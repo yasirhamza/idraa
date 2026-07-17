@@ -1,0 +1,4 @@
+# Suppressions convention: every allow-ghsas entry MUST carry a comment with
+# (a) why it is unfixable/accepted and (b) a review-by date. Empty by default.
+fail-on-severity: high
+allow-ghsas: []
