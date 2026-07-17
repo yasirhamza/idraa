@@ -389,43 +389,6 @@ git commit -m "ci: SHA-pin all actions; add grouped monthly Dependabot config (#
 **Interfaces:**
 - Consumes: Task 2's pin format. Produces: advisory CodeQL alerts in the Security tab; a PR-blocking dependency-review job (its own check, NOT part of `ci-success`); the `allow-ghsas` suppressions convention.
 
-- [ ] **Step 1: `.github/workflows/codeql.yml`**
-
-Resolve `github/codeql-action` v3 SHA first (`gh api repos/github/codeql-action/commits/v3 --jq .sha`), then:
-
-```yaml
-# CodeQL — ADVISORY by deliberate decision. Findings land in the Security tab;
-# there is NO code_scanning required-check ruleset (AndroDR #252 close-out:
-# the ruleset has no "analysis not expected" handling for path-filtered
-# workflows and wedges docs-only PRs). Do not "harden" this into a ruleset.
-name: CodeQL
-
-on:
-  pull_request:
-    branches: [main]
-    paths: ["**.py", ".github/workflows/*.yml"]
-  schedule:
-    - cron: "24 5 * * 1"   # weekly, Monday 05:24 UTC
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@<SHA-checkout> # v4
-      - uses: github/codeql-action/init@<SHA-codeql> # v3
-        with:
-          languages: python
-          build-mode: none
-      - uses: github/codeql-action/analyze@<SHA-codeql> # v3
-```
-
 - [ ] **Step 2: `.github/workflows/dependency-review.yml` + config**
 
 Resolve `actions/dependency-review-action` v4 SHA, then:
