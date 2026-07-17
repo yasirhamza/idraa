@@ -467,7 +467,7 @@ git add -A && git commit -m "build: digest-pin base image; CycloneDX SBOM per ma
 ### Task 6: pip-audit in the local gate (PR3)
 
 **Files:**
-- Create: `scripts/sca_gate.py` (policy wrapper; ≤95 physical lines incl. docstring + fail-closed error handling; core logic ≈60)
+- Create: `scripts/sca_gate.py` (policy wrapper; ≤110 physical lines incl. docstring + fail-closed error handling; core logic ≈60 — ceiling per the design's dated budget addendum (ruff-format reflow))
 - Create: `scripts/sca_suppressions.txt`
 - Modify: `scripts/run_local_gate.py` (audit step + `IDRAA_GATE_SKIP_AUDIT`)
 - Modify: `pyproject.toml` (add `pip-audit` to dev extra)

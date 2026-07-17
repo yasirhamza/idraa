@@ -57,6 +57,7 @@ dev = [
   "html5lib>=1.1",
   "zizmor>=1.27.0",
   "cyclonedx-bom>=7.3.0",
+  "pip-audit>=2.10.1",
 ]
 
 [project.scripts]
