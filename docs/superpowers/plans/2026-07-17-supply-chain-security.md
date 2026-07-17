@@ -121,7 +121,7 @@ jobs:
         run: |
           GITLEAKS_VERSION=8.24.3
           # Resolve once from the release's *_checksums.txt and hardcode:
-          GITLEAKS_SHA256=<resolve: curl -sSL .../v8.24.3/gitleaks_8.24.3_checksums.txt | grep linux_x64.tar.gz>
+          GITLEAKS_SHA256=<resolve: curl -sSL .../v8.24.3/gitleaks_8.24.3_checksums.txt | grep linux_x64.tar.gz | awk '{print $1}'>  # bare 64-hex hash only
           curl -sSL -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xz -C /tmp -f /tmp/gitleaks.tgz gitleaks
@@ -191,7 +191,7 @@ jobs:
 ```
 
 Adaptation notes for the implementer (verify against the CURRENT file before deleting):
-- Add `zizmor` to the dev extra in this task (`uv add --optional dev zizmor && uv sync --extra dev`) and run `uv run zizmor .github/workflows/` locally; triage any finding it raises on the NEW workflows before committing (fix or annotate per zizmor's docs).
+- Add `zizmor` to the dev extra in this task (`uv add --optional dev zizmor && uv sync --extra dev`). Run `uv run zizmor .github/workflows/` locally AFTER Task 2's SHA-pin sweep (its unpinned-uses audit flags tag pins until then); triage findings before opening PR1. Without GITHUB_TOKEN zizmor's online GHSA audits are skipped — the offline audits (template-injection, excessive-permissions, unpinned-uses) are the high-value cases and run fine.
 - Resolve the gitleaks sha256 before committing: `curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_checksums.txt | grep linux_x64.tar.gz` and hardcode the hash in the workflow (supply-chain epic must not curl|tar its own scanner unverified — Sec-I1; build_css.py precedent).
 - The `SESSION_SECRET` dummy is deliberately LOW-ENTROPY (word-based) — a random-looking value trips gitleaks' generic-api-key rule in the `secrets` job and the pre-commit hook (verified live: the first version of this very plan document was blocked by the hook). Keep it word-based.
 - Preserve the existing file's `notebook-smoke` invocation if it differs (read the old job first; keep its exact command).
@@ -630,7 +630,7 @@ def main() -> int:
         return 2
     try:
         deps = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
-    except (json.JSONDecodeError, KeyError) as exc:
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
         return 2
     failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))

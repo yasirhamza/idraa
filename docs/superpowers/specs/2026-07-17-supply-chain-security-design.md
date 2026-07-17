@@ -40,8 +40,9 @@ SECURITY.md, README license/trademark notices.
 **Discovered state this epic must fix:** `ci.yml` is a fossil — authored
 pre-billing-freeze and never reconciled with the local gate as it evolved. On
 the first public runs: bare `uv run mypy` checks `tests/` (1,298 errors the
-gate deliberately scopes out), standalone `bandit -ll` reports 3 untriaged
-mediums (the gate uses ruff-S), and the test matrix runs Python 3.12 while the
+gate deliberately scopes out), standalone `bandit -ll` reports 3 mediums whose
+dispositions already exist as ruff-S noqas (bandit reads `# nosec`, not
+`# noqa`, so it cannot see them), and the test matrix runs Python 3.12 while the
 project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
 
 ## Design — six layers on the public substrate
@@ -74,9 +75,14 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
 ### PR 1 — CI truth + scanning gates
 - Rewrite `ci.yml`: one `gate` job = `uv run --extra dev python
   scripts/run_local_gate.py` (verbatim — CI can never drift from the gate
-  again), Python pinned to the project's 3.11; keep separate jobs only for what
-  the gate doesn't run: `secrets` (gitleaks full-history), `docker-build`,
-  `e2e` (Playwright), `notebook-smoke`. Delete the fossil `lint`/`typecheck`/
+  again), Python pinned to the project's 3.11; separate jobs for what the gate
+  doesn't run: `secrets` (gitleaks full-history), `docker-build`, `e2e`
+  (Playwright), `notebook-smoke`, `test-windows` (fast suite, windows-latest,
+  pinned 3.11), the named blocking `sast` job (below), and the `ci-success`
+  aggregator over the deterministic core (`gate`, `test-windows`, `secrets`,
+  `sast`) — e2e/docker-build/notebook-smoke stay visible-but-advisory (no
+  wedge). CI's uv aligned to the dev toolchain (0.11.x; revision-3 lock).
+  Delete the fossil `lint`/`typecheck`/
   `sast` jobs (their coverage is inside the gate; bandit's 3 medium `-ll`
   findings get triaged in this PR — fixed or suppressed with rationale — before
   the job is deleted).
@@ -110,7 +116,7 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
 ### PR 3 — local SCA + posture doc + arming
 - `pip-audit` as a dev dependency + `GATE_STEPS` entry with the policy above +
   suppressions file + `IDRAA_GATE_SKIP_AUDIT` hatch.
-- `docs/supply-chain.md`: the posture narrative — five layers, the SCA triage
+- `docs/supply-chain.md`: the posture narrative — six layers, the SCA triage
   policy, the outbound-leak surface (denylist + gitleaks + what must never
   leave the machine), the deliberate keeps (Fly-built images unattested, by
   decision), and the "am I affected?" runbook (graph + SBOM lookup).
@@ -137,8 +143,9 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
   PR2: (5) digest-pin + SBOM job + `uv lock --check`; PR3: (6) pip-audit gate
   step + suppressions, (7) docs/supply-chain.md + branch-protection arming.
 - **target_loc_delta:** workflows/config dominated; new Python ≈ the pip-audit
-  gate step (`scripts/sca_gate.py` ≤90 physical lines incl. docstring and the
-  fail-closed error handling; core logic ≈60). Any task adding >50 lines of non-config logic is out
+  gate step (`scripts/sca_gate.py` ≤95 physical lines incl. docstring and the
+  fail-closed error handling; core logic ≈60; the plan's reference
+  implementation is 91). Any task adding >50 lines of non-config logic is out
   of budget.
 - **review_budget:** cross-cutting infra → 4-reviewer plan-gate on this design
   + the plan (iterated to 0/0) and a 4-reviewer final PR-gate on the last PR;
@@ -167,7 +174,7 @@ If exceeded, append `## Scope budget — addendum` with owner re-approval.
   severity gating delegated to dependency-review on the PR path. (Plan-gate
   S-B1/M-I1 — the two docs previously disagreed silently.)
 - **Item:** ci-success aggregator scoped to the deterministic core (gate,
-  test-windows, secrets); e2e/docker-build/notebook-smoke advisory ·
+  test-windows, secrets, sast); e2e/docker-build/notebook-smoke advisory ·
   **Direction:** ↔reframed · **Justification:** plan-gate A-I5 — requiring
   flake-prone jobs contradicts the wedge lesson; --admin bypass exists but a
   wedging default is wrong.
@@ -184,6 +191,7 @@ If exceeded, append `## Scope budget — addendum` with owner re-approval.
   tool/config as the gate), zizmor covers workflow files (previously
   hand-audited only).
 - **Item:** bandit `-ll` medium-finding triage absorbed into PR1 ·
-  **Direction:** +added (small) · **Justification:** the fossil sast job
-  surfaced 3 untriaged mediums; they must be dispositioned (fix or suppress
-  with rationale) before the job that found them is deleted.
+  **Direction:** +added (small) · **Justification:** the fossil bandit job
+  surfaced 3 mediums already pre-triaged via ruff-S noqas (bandit doesn't
+  honor ruff's directives); the plan verifies each rationale, then deletes
+  the redundant job. No new suppressions.
