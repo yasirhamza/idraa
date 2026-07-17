@@ -161,6 +161,17 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
 
 If exceeded, append `## Scope budget — addendum` with owner re-approval.
 
+## Scope budget — addendum
+
+- **2026-07-17 (owner-approved):** `scripts/sca_gate.py` ceiling raised ≤95 →
+  **≤110** physical lines: the 91-line reference implementation reflows to 104
+  under mandatory ruff-format — whitespace only, zero added logic (also noted
+  inline at target_loc_delta).
+- **2026-07-17 (final-gate fix):** a second gitleaks hook added at pre-push
+  (`gitleaks git`, full history) — the upstream hook's `--staged` entry was a
+  no-op at push, so the documented push-time full-history scan is now real
+  rather than a doc correction.
+
 ## Scope drift log
 
 - **Item:** local-gate homing (original #555 design) replaced by GitHub-native

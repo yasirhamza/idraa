@@ -56,13 +56,22 @@ repos:
         args: [--config-file=pyproject.toml]
         files: ^src/idraa/
 
-  # Secret scanning (#555 outbound-leak posture): staged-content scan at commit,
-  # full-history scan at push. Content-level complement to the tracked-path
-  # denylist below.
+  # Secret scanning (#555 outbound-leak posture): staged-content scan at commit
+  # + a genuine FULL-HISTORY scan at push (the upstream hook's default entry is
+  # --staged at every stage, which is a no-op at pre-push — the second hook
+  # overrides the entry to `gitleaks git` over the whole history; ~0.5s on this
+  # repo). CI's secrets job repeats the full-history scan as the backstop.
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.3
     hooks:
       - id: gitleaks
+      - id: gitleaks
+        alias: gitleaks-full-history
+        name: gitleaks (full history, pre-push)
+        entry: gitleaks git --redact --verbose
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
   - repo: local
     hooks:

@@ -14,8 +14,8 @@ design) — this doc is the posture as shipped, not the rationale trail.
 | 2 | Dependency vulns (SCA) | `dependency-review-action` on PRs (delta, severity-based) + Dependabot alerts (standing tree) + `pip-audit` in the local gate (offline, fixability-based) | PR checks + Security tab + pre-push |
 | 3 | CI/build hardening | `ci.yml`'s `gate` job runs `scripts/run_local_gate.py` verbatim, so CI cannot drift from the local authority; every `uses:` is SHA-pinned with a version comment; top-level `permissions: contents: read` | GitHub Actions |
 | 4 | Build/release transparency | Docker base image digest-pinned (both stages); CycloneDX SBOM generated from `uv.lock` on every `main` push, uploaded as a sha-keyed artifact | CI + `Dockerfile` |
-| 5 | First-party SAST | `ruff check --select S` in the local gate, re-run identically as a named blocking `sast` CI job (zero drift); `zizmor` lints the workflows; CodeQL (`python`) advisory on PRs + weekly cron | gate + `ci-success` + Security tab |
-| 6 | Outbound-leak control | gitleaks (staged/commit, full-history/push, full-history/CI) + a tracked-path denylist (`scripts/lint_tracked_paths.py`) independent of content scanning | pre-commit / pre-push / CI `secrets` |
+| 5 | First-party SAST | `ruff check --select S` in the local gate, re-checked by the named blocking `sast` CI job (`ruff check --select S` — same tool + same pyproject config, so findings cannot diverge); `zizmor` lints the workflows; CodeQL (`python`) advisory on PRs + weekly cron | gate + `ci-success` + Security tab |
+| 6 | Outbound-leak control | gitleaks (staged at commit; full-history at push via a dedicated pre-push hook; full-history again in CI) + a tracked-path denylist (`scripts/lint_tracked_paths.py`) independent of content scanning | pre-commit / pre-push / CI `secrets` |
 
 This is the standard GitHub-native toolkit, wired so the local gate stays the
 actual merge authority and CI is its drift-proof mirror, not a second,
@@ -53,9 +53,7 @@ commit that uses it.
 
 ## 3. Outbound-leak surface
 
-- **gitleaks**, three points of increasing scope: staged-content at commit,
-  full-history at push, full-history again in CI as a backstop against a
-  bypassed local hook.
+- **gitleaks**, three points: staged-content at commit; a genuine full-history scan at push (a dedicated pre-push hook running `gitleaks git`); and full-history again in CI as the backstop against a bypassed local hook.
 - **Tracked-path denylist** (`scripts/lint_tracked_paths.py`): fails if any
   *tracked* file matches local tool/agent state, secrets-shaped files, or
   databases — content-independent, catches whole-file/dir accidents gitleaks
@@ -87,7 +85,7 @@ commit that uses it.
 - **`/data/riskflow.db` filename in production** (`fly.toml`'s
   `DATABASE_URL`) **— a legacy name retained through the project rename to
   Idraa, not reverted.** WAL-mode SQLite keeps `-wal`/`-shm` sidecars matched
-  to the base filename; the denylist keys off `*.db*` generically, so any
+  to the base filename; the denylist covers `*.db` plus the `-journal`/`-shm`/`-wal` sidecars and `*.sqlite*` explicitly, so any
   name works with the guard — the specific name is a rename-cleanup item,
   not a security control.
 

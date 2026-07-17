@@ -89,10 +89,10 @@ def main() -> int:
         return 2
     try:
         deps = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
+        failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
         return 2
-    failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))
     for w in warnings:
         print(f"sca_gate WARN: {w}")
     for f in failures:

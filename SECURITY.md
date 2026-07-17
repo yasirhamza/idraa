@@ -16,6 +16,8 @@ steps and the commit/version you tested against.
 
 ## Supply-chain posture (summary)
 
+Full posture document: [`docs/supply-chain.md`](docs/supply-chain.md).
+
 - Dependencies are pinned with hashes in `uv.lock`; Docker builds use
   `uv sync --frozen`.
 - Vendored front-end assets are integrity-pinned (`static/vendor/integrity.json`).
