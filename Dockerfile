@@ -1,14 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
 # --- Stage 1: build dependencies into a venv -----------------------------------
-FROM python:3.11-slim AS builder
+# Digest-pinned (supply-chain: a mutable tag is the container analog of an
+# unpinned action). Dependabot's docker ecosystem keeps this current.
+FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install uv
-RUN pip install --no-cache-dir uv==0.4.27
+RUN pip install --no-cache-dir uv==0.11.11
 
 WORKDIR /app
 
@@ -55,7 +57,9 @@ RUN --mount=type=cache,target=/app/.tailwind-bin \
     /app/.venv/bin/python -m idraa.tasks build-css
 
 # --- Stage 2: runtime ---------------------------------------------------------
-FROM python:3.11-slim AS runtime
+# Digest-pinned (supply-chain: a mutable tag is the container analog of an
+# unpinned action). Dependabot's docker ecosystem keeps this current.
+FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
