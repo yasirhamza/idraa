@@ -88,8 +88,14 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
   the job is deleted).
 - SHA-pin **every** action across all workflows (version comments; Dependabot's
   `github-actions` ecosystem keeps pins current).
-- Add `codeql.yml` (`language: python`, PRs + weekly cron, **advisory** — no
-  required-check ruleset).
+- Enable CodeQL **default setup** via the API (GitHub-managed — python
+  auto-detected, GitHub maintains triggers/versions so it can never fossilize;
+  structurally wedge-free: no path filter exists to trip a ruleset's
+  "analysis not expected" hazard). **Advisory** — no required-check ruleset.
+  Owner decision 2026-07-17: default setup also keeps the on-ramp to GitHub's
+  AI security detections preview (requires default setup + GHAS/org — not
+  available to personal public repos today; revisit if the repo moves to an
+  org with GHAS). Agentic autofix (Copilot-credits-gated) noted, not adopted.
 - Add `dependency-review.yml` (PR trigger, `fail-on-severity: high`) +
   `dependency-review-config.yml` with the empty `allow-ghsas` block + convention
   comment.
@@ -185,6 +191,13 @@ If exceeded, append `## Scope budget — addendum` with owner re-approval.
 - **Item:** gitleaks CI binary sha256-pinned · **Direction:** +added ·
   **Justification:** plan-gate Sec-I1 — a supply-chain epic must not
   curl|tar its own scanner unverified; follows the build_css.py precedent.
+- **Item:** CodeQL via DEFAULT setup instead of a custom codeql.yml ·
+  **Direction:** ↔reframed · **Justification:** owner decision 2026-07-17 after
+  reviewing GitHub's July-2026 AI-security previews: default setup is
+  GitHub-maintained (anti-fossil — this epic's founding failure mode was a
+  fossilized workflow), wedge-free by construction, and the prerequisite for
+  the AI-detections preview if ever GHAS-eligible. Trade accepted: that one
+  scanning pipeline is not SHA-pinned by us (GitHub manages it).
 - **Item:** named blocking `sast` CI job (ruff-S + zizmor) added ·
   **Direction:** +added · **Justification:** owner decision 2026-07-17 —
   visible, blocking SAST check; ruff-S re-run has zero drift risk (same
