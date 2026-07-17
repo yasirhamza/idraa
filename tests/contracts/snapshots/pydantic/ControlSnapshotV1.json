@@ -1,0 +1,50 @@
+{
+  "fields": {
+    "control_coverage": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "control_id": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "control_reliability": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "control_strength": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "domain": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "function": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "name": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "snapshot_version": {
+      "has_default": true,
+      "optional": false,
+      "type": "Literal[1]"
+    },
+    "type": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "ControlSnapshotV1"
+}

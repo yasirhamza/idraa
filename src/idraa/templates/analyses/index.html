@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}Analyses{% endblock %}
+{% block container_class %}max-w-5xl mx-auto{% endblock %}
+
+{% block content %}
+
+{# "New analysis" is analyst/admin-only (the /analyses/new form enforces this
+   server-side); viewers/reviewers see the list + CSV export but not the create
+   button. CSV export uses download=True so the browser navigates to the file
+   instead of HTMX-swapping the bytes into the DOM. #}
+{%- set _actions = [] -%}
+{%- if current_user and current_user.role.value in ("analyst", "admin") -%}
+  {%- set _ = _actions.append({"label": "New analysis", "href": "/analyses/new", "style": "primary"}) -%}
+{%- endif -%}
+{%- if run_display_rows -%}
+  {%- set _ = _actions.append({"label": "Export CSV", "href": "/analyses/export.csv", "icon": "⇩", "download": True}) -%}
+{%- endif -%}
+
+{{ page_header(title="Analyses",
+               breadcrumb=breadcrumb_for(request),
+               actions=_actions,
+               meta=(total ~ (" run" if total == 1 else " runs")) if total else none) }}
+{{ help_trigger('run-and-read-analyses') }}
+
+{% set show_run_meta = true %}
+{% set list_url = "/analyses" %}
+{% set list_heading = "Run history" %}
+{% set empty_message = "No analysis runs yet. Create one to get started." %}
+{% include "runs/_history_list.html" %}
+
+{% endblock %}

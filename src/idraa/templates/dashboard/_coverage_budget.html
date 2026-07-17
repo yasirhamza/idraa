@@ -1,0 +1,192 @@
+{#- Coverage & budget band (Task 5, #476-#480 dashboard redesign).
+
+    Params (from the enclosing dashboard/index.html context):
+      data = DashboardData (services/dashboard.py)
+
+    Consumes (Task 3, services/dashboard.py / dashboard_view_model.py):
+      data.budget            = {"spend": float, "budget": float|None,
+                                 "ratio": float|None, "headroom": float|None}
+      data.control_coverage  = {"fair_cam": {ControlDomain: int, ...},
+                                 "frameworks": [{"name": str, "coverage": CoverageResult}, ...]}
+      data.scenario_coverage = CoverageResult(covered_count, reference_count, ratio, missing, present)
+
+    HARD RULE (acceptance-tested, see
+    tests/integration/test_dashboard.py::test_coverage_template_has_no_hardcoded_reference_lists):
+    this template MUST NOT contain a literal crosswalk-framework slug or FAIR
+    taxonomy enum value (see that test's banned-literal list) as a reference
+    enumeration. `control_coverage.fair_cam.items()` and
+    `control_coverage.frameworks` are the only reference sets — always
+    looped, never re-listed here. Display labels derived generically from an
+    already-iterated key (case/separator transforms below) are fine; they are
+    not a second reference enumeration. This is also why the panel renders a
+    flat ratio + gap COUNT for scenario coverage rather than a threat x asset
+    matrix — a matrix would need hardcoded taxonomy column/row literals that
+    the real `scenario_coverage` CoverageResult (Task 3) doesn't carry. -#}
+
+{%- set _budget = data.budget -%}
+{%- set _cc = data.control_coverage -%}
+{%- set _sc = data.scenario_coverage -%}
+{%- set _code = data.currency.code if data.currency else "USD" -%}
+{%- set _domain_items = _cc.fair_cam.items() | list -%}
+{%- set _domain_counts = _cc.fair_cam.values() | list -%}
+{%- set _max_domain = (_domain_counts | max) if _domain_counts else 0 -%}
+{%- set ns = namespace(thin_domain=none, thin_count=none) -%}
+{%- for _domain, _count in _domain_items -%}
+  {%- if ns.thin_count is none or _count < ns.thin_count -%}
+    {%- set ns.thin_domain = _domain -%}
+    {%- set ns.thin_count = _count -%}
+  {%- endif -%}
+{%- endfor -%}
+
+<div>
+  <h2 class="text-h3 text-ink-1 mb-3">Coverage &amp; budget</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+    {# ---- Panel 1: control budget ---- #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5">
+      <h3 class="text-h4 text-ink-1 mb-0.5">Control budget</h3>
+      <p class="text-micro text-ink-3 mb-4">Annual spend against your security budget</p>
+
+      {% if _budget.ratio is not none %}
+        {%- set _pct = _budget.ratio * 100 -%}
+        {%- set _bar_pct = 100 if _pct > 100 else _pct -%}
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <span class="text-number-lg font-mono tabular-nums">{{ _budget.spend | money(_code) }}</span>
+          <span class="text-body text-ink-3 font-mono">of {{ _budget.budget | money(_code) }}</span>
+        </div>
+        <div class="h-3 bg-surface-2 rounded-full overflow-hidden mt-3">
+          <div
+            class="h-full rounded-full {% if _pct > 100 %}bg-[var(--color-status-critical)]{% elif _pct >= 90 %}bg-[var(--color-status-warning)]{% else %}bg-brand{% endif %}"
+            style="width: {{ '%.0f' | format(_bar_pct) }}%"
+          ></div>
+        </div>
+        <div class="flex justify-between text-body text-ink-2 mt-1">
+          <span>{{ '%.0f' | format(_pct) }}% committed</span>
+          <span class="font-mono tabular-nums">{{ _budget.headroom | money(_code) }} headroom</span>
+        </div>
+      {% else %}
+        <div class="text-number-lg font-mono tabular-nums">{{ _budget.spend | money(_code) }}</div>
+        <p class="text-micro text-ink-3 mt-1">
+          Annual control cost.
+          <a class="text-brand hover:underline" href="/organization">Set a security budget</a>
+          to see utilization.
+        </p>
+        {% if data.posture and data.posture.roi is not none %}
+          <p class="text-body text-ink-2 border-t border-border-subtle pt-3 mt-3">
+            <span class="font-mono font-semibold text-status-success">{{ '%.1f' | format(data.posture.roi) }}&times;</span>
+            return on control spend, against avoided annual loss.
+          </p>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    {# ---- Panel 2: control coverage (FAIR-CAM function + framework crosswalk) ---- #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5">
+      <h3 class="text-h4 text-ink-1 mb-0.5">Control coverage</h3>
+      <p class="text-micro text-ink-3 mb-4">By FAIR-CAM function &amp; framework</p>
+
+      <div class="flex flex-col gap-2.5 mb-4">
+        {% for _domain, _count in _domain_items %}
+          {%- set _label = _domain.value | replace('_', '-') | capitalize -%}
+          {%- set _width = (_count / _max_domain * 100) if _max_domain else 0 -%}
+          <div class="flex items-center gap-2 text-body">
+            <span class="w-40 flex-none text-ink-2 truncate" title="{{ _domain.value }}">{{ _label }}</span>
+            <span class="flex-1 h-2 bg-surface-2 rounded-full overflow-hidden">
+              <span class="block h-full bg-brand rounded-full" style="width: {{ '%.0f' | format(_width) }}%"></span>
+            </span>
+            <span class="w-6 text-right font-mono font-semibold tabular-nums">{{ _count }}</span>
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if _cc.frameworks %}
+        <div class="border-t border-border-subtle pt-3 flex flex-col gap-2">
+          {% for fw in _cc.frameworks %}
+            {%- set _fw_label = fw.name | upper | replace('_', ' ') -%}
+            <div class="flex items-center gap-2 text-body">
+              <span class="w-20 flex-none text-ink-2 font-medium truncate" title="{{ fw.name }}">{{ _fw_label }}</span>
+              <span class="flex-1 h-2 bg-surface-2 rounded-full overflow-hidden">
+                <span class="block h-full bg-brand rounded-full" style="width: {{ '%.0f' | format(fw.coverage.ratio * 100) }}%"></span>
+              </span>
+              <span class="w-12 text-right font-mono tabular-nums">{{ '%.0f' | format(fw.coverage.ratio * 100) }}%</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if _max_domain and ns.thin_domain is not none and ns.thin_count < _max_domain %}
+        <p class="text-micro text-ink-3 mt-3">
+          Thin on
+          <strong class="text-status-warning">{{ ns.thin_domain.value | replace('_', '-') | capitalize }}</strong>
+          &mdash; {{ ns.thin_count }} control{{ '' if ns.thin_count == 1 else 's' }} assigned there vs
+          {{ _max_domain }} for the strongest function.
+        </p>
+      {% endif %}
+    </div>
+
+    {# ---- Panel 3: scenario coverage (library-derived reference set) ---- #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5">
+      <h3 class="text-h4 text-ink-1 mb-0.5">Scenario coverage</h3>
+      <p class="text-micro text-ink-3 mb-4">What you've modeled vs. the recommended library</p>
+
+      {% if _sc.reference_count > 0 %}
+        <div class="flex items-baseline gap-2">
+          <span class="text-number-lg font-mono tabular-nums">{{ _sc.covered_count }}</span>
+          <span class="text-body text-ink-3 font-mono">/ {{ _sc.reference_count }}</span>
+        </div>
+        <p class="text-body text-ink-2 mt-1">{{ _sc.covered_count }} of {{ _sc.reference_count }} recommended scenarios modeled</p>
+        <div class="h-2 bg-surface-2 rounded-full overflow-hidden mt-3">
+          <div class="h-full bg-brand rounded-full" style="width: {{ '%.0f' | format(_sc.ratio * 100) }}%"></div>
+        </div>
+        {% if _sc.missing %}
+          <p class="text-body text-ink-2 mt-2">
+            <strong class="text-status-warning">{{ _sc.missing | length }}</strong>
+            recommended scenario{{ '' if _sc.missing | length == 1 else 's' }} not yet modeled &mdash;
+            <a class="text-brand hover:underline" href="/library">browse the library</a>.
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-body text-ink-2">
+          No industry-recommended scenarios configured for your sub-sector yet.
+        </p>
+      {% endif %}
+
+      {# ---- ATT&CK tactic rollup (#475 follow-up). Counts ANY active
+            scenario with technique mappings — library-derived or from
+            scratch — so the old from-scratch caveat no longer applies.
+            Labels and denominators come from data.attack_coverage (seeded
+            catalog); the block hides entirely on an unseeded catalog. ---- #}
+      {% if data.attack_coverage %}
+        {%- set ns_att = namespace(total_mapped=0) -%}
+        <div class="mt-4 pt-4 border-t border-border-subtle">
+          <div class="flex items-baseline justify-between gap-2">
+            <h4 class="text-body font-medium text-ink-1">MITRE ATT&amp;CK</h4>
+            <a class="text-micro text-brand hover:underline" href="/scenarios/attack-coverage">Technique-level breakdown &rarr;</a>
+          </div>
+          {% for d in data.attack_coverage %}
+            {%- set ns_att.total_mapped = ns_att.total_mapped + d.technique_count_mapped -%}
+            <div class="flex items-center gap-2 mt-2">
+              <span class="w-20 shrink-0 text-body text-ink-2">{{ d.label }}</span>
+              <div class="flex-1 h-2 bg-surface-2 rounded-full overflow-hidden">
+                <div class="h-full bg-brand rounded-full" style="width: {{ '%.0f' | format(d.tactic_result.ratio * 100) }}%"></div>
+              </div>
+              <span class="w-28 text-right font-mono tabular-nums text-micro text-ink-2">
+                {{ d.tactic_result.covered_count }} of {{ d.tactic_result.reference_count }} tactic{{ '' if d.tactic_result.reference_count == 1 else 's' }}
+              </span>
+            </div>
+            <p class="text-micro text-ink-3 mt-0.5 pl-[5.5rem]">
+              {{ d.technique_count_mapped }} technique{{ '' if d.technique_count_mapped == 1 else 's' }} mapped
+            </p>
+          {% endfor %}
+          {% if ns_att.total_mapped == 0 %}
+            <p class="text-micro text-ink-3 mt-2">
+              No scenarios are mapped to ATT&amp;CK techniques yet &mdash;
+              tag techniques on a scenario to populate this.
+            </p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>

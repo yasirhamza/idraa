@@ -1,0 +1,184 @@
+{
+  "columns": {
+    "adopted_snapshot": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "annual_cost": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "applicable_industries": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "applicable_org_sizes": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "compliance_mappings": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "created_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "created_by": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "description": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "TEXT"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "implementation_stage": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(12)"
+    },
+    "iso_27001_domains": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "library_pin": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "name": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(255)"
+    },
+    "nist_csf_functions": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "organization_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "skill_requirements": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "source": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(15)"
+    },
+    "status": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(10)"
+    },
+    "technology_dependencies": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "type": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(14)"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "version": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(32)"
+    }
+  },
+  "indexes": [
+    "ix_controls_organization_id"
+  ],
+  "table_name": "controls"
+}

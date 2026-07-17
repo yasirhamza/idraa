@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="light dark">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <script>
+    // Pre-paint bootstrap. Runs synchronously before first paint to avoid FOUC.
+    // Spec §1: tri-state theme preference (`light`/`dark`/`auto`) persisted per-browser.
+    // Plan-gate Arch-14: sidebar collapse state also resolved here to avoid the
+    // 240→64 px layout snap when Alpine init() fires after DOMContentLoaded.
+    (function () {
+      // --- Theme ---
+      var stored = null;
+      try { stored = localStorage.getItem('idraa.theme'); } catch (e) { /* localStorage blocked */ }
+      var pref = stored === 'light' || stored === 'dark' ? stored : 'auto';
+      var resolved;
+      if (pref === 'auto') {
+        resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } else {
+        resolved = pref;
+      }
+      document.documentElement.setAttribute('data-theme', resolved);
+      document.documentElement.setAttribute('data-theme-pref', pref);
+
+      // --- Sidebar collapse (plan-gate Arch-14) ---
+      var sbStored = null;
+      try { sbStored = localStorage.getItem('idraa.sidebar'); } catch (e) {}
+      var sbCollapsed;
+      if (sbStored === 'collapsed') sbCollapsed = true;
+      else if (sbStored === 'expanded') sbCollapsed = false;
+      else {
+        // First-visit defaults: expanded ≥lg (1024 px), collapsed at md (tablet).
+        sbCollapsed = !(window.matchMedia && window.matchMedia('(min-width: 1024px)').matches);
+      }
+      document.documentElement.setAttribute('data-sidebar-collapsed', sbCollapsed ? 'true' : 'false');
+
+      // Live OS-change listener: only re-apply when theme pref is `auto`.
+      if (window.matchMedia) {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        var apply = function () {
+          var p = document.documentElement.getAttribute('data-theme-pref');
+          if (p === 'auto') {
+            document.documentElement.setAttribute('data-theme', mq.matches ? 'dark' : 'light');
+          }
+        };
+        if (mq.addEventListener) { mq.addEventListener('change', apply); }
+        else if (mq.addListener) { mq.addListener(apply); }
+      }
+    })();
+  </script>
+  <title>{% block title %}Idraa{% endblock %} — Idraa</title>
+  {# Same-origin CSS — SRI intentionally omitted (integrity attrs are for cross-origin
+     assets; these are served from /static by this app). Cache-busted via static_version. #}
+  <link rel="stylesheet"
+        href="/static/vendor/daisyui-4.12.10.min.css?v={{ static_version }}"/>
+  <link rel="stylesheet"
+        href="/static/css/tailwind.css?v={{ static_version }}"/>
+  {# Self-hosted HTMX + Alpine (below). Vendored bytes are the EXACT pinned
+     unpkg builds — each file's sha384 was verified equal to the prior SRI
+     integrity value before committing. Same-origin removes the last runtime
+     CDN dependency (unpkg.com) so core interactivity survives locked-down /
+     air-gapped networks, and CSP script-src drops the unpkg.com grant. No
+     SRI/crossorigin needed same-origin; integrity is guaranteed by the
+     committed, version-pinned filename + CSP 'self'. #}
+  <script src="/static/vendor/htmx-1.9.12.min.js?v={{ static_version }}"></script>
+  {# HTMX 1.9.x defaults drop 4xx + 5xx responses (no swap), making
+     server-side form validation errors invisible — the route returns
+     422 with a fully re-rendered form including <div class="alert
+     alert-error"> banners, but HTMX never inserts the response into
+     the DOM. Live UAT 2026-05-20: 'still no feedback when there's a
+     problem with form submission'.
+     Override via the `htmx:beforeSwap` event (the documented 1.9 API;
+     `htmx.config.responseHandling` is HTMX 2.x only). Force swap on
+     4xx (validation errors carry a re-rendered form); leave 5xx as
+     no-swap (genuine server problems shouldn't replace the user's
+     form with a 500-page). #}
+  <script>
+    document.addEventListener('htmx:beforeSwap', function (event) {
+      var status = event.detail.xhr && event.detail.xhr.status;
+      if (status >= 400 && status < 500) {
+        event.detail.shouldSwap = true;
+        event.detail.isError = false;
+      }
+    });
+  </script>
+  <script defer
+          src="/static/vendor/alpinejs-3.14.1.min.js?v={{ static_version }}"></script>
+  {# `?v={{ static_version }}` cache-busts /static/* on every deploy.
+     Without it, mobile browsers serve a stale combobox JS across
+     deploys (live UAT 2026-05-20: pre-filled assignment inputs
+     rendered empty because of cached pre-combobox JS). #}
+  <link rel="stylesheet" href="/static/css/app.css?v={{ static_version }}"/>
+  {# Sub-function combobox (controls form). Loaded once globally so Alpine
+     has the component registered before any x-data="subFunctionCombobox(...)"
+     evaluates. The matching option-data is injected per-page via
+     `window.SUB_FUNCTION_GROUPS` (set in the page that needs it). #}
+  <script src="/static/js/sub_function_combobox.js?v={{ static_version }}"></script>
+  {# Client-side timezone localization. Server renders <time> elements with
+     ISO UTC datetime + fallback text; this JS walks them on load + after
+     each htmx swap and converts to the browser's local-format. #}
+  <script src="/static/js/localize_time.js?v={{ static_version }}"></script>
+  {# First-party SVG chart hydration (epic #547 P1) — crosshair/tooltip/
+     slider/log-toggle for LEC figures, hover-only tooltip for EPC figures.
+     `defer` so document.body (used for the htmx:afterSwap listener) exists
+     when the script runs. #}
+  <script src="/static/js/charts.js?v={{ static_version }}" defer></script>
+  {# Help slide-over drawer store. Non-defer, like sub_function_combobox.js, so
+     its alpine:init listener registers before Alpine initializes. #}
+  <script src="/static/js/help_drawer.js?v={{ static_version }}"></script>
+</head>
+<body class="min-h-screen bg-base-200" hx-boost="true">
+  {% include "layouts/_sidebar.html" %}
+  {% include "layouts/_flash.html" %}
+  <main id="main"
+        class="
+          bg-surface-0 min-h-screen
+          ml-0 md:ml-60
+          transition-[margin] duration-150
+          px-6 md:px-8 py-4 md:py-6
+          mx-auto max-w-screen-2xl
+        ">
+    <div class="{% block container_class %}{% endblock %}">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+  {# Help slide-over drawer. Body content is swapped in via hx-get from
+     help_trigger(slug). Sits above the sidebar (z-40/z-50) at z-[60]/z-[70]. #}
+  <div x-data
+       x-show="$store.helpDrawer.open"
+       x-cloak
+       class="fixed inset-0 z-[60]"
+       @keydown.escape.window="$store.helpDrawer.hide()">
+    <div class="absolute inset-0 bg-black/40 z-[60]"
+         @click="$store.helpDrawer.hide()" aria-hidden="true"></div>
+    <aside id="help-drawer" role="dialog" aria-modal="true" aria-label="Help"
+           class="absolute right-0 top-0 h-full w-full sm:w-[28rem] z-[70]
+                  bg-surface-0 shadow-xl overflow-y-auto">
+      <div class="flex items-center justify-between p-4 border-b border-border-subtle">
+        <span class="text-meta text-ink-3">HELP</span>
+        <button type="button" class="btn btn-ghost btn-xs btn-circle"
+                @click="$store.helpDrawer.hide()" aria-label="Close help">✕</button>
+      </div>
+      <div id="help-drawer-body" class="p-4"></div>
+    </aside>
+  </div>
+</body>
+</html>

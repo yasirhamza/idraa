@@ -1,0 +1,85 @@
+# Idraa UAT — Fly.io app configuration.
+# Phase 1.5.5 design: docs/plans/2026-05-07-phase-1-5-5-uat-publishing-design.md
+#
+# This file is read on every `fly deploy` (run by .github/workflows/uat-deploy.yml).
+# Operators override `primary_region` via the bootstrap workflow's `region` input.
+
+app = "idraa"
+# 2026-05-29: moved ord (Chicago) -> fra (Frankfurt) to cut latency for the
+# Gulf-based UAT user (~300ms RTT to ord vs ~100-130ms to fra). bom (Mumbai,
+# closest) was capacity-blocked by Fly at the time. Single machine on a
+# single-attach volume; the SQLite data was migrated by sftp-restoring a
+# backup into a fresh fra volume.
+primary_region = "fra"
+
+# `flyctl deploy --remote-only` is the canonical command — Fly's remote
+# builder builds the image from this checked-out repo + Dockerfile and
+# pushes to registry.fly.io/idraa. No external image registry.
+
+[deploy]
+  # Volume `data` is single-attach: only one machine can mount it at a time,
+  # so the default bluegreen strategy (which runs new + old simultaneously)
+  # would hang. `immediate` accepts a ~10-30s traffic gap during deploys.
+  strategy = "immediate"
+
+[env]
+  ENVIRONMENT = "prod"
+  # Physical DB filename deliberately unchanged: the volume is restored from the
+  # old app's snapshot, the DB runs WAL mode (renaming only the main file drops
+  # committed-but-uncheckpointed -wal frames), and the filename is invisible to
+  # users. See docs/runbooks/idraa-fly-cutover.md.
+  DATABASE_URL = "sqlite+aiosqlite:////data/riskflow.db"
+  # Operational retention (#297): the 6-hourly + opportunistic sweep purges heavy
+  # run_samples blobs older than N days (keeps the run + its summary; charts for
+  # purged runs lose re-derivable detail). Enabled 2026-06-29 after the run_samples
+  # backlog filled the 1GB volume and OOM-style crash-looped the app on a SQLite
+  # "disk I/O error". 0 = disabled. retention_run_delete_days stays 0 (we purge
+  # samples, we don't auto-delete whole runs). Tune freely — volume now 3GB.
+  RETENTION_SAMPLE_PURGE_DAYS = "14"
+  # Task 5 (Arch-B1): startup-only VACUUM reclaims the disk space the purge
+  # sweep frees (deleting run_samples rows leaves free pages inside the
+  # SQLite file until VACUUM rewrites it). AUTOCOMMIT, SQLite-only, gated on
+  # no-active-runs — see src/idraa/services/retention.py:_run_vacuum.
+  RETENTION_VACUUM_ENABLED = "1"
+
+# Durability posture (decided in the whole-project-eval hygiene pass):
+# - Commit durability: SQLite WAL + PRAGMA synchronous=FULL (src/idraa/db.py)
+#   — committed transactions survive an unplanned host crash.
+# - Volume disaster recovery: Fly's automatic daily volume snapshots
+#   (`fly volumes snapshots list <vol-id>`), RPO <= 24h, 5-day retention.
+# - If a tighter RPO is ever required, litestream WAL-shipping to object
+#   storage is the documented upgrade path (new PR; needs a bucket + token).
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Scale-to-zero KEPT (2026-06-29 operator decision): idle → stop, next request
+  # auto-starts (~2-3s cold start). $0 idle cost. ACCEPTED RISK (gap #211): Fly
+  # auto-stop watches inbound HTTP, not background work, so a long Monte-Carlo run
+  # with no active browser connection can be stopped mid-flight (keep the run page
+  # open so status-polling holds the machine up). The performance VM below makes
+  # runs finish faster, shrinking that exposure window.
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  cpu_kind = "performance"
+  cpus = 2
+  memory_mb = 4096
+  # 2026-06-29 — moved off throttled shared-cpu-1x to a dedicated performance
+  # VM. The weight-robustness ensemble (#419) is CPU-bound and single-threaded;
+  # a many-control single run did ~10M closed-form Shapley evals that crawled
+  # on a throttled shared core. A dedicated performance core runs the run while
+  # the 2nd core serves uvicorn/health; 4 GB keeps the 100k-iter headroom from
+  # the prior OOM note (2026-05-21). Higher cost, accepted for run reliability.

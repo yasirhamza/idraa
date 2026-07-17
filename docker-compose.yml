@@ -1,0 +1,42 @@
+# Local dev stack. `docker compose up` brings the whole thing up.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: idraa
+      POSTGRES_PASSWORD: idraa
+      POSTGRES_DB: idraa
+    ports:
+      - "5432:5432"
+    volumes:
+      - riskflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idraa"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: idraa:dev
+    environment:
+      DATABASE_URL: postgresql+asyncpg://idraa:idraa@db:5432/idraa
+      # SESSION_SECRET MUST be set by the operator (generate via:
+      # python -c 'import secrets; print(secrets.token_urlsafe(48))').
+      # The ${VAR:?message} syntax makes docker compose refuse to start
+      # without it — prevents the "I copied docker-compose.yml and ran it"
+      # failure mode where a committed placeholder signs real cookies.
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env or the environment}
+      # ENVIRONMENT is explicit so the config guard's env-dependent
+      # hardening (32-char minimum secret in prod) is predictable.
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  riskflow_pgdata:

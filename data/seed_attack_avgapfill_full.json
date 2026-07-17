@@ -1,0 +1,251 @@
+{
+  "_note": "Attack-coverage gap-fill epic (#529), Task 2: ATT&CK technique-mapping rows for the 9 new library entries authored in data/seed_library_entries_extension.json (Task 1), plus 3 ICS-twin rows added to pre-existing entries (watering-hole-industry-targeted, it-ot-bridge-compromise, oem-remote-maintenance-abuse) per design doc Sec 6.1. SEPARATE from data/seed_attack_full_mappings.json / seed_attack_d_iii_b_full.json so the historical fail-loud attack-seed migrations that own those files are not disturbed. Read ONLY by the Task-3 migration.",
+  "mappings": [
+    {
+      "entry_slug": "edge-ransomware-perimeter-gateway",
+      "domain": "enterprise",
+      "technique_id": "T1190",
+      "rationale": "Entry describes \"mass-exploitation of a known CVE in an internet-facing edge appliance (VPN concentrator, remote-access gateway, perimeter firewall) as the initial access for ransomware deployment\" -- Citrix Bleed (CVE-2023-4966) was mass-exploited in exactly this way against Boeing, ICBC, and Comcast-Xfinity, and Ivanti Connect Secure (CVE-2023-46805/CVE-2024-21887, CISA Emergency Directive 24-01) and CVE-2025-0282 were likewise mass-exploited to deploy the SPAWN malware family, per the entry's own citations.",
+      "provenance": "cited",
+      "citations": [
+        "Citrix Bleed (CVE-2023-4966) enabling ransomware at Boeing / ICBC / Comcast-Xfinity, 2023; Ivanti Connect Secure (CVE-2023-46805, CVE-2024-21887; CISA Emergency Directive 24-01, Jan 2024) and CVE-2025-0282 mass-exploited to deploy SPAWN (Verizon DBIR 2026 p.108); DBIR 2026 p.98 (29% of ransomware initial access via unpatched edge-device vulnerabilities), p.15 (exploitation of vulnerabilities is the #1 initial-access vector at 31%)"
+      ]
+    },
+    {
+      "entry_slug": "edge-ransomware-perimeter-gateway",
+      "domain": "enterprise",
+      "technique_id": "T1133",
+      "rationale": "The exploited appliance class the entry names -- \"VPN concentrator, remote-access gateway\" -- is itself an externally-facing remote-access service; Citrix and Ivanti Connect Secure (the entry's named products) are both VPN/remote-access gateway products, so the initial-access surface is simultaneously an exploited public-facing application (T1190) and an external remote-access service reached directly from the internet.",
+      "provenance": "cited",
+      "citations": [
+        "Citrix Bleed (CVE-2023-4966) enabling ransomware at Boeing / ICBC / Comcast-Xfinity, 2023; Ivanti Connect Secure (CVE-2023-46805, CVE-2024-21887; CISA Emergency Directive 24-01, Jan 2024) and CVE-2025-0282 mass-exploited to deploy SPAWN (Verizon DBIR 2026 p.108); DBIR 2026 p.98 (29% of ransomware initial access via unpatched edge-device vulnerabilities), p.15 (exploitation of vulnerabilities is the #1 initial-access vector at 31%)"
+      ]
+    },
+    {
+      "entry_slug": "edge-ransomware-perimeter-gateway",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry's threat_event_type is \"ransomware\" and states the CVE exploitation is \"for ransomware deployment\" -- Citrix Bleed enabled ransomware deployment at Boeing/ICBC/Comcast-Xfinity and the Ivanti/SPAWN campaign was likewise ransomware-directed, the encryption-for-impact step this entry models as loss-effect-identical to the library's other ransomware entries (per canonical_fair_gap).",
+      "provenance": "cited",
+      "citations": [
+        "Citrix Bleed (CVE-2023-4966) enabling ransomware at Boeing / ICBC / Comcast-Xfinity, 2023; Ivanti Connect Secure (CVE-2023-46805, CVE-2024-21887; CISA Emergency Directive 24-01, Jan 2024) and CVE-2025-0282 mass-exploited to deploy SPAWN (Verizon DBIR 2026 p.108); DBIR 2026 p.98 (29% of ransomware initial access via unpatched edge-device vulnerabilities), p.15 (exploitation of vulnerabilities is the #1 initial-access vector at 31%)"
+      ]
+    },
+    {
+      "entry_slug": "edge-espionage-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1133",
+      "rationale": "Entry describes exploitation of \"a known edge-appliance CVE\" for persistent access; Volt Typhoon's documented campaign compromised \"edge routers and appliances across multiple U.S. critical-infrastructure sectors\" for persistent access (CISA AA24-038A) -- these edge routers/appliances are externally-facing remote-access infrastructure reached directly from the internet.",
+      "provenance": "cited",
+      "citations": [
+        "Volt Typhoon PRC state-sponsored compromise of edge routers/appliances across multiple U.S. critical-infrastructure sectors - CISA AA24-038A (2024-02-07); Palo Alto PAN-OS GlobalProtect CVE-2024-3400 (2024); Fortinet FortiOS mass exploitation; UNC5221 Ivanti espionage. Verizon DBIR 2026 p.15 (exploitation #1 initial-access vector). NOTE: cite CISA advisory IDs; CISA URLs 403 on automated fetch."
+      ]
+    },
+    {
+      "entry_slug": "edge-espionage-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1190",
+      "rationale": "Entry's example_incidents name Palo Alto PAN-OS GlobalProtect (CVE-2024-3400), Fortinet FortiOS, and UNC5221's Ivanti exploitation as mass-exploited edge-appliance CVEs -- direct exploitation of an internet-facing application/appliance for initial access, matching the entry's \"known edge-appliance CVE\" framing.",
+      "provenance": "cited",
+      "citations": [
+        "Volt Typhoon PRC state-sponsored compromise of edge routers/appliances across multiple U.S. critical-infrastructure sectors - CISA AA24-038A (2024-02-07); Palo Alto PAN-OS GlobalProtect CVE-2024-3400 (2024); Fortinet FortiOS mass exploitation; UNC5221 Ivanti espionage. Verizon DBIR 2026 p.15 (exploitation #1 initial-access vector). NOTE: cite CISA advisory IDs; CISA URLs 403 on automated fetch."
+      ]
+    },
+    {
+      "entry_slug": "edge-espionage-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1567",
+      "rationale": "Entry states the actor's objective is to \"exfiltrate data/secrets\" but does not name the specific exfiltration channel used in any of its example_incidents (Volt Typhoon, PAN-OS, FortiOS, Ivanti); exfiltration over a legitimate external web service is a common generic channel nation-state edge-appliance campaigns use to blend into normal traffic, so this row is an inference from the entry's stated objective rather than an incident-documented mechanism.",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "edge-device-orb-foothold",
+      "domain": "ics",
+      "technique_id": "T0883",
+      "rationale": "Entry describes compromise of \"an internet-facing edge device (EOL router/modem, VPN concentrator)\" reached directly for \"unauthorized-access foothold\" purposes; DBIR 2026 (p.34, in the entry's own citations) documents \"45,000-50,000 EOL internet-facing cellular modems with exposed management interfaces repurposed as operational relay boxes\" -- access via an exposed management interface with no exploit required, matching T0883's \"without the use of exploits\" definition. The J-Magic campaign's \"magic packet\" backdoor on Juniper edge routers and the KV-botnet's SOHO/edge-router compromise (both in the entry's citations) are the same internet-exposed-device access pattern.",
+      "provenance": "cited",
+      "citations": [
+        "J-Magic campaign against Juniper edge routers via the cd00r 'magic packet' backdoor (Verizon DBIR 2026 p.108); FBI/CISA disruption of the PRC-linked KV-botnet of SOHO/edge routers (2024-01-31); DBIR 2026 p.34 (45,000-50,000 EOL internet-facing cellular modems with exposed management interfaces repurposed as operational relay boxes)"
+      ]
+    },
+    {
+      "entry_slug": "edge-device-orb-foothold",
+      "domain": "enterprise",
+      "technique_id": "T1584",
+      "rationale": "Entry's core framing is \"operational-relay-box (ORB) repurposing\" of the compromised edge device -- T1584 explicitly covers adversaries compromising \"network devices\" and forming \"a botnet they can leverage,\" the exact ORB-repurposing behavior the entry describes as distinct from OT-consequence scenarios. The KV-botnet (SOHO/edge routers, disrupted by FBI/CISA 2024-01-31) and the DBIR-documented EOL-modem ORB network are both named examples of this device-to-infrastructure repurposing.",
+      "provenance": "cited",
+      "citations": [
+        "J-Magic campaign against Juniper edge routers via the cd00r 'magic packet' backdoor (Verizon DBIR 2026 p.108); FBI/CISA disruption of the PRC-linked KV-botnet of SOHO/edge routers (2024-01-31); DBIR 2026 p.34 (45,000-50,000 EOL internet-facing cellular modems with exposed management interfaces repurposed as operational relay boxes)"
+      ]
+    },
+    {
+      "entry_slug": "transient-cyber-asset-ot-intrusion",
+      "domain": "ics",
+      "technique_id": "T0864",
+      "rationale": "Entry's own example_incidents states this archetype is \"pattern-attested\" via \"MITRE ATT&CK for ICS documents T0864 Transient Cyber Asset as a recognized top-tier ICS initial-access technique, and NIST SP 800-82r3 Section 6 addresses transient-device controls\" -- the entry names this exact technique as its defining archetype (attack_vector: transient_device_compromise; tags include \"transient_cyber_asset\"). Grounded in NIST SP 800-82r3 Sec 6 as the checkable primary technical source, not the ATT&CK technique page itself (catalog attribution, not incident evidence).",
+      "provenance": "cited",
+      "citations": [
+        "NIST SP 800-82r3 Sec 6 (transient-device controls); MITRE ATT&CK for ICS T0864 Transient Cyber Asset (recognized top-tier ICS initial-access technique); pattern documented across CISA ICS advisories"
+      ]
+    },
+    {
+      "entry_slug": "browser-zeroday-driveby",
+      "domain": "enterprise",
+      "technique_id": "T1189",
+      "rationale": "Entry describes \"opportunistic exploitation of a browser or client-software zero-day via a drive-by/malicious-ad delivery\" -- CVE-2023-4863 (libwebp heap-buffer-overflow) was mass-exploited exactly this way, client-side, across Chrome and other browsers starting Sep 2023, matching Drive-by Compromise's definition of a browser exploited simply by visiting a page.",
+      "provenance": "cited",
+      "citations": [
+        "CVE-2023-4863 (libwebp) mass client-side exploitation across Chrome and other browsers, exploited in the wild Sep 2023; Google TAG 'in-the-wild 0-days' annual tracking of browser zero-days"
+      ]
+    },
+    {
+      "entry_slug": "browser-zeroday-driveby",
+      "domain": "enterprise",
+      "technique_id": "T1203",
+      "rationale": "Entry's description explicitly names \"MITRE ATT&CK T1203, entirely unmapped in the library\" as its own defining gap; CVE-2023-4863 is the named client-software vulnerability whose exploitation via drive-by delivery achieves code execution on the endpoint, the exact behavior T1203 covers.",
+      "provenance": "cited",
+      "citations": [
+        "CVE-2023-4863 (libwebp) mass client-side exploitation across Chrome and other browsers, exploited in the wild Sep 2023; Google TAG 'in-the-wild 0-days' annual tracking of browser zero-days"
+      ]
+    },
+    {
+      "entry_slug": "email-client-zeroclick-espionage",
+      "domain": "enterprise",
+      "technique_id": "T1566",
+      "rationale": "The CVE-2023-23397 exploit is delivered as a malicious calendar/reminder item arriving via the Outlook mail/calendar channel -- the same electronically-delivered-message vector T1566 Phishing covers. The entry's canonical_fair_gap distinguishes this archetype from click-dependent phishing on the EXPLOITATION trigger (zero-click vs. requiring a user click), not on the delivery channel; APT28/Fancy Bear still delivered the malicious item via a mail-borne message.",
+      "provenance": "cited",
+      "citations": [
+        "Microsoft Outlook CVE-2023-23397 zero-click NTLM-relay vulnerability, exploited by APT28/Fancy Bear against European government, military, and other-sector targets (Microsoft MSTIC + CERT-EU SA2023-018, Mar 2023)"
+      ]
+    },
+    {
+      "entry_slug": "email-client-zeroclick-espionage",
+      "domain": "enterprise",
+      "technique_id": "T1187",
+      "rationale": "Entry's named incident, Microsoft Outlook CVE-2023-23397, is documented as a zero-click NTLM-relay vulnerability: a crafted reminder/task item forces the client to automatically authenticate to an attacker-controlled server, leaking NTLM credential material for relay -- exactly Forced Authentication's definition of invoking a mechanism that makes a user/client automatically provide authentication information an adversary can intercept.",
+      "provenance": "cited",
+      "citations": [
+        "Microsoft Outlook CVE-2023-23397 zero-click NTLM-relay vulnerability, exploited by APT28/Fancy Bear against European government, military, and other-sector targets (Microsoft MSTIC + CERT-EU SA2023-018, Mar 2023)"
+      ]
+    },
+    {
+      "entry_slug": "removable-media-airgap-ot",
+      "domain": "ics",
+      "technique_id": "T0847",
+      "rationale": "Entry describes \"delivery of malware across an air gap into OT via removable media (USB)\" -- Stuxnet's documented delivery mechanism, per the Symantec W32.Stuxnet Dossier, was propagation onto air-gapped PLC engineering systems via infected USB drives, exactly T0847's \"copying malware to removable media which is inserted into the control systems environment.\"",
+      "provenance": "cited",
+      "citations": [
+        "Stuxnet (W32.Stuxnet, 2010) - air-gapped PLCs compromised via USB, per the Symantec W32.Stuxnet Dossier; Raspberry Robin USB worm (2021-present, Red Canary / Microsoft)"
+      ]
+    },
+    {
+      "entry_slug": "removable-media-airgap-ot",
+      "domain": "ics",
+      "technique_id": "T0831",
+      "rationale": "Stuxnet's payload manipulated physical process control directly -- altering centrifuge operating behavior at Natanz while feeding falsified telemetry to operators, per the Symantec dossier -- the \"changes to set point values ... or other parameters\" this technique covers, matching the entry's \"the Stuxnet class\" framing.",
+      "provenance": "cited",
+      "citations": [
+        "Stuxnet (W32.Stuxnet, 2010) - air-gapped PLCs compromised via USB, per the Symantec W32.Stuxnet Dossier; Raspberry Robin USB worm (2021-present, Red Canary / Microsoft)"
+      ]
+    },
+    {
+      "entry_slug": "removable-media-airgap-ot",
+      "domain": "ics",
+      "technique_id": "T0836",
+      "rationale": "The Symantec W32.Stuxnet Dossier documents that Stuxnet specifically altered the output-frequency parameters of the targeted centrifuge frequency converters (cycling frequency outside normal operating ranges) while masking the change from operators -- the device-parameter-modification behavior T0836 covers, distinct from (and layered with) the broader control manipulation in the T0831 row.",
+      "provenance": "cited",
+      "citations": [
+        "Stuxnet (W32.Stuxnet, 2010) - air-gapped PLCs compromised via USB, per the Symantec W32.Stuxnet Dossier; Raspberry Robin USB worm (2021-present, Red Canary / Microsoft)"
+      ]
+    },
+    {
+      "entry_slug": "ot-wireless-field-network-compromise",
+      "domain": "ics",
+      "technique_id": "T0860",
+      "rationale": "Entry's own description names this \"the T0860 class\" -- \"Compromise via OT field-wireless (WirelessHART/ISA100, plant Wi-Fi, rogue AP, cellular field networks)\"; Vitek Boden's Maroochy Shire attack used a stolen SCADA laptop and two-way radio to gain unauthorized wireless access to the sewage system's control network, the canonical case documented in the MITRE ATT&CK for ICS T0860 procedure examples the entry cites.",
+      "provenance": "cited",
+      "citations": [
+        "Maroochy Shire SCADA radio attack (Vitek Boden, 2000) - the canonical wireless-OT case, in the MITRE ATT&CK for ICS T0860 procedure examples and the Abrams/Weiss NIST case study"
+      ]
+    },
+    {
+      "entry_slug": "ot-wireless-field-network-compromise",
+      "domain": "ics",
+      "technique_id": "T0836",
+      "rationale": "Boden's Maroochy Shire attack issued unauthorized radio commands that altered pumping-station operating parameters (valve/pump control settings), causing malfunctions and sewage overflows across the network -- the device-parameter-modification behavior T0836 covers, documented in the entry's cited Abrams/Weiss NIST case study of the same incident.",
+      "provenance": "cited",
+      "citations": [
+        "Maroochy Shire SCADA radio attack (Vitek Boden, 2000) - the canonical wireless-OT case, in the MITRE ATT&CK for ICS T0860 procedure examples and the Abrams/Weiss NIST case study"
+      ]
+    },
+    {
+      "entry_slug": "destructive-wiper-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1485",
+      "rationale": "Entry describes \"deployment of destructive wiper / pseudo-ransomware malware with no ransom and no recovery path\" -- NotPetya (2017, Sandworm/GRU) and Shamoon/Disttrack (2012 Saudi Aramco, ~30,000 workstations wiped) are the entry's named exemplars of exactly this behavior: destroying data/files at scale to interrupt availability with no decryption path, matching T1485's definition.",
+      "provenance": "cited",
+      "citations": [
+        "NotPetya (2017, Sandworm/GRU) - pushed via a trojanized M.E.Doc software update, spreading through EternalBlue/EternalRomance + Mimikatz (Maersk, Merck, Mondelez, FedEx/TNT); Shamoon/Disttrack (2012 Saudi Aramco, ~30,000 workstations wiped; 2016-17 revival); Olympic Destroyer (2018 PyeongChang); HermeticWiper/WhisperGate (2022 Ukraine)"
+      ]
+    },
+    {
+      "entry_slug": "destructive-wiper-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1561",
+      "rationale": "Shamoon/Disttrack is documented as a raw master-boot-record wiper that overwrote disk data on ~30,000 Saudi Aramco workstations, and HermeticWiper (2022 Ukraine, named in the entry) likewise corrupts the master boot record/partition table -- both are raw-disk-wipe behavior distinct from selective file destruction, matching T1561.",
+      "provenance": "cited",
+      "citations": [
+        "NotPetya (2017, Sandworm/GRU) - pushed via a trojanized M.E.Doc software update, spreading through EternalBlue/EternalRomance + Mimikatz (Maersk, Merck, Mondelez, FedEx/TNT); Shamoon/Disttrack (2012 Saudi Aramco, ~30,000 workstations wiped; 2016-17 revival); Olympic Destroyer (2018 PyeongChang); HermeticWiper/WhisperGate (2022 Ukraine)"
+      ]
+    },
+    {
+      "entry_slug": "destructive-wiper-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1490",
+      "rationale": "NotPetya is documented as disabling Volume Shadow Copy and corrupting the Master File Table to specifically prevent recovery, not merely encrypt for later decryption -- the entry's \"no recovery path\" framing is this exact behavior. HermeticWiper (also named in the entry) likewise deletes Volume Shadow Copies before wiping, the recovery-inhibition step T1490 covers.",
+      "provenance": "cited",
+      "citations": [
+        "NotPetya (2017, Sandworm/GRU) - pushed via a trojanized M.E.Doc software update, spreading through EternalBlue/EternalRomance + Mimikatz (Maersk, Merck, Mondelez, FedEx/TNT); Shamoon/Disttrack (2012 Saudi Aramco, ~30,000 workstations wiped; 2016-17 revival); Olympic Destroyer (2018 PyeongChang); HermeticWiper/WhisperGate (2022 Ukraine)"
+      ]
+    },
+    {
+      "entry_slug": "destructive-wiper-nationstate",
+      "domain": "enterprise",
+      "technique_id": "T1195",
+      "rationale": "Entry's example_incidents state NotPetya \"was pushed via a trojanized M.E.Doc software update\" -- compromise of a legitimate Ukrainian tax-software vendor's update mechanism to distribute the wiper, the exact product/update-mechanism manipulation T1195 covers, and the entry's named initial-delivery vector.",
+      "provenance": "cited",
+      "citations": [
+        "NotPetya (2017, Sandworm/GRU) - pushed via a trojanized M.E.Doc software update, spreading through EternalBlue/EternalRomance + Mimikatz (Maersk, Merck, Mondelez, FedEx/TNT); Shamoon/Disttrack (2012 Saudi Aramco, ~30,000 workstations wiped; 2016-17 revival); Olympic Destroyer (2018 PyeongChang); HermeticWiper/WhisperGate (2022 Ukraine)"
+      ]
+    },
+    {
+      "entry_slug": "watering-hole-industry-targeted",
+      "domain": "ics",
+      "technique_id": "T0817",
+      "rationale": "ICS-domain twin of the entry's existing T1189 (enterprise Drive-by Compromise) row: the entry models a nation-state watering hole targeting the OT/ICS sector specifically (applicable_industries includes utilities/electric_utility/oil_and_gas; example_incidents name DragonFly/Energetic Bear compromising \"ICS vendor websites ... to deliver Havex RAT to energy sector employees\"). CISA ICS-ALERT-14-176-02A documents this same \"watering hole-style\" campaign against ICS-vendor sites, the ICS-catalog counterpart of the already-mapped enterprise Drive-by Compromise technique.",
+      "provenance": "cited",
+      "citations": [
+        "CISA, 'ICS Focused Malware (Update A)', ICS-ALERT-14-176-02A, cisa.gov (accessed 2026-07-05)"
+      ]
+    },
+    {
+      "entry_slug": "it-ot-bridge-compromise",
+      "domain": "ics",
+      "technique_id": "T0865",
+      "rationale": "ICS-domain twin of the entry's existing enterprise T1078/T1133 rows: attack_vector is \"spearphishing_followed_by_lateral_movement\" and the description states the intrusion \"often begins as a routine phishing or credential-stuffing attack on IT assets, with the OT pivot as the escalation step.\" T0865 is the ICS-catalog classification of the same spearphishing-based initial vector that precedes the IT-to-OT pivot this entry models; no example_incident (Colonial Pipeline, Norsk Hydro) documents an attachment-specific delivery, so this stays an inference from the entry's own attack_vector field, consistent with the entry's existing sibling rows on this slug.",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "oem-remote-maintenance-abuse",
+      "domain": "ics",
+      "technique_id": "T0886",
+      "rationale": "ICS-domain companion to the entry's existing T0822 (Internet Accessible Device) row: the Oldsmar, FL water-treatment intrusion (2021) used TeamViewer -- remote-access/remote-services software already present on the SCADA operator workstation -- to directly reach and manipulate the HMI and attempt the sodium hydroxide setpoint change, the leverage-remote-services-to-reach-assets behavior T0886 covers, distinct from T0822's internet-exposure characteristic of the same access point.",
+      "provenance": "cited",
+      "citations": [
+        "Threatpost, 'Florida Water Plant Hack: Leaked Credentials Found in Breach Database' (2021-02-11), threatpost.com (accessed 2026-07-05)"
+      ]
+    }
+  ]
+}

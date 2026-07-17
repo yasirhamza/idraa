@@ -1,0 +1,150 @@
+<h2 class="text-h3 text-ink-1 mb-3">Overview</h2>
+<p class="text-body text-ink-2 mb-3">
+  Idraa ships with two curated catalogs &mdash; the <strong>Scenario Library</strong>
+  and the <strong>Control Library</strong> &mdash; plus a
+  <strong>Framework&rarr;FAIR-CAM Crosswalk</strong> that grounds control entries in
+  recognised frameworks (CIS Controls, NIST CSF). Together these let you start from
+  ready-made, peer-reviewed content rather than a blank form.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Library values are <strong>starting points to review for your context</strong>, not
+  definitive figures. Before relying on any catalog entry, check that the threat actor
+  type, asset class, and loss assumptions match your organisation&rsquo;s situation.
+  See also the
+  <a class="text-brand hover:underline" href="/help/getting-started">Getting started</a>
+  caveats for more on calibration and decision-support limits.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Scenario Library</h2>
+<p class="text-body text-ink-2 mb-3">
+  The Scenario Library (<a class="text-brand hover:underline" href="/library">/library</a>)
+  is a browseable catalog of pre-built risk scenarios. Each entry carries a
+  threat actor type, threat event type, asset class, industry tags, and calibrated
+  FAIR input ranges (Threat Event Frequency, Vulnerability, Primary Loss, Secondary Loss).
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Use the filter sidebar to narrow by threat actor, threat category, asset class, or
+  industry. The search box matches on entry name. Results are paginated; use the page
+  controls at the bottom to move through the catalog.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Open an entry&rsquo;s detail page to see its full description and calibrated parameters.
+  From there you can start a new scenario pre-populated with the entry&rsquo;s values by
+  clicking <strong>Use this scenario</strong>. The wizard opens with the library values
+  already filled in; you then adjust any input that does not match your specific context.
+  This is the fastest path to a defensible first estimate.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  For the mechanics of adjusting inputs once the wizard is open, see
+  <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>.
+  To bulk-import or export library entries as JSON bundles, see
+  <a class="text-brand hover:underline" href="/help/import-export">Import &amp; export</a>.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">Adopt from any industry and tweak</h3>
+<p class="text-body text-ink-2 mb-3">
+  The Scenario Library shows entries from <strong>all industries</strong> by default.
+  Industry and sub-sector are optional filter sidebar controls &mdash; use them to
+  narrow to your sector, or browse across sectors to find scenarios whose threat
+  actor, threat event, and asset class match your situation regardless of the
+  entry&rsquo;s tagged industry. A professional-services payroll-BEC scenario, for
+  example, is relevant to many sectors even if it was originally curated for a
+  different vertical.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  When you adopt a scenario from a <strong>different industry</strong>, the wizard
+  pre-fills Primary Loss and Secondary Loss re-scaled to
+  <strong>your organisation&rsquo;s revenue tier</strong> using IRIS-2025 p50
+  figures &mdash; the rescale multiplier is
+  IRIS&nbsp;p50(your&nbsp;tier)&nbsp;&divide;&nbsp;IRIS&nbsp;p50(the&nbsp;entry&rsquo;s
+  anchor&nbsp;tier). The entry&rsquo;s industry tag is
+  <strong>advisory only</strong> and is not used in the rescale calculation: IRIS
+  does not publish industry &times; revenue-tier loss figures jointly, so only the
+  revenue-tier dimension drives the adjustment. Threat Event Frequency and
+  Vulnerability pass through unchanged from the library entry. The
+  <strong>Impact-page calibration banner</strong> in the wizard shows the
+  anchor&nbsp;&rarr;&nbsp;target rescale and the applied multiplier so you can see
+  exactly what was adjusted. All values remain fully editable &mdash; library figures
+  are starting points to review and tweak for your specific context. See the
+  <a class="text-brand hover:underline" href="/help/getting-started">Getting started</a>
+  caveats and
+  <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>
+  for guidance on calibrating your inputs.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Control Library</h2>
+<p class="text-body text-ink-2 mb-3">
+  The Control Library
+  (<a class="text-brand hover:underline" href="/controls/library">/controls/library</a>)
+  is a companion catalog of ready-made security controls, each tagged with a
+  FAIR-CAM sub-function, control type, reference annual cost, and framework tags
+  (NIST CSF subcategories, CIS Safeguards, ISO 27001 controls).
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Browse and filter by FAIR-CAM sub-function, control type, or framework tag.
+  Cards show whether your organisation has already adopted the control so you do
+  not duplicate effort.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">Adopt a control (&ldquo;Add to My Controls&rdquo;)</h3>
+<p class="text-body text-ink-2 mb-3">
+  Analyst and Admin users can adopt a library control into their organisation&rsquo;s
+  editable control set by clicking <strong>Add to My Controls</strong> on any entry
+  card or detail page. Adopting clones a snapshot of the library entry at that version
+  and creates a new control in your organisation&rsquo;s control list
+  (<a class="text-brand hover:underline" href="/controls">/controls</a>) with
+  <em>source = Library-derived</em>.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  After adopting you are taken to the control&rsquo;s detail page where you can
+  review and confirm its FAIR-CAM function assignments, adjust cost figures, and
+  tune effectiveness parameters for your environment before linking it to scenarios.
+  Assignments copied from the library start as <em>unconfirmed</em>; confirm each one
+  once you have reviewed it. Re-adopting the same entry is allowed and results in a
+  second independent copy; the &ldquo;Already adopted&rdquo; badge on the card flags
+  this to avoid accidental duplicates.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  You can also adopt controls directly from the scenario wizard (Step 5 &mdash;
+  Controls). When you adopt from inside the wizard, you are returned to the wizard
+  after the adopt completes so you can immediately link the new control to your
+  scenario.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Framework&rarr;FAIR-CAM Crosswalk</h2>
+<p class="text-body text-ink-2 mb-3">
+  The crosswalk maps framework controls &mdash; CIS Safeguards, NIST CSF
+  subcategories, ISO 27001 controls &mdash; to FAIR-CAM sub-functions (Threat
+  Event Frequency reduction, Vulnerability reduction, Primary Loss reduction, and so
+  on). This mapping is the evidence layer behind each library control entry&rsquo;s
+  FAIR-CAM claim: a control that carries a CIS or NIST tag has its claimed FAIR-CAM
+  sub-function validated against the crosswalk at import time.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The crosswalk is canonical and read-only &mdash; it reflects the published
+  framework versions seeded into Idraa. It is used internally to validate control
+  library entries and to surface framework tags on control cards. If you are importing
+  custom control library data, ensure the framework tags in your bundle match the
+  seeded framework identifiers and codes.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Scenario&rarr;Control Recommendations</h2>
+<p class="text-body text-ink-2 mb-3">
+  When you open a scenario library entry&rsquo;s detail page, Idraa shows a
+  <strong>Recommended controls</strong> panel listing the control library entries
+  that the scenario&rsquo;s curators suggest as most relevant. The same recommendations
+  appear in the scenario wizard&rsquo;s Controls step (Step 5) for scenarios that were
+  started from a library entry.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Each recommendation shows whether your organisation has already adopted that
+  control. Un-adopted recommendations display an <strong>Add to My Controls</strong>
+  button so you can adopt them inline without leaving the page. Recommendations are
+  curated by the library authors and scoped to a maximum of six controls per scenario
+  entry &mdash; they are suggestions, not a mandatory control set.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Recommendations also appear on the scenario detail page for scenarios created from a
+  library entry, showing only the controls that have not yet been adopted, as a
+  persistent nudge to complete the suggested control set.
+</p>

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+
+{% block title %}Scenarios{% endblock %}
+{% block content %}
+
+{# Import is admin-only — gate the page-action so non-admins don't see it
+   (the route's require_role(ADMIN) is the real gate; this hides the affordance).
+   Export CSV (repointed in Task 7) + Export JSON are read-only and shown to all. #}
+{{ page_header(
+  title="Scenarios",
+  breadcrumb=breadcrumb_for(request),
+  actions=(
+    [{"label": "Import", "href": "/scenarios/import", "style": "ghost", "icon": "⇧"}]
+      if (current_user and current_user.role.value == "admin") else []
+  ) + [
+    {"label": "Export CSV", "href": "/scenarios/export?format=csv", "style": "brand", "icon": "⇩", "download": True},
+    {"label": "Export JSON", "href": "/scenarios/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
+  ] + (
+    [{"label": "+ New scenario", "href": "/scenarios/new/wizard", "style": "primary"}]
+      if (current_user and current_user.role.value in ("analyst", "admin")) else []
+  ),
+) }}
+
+{% set columns = [
+  {"key": "name",           "label": "Name",           "sortable": True, "priority": "primary"},
+  {"key": "threat_category","label": "Threat",          "priority": "secondary"},
+  {"key": "industry",       "label": "Industry",        "priority": "secondary"},
+  {"key": "revenue_tier",   "label": "Revenue tier",    "priority": "hidden_on_mobile", "numeric": True},
+  {"key": "status_value",   "label": "Status",          "kind": "status_pill", "pill_kind": "entity"},
+  {"key": "updated",        "label": "Updated",         "priority": "hidden_on_mobile"},
+  {"key": "_actions",       "label": "",                "kind": "action_menu"},
+] %}
+
+{# Empty-state CTAs matched to each target route's RBAC gate (review
+   finding): library browse is viewer+, the wizard is analyst/admin, import
+   is admin-only — don't show buttons that 403. #}
+{% set _empty_ctas = [{"label": "Browse library", "href": "/library", "style": "primary"}] %}
+{% if current_user and current_user.role.value in ("analyst", "admin") %}
+  {% set _ = _empty_ctas.append({"label": "+ New scenario", "href": "/scenarios/new/wizard", "style": "outline"}) %}
+{% endif %}
+{% if current_user and current_user.role.value == "admin" %}
+  {% set _ = _empty_ctas.append({"label": "Import CSV", "href": "/scenarios/import", "style": "ghost"}) %}
+{% endif %}
+
+{% set rows = [] %}
+{% for s in scenarios %}
+{%- set _ = rows.append({
+  "id":             s.id | string,
+  "name":           s.name,
+  "threat_category": s.threat_category.value if s.threat_category else "—",
+  "industry":       s.organization.industry_slug if s.organization else "—",
+  "revenue_tier":   s.organization.revenue_tier if s.organization else "—",
+  "status_value":   s.status.value,
+  "updated":        s.updated_at | format_date,
+  "_actions": [
+    {"label": "Edit", "href": "/scenarios/" ~ s.id ~ "/edit"},
+  ] + (
+    [{
+      "label": "Delete",
+      "action": "/scenarios/" ~ s.id ~ "/delete",
+      "method": "post",
+      "danger": True,
+      "confirm": "Delete scenario " ~ s.name ~ "?",
+      "hidden": {"expected_row_version": s.row_version},
+    }] if (current_user and current_user.role.value in ("analyst", "admin")) else []
+  ),
+}) -%}
+{% endfor %}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  sort_by=sort_by | default("name"),
+  sort_dir=sort_dir | default("asc"),
+  sort_url="/scenarios",
+  row_href_template="/scenarios/{id}",
+  page=page,
+  total=total,
+  page_size=page_size,
+  page_size_key="scenarios",
+  empty={
+    "icon": "⛣",
+    "title": "No scenarios yet",
+    "body": "Start from a curated library entry (pre-calibrated FAIR distributions, OT/ICS included) or build one from scratch.",
+    "cta": _empty_ctas,
+  },
+) }}
+
+{% endblock %}

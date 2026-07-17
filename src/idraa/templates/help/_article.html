@@ -1,0 +1,22 @@
+{# src/idraa/templates/help/_article.html
+   Shared shell included by BOTH the full page and the drawer partial, so the
+   article content is byte-identical in both contexts. `article` is a
+   HelpArticle; `related` is a list of HelpArticle. The body include uses the
+   registry-validated slug (safe — never raw user input). #}
+<article class="prose-help max-w-none">
+  <h1 class="text-h2 text-ink-1">{{ article.title }}</h1>
+  <p class="text-body text-ink-2 mt-1 mb-6">{{ article.summary }}</p>
+
+  {% include "help/articles/" ~ article.slug ~ ".html" %}
+
+  {% if related %}
+  <footer class="mt-10 pt-4 border-t border-border-subtle">
+    <p class="text-meta text-ink-3 mb-2">RELATED</p>
+    <ul class="flex flex-wrap gap-x-4 gap-y-1 text-body">
+      {% for r in related %}
+      <li><a class="text-brand hover:underline" href="/help/{{ r.slug }}">{{ r.title }}</a></li>
+      {% endfor %}
+    </ul>
+  </footer>
+  {% endif %}
+</article>

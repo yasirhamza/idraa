@@ -1,0 +1,62 @@
+{#- Summary view — composes the shared components (spec §Summary view).
+    Context contract (exactly these — NOT has_reinterpreted_v2_snapshot, which
+    lives in detail.html chrome outside the #run-status swap region, Arch-R2):
+    run, display_results, converted_cost_summary, current_user + app globals.
+    Included from _aggregate_results_panel.html (and the P2 view switcher later). -#}
+{% import "runs/components/caveats.html" as cvm %}
+{% from "runs/components/verdict_strip.html" import verdict_strip %}
+{% from "runs/components/trust_chips.html" import trust_chips %}
+{% from "runs/components/dist_table.html" import dist_table %}
+{% from "runs/components/exceedance_chart.html" import exceedance_toggle %}
+{% from "runs/components/scenario_dumbbell.html" import scenario_dumbbell %}
+{% from "runs/components/control_ledger.html" import control_ledger %}
+
+{%- set dr = display_results -%}
+{%- set _wr = dr.weight_robustness -%}
+{%- set matrix = dr.per_scenario_control_matrix -%}
+{#- Jinja scoping: {% set %} inside {% for %} does not leak out — use a
+    namespace() accumulator. -#}
+{%- set zns = namespace(any=false) -%}
+{%- if _wr and _wr.per_control -%}
+  {%- for cid, cell in _wr.per_control.items() if cell.zero_reason -%}
+    {%- set zns.any = true -%}
+  {%- endfor -%}
+{%- endif -%}
+{%- set _has_attribution = matrix and not matrix.unavailable and matrix.controls -%}
+{#- The cost-dedup caveat's only chip lives inside the verdict-strip ROI/dedup
+    cell, which renders ONLY when aggregate_roi AND n_unique_controls are both
+    present. Gating has_cost on the same condition keeps the panel entry from
+    orphaning when a run carries a zero/None-ROI cost_summary (no priced
+    controls). -#}
+{%- set _cost = converted_cost_summary -%}
+{%- set _cost_roi = (_cost.get('aggregate_roi') if _cost is mapping else _cost.aggregate_roi) if _cost else none -%}
+{%- set _cost_nctrl = (_cost.get('n_unique_controls') if _cost is mapping else _cost.n_unique_controls) if _cost else none -%}
+{#- Mean+typical side-by-side (2026-07-04): matrix.basis is always present
+    (every branch of _build_per_scenario_control_matrix sets it, including the
+    empty/unavailable states) and is the authoritative basis for the
+    fair-share/attribution caveat — it's the matrix's own field, in case the
+    matrix + weight_robustness blobs ever disagree on basis. -#}
+{%- set caveats = active_run_caveats(
+      has_cost=(_cost_roi is not none and _cost_nctrl is not none),
+      has_ranges=(_wr is not none and _wr.headline_range_str is defined and _wr.headline_range_str and _wr.headline_range_str != "—"),
+      has_zero_reasons=zns.any,
+      has_tail=dr.dist_stats.has_tail,
+      wr_present=(_wr is not none),
+      has_if_removed=(true if (_has_attribution and _wr is not none and _wr.per_control is not none and _wr.per_control | length > 0) else false),
+      has_attribution=(true if _has_attribution else false),
+      basis=matrix.basis,
+   ) -%}
+
+<div id="summary-view">
+  {{ verdict_strip(dr, converted_cost_summary, run, caveats) }}
+  {{ trust_chips(dr, run, caveats) }}
+  {{ dist_table(dr, caveats) }}
+  {{ exceedance_toggle(dr, caveats) }}
+  {{ scenario_dumbbell(dr) }}
+  {#- Attribution is a wide-screen artifact — matrix + ledger keep the
+      existing hidden sm:block gate (spec Non-goals: responsive conventions hold). -#}
+  <div class="hidden sm:block">
+    {{ control_ledger(dr, run, caveats) }}
+  </div>
+  {{ cvm.caveat_panel(caveats) }}
+</div>

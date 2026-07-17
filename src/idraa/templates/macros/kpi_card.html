@@ -1,0 +1,36 @@
+{#
+  kpi_card(label, value, delta?, format, delta_format?, status?, footer?, currency?) — Spec §3.
+
+  format:        "money" | "percent" | "count" | "ratio"
+  delta_format:  "pct" | "money"  (default "pct")
+  status:        "ok" | "near" | "bad" — renders the border-l accent shared with _posture.html
+  footer:        optional sub-label text
+  currency:      currency symbol string for "money" format (default "$" for USD back-compat)
+
+  Uses the format_delta Jinja filter from F3 for signed delta rendering + colour class.
+#}
+
+{% macro _format_value(value, fmt, currency="$") -%}
+  {%- if value is none -%}—
+  {%- elif fmt == 'money' -%}{{ currency }}{{ '{:,.0f}'.format(value) }}
+  {%- elif fmt == 'percent' -%}{{ '{:.1f}'.format(value * 100) }}%
+  {%- elif fmt == 'count' -%}{{ value|format_count }}
+  {%- elif fmt == 'ratio' -%}{{ '{:.2f}'.format(value) }}
+  {%- else -%}{{ value }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro kpi_card(label, value, delta=none, format='count', delta_format='pct', status=none, footer=none, currency="$") -%}
+<div class="bg-surface-1 border border-border-subtle rounded-card p-4
+            {%- if status == 'near' %} border-l-4 border-l-[var(--color-status-warning)]
+            {%- elif status == 'ok' %} border-l-4 border-l-[var(--color-status-success)]
+            {%- elif status == 'bad' %} border-l-4 border-l-[var(--color-status-critical)]{% endif %}">
+  <p class="text-meta text-ink-2">{{ label }}</p>
+  <p class="text-number-lg text-ink-1 font-mono tabular-nums mt-1">{{ _format_value(value, format, currency) }}</p>
+  {% if delta is not none %}
+    {%- set delta_pair = delta|format_delta(format=delta_format) -%}
+    <p class="text-meta text-{{ delta_pair[1] }} mt-1 font-mono tabular-nums">{{ delta_pair[0] }}</p>
+  {% endif %}
+  {% if footer %}<p class="text-micro text-ink-3 mt-2">{{ footer }}</p>{% endif %}
+</div>
+{%- endmacro %}

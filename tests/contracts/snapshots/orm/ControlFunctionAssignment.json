@@ -1,0 +1,113 @@
+{
+  "columns": {
+    "capability_value": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "confirmed_by_user_at": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "control_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "coverage": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "created_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "derived_from_assignment_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "measured_at": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "measured_by": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "organization_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "reliability": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "sub_function": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(29)"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    }
+  },
+  "indexes": [
+    "ix_control_function_assignments_control_id",
+    "ix_control_function_assignments_organization_id"
+  ],
+  "table_name": "control_function_assignments"
+}

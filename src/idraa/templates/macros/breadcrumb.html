@@ -1,0 +1,17 @@
+{# breadcrumb(items) — Spec §2. items: list of (label, href|None). Last item has href=None. #}
+{% macro breadcrumb(items) -%}
+<nav aria-label="Breadcrumb" class="text-meta text-ink-2">
+  <ol class="flex flex-wrap items-center gap-x-1">
+    {% for label, href in items -%}
+    <li class="flex items-center gap-x-1">
+      {% if href -%}
+        <a href="{{ href }}" class="hover:text-ink-1">{{ label }}</a>
+      {%- else -%}
+        <span class="text-ink-1" aria-current="page">{{ label }}</span>
+      {%- endif %}
+      {%- if not loop.last %}<span aria-hidden="true">/</span>{%- endif %}
+    </li>
+    {%- endfor %}
+  </ol>
+</nav>
+{%- endmacro %}

@@ -1,0 +1,20 @@
+<section class="run-results">
+  {# Issue #89: legacy-AGGREGATE banner. Runs created BEFORE issue #89 landed
+     have a NULL aggregate_control_ids_per_scenario column; they applied the
+     UNION of all selected scenarios' controls to every scenario in the run
+     (the defect that issue #89 corrected). New AGGREGATE runs apply each
+     scenario's own controls. Show this banner so analysts comparing old vs
+     new runs aren't misled by the semantic shift. #}
+  {% if run.run_type.value == "aggregate" and run.aggregate_control_ids_per_scenario is none %}
+    <div class="alert alert-warning text-sm mb-4">
+      <span>This AGGREGATE run was created before strict scenario-coupling
+      (<a class="link" href="https://github.com/yasirhamza/idraa/issues/89">issue #89</a>).
+      It applied the UNION of all selected scenarios' controls to every
+      scenario. New AGGREGATE runs apply each scenario's own controls.</span>
+    </div>
+  {% endif %}
+
+  {% if display_results %}
+    {% include "runs/_view_summary.html" %}
+  {% endif %}
+</section>

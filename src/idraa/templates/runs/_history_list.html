@@ -1,0 +1,128 @@
+{# Run history fragment — used both as the per-scenario HTMX fragment and
+   (with show_run_meta) inside the org-wide /analyses index page.
+   Inputs: run_display_rows (list[dict{run, ale, currency_symbol}]), total (int), page, page_size.
+   Optional:
+     scenario_id   — per-scenario mode (default pagination base).
+     list_url      — pagination base URL (default "/scenarios/<scenario_id>/runs").
+     show_run_meta — prepend Name + Type columns (org-wide index). Default false.
+     list_heading  — section heading. Default "Run history".
+     empty_message — shown when there are no rows. Default "No runs yet for this scenario."
+   Backward-compat: runs list is still passed but run_display_rows is preferred for ALE display.
+#}
+{% from "macros/run_badges.html" import run_status_badge %}
+{# Lazy ternary (not the default() filter) so the scenario_id branch is never
+   evaluated when list_url is supplied — scenario_id is undefined on the org-wide
+   index and StrictUndefined would otherwise raise on the eager concat. #}
+{%- set _list_url = list_url if (list_url is defined and list_url) else ("/scenarios/" ~ scenario_id ~ "/runs") -%}
+{%- set _show_meta = show_run_meta | default(false, true) -%}
+{%- set _heading = list_heading | default("Run history", true) -%}
+{%- set _empty = empty_message | default("No runs yet for this scenario.", true) -%}
+
+<section class="run-history">
+  <h2 class="text-lg font-bold">{{ _heading }}</h2>
+
+  {% if run_display_rows %}
+    <div class="overflow-x-auto">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          {% if _show_meta %}
+          <th>Name</th>
+          <th>Type</th>
+          {% endif %}
+          <th>Started</th>
+          <th>Status</th>
+          <th>Iterations</th>
+          <th>Seed</th>
+          <th>Residual ALE</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in run_display_rows %}
+          {%- set run = row.run -%}
+          <tr>
+            {% if _show_meta %}
+            <td>
+              <a href="/runs/{{ run.id }}" class="link link-primary">
+                {{ run.name | e if run.name else "Untitled run" }}
+              </a>
+            </td>
+            <td>
+              <span class="badge badge-ghost badge-sm">
+                {{ run.run_type.value | title if run.run_type is not string else run.run_type | title }}
+              </span>
+            </td>
+            {% endif %}
+            <td>{{ run.created_at | format_datetime }}</td>
+            <td>
+              {{ run_status_badge(run.status, is_stale=run.is_stale) }}
+            </td>
+            <td>{{ run.mc_iterations }}</td>
+            <td>{{ run.random_seed if run.random_seed is not none else "not recorded" }}</td>
+            <td>
+              {# P3: ALE is pre-converted per-run at the route level using the run's
+                 pinned FX snapshot when available, else the current active rate. #}
+              {% if row.ale is not none %}
+                {{ row.currency_symbol }}{{ row.ale | format_money }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex items-center gap-2">
+                <a href="/runs/{{ run.id }}" class="link link-primary">
+                  View
+                </a>
+                {# Per-row danger actions — analyst+ only (#297). Confirm-gated,
+                   CSRF-protected, POST-redirect (full-page nav, fine inside a
+                   fragment). #}
+                {% if current_user and current_user.role.value in ("analyst", "admin") %}
+                  {# window.confirm (not bare confirm): the hidden name="confirm"
+                     input below shadows the global confirm() in this form's
+                     inline-handler scope chain, so bare confirm() throws and the
+                     form submits UNCONFIRMED. Same fix as action_menu.html. #}
+                  <form method="post" action="/runs/{{ run.id }}/purge-samples" class="inline"
+                        onsubmit="return window.confirm('Purge sample arrays for this run?');">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="confirm" value="1">
+                    <button type="submit" class="link link-warning">Purge</button>
+                  </form>
+                  <form method="post" action="/runs/{{ run.id }}/delete" class="inline"
+                        onsubmit="return window.confirm('Delete this run permanently?');">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="confirm" value="1">
+                    {% if run.status.value in ("running", "queued") %}
+                      <input type="hidden" name="force" value="1">
+                    {% endif %}
+                    <button type="submit" class="link link-error">Delete</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% set total_pages = ((total + page_size - 1) // page_size) if page_size > 0 else 1 %}
+    {% if total_pages > 1 %}
+      <div class="join mt-3">
+        {% if page > 1 %}
+          <a href="{{ _list_url }}?page={{ page - 1 }}"
+             class="join-item btn btn-sm">«</a>
+        {% endif %}
+        <span class="join-item btn btn-sm btn-ghost no-animation">
+          Page {{ page }} of {{ total_pages }}
+        </span>
+        {% if page < total_pages %}
+          <a href="{{ _list_url }}?page={{ page + 1 }}"
+             class="join-item btn btn-sm">»</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="opacity-70">{{ _empty }}</p>
+  {% endif %}
+</section>

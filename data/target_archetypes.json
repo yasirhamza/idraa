@@ -1,0 +1,822 @@
+[
+  {
+    "archetype": "ransomware-on-ehr",
+    "sector": "healthcare",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-on-ehr"
+  },
+  {
+    "archetype": "ransomware-on-historian",
+    "sector": "energy_utilities",
+    "threat_type": "ransomware",
+    "asset_class": "ot_systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-on-historian"
+  },
+  {
+    "archetype": "unauthorized-plc-modification",
+    "sector": "manufacturing",
+    "threat_type": "ot_safety_tampering",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "unauthorized-plc-modification"
+  },
+  {
+    "archetype": "safety-system-bypass",
+    "sector": "manufacturing",
+    "threat_type": "ot_safety_tampering",
+    "asset_class": "safety_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "safety-system-bypass"
+  },
+  {
+    "archetype": "denial-of-control",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "denial-of-control"
+  },
+  {
+    "archetype": "hmi-credential-compromise",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "hmi-credential-compromise"
+  },
+  {
+    "archetype": "it-ot-bridge-compromise",
+    "sector": "energy_utilities",
+    "threat_type": "malware",
+    "asset_class": "ot_systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "it-ot-bridge-compromise"
+  },
+  {
+    "archetype": "nation-state-ics-supply-chain",
+    "sector": "energy_utilities",
+    "threat_type": "supply_chain",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "nation-state-ics-supply-chain"
+  },
+  {
+    "archetype": "hacktivist-ot-disruption",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "hacktivists",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "hacktivist-ot-disruption"
+  },
+  {
+    "archetype": "bec-fraud-financial",
+    "sector": "financial_services",
+    "threat_type": "social_engineering",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "bec-fraud-financial"
+  },
+  {
+    "archetype": "ransomware-on-virtualization-stack",
+    "sector": "manufacturing",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-on-virtualization-stack"
+  },
+  {
+    "archetype": "insider-data-theft-financial",
+    "sector": "financial_services",
+    "threat_type": "insider_misuse",
+    "asset_class": "data",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "insider-data-theft-financial"
+  },
+  {
+    "archetype": "insider-ip-theft-manufacturing",
+    "sector": "manufacturing",
+    "threat_type": "insider_misuse",
+    "asset_class": "data",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "insider-ip-theft-manufacturing"
+  },
+  {
+    "archetype": "cloud-account-takeover",
+    "sector": "technology_saas",
+    "threat_type": "malware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "cloud-account-takeover"
+  },
+  {
+    "archetype": "api-key-leak-devops",
+    "sector": "technology_saas",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "api-key-leak-devops"
+  },
+  {
+    "archetype": "ddos-extortion-financial",
+    "sector": "financial_services",
+    "threat_type": "denial_of_service",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ddos-extortion-financial"
+  },
+  {
+    "archetype": "solarwinds-class-supply-chain",
+    "sector": "technology_saas",
+    "threat_type": "supply_chain",
+    "asset_class": "systems",
+    "threat_actor": "nation_state",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "solarwinds-class-supply-chain"
+  },
+  {
+    "archetype": "moveit-class-zero-day-mft",
+    "sector": "professional_services",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "moveit-class-zero-day-mft"
+  },
+  {
+    "archetype": "session-hijack-post-mfa-bypass",
+    "sector": "technology_saas",
+    "threat_type": "malware",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "session-hijack-post-mfa-bypass"
+  },
+  {
+    "archetype": "watering-hole-industry-targeted",
+    "sector": "energy_utilities",
+    "threat_type": "malware",
+    "asset_class": "systems",
+    "threat_actor": "nation_state",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "watering-hole-industry-targeted"
+  },
+  {
+    "archetype": "s3-misconfiguration-data-exposure",
+    "sector": "technology_saas",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "s3-misconfiguration-data-exposure"
+  },
+  {
+    "archetype": "package-registry-supply-chain",
+    "sector": "technology_saas",
+    "threat_type": "supply_chain",
+    "asset_class": "systems",
+    "threat_actor": "nation_state",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "package-registry-supply-chain"
+  },
+  {
+    "archetype": "ddos-financial-seasonal-peak",
+    "sector": "financial_services",
+    "threat_type": "denial_of_service",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ddos-financial-seasonal-peak"
+  },
+  {
+    "archetype": "phishing-ad-compromise-ransomware",
+    "sector": "education",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "phishing-ad-compromise-ransomware"
+  },
+  {
+    "archetype": "ransomware-on-fileshare",
+    "sector": "professional_services",
+    "threat_type": "ransomware",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-on-fileshare"
+  },
+  {
+    "archetype": "credential-stuffing-consumer-portal",
+    "sector": "retail_ecommerce",
+    "threat_type": "malware",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "credential-stuffing-consumer-portal"
+  },
+  {
+    "archetype": "mfa-fatigue-prompt-bombing",
+    "sector": "technology_saas",
+    "threat_type": "social_engineering",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "mfa-fatigue-prompt-bombing"
+  },
+  {
+    "archetype": "ransomware-healthcare-small-practice",
+    "sector": "healthcare",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-healthcare-small-practice"
+  },
+  {
+    "archetype": "ot-network-scanning-reconnaissance",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "ot-network-scanning-reconnaissance"
+  },
+  {
+    "archetype": "data-breach-notification-regulatory-tail",
+    "sector": "retail_ecommerce",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "data-breach-notification-regulatory-tail"
+  },
+  {
+    "archetype": "generative-ai-prompt-injection",
+    "sector": "technology_saas",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "generative-ai-prompt-injection"
+  },
+  {
+    "archetype": "ransomware-on-control-layer",
+    "sector": "manufacturing",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "ransomware-on-control-layer"
+  },
+  {
+    "archetype": "process-view-manipulation",
+    "sector": "energy_utilities",
+    "threat_type": "ot_integrity",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "process-view-manipulation"
+  },
+  {
+    "archetype": "field-instrument-spoofing",
+    "sector": "manufacturing",
+    "threat_type": "ot_integrity",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "field-instrument-spoofing"
+  },
+  {
+    "archetype": "oem-remote-maintenance-abuse",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "oem-remote-maintenance-abuse"
+  },
+  {
+    "archetype": "grid-protective-relay-manipulation",
+    "sector": "energy_utilities",
+    "threat_type": "ot_availability",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "grid-protective-relay-manipulation"
+  },
+  {
+    "archetype": "pipeline-scada-integrity",
+    "sector": "energy_utilities",
+    "threat_type": "ot_integrity",
+    "asset_class": "ot_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "pipeline-scada-integrity"
+  },
+  {
+    "archetype": "chemical-process-safety-attack",
+    "sector": "manufacturing",
+    "threat_type": "ot_safety_tampering",
+    "asset_class": "safety_systems",
+    "threat_actor": "nation_state",
+    "is_ot": true,
+    "keep_or_new": "keep",
+    "existing_slug": "chemical-process-safety-attack"
+  },
+  {
+    "archetype": "accidental-insider-exposure",
+    "sector": "healthcare",
+    "threat_type": "insider_misuse",
+    "asset_class": "data",
+    "threat_actor": "insider_accidental",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "accidental-insider-exposure"
+  },
+  {
+    "archetype": "web-app-exploitation",
+    "sector": "financial_services",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "web-app-exploitation"
+  },
+  {
+    "archetype": "third-party-processor-breach",
+    "sector": "financial_services",
+    "threat_type": "supply_chain",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "third-party-processor-breach"
+  },
+  {
+    "archetype": "retail-pos-card-skimming",
+    "sector": "retail_ecommerce",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "retail-pos-card-skimming"
+  },
+  {
+    "archetype": "public-sector-targeted-intrusion",
+    "sector": "government_public",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "public-sector-targeted-intrusion"
+  },
+  {
+    "archetype": "logistics-disruption",
+    "sector": "transportation_logistics",
+    "threat_type": "ransomware",
+    "asset_class": "systems",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "keep",
+    "existing_slug": "logistics-disruption"
+  },
+  {
+    "archetype": "telecom-ddos-core-network",
+    "sector": "telecom",
+    "threat_type": "denial_of_service",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "telecom-sim-swap-fraud",
+    "sector": "telecom",
+    "threat_type": "social_engineering",
+    "asset_class": "people",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "telecom-subscriber-data-breach",
+    "sector": "telecom",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "telecom-bgp-route-hijack",
+    "sector": "telecom",
+    "threat_type": "data_tampering",
+    "asset_class": "systems",
+    "threat_actor": "nation_state",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "hospitality-pos-card-skimming",
+    "sector": "hospitality",
+    "threat_type": "data_disclosure",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "hospitality-loyalty-account-takeover",
+    "sector": "hospitality",
+    "threat_type": "social_engineering",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "hospitality-booking-ddos-peak-season",
+    "sector": "hospitality",
+    "threat_type": "denial_of_service",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "food-cold-chain-ransomware",
+    "sector": "food_agriculture",
+    "threat_type": "ransomware",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "food-recall-data-tampering",
+    "sector": "food_agriculture",
+    "threat_type": "data_tampering",
+    "asset_class": "business_process_cost",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "agri-equipment-physical-tamper",
+    "sector": "food_agriculture",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "hacktivists",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "agri-coop-bec-fraud",
+    "sector": "food_agriculture",
+    "threat_type": "social_engineering",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "crop-science-ip-exfiltration",
+    "sector": "food_agriculture",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "competitors",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "education-research-ip-exfiltration",
+    "sector": "education",
+    "threat_type": "data_disclosure",
+    "asset_class": "data",
+    "threat_actor": "nation_state",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "education-student-records-insider",
+    "sector": "education",
+    "threat_type": "insider_misuse",
+    "asset_class": "people",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "gov-citizen-portal-ddos",
+    "sector": "government_public",
+    "threat_type": "denial_of_service",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "hacktivists",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "gov-records-tampering",
+    "sector": "government_public",
+    "threat_type": "data_tampering",
+    "asset_class": "data",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "logistics-tms-data-tampering",
+    "sector": "transportation_logistics",
+    "threat_type": "data_tampering",
+    "asset_class": "business_process_cost",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "logistics-warehouse-physical-intrusion",
+    "sector": "transportation_logistics",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "ip-theft-by-competitor",
+    "sector": "manufacturing",
+    "threat_type": "insider_misuse",
+    "asset_class": "data",
+    "threat_actor": "competitors",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "competitor-trade-secret-recruit",
+    "sector": "technology_saas",
+    "threat_type": "social_engineering",
+    "asset_class": "people",
+    "threat_actor": "competitors",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "datacenter-physical-breach",
+    "sector": "technology_saas",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "branch-atm-physical-tamper",
+    "sector": "financial_services",
+    "threat_type": "physical_tampering",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "financial-transaction-tampering",
+    "sector": "financial_services",
+    "threat_type": "data_tampering",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "healthcare-record-alteration",
+    "sector": "healthcare",
+    "threat_type": "data_tampering",
+    "asset_class": "data",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "manufacturing-billing-fraud",
+    "sector": "manufacturing",
+    "threat_type": "insider_misuse",
+    "asset_class": "business_process_cost",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "retail-ecommerce-checkout-ddos",
+    "sector": "retail_ecommerce",
+    "threat_type": "denial_of_service",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "saas-revenue-outage-sabotage",
+    "sector": "technology_saas",
+    "threat_type": "insider_misuse",
+    "asset_class": "business_process_revenue",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "healthcare-staff-credential-phish",
+    "sector": "healthcare",
+    "threat_type": "social_engineering",
+    "asset_class": "people",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "professional-payroll-bec",
+    "sector": "professional_services",
+    "threat_type": "social_engineering",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "energy-billing-system-tamper",
+    "sector": "energy_utilities",
+    "threat_type": "data_tampering",
+    "asset_class": "business_process_cost",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "professional-office-physical-theft",
+    "sector": "professional_services",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "retail-store-employee-fraud",
+    "sector": "retail_ecommerce",
+    "threat_type": "insider_misuse",
+    "asset_class": "cash_or_equivalent",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "manufacturing-facility-sabotage",
+    "sector": "manufacturing",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "financial-call-center-social-eng",
+    "sector": "financial_services",
+    "threat_type": "social_engineering",
+    "asset_class": "people",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "education-campus-facility-tamper",
+    "sector": "education",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "hacktivists",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "gov-employee-insider-leak",
+    "sector": "government_public",
+    "threat_type": "insider_misuse",
+    "asset_class": "people",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "telecom-field-cabinet-tamper",
+    "sector": "telecom",
+    "threat_type": "physical_tampering",
+    "asset_class": "facilities",
+    "threat_actor": "cybercriminals",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  },
+  {
+    "archetype": "hospitality-guest-data-insider",
+    "sector": "hospitality",
+    "threat_type": "insider_misuse",
+    "asset_class": "data",
+    "threat_actor": "insider_malicious",
+    "is_ot": false,
+    "keep_or_new": "new",
+    "existing_slug": null
+  }
+]

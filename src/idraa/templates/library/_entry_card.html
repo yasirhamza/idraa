@@ -1,0 +1,58 @@
+{% if entries %}
+  {% for entry in entries %}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-lg">
+          <a class="link link-hover" href="/library/entries/{{ entry.id }}">
+            {{ entry.name }}
+          </a>
+        </h3>
+
+        <div class="badges flex flex-wrap gap-1 my-2">
+          {# threat_actor_type and threat_event_type are non-nullable on the model #}
+          <span class="badge badge-sm badge-outline">
+            {{ entry.threat_actor_type.value | replace("_", " ") | title }}
+          </span>
+          <span class="badge badge-sm badge-secondary badge-outline">
+            {{ entry.threat_event_type.value | replace("_", " ") | title }}
+          </span>
+          {# asset_class is also non-nullable per the model definition #}
+          <span class="badge badge-sm badge-accent badge-outline">
+            {{ entry.asset_class.value | replace("_", " ") | title }}
+          </span>
+          {# P3 Task 6 provenance badge: 'imported' (uploaded at runtime) vs
+             'seed' (shipped in code). No |safe — entry.source is an app-
+             enforced enum string, never user free-text. #}
+          {% if entry.source == "imported" %}
+            <span class="badge badge-sm badge-info">Imported</span>
+          {% else %}
+            <span class="badge badge-sm badge-ghost">Built-in</span>
+          {% endif %}
+        </div>
+
+        <p class="text-sm text-base-content/70">
+          {% if entry.description | length > 120 %}
+            {{ entry.description[:120] }}…
+          {% else %}
+            {{ entry.description }}
+          {% endif %}
+        </p>
+
+        <div class="card-actions justify-end mt-2">
+          <a class="btn btn-xs btn-ghost" href="/library/entries/{{ entry.id }}">
+            View details
+          </a>
+          <a class="btn btn-xs btn-primary"
+             href="/scenarios/new/wizard?library_entry_id={{ entry.id }}">
+            Use this entry →
+          </a>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state col-span-3 text-center py-12">
+    <p class="text-base-content/60 mb-3">No entries match these filters.</p>
+    <a href="/library" class="btn btn-link">Clear filters</a>
+  </div>
+{% endif %}

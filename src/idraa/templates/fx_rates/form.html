@@ -1,0 +1,34 @@
+{% from "macros/form_field.html" import form_field %}
+<form method="post" action="/fx-rates" class="space-y-3 border-t border-border-subtle pt-4">
+  {{ csrf_field() }}
+
+  {% if error_msg %}
+  <p class="text-status-critical text-meta" role="alert">{{ error_msg }}</p>
+  {% endif %}
+
+  {%- set currency_options = [] -%}
+  {%- for c in offered|default(['SAR']) -%}
+    {%- set _ = currency_options.append((c, c)) -%}
+  {%- endfor -%}
+
+  <div class="grid grid-cols-2 gap-3 max-w-xl [&>div]:max-w-none">
+    {{ form_field(name="code", label="Currency", input_type="select",
+                  value=form.get('code') if form else none,
+                  options=currency_options,
+                  required=True) }}
+
+    {{ form_field(name="usd_rate", label="USD rate (units per 1 USD)", input_type="number",
+                  value=form.get('usd_rate', '') if form else '',
+                  step="any", placeholder="e.g. 3.75", required=True) }}
+
+    {{ form_field(name="as_of_date", label="As of date", input_type="date",
+                  value=form.get('as_of_date', '') if form else '',
+                  required=True) }}
+
+    {{ form_field(name="source", label="Source", input_type="text",
+                  value=form.get('source', '') if form else '',
+                  required=True) }}
+  </div>
+
+  <button type="submit" class="h-10 px-4 rounded-input bg-brand text-white">Save rate</button>
+</form>

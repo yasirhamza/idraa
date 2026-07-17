@@ -1,0 +1,1922 @@
+{
+ "_note": "P2 full-library curation (#475). Complements seed_attack_exemplar_mappings.json. Rules: docs/superpowers/specs/2026-07-05-attack-curation-p2-design.md \u00a7Curation methodology. Deliberate gap: entry 'generative-ai-prompt-injection' stays unmapped pending the MITRE ATLAS domain (#482) \u2014 no Enterprise nearest-fit.",
+ "mappings": [
+  {
+   "entry_slug": "accidental-insider-exposure",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "Entry description names 'mis-setting a SharePoint/cloud-share permission, leaving a database or mailbox publicly accessible' as the exposure mechanism. This entry has no adversary or motive term (threat_actor_type=insider_accidental) -- the mapping documents only that the resulting exposed object is the same cloud-storage access surface T1530 describes an adversary exploiting, not that an intrusion chain occurred; other error modes in the entry (misdelivered email, wrong attachment) have no corresponding Enterprise technique and are intentionally left unmapped.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "agri-coop-bec-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states cybercriminals redirect payments 'to attacker-controlled accounts' via BEC targeting 'grain-elevator disbursements' -- the load-bearing account-compromise/impersonation step needed to convincingly redirect an established payment relationship; tags include 'bec'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "agri-coop-bec-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry's attack_vector field is 'phishing'; description frames the scheme as cybercriminals 'using business email compromise techniques' timed to 'grain planting and harvest cycles' to open the fraud chain.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "agri-coop-bec-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry description states the objective is to 'redirect large commodity payments, input-supply invoices, or grain-elevator disbursements to attacker-controlled accounts' -- the defining financial-theft impact of this archetype.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "agri-equipment-physical-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1200",
+   "rationale": "Entry describes hacktivists who 'tamper with navigation receivers, firmware, or connectivity modules' on autonomous farm equipment -- physically introducing a GPS-spoofing or connectivity-interception device at the receiver/connectivity module is the hardware-manipulation vector this entry frames, consistent with tags 'gps_spoofing' and 'autonomous_equipment'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "agri-equipment-physical-tamper",
+   "domain": "ics",
+   "technique_id": "T0813",
+   "rationale": "Entry states the tampering is intended 'to disrupt planting/harvesting operations' -- denying the equipment operator's ability to properly direct autonomous, GPS-guided machinery once navigation, firmware, or connectivity are compromised is the operator-control-denial impact this technique covers on the tractor's process-control loop.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "api-key-leak-devops",
+   "domain": "enterprise",
+   "technique_id": "T1539",
+   "rationale": "CircleCI's own incident report states 'an unauthorized third party leveraged malware deployed to a CircleCI engineer's laptop in order to steal a valid, 2FA-backed SSO session' via 'session cookie theft, enabling them to impersonate the targeted employee' -- the infostealer-malware session-theft behavior this entry names among 'TravisCI 2022 and CircleCI 2023' as a side-channel to secrets exposure.",
+   "provenance": "cited",
+   "citations": [
+    "CircleCI, 'CircleCI incident report for January 4, 2023 security incident' (2023-01-13), https://circleci.com/blog/jan-4-2023-incident-report/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "api-key-leak-devops",
+   "domain": "enterprise",
+   "technique_id": "T1550",
+   "rationale": "The same CircleCI report states the stolen session let the actor 'impersonate the targeted employee in a remote location and then escalate access to a subset of our production systems' -- reuse of the stolen session as alternate authentication material to move into production, bypassing CircleCI's normal access controls.",
+   "provenance": "cited",
+   "citations": [
+    "CircleCI, 'CircleCI incident report for January 4, 2023 security incident' (2023-01-13), https://circleci.com/blog/jan-4-2023-incident-report/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "api-key-leak-devops",
+   "domain": "enterprise",
+   "technique_id": "T1552",
+   "rationale": "CircleCI's report states that, via the compromised employee's production-token-generation privileges, the actor was able to 'access and exfiltrate data from a subset of databases and stores, including customer environment variables, tokens, and keys' -- harvesting insecurely-exposed customer secrets from CircleCI's internal stores, the CI-provider-breach secrets exposure this entry describes as distinct from secrets committed directly to source control.",
+   "provenance": "cited",
+   "citations": [
+    "CircleCI, 'CircleCI incident report for January 4, 2023 security incident' (2023-01-13), https://circleci.com/blog/jan-4-2023-incident-report/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "bec-fraud-financial",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "FBI IC3 PSA I-091124-PSA documents that BEC 'is frequently carried out when a subject compromises legitimate business or personal email accounts through social engineering or computer intrusion' -- the account-takeover behavior this entry describes as 'sophisticated account takeover of legitimate supplier email accounts.'",
+   "provenance": "cited",
+   "citations": [
+    "FBI IC3 PSA I-091124-PSA, 'Business Email Compromise: The $55 Billion Scam' (2024-09-11), https://www.ic3.gov/PSA/2024/PSA240911 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "bec-fraud-financial",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry description states attacks 'range from simple display-name spoofing... to sophisticated account takeover of legitimate supplier email accounts' -- display-name-spoofed sender deception is the phishing-style lure that opens the BEC chain; attack_vector=email_social_engineering.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "bec-fraud-financial",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "The same IC3 PSA documents the compromise is conducted 'to conduct unauthorized transfers of funds' -- the direct financial-theft impact this entry describes as redirecting 'wire transfers or ACH payments to attacker-controlled accounts.'",
+   "provenance": "cited",
+   "citations": [
+    "FBI IC3 PSA I-091124-PSA, 'Business Email Compromise: The $55 Billion Scam' (2024-09-11), https://www.ic3.gov/PSA/2024/PSA240911 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "branch-atm-physical-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1200",
+   "rationale": "Entry describes cybercriminals who 'physically connect external attack hardware (black-box devices or USB-connected controllers) to the ATM's dispensing mechanism.' Recorded Future News's reporting on the FBI's 2026 ATM-jackpotting alert confirms the underlying physical-tampering pattern -- criminals open the ATM cabinet and have 'the malware interact[] directly with the ATM hardware, bypassing any communications or security of the original ATM software' -- via a hard-drive swap rather than this entry's black-box/USB device, a different specific implement for the same physical hardware-manipulation objective.",
+   "provenance": "cited",
+   "citations": [
+    "Recorded Future News (The Record), 'FBI: More than 700 ATM jackpotting incidents with losses over $20 million occurred in 2025' (2026), https://therecord.media/fbi-atm-jackpotting-2025-report (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "branch-atm-physical-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry describes attackers 'forcing the machine to dispense cash on command without a legitimate transaction.' Recorded Future News's reporting on the FBI's 2026 jackpotting alert confirms that malware exploiting the ATM's XFS layer lets attackers 'instruct the ATM to dispense cash on demand' and that 'the malware does not require connection to an actual bank customer account to dispense cash' -- the same unauthorized cash-extraction-for-gain behavior.",
+   "provenance": "cited",
+   "citations": [
+    "Recorded Future News (The Record), 'FBI: More than 700 ATM jackpotting incidents with losses over $20 million occurred in 2025' (2026), https://therecord.media/fbi-atm-jackpotting-2025-report (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "chemical-process-safety-attack",
+   "domain": "ics",
+   "technique_id": "T0821",
+   "rationale": "Per Dragos, TRISIS added a new command to the TriStation protocol to reprogram the safety controller's execution -- the same controller-reprogramming behavior this entry attributes to a nation-state actor defeating a chemical plant's SIS.",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "chemical-process-safety-attack",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Dragos's TRISIS analysis documents the malware manipulating outputs and executing new logic on the Triconex safety controller; this entry generalizes the same TRITON-pattern SIS manipulation to a chemical/petrochemical process driving overpressure or runaway conditions.",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "chemical-process-safety-attack",
+   "domain": "ics",
+   "technique_id": "T0880",
+   "rationale": "Dragos documents TRISIS altering safety logic even with the keyswitch in RUN/REMOTE mode, circumventing the safeguard against unauthorized changes -- the SIS-defeat objective this entry describes as opening a 'catastrophic-consequence tail' once the safety barrier is gone.",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "cloud-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states the attacker 'establishes persistent access to the cloud environment' after obtaining or bypassing cloud provider credentials -- ongoing abuse of the compromised IAM/Azure AD/GCP account is the access mechanism connecting initial credential theft to follow-on activity; attack_vector=stolen_credentials_or_mfa_bypass.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "cloud-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1496",
+   "rationale": "Entry description states attackers 'begin exfiltration or cryptomining' once persistent cloud access is established, and example_incidents names 'Multiple AWS cryptomining campaigns via exposed IAM keys 2021-2024' -- cryptomining is the resource-hijacking impact this entry names as an alternative monetization path to data theft.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "cloud-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "The same Krebs report states the intruder 'used those creds to make API calls to the S3 service and dump all the data' -- direct collection of data from cloud storage using the stolen IAM credentials, the S3-enumeration-and-exfiltration conclusion of the Capital One 2019 pattern this entry names in its description.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'What We Can Learn from the Capital One Hack' (2019-08-02), https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "cloud-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1552",
+   "rationale": "Krebs on Security documents the Capital One intruder exploiting a misconfigured WAF's SSRF flaw so the WAF would 'send a request to the local metadata service, which returned the temporary IAM credentials the WAF was using' -- harvesting insecurely-exposed cloud credentials from the instance metadata service, the credential-theft step this entry names as the 'SSRF\u2192IAM-role-credential pattern'.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'What We Can Learn from the Capital One Hack' (2019-08-02), https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "cloud-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1685",
+   "rationale": "Entry description states 'modern attackers immediately... disable GuardDuty/CloudTrail' upon gaining cloud access -- tampering with the cloud environment's detection/logging tooling to impair visibility of follow-on data theft or cryptomining.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "competitor-trade-secret-recruit",
+   "domain": "enterprise",
+   "technique_id": "T1074",
+   "rationale": "The same press release documents a two-step sequence -- Levandowski downloaded the 14,000 SVN files onto his Google-issued laptop on 2015-12-11, then 'transferred those SVN files from his Google-issued laptop to his personal laptop' three days later -- the local collection/staging step preceding removal from employer control; entry names 'potentially misappropriated files' as the loss vehicle. Mapped narrowly: the entry's canonical_fair_gap itself notes the primary attack vector is 'a job offer (not a phishing email)', so no ATT&CK initial-access technique is force-fitted here -- only the data-handling steps the primary actually documents.",
+   "provenance": "cited",
+   "citations": [
+    "US DOJ, Northern District of California, 'Former Uber Executive Sentenced To 18 Months In Jail For Trade Secret Theft From Google' (2020-08-04), https://www.justice.gov/usao-ndca/pr/former-uber-executive-sentenced-18-months-jail-trade-secret-theft-google (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "competitor-trade-secret-recruit",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "The DOJ press release on Levandowski's sentencing documents he 'downloaded approximately 14,000 files from an internal, password-protected Google server known as \"SVN\"' -- the internal engineering-data repository this entry's Waymo v. Uber example_incidents references, matching Data from Information Repositories.",
+   "provenance": "cited",
+   "citations": [
+    "US DOJ, Northern District of California, 'Former Uber Executive Sentenced To 18 Months In Jail For Trade Secret Theft From Google' (2020-08-04), https://www.justice.gov/usao-ndca/pr/former-uber-executive-sentenced-18-months-jail-trade-secret-theft-google (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "credential-stuffing-consumer-portal",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states 'successful matches grant account takeover' once stuffing succeeds -- the attacker's operation of the now-valid customer credentials is the load-bearing pivot from automated guessing to actual account control.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "credential-stuffing-consumer-portal",
+   "domain": "enterprise",
+   "technique_id": "T1110",
+   "rationale": "The New York Attorney General's press release on the Dunkin' settlement describes the attacks as 'repeated, automated attempts to gain access to accounts using usernames and passwords stolen through security breaches of other unrelated websites or online services' -- the automated credential-stuffing behavior this entry names as its defining tooling (Sentry MBA, Snipr, Openbullet) testing breached credentials against the consumer portal.",
+   "provenance": "cited",
+   "citations": [
+    "New York Office of the Attorney General, 'Attorney General James Gets Dunkin' to Fill Holes in Security, Reimburse Hacked Customers' (2020-09-15), https://ag.ny.gov/press-release/2020/attorney-general-james-gets-dunkin-fill-holes-security-reimburse-hacked-customers (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "credential-stuffing-consumer-portal",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry description states attackers 'drain loyalty points, redirect payment instruments, make fraudulent purchases, or sell valid account credentials' post-takeover -- direct monetary/technical theft executed from the compromised consumer accounts.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "crop-science-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "AA21-200A documents APT40 actors 'establish initial access via user and administrator credentials' -- the credential-based access this entry's long-dwell intrusion model relies on once the external network foothold is gained.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-200A, 'Tactics, Techniques, and Procedures of Indicted APT40 Actors Associated with China's MSS Hainan State Security Department' (2021-07-20, updated 2021-07-22), https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-200a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "crop-science-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "CISA/FBI AA21-200A documents APT40's tactics 'include spearphishing, exploitation of public-facing applications' as initial-access methods; this entry's attack_vector=external_network_exploitation and 'long-dwell intrusions' framing extends that documented APT40 behavior to a crop-science target, which AA21-200A itself lists 'research institutes' and 'biomedical' among APT40's targeted industries (not crop-science specifically -- extended here per the entry's archetype).",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-200A, 'Tactics, Techniques, and Procedures of Indicted APT40 Actors Associated with China's MSS Hainan State Security Department' (2021-07-20, updated 2021-07-22), https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-200a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "crop-science-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "AA21-200A documents APT40 actors 'locate high value assets in order to exfiltrate data' after lateral movement -- the collection step this entry describes as exfiltrating 'proprietary seed genetics, pesticide and herbicide formulation data, and precision-agriculture algorithms' from R&D repositories.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-200A, 'Tactics, Techniques, and Procedures of Indicted APT40 Actors Associated with China's MSS Hainan State Security Department' (2021-07-20, updated 2021-07-22), https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-200a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "data-breach-notification-regulatory-tail",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "Entry's attack_vector field is 'external_network_exploitation.' This entry's own description and example_incidents (British Airways/Magecart web-skimming, Marriott/Starwood long-dwell compromise, T-Mobile) do not share a single stated intrusion mechanism -- the entry is a consequence/secondary-loss archetype (the regulatory notification cascade AFTER a breach), not an attack-chain description, so this row maps only the generic external-network-exploitation vector the entry's own field names, without inventing a specific chain from any one named incident.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "datacenter-physical-breach",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states adversaries gain unauthorized access 'via tailgating, cloned access badges, or social engineering of facility staff' -- the cloned-badge/social-engineered-credential path is the perimeter-access-control bypass this entry frames; tags include 'tailgating'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "datacenter-physical-breach",
+   "domain": "enterprise",
+   "technique_id": "T1200",
+   "rationale": "Entry description states adversaries who gain physical access 'install network taps or hardware implants' -- the direct hardware-introduction behavior this technique covers; tags include 'implant'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ddos-financial-seasonal-peak",
+   "domain": "enterprise",
+   "technique_id": "T1498",
+   "rationale": "Entry states 'Mirai and MerisBot botnets have demonstrated multi-terabit attack capability.' Cloudflare's retrospective analysis documents Mirai's attack module implementing 'UDP flooding, and all TCP flooding options' and reaching '623 Gbps' (Krebs on Security) and peaking at '1TBs' (OVH) -- the multi-terabit network-layer volumetric flood capability this entry names.",
+   "provenance": "cited",
+   "citations": [
+    "Cloudflare Blog, 'Inside the infamous Mirai IoT Botnet: A Retrospective Analysis' (2017-12-14), https://blog.cloudflare.com/inside-mirai-the-infamous-iot-botnet-a-retrospective-analysis/, 'Attack module' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ddos-financial-seasonal-peak",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry's example_incidents names 'Meris botnet DDoS against Yandex 2021 (21.8M RPS peak).' Qrator Labs' technical analysis documents the Meris botnet's HTTP-pipelining technique reaching '21.8 M rps' against Yandex -- an application-layer request flood exhausting the target web service rather than raw network bandwidth, matching this entry's Meris-specific example.",
+   "provenance": "cited",
+   "citations": [
+    "Qrator Labs, 'Meris botnet, climbing to the record' (2021-09-09), https://blog.qrator.net/en/meris-botnet-climbing-to-the-record_142/, narrative following the 'Discovery' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "education-campus-facility-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1200",
+   "rationale": "Entry describes hacktivists 'breaching server rooms' among the three listed tampering actions ('cutting network cables, disabling emergency-communication systems, or breaching server rooms'); unauthorized physical entry to a server room is the access precondition this technique's hardware-introduction behavior presupposes. The entry does not state what, if anything, was introduced once inside, and the cable-cutting/comms-disabling actions have no distinct ATT&CK enterprise equivalent, so this is the entry's only mapped row.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "education-research-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry's attack_vector field names the chain as 'spearphishing_followed_by_lateral_movement' -- valid-account reuse is the standard mechanism bridging an initial researcher-workstation foothold to the file servers and research repositories the entry describes as the ultimate target.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "education-research-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "The FBI/CISA joint PSA on PRC targeting of COVID-19 research documents PRC-affiliated actors 'attempting to identify and illicitly obtain valuable intellectual property (IP) and public health data... from networks and personnel affiliated with COVID-19-related research' -- the pre-publication research-data theft this entry describes, extended from COVID-specific research data to the entry's broader university research-repository framing.",
+   "provenance": "cited",
+   "citations": [
+    "FBI/CISA Joint Public Service Announcement, 'People's Republic of China (PRC) Targeting of COVID-19 Research Organizations' (2020-05-13), https://www.cisa.gov/sites/default/files/publications/Joint_FBI-CISA_PSA_PRC_Targeting_of_COVID-19_Research_Organizations_S508C.pdf (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "education-research-ip-exfiltration",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "CISA AA21-200B documents Chinese state-sponsored actors sent 'fraudulent spearphishing emails that were buttressed by fictitious online profiles and contained links to doppelganger domain names' -- the spearphishing-of-researchers behavior this entry names as the attack chain's first step; attack_vector=spearphishing_followed_by_lateral_movement.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI/NSA Joint Cybersecurity Advisory AA21-200B, 'Chinese State-Sponsored Cyber Operations: Observed TTPs' (2021-07-19), https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-200b (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "education-student-records-insider",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states the insider 'abuses access to student information systems (SIS/ERP)' -- the entry's threat_actor_type is insider_malicious with an already-provisioned SIS/ERP account as the load-bearing access vector, not an externally obtained credential.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "education-student-records-insider",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description states the insider exfiltrates 'student personal records, academic performance data, financial-aid information, or student-health service records' from the SIS/ERP -- data mined from a shared institutional information repository rather than a single local system.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "energy-billing-system-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "CISA/FBI/MS-ISAC advisory AA25-163A documents ransomware actors exploiting CVE-2024-57727, a path-traversal vulnerability allowing 'unauthenticated remote attackers to download arbitrary files from the SimpleHelp host,' to compromise a utility billing software provider's internet-facing RMM -- a real instance of the external network exploitation of billing-adjacent infrastructure this entry's attack_vector names; the advisory documents ransomware/double-extortion rather than this entry's covert meter-fraud objective, which this entry extends the initial-access step to support.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI/MS-ISAC Cybersecurity Advisory AA25-163A, 'Ransomware Actors Exploit Unpatched SimpleHelp Remote Monitoring and Management to Compromise Utility Billing Software Provider' (2025-06-12), https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-163a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "energy-billing-system-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the attacker manipulates 'meter readings, billing records, or consumption data... enabling fraudulent under-billing, theft of service, or energy diversion at scale' -- unauthorized alteration of the revenue-accounting data itself, the entry's defining fraud mechanism. (Investigated the PREPA/Krebs 2012 case named for AMI fraud precedent generally; that campaign used physical optical-port access to meters, not the network exploitation this entry describes, so it is not used as grounding here.)",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "energy-settlement-platform-tampering-offtaker-liability",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "Entry description frames the attack as targeting 'the energy-trading or wholesale-settlement platform (ETRM, ISO/RTO scheduling interface, or bilateral PPA settlement system)'; attack_vector=external_network_exploitation names the initial-access path into this externally-reachable business platform.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "energy-settlement-platform-tampering-offtaker-liability",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry description names 'a data-tampering or availability attack' where 'settlement windows expire without valid data' -- an availability-denial dimension of the same platform attack distinct from the corruption dimension, consistent with tags including 'data_tampering' alongside the entry's explicit 'availability attack' framing.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "energy-settlement-platform-tampering-offtaker-liability",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the attack 'corrupts or halts the settlement process' where 'invoices are corrupted' -- unauthorized alteration of the settlement/billing data underlying the offtaker's contracted revenue, this entry's defining data-tampering mechanism.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "field-instrument-spoofing",
+   "domain": "ics",
+   "technique_id": "T0830",
+   "rationale": "Entry's example_incidents names Stuxnet 2010, which 'manipulated centrifuge process parameters while feeding controllers prior recorded values' -- an in-line interception of the field-to-controller signal path (Adversary-in-the-Middle), distinct from the HMI-display falsification the entry explicitly excludes ('distinct from manipulation-of-view').",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "field-instrument-spoofing",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Description states 'the control loop is steered toward an out-of-spec state' by the falsified measurements -- a process-parameter-level impact consistent with Modify Parameter, driven here by corrupted inputs rather than a direct parameter write.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "field-instrument-spoofing",
+   "domain": "ics",
+   "technique_id": "T1692",
+   "rationale": "Entry describes 'spoofing or biasing sensor inputs... or actuator feedback so controllers and operators act on physically false measurements,' i.e. falsified reporting/command messages injected below the HMI -- the field-level message-spoofing behavior this technique covers (v19 successor to the retired Spoof Reporting Message / Unauthorized Command Message pair).",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "financial-call-center-social-eng",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry's canonical_fair_gap states the 'primary loss profile [is] dominated by authorized transfer fraud (the agent is deceived into authorizing a legitimate-looking transfer)' -- the institution's own funds are stolen via the manipulated transfer, matching tags 'authorized_transfer' and 'vishing'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "financial-call-center-social-eng",
+   "domain": "enterprise",
+   "technique_id": "T1684",
+   "rationale": "Entry description states cybercriminals 'call financial institution customer service centers posing as customers, law enforcement, or internal staff to manipulate agents into authorizing fraudulent wire transfers, resetting account authentication, or disclosing account information' -- influencing call-center agents to take unauthorized action is the defining vishing/pretexting behavior; attack_vector=social_engineering.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "financial-transaction-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states the insider has 'privileged access to core banking systems, wire-transfer platforms, or trading systems' -- the insider's own legitimate privileged account, exploited to bypass dual control, is the load-bearing access vector; attack_vector=insider_privileged_access.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "financial-transaction-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states typical methods include 'backdating transactions, altering beneficiary fields, inserting fictitious trades, or bypassing dual-control authorization' -- direct insertion/alteration of transaction records to divert funds, matching Data Manipulation's insert/manipulate-data-to-influence-outcomes definition. No technique-evidencing primary was found for this archetype: the entry's own source_citations is empty and the named example (Societe Generale/Kerviel 2008) is documented in French regulatory and court records that could not be fetched and behavior-confirmed at authoring time, so this row is left expert-estimate rather than force-citing a loss-magnitude-only source.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "food-cold-chain-ransomware",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes ransomware 'encrypting ERP systems, warehouse management systems, and OT-adjacent temperature-monitoring and process-control networks' -- the direct encryption impact this entry's regulatory-tail gap analysis is built on.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "food-cold-chain-ransomware",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "attack_vector=phishing and tags include 'ransomware'/'ot_adjacent'; entry names cybercriminal ransomware deployment against food manufacturing facilities beginning from a phishing-based foothold before reaching ERP/WMS/monitoring networks.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "food-cold-chain-ransomware",
+   "domain": "ics",
+   "technique_id": "T0828",
+   "rationale": "Entry's canonical_fair_gap states compromise of 'temperature-monitoring or food-safety record systems may trigger a mandatory recall even if the ransomware payload never touches the food itself,' and the description names 'extended production shutdown' as a loss driver -- a production/regulatory revenue-loss impact on the food-manufacturing process matching ATT&CK for ICS's Loss of Productivity and Revenue, distinct from the IT-side encryption event itself.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "food-recall-data-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the insider 'alters food-safety records -- passing contaminated product, suppressing test failures, or manipulating lot-traceability data' in ERP/LIMS/QA systems -- directly matching Data Manipulation's insert/delete/manipulate-to-influence-outcomes behavior. Per the entry's own example_incidents note, Peanut Corporation/Blue Bell/Jensen Farms are physical-contamination cases with insider-knowledge elements, NOT cyber-tampering incidents, so they are not usable as technique-evidencing citations here (source_citations is empty on this entry) -- expert-estimate only, grounded in the entry's own description.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "gov-citizen-portal-ddos",
+   "domain": "enterprise",
+   "technique_id": "T1498",
+   "rationale": "NETSCOUT documents that 'In October 2022, a DDoS cyberattack took down dozens of state government websites including those of Connecticut, Colorado, Mississippi, and Kentucky,' attributed to Killnet -- the volumetric-DDoS-on-citizen-portal behavior this entry names in its example_incidents ('Killnet 2022-2023... DDoS campaigns against multiple US state government portals').",
+   "provenance": "cited",
+   "citations": [
+    "NETSCOUT (Gary Sockrider), 'DDoS Attacks Against Governments Are on the Rise' (2023-08-08), https://www.netscout.com/blog/ddos-attacks-against-governments-are-rise (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "gov-citizen-portal-ddos",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry description states hacktivists mount 'volumetric OR application-layer DDoS attacks against government citizen-service portals' -- the application-layer half of that stated dichotomy, distinct from the volumetric/network-flood row above.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "gov-employee-insider-leak",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry's example_incidents names both 'Harold Martin (NSA contractor, 2016...)' and 'Reality Winner (NSA contractor, 2017...)'. DOJ's press release on Martin states he 'was a contractor with the federal government and had a top secret national security clearance'; DOJ's press release on Winner states she was a federal contractor holding a Top Secret clearance who 'admitted intentionally identifying and printing the classified intelligence reporting despite not having a \"need to know\"' -- in both cases the insider's own authorized clearance/account, not a compromised credential, is the load-bearing access vector for the leak.",
+   "provenance": "cited",
+   "citations": [
+    "U.S. Department of Justice, Office of Public Affairs, 'Maryland Man Charged With Removal of Classified Materials and Theft of Government Property' (2016-08-29), https://www.justice.gov/archives/opa/pr/maryland-man-charged-removal-classified-materials-and-theft-government-property (accessed 2026-07-05), paragraph describing Martin's contractor status and top secret clearance",
+    "U.S. Department of Justice, Office of Public Affairs, 'Federal Government Contractor in Georgia Charged With Removing and Mailing Classified Materials to a News Outlet' (2017-06-05), https://www.justice.gov/archives/opa/pr/federal-government-contractor-georgia-charged-removing-and-mailing-classified-materials-news (accessed 2026-07-05), paragraph describing Winner's Top Secret clearance and lack of need-to-know"
+   ]
+  },
+  {
+   "entry_slug": "gov-employee-insider-leak",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description names the exfiltrated record types as 'personnel files, law-enforcement databases, citizen benefit records, or national-security information' -- data resident in shared government information systems/repositories rather than a single workstation's files, consistent with mining information repositories prior to disclosure.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "gov-records-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the insider 'intentionally corrupts, alters, or deletes official records' in voter-roll, property, criminal-history, court, or benefits systems -- directly matching Data Manipulation's 'insert, delete, or manipulate data... to influence external outcomes or decision making.' No further technique is honestly supportable: attack_vector=insider_access_abuse describes an insider using ALREADY-HELD administrative access (not obtained/escalated via an attack step), so Valid Accounts is not invoked here.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "grid-protective-relay-manipulation",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "ESET reports the breaker-control payload was 'designed to gain direct control of switches and circuit breakers at an electricity distribution substation' to cut power -- the load-loss availability impact this entry describes ('operator-visible load loss').",
+   "provenance": "cited",
+   "citations": [
+    "ESET WeLiveSecurity (Robert Lipovsky), 'Industroyer: Biggest threat to industrial control systems since Stuxnet' (2017-06-12), https://www.welivesecurity.com/2017/06/12/industroyer-biggest-threat-industrial-control-systems-since-stuxnet/ (accessed 2026-07-05)",
+    "CISA, 'CRASHOVERRIDE Malware', ICS-ALERT-17-206-01, https://www.cisa.gov/news-events/ics-alerts/ics-alert-17-206-01 (accessed 2026-07-05)",
+    "CISA/NCCIC, 'CrashOverride Malware', TA17-163A, https://www.cisa.gov/news-events/alerts/2017/06/12/crashoverride-malware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "grid-protective-relay-manipulation",
+   "domain": "ics",
+   "technique_id": "T0837",
+   "rationale": "ESET documents a dedicated Industroyer DoS module exploiting CVE-2015-5374 to 'render targeted [Siemens SIPROTEC] devices unresponsive' -- directly disabling protective relays so faults are not cleared, exactly this entry's 'disabling protective relays' description.",
+   "provenance": "cited",
+   "citations": [
+    "ESET WeLiveSecurity (Robert Lipovsky), 'Industroyer: Biggest threat to industrial control systems since Stuxnet' (2017-06-12), https://www.welivesecurity.com/2017/06/12/industroyer-biggest-threat-industrial-control-systems-since-stuxnet/ (accessed 2026-07-05)",
+    "CISA, 'CRASHOVERRIDE Malware', ICS-ALERT-17-206-01, https://www.cisa.gov/news-events/ics-alerts/ics-alert-17-206-01 (accessed 2026-07-05)",
+    "CISA/NCCIC, 'CrashOverride Malware', TA17-163A, https://www.cisa.gov/news-events/alerts/2017/06/12/crashoverride-malware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "grid-protective-relay-manipulation",
+   "domain": "ics",
+   "technique_id": "T1692",
+   "rationale": "ESET's Industroyer analysis documents payload components issuing direct protocol commands (IEC 60870-5-101/104, IEC 61850, OPC DA) to open substation circuit breakers/switches -- the 'unauthorized breaker-open commands' and protocol abuse this entry describes as Industroyer/CRASHOVERRIDE's signature capability.",
+   "provenance": "cited",
+   "citations": [
+    "ESET WeLiveSecurity (Robert Lipovsky), 'Industroyer: Biggest threat to industrial control systems since Stuxnet' (2017-06-12), https://www.welivesecurity.com/2017/06/12/industroyer-biggest-threat-industrial-control-systems-since-stuxnet/ (accessed 2026-07-05)",
+    "CISA, 'CRASHOVERRIDE Malware', ICS-ALERT-17-206-01, https://www.cisa.gov/news-events/ics-alerts/ics-alert-17-206-01 (accessed 2026-07-05)",
+    "CISA/NCCIC, 'CrashOverride Malware', TA17-163A, https://www.cisa.gov/news-events/alerts/2017/06/12/crashoverride-malware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hacktivist-ot-disruption",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "CISA reporting on the November 2023 Unitronics incident states the affected water authority 'immediately took the system offline and switched to manual operations' -- an availability loss on the automated pumping process forced by the hacktivist compromise, matching this entry's framing that hacktivists 'typically do not achieve physical safety consequences due to operator vigilance and physical safeguards' (the manual fallback being that safeguard).",
+   "provenance": "cited",
+   "citations": [
+    "CISA, 'Exploitation of Unitronics PLCs used in Water and Wastewater Systems' (2023-11-28), https://www.cisa.gov/news-events/alerts/2023/11/28/exploitation-unitronics-plcs-used-water-and-wastewater-systems (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hacktivist-ot-disruption",
+   "domain": "ics",
+   "technique_id": "T0829",
+   "rationale": "AA23-335A and contemporaneous CISA reporting document the actors leaving a defacement image ('You have been hacked, down with Israel...') on the compromised HMI in place of the operator's normal process display -- the affected utility's HMI-based visibility into pump-station state was lost as a direct consequence, matching Loss of View's 'sustained... visibility loss' requiring hands-on intervention.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI/NSA/EPA/Israel National Cyber Directorate Joint Cybersecurity Advisory AA23-335A, 'IRGC-Affiliated Cyber Actors Exploit PLCs in Multiple Sectors, Including US Water and Wastewater Systems Facilities' (2023-12-01), https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-335a (accessed 2026-07-05), 'Threat Actor Activity' section"
+   ]
+  },
+  {
+   "entry_slug": "hacktivist-ot-disruption",
+   "domain": "ics",
+   "technique_id": "T0859",
+   "rationale": "AA23-335A documents that the compromised Unitronics devices 'either had a default password in place or no password' (the default was '1111') -- exactly the 'default credentials' access path this entry names as the archetype's low-sophistication hallmark, distinct from the internet-exposure step itself.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI/NSA/EPA/Israel National Cyber Directorate Joint Cybersecurity Advisory AA23-335A, 'IRGC-Affiliated Cyber Actors Exploit PLCs in Multiple Sectors, Including US Water and Wastewater Systems Facilities' (2023-12-01), https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-335a (accessed 2026-07-05), 'Threat Actor Activity' section"
+   ]
+  },
+  {
+   "entry_slug": "hacktivist-ot-disruption",
+   "domain": "ics",
+   "technique_id": "T0883",
+   "rationale": "CISA/FBI/NSA/EPA/INCD advisory AA23-335A documents CyberAv3ngers compromising 'Unitronics Vision Series devices... publicly exposed to the internet' via the default TCP communications port -- the direct internet-facing exposure this entry names ('internet-exposed Unitronics, AutomationDirect, or other PLCs').",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI/NSA/EPA/Israel National Cyber Directorate Joint Cybersecurity Advisory AA23-335A, 'IRGC-Affiliated Cyber Actors Exploit PLCs in Multiple Sectors, Including US Water and Wastewater Systems Facilities' (2023-12-01), https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-335a (accessed 2026-07-05), 'Threat Actor Activity' section"
+   ]
+  },
+  {
+   "entry_slug": "healthcare-record-alteration",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description names the actor as 'clinician, administrator, or IT staff with EHR access' and states 'the insider has read-write access to records beyond their minimum-necessary role' -- the insider's own legitimate, over-scoped EHR account is the load-bearing access vector.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "healthcare-record-alteration",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the insider deliberately alters patient records, 'modifying diagnoses, medication orders, lab results, or billing codes' -- direct insertion/manipulation of stored EHR data to influence billing or clinical outcomes, matching Data Manipulation. No technique-evidencing primary was found: the entry's own source_citations is empty and the named examples (federal healthcare-fraud prosecutions, Theranos) either lack published per-incident TTP detail or describe organizational lab fraud rather than EHR record alteration by an individual insider, so this row is left expert-estimate.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "healthcare-staff-credential-phish",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states 'once compromised, the attacker accesses electronic health records' using the captured EHR credentials -- operating the compromised clinical/administrative account as an authenticated valid user.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "healthcare-staff-credential-phish",
+   "domain": "enterprise",
+   "technique_id": "T1114",
+   "rationale": "Entry description states the compromised account may be used 'for business-email compromise against the organization's vendors' -- leveraging the captured staff mailbox to collect and target vendor email communications in furtherance of BEC, a distinct downstream path from the direct EHR/PHI access route.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "healthcare-staff-credential-phish",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description states the attacker 'exfiltrates protected health information (PHI) for sale on dark-web markets' from the EHR -- mining the EHR, an information repository, for PHI ahead of exfiltration; tags include 'ehr' and 'phi_breach'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "healthcare-staff-credential-phish",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry description states cybercriminals 'send spear-phishing emails targeting clinical and administrative healthcare staff to capture EHR login credentials' -- electronically-delivered social engineering to obtain initial access credentials; entry's attack_vector=phishing.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hmi-credential-compromise",
+   "domain": "ics",
+   "technique_id": "T0822",
+   "rationale": "The Oldsmar attacker reached the plant's SCADA controls via TeamViewer, remote-access software left reachable on the OT perimeter, per Threatpost's reporting -- matching the entry's description of 'exposed VNC, TeamViewer, or RDP on the OT network perimeter'.",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'Florida Water Plant Hack: Leaked Credentials Found in Breach Database', https://threatpost.com/florida-water-plant-hack-credentials-breach/163919/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hmi-credential-compromise",
+   "domain": "ics",
+   "technique_id": "T0831",
+   "rationale": "Threatpost documents the attacker using remote access to change the sodium hydroxide level from 100 to 11,100 ppm (~111x) before an operator reversed it -- the exact setpoint manipulation this entry describes.",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'Florida Water Plant Hack: Leaked Credentials Found in Breach Database', https://threatpost.com/florida-water-plant-hack-credentials-breach/163919/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hmi-credential-compromise",
+   "domain": "ics",
+   "technique_id": "T0859",
+   "rationale": "Threatpost reports researchers found the Oldsmar facility's credentials in prior breach-database dumps (11 credential pairs from a 2017 compilation), consistent with this entry's 'single operator credential exposed via remote access' framing.",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'Florida Water Plant Hack: Leaked Credentials Found in Breach Database', https://threatpost.com/florida-water-plant-hack-credentials-breach/163919/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hospitality-booking-ddos-peak-season",
+   "domain": "enterprise",
+   "technique_id": "T1498",
+   "rationale": "Entry describes DDoS attacks 'against hotel booking platforms, reservation systems, and property management systems' timed to 'maximize revenue disruption pressure'; canonical_fair_gap states the inherent posture assumes 'no DDoS scrubbing or CDN-based absorption layer,' i.e. no defense against a volumetric flood saturating the booking platform's network capacity.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-booking-ddos-peak-season",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry names the 'booking platform, reservation systems, and property management systems' themselves -- application-tier services -- as the DDoS target, distinct from a raw network-bandwidth flood; an application-layer request flood against these booking-specific services is the mechanism by which the 'irreplaceable perishable inventory (unfilled room-nights)' described in canonical_fair_gap is destroyed.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-guest-data-insider",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states the insider 'abuses privileged access to the property-management system (PMS) or central reservation system' -- the insider's own legitimate PMS/CRS account, not a compromised credential, is the load-bearing access vector; attack_vector=insider_access_abuse.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-guest-data-insider",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description states hospitality organizations hold 'dense guest profiles (travel patterns, credit card data, VIP preferences, room-access codes)' in the PMS/CRS -- mining this shared guest-data repository, rather than a single local file, is the described collection behavior.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-loyalty-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description frames the loss as arising once loyalty accounts are taken over and points redeemed -- the attacker operating the loyalty account as an authenticated valid user is the load-bearing access step between credential compromise and points-fraud impact.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-loyalty-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1110",
+   "rationale": "Entry description states cybercriminals 'use credential stuffing, phishing, or SIM-swap attacks to take over hotel, airline, or rental-car loyalty accounts' -- automated credential-stuffing/brute-force testing is named as the primary access-gaining tooling for this archetype; tags include 'credential_stuffing'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-loyalty-account-takeover",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry description states attackers 'redeem accumulated points or miles for cash-equivalent travel, gift cards, or merchandise' -- direct technical/monetary theft from the compromised loyalty balance; tags include 'points_fraud'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "hospitality-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1005",
+   "rationale": "Entry describes 'deploying memory-scraping malware on POS hardware.' Threatpost's reporting on the FTC's case against Wyndham Hotels (named in this entry's example_incidents) documents that across the 2008-2010 breaches 'attackers installed memory scraping malware to access payment card account information held by the hotels' at dozens of Wyndham-branded properties -- the POS memory-scraping behavior this entry names.",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'FTC Sues Wyndham Over Breaches Linked to $10M In Fraud' (2012-06-26), https://threatpost.com/ftc-sues-wyndham-over-breaches-linked-10m-fraud-062612/76735/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hospitality-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1041",
+   "rationale": "Threatpost's reporting on the Wyndham breaches documents that stolen card data from the first breach 'was exported to a server on a domain registered in Russia' -- the external exfiltration-channel behavior following the POS memory-scraping collection this entry describes.",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'FTC Sues Wyndham Over Breaches Linked to $10M In Fraud' (2012-06-26), https://threatpost.com/ftc-sues-wyndham-over-breaches-linked-10m-fraud-062612/76735/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "hospitality-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1185",
+   "rationale": "Entry description also states adversaries inject 'JavaScript skimmers on the booking and checkout platform' -- the same in-browser payment-form interception behavior as this batch's Magecart-family entry, though this entry's own named incidents (Marriott, Wyndham) document POS-malware breaches rather than a JS-skimming campaign specifically, so this row is not grounded in a fetched hospitality-specific primary.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "insider-data-theft-financial",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description frames the actor as a 'Malicious insider (employee, contractor, or privileged vendor) with legitimate access to financial records, customer PII, or transactional data' who then 'exfiltrates large datasets' -- abuse of that already-provisioned, legitimate account is the load-bearing vector; attack_vector=privileged_access_misuse.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "insider-data-theft-financial",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description states the insider exfiltrates 'financial records, customer PII, or transactional data' -- data of this kind is resident in shared organizational databases/CRM systems rather than a single workstation, consistent with mining information repositories rather than local-file collection.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "insider-ip-theft-manufacturing",
+   "domain": "enterprise",
+   "technique_id": "T1005",
+   "rationale": "DOJ's press release documents Zheng 'stealing multiple electronic files, including proprietary files involving design models, engineering drawings, configuration files, and material specifications' from GE's internal systems -- collection of sensitive files resident on the corporate file store prior to exfiltration, matching this entry's 'exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets' framing.",
+   "provenance": "cited",
+   "citations": [
+    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the specific file types stolen"
+   ]
+  },
+  {
+   "entry_slug": "insider-ip-theft-manufacturing",
+   "domain": "enterprise",
+   "technique_id": "T1027",
+   "rationale": "DOJ's press release documents Zheng using steganography -- hiding 'data files belonging to GE into an innocuous looking digital picture of a sunset' -- to obfuscate the stolen trade-secret files before transmission, the specific concealment technique behind this entry's IP-exfiltration archetype.",
+   "provenance": "cited",
+   "citations": [
+    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the steganographic sunset photo"
+   ]
+  },
+  {
+   "entry_slug": "insider-ip-theft-manufacturing",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry's example_incidents names the 'General Electric IP theft case 2023 (former GE engineer convicted of stealing turbine technology for China)'. DOJ's press release documents that Zheng, 'while employed at GE Power & Water in Schenectady, New York as an engineer specializing in sealing technology,' 'exploited his access to GE's files' -- abuse of his own legitimate employee account, not a compromised credential, is the load-bearing insider vector this entry generalizes to CAD/mask-set/formulation theft.",
+   "provenance": "cited",
+   "citations": [
+    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing Zheng's employment and access to GE's files"
+   ]
+  },
+  {
+   "entry_slug": "insider-ip-theft-manufacturing",
+   "domain": "enterprise",
+   "technique_id": "T1567",
+   "rationale": "DOJ's press release documents Zheng '[e-]mail[ing] the digital picture, which contained the stolen GE data files, to Zheng's e-mail account' -- using a personal webmail service, rather than GE's own infrastructure, as the channel to move the stolen trade secrets out of the corporate environment.",
+   "provenance": "cited",
+   "citations": [
+    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the photo being e-mailed to Zheng's personal account"
+   ]
+  },
+  {
+   "entry_slug": "ip-theft-by-competitor",
+   "domain": "enterprise",
+   "technique_id": "T1005",
+   "rationale": "Entry description names 'proprietary process designs, chemical formulations, tooling specifications' as the targeted IP -- files resident on the insider's local/engineering systems, matching Data from Local System.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ip-theft-by-competitor",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry's attack_vector field is 'insider_access_abuse'; description states a competitor 'recruits or compromises an insider to exfiltrate manufacturing trade secrets' -- the insider's own legitimate account access is the vehicle for reaching the IP.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ip-theft-by-competitor",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry description also names 'supplier contracts, or customer pricing models' among the exfiltrated IP -- data types that typically live in ERP/CRM/document-management repositories rather than a single local workstation, matching Data from Information Repositories.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "it-ot-bridge-compromise",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description frames the compromise as beginning with a 'routine phishing or credential-stuffing attack on IT assets' -- abuse of valid accounts obtained via credential stuffing is the load-bearing initial foothold; attack_vector=spearphishing_followed_by_lateral_movement.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "it-ot-bridge-compromise",
+   "domain": "enterprise",
+   "technique_id": "T1133",
+   "rationale": "Entry description names a 'shared vendor VPN' among the bridge assets the attacker rides from IT into OT -- an externally-facing remote-access service; tags include 'it_ot_segmentation'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "it-ot-bridge-compromise",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "Entry's example_incidents cites Colonial Pipeline 2021, where the operator 'shut OT pipeline control systems as precaution' -- a proactive OT-availability loss triggered by the IT event, matching the entry's tags 'pipeline'/'oil_and_gas' and the described IT->OT escalation.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "it-ot-bridge-compromise",
+   "domain": "ics",
+   "technique_id": "T0866",
+   "rationale": "Description frames the OT pivot as reaching 'a jump server, historian, data diode misconfiguration, or shared vendor VPN' from the IT foothold -- an escalation into OT-side remote-access/lateral pathways distinct from the initial IT compromise.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "logistics-disruption",
+   "domain": "enterprise",
+   "technique_id": "T1003",
+   "rationale": "CISA/US-CERT alert TA17-181A states the Petya/NotPetya variant used 'a modified version of the Mimikatz tool to steal the user's Windows credentials' as its 'first and... most effective propagation method' -- the credential-harvesting step enabling the entry's described spread across 'terminal operating systems, booking and tracking platforms, warehouse-management and dispatch systems.'",
+   "provenance": "cited",
+   "citations": [
+    "CISA/US-CERT Alert TA17-181A, 'Petya Ransomware' (2017-07-01), https://www.cisa.gov/news-events/alerts/2017/07/01/petya-ransomware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-disruption",
+   "domain": "enterprise",
+   "technique_id": "T1210",
+   "rationale": "TA17-181A states the malware laterally moved by 'exploiting previously identified SMB vulnerabilities' (MS17-010, the EternalBlue/EternalRomance exploits) in addition to stolen credentials -- the multi-site propagation mechanism behind this entry's description of recovery 'spanning weeks across many sites.'",
+   "provenance": "cited",
+   "citations": [
+    "CISA/US-CERT Alert TA17-181A, 'Petya Ransomware' (2017-07-01), https://www.cisa.gov/news-events/alerts/2017/07/01/petya-ransomware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-disruption",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "TA17-181A documents the same malware 'encrypting files' on infected hosts prior to the MBR/disk-wipe stage -- the file-encryption behavior underlying this entry's 'ransomware or a destructive wiper' framing (the entry explicitly covers both outcomes as a regime mixture).",
+   "provenance": "cited",
+   "citations": [
+    "CISA/US-CERT Alert TA17-181A, 'Petya Ransomware' (2017-07-01), https://www.cisa.gov/news-events/alerts/2017/07/01/petya-ransomware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-disruption",
+   "domain": "enterprise",
+   "technique_id": "T1561",
+   "rationale": "TA17-181A states the malware proceeded to 'encrypting files and overwriting the Master Boot Record (MBR) or wiping sectors of the disk drive' -- the destructive, non-recoverable wiper behavior this entry contrasts with ordinary ransomware ('Maersk reported... a near-total Active Directory rebuild'), grounding the entry's 'destructive wiper' framing distinct from a standard pay-to-decrypt outcome.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/US-CERT Alert TA17-181A, 'Petya Ransomware' (2017-07-01), https://www.cisa.gov/news-events/alerts/2017/07/01/petya-ransomware (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-tms-data-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "FBI IC3's 2026 cargo-theft PSA documents cyber threat actors gaining 'total, undetected access to the brokers' or carriers' systems' and using 'compromised carrier accounts' to access trucking load boards -- the compromised-TMS-credential access vector this entry describes ('compromise transportation management system (TMS) credentials').",
+   "provenance": "cited",
+   "citations": [
+    "FBI Internet Crime Complaint Center (IC3), Alert I-043026-PSA, 'Cyber-Enabled Strategic Cargo Theft Surging', 'How the Scheme Works' section (2026-04-30), https://www.ic3.gov/PSA/2026/PSA260430 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-tms-data-tampering",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "The same IC3 PSA documents threat actors using 'manipulated bills of lading, and changing the destination of the load' after gaining account access -- the manifest/route-record falsification this entry describes ('alter shipping manifests, route assignments, or delivery confirmation records, enabling cargo diversion').",
+   "provenance": "cited",
+   "citations": [
+    "FBI Internet Crime Complaint Center (IC3), Alert I-043026-PSA, 'Cyber-Enabled Strategic Cargo Theft Surging', 'How the Scheme Works' section (2026-04-30), https://www.ic3.gov/PSA/2026/PSA260430 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "logistics-warehouse-physical-intrusion",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry describes cybercriminals using 'cloned employee credentials to gain physical entry to logistics warehouses and conduct high-value cargo theft' -- the credential-cloning path is the load-bearing access-control bypass this entry frames as 'the cyber component... the enabler' for the physical intrusion; the entry's other named enablers ('compromised access-control systems,' 'disabled CCTV feeds') do not map cleanly to a distinct ATT&CK enterprise technique without over-extending Denial-of-Service or remote-exploitation definitions beyond what the entry specifies.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "manufacturing-billing-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states the insider 'creates fictitious vendor records, manipulates purchase orders, or diverts payments' in the ERP/AP system -- matching Data Manipulation's insert/manipulate-data-to-influence-a-business-process behavior. The entry's own source material (US DOJ press releases 'without specific loss figures per case', ACFE Report to the Nations referenced without a specific figure) names no single verifiable incident with technique-level detail, and no independently verifiable primary specific to this archetype was found -- expert-estimate only.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "manufacturing-facility-sabotage",
+   "domain": "ics",
+   "technique_id": "T0828",
+   "rationale": "Entry description frames the loss as 'production shutdown' with 'lost production output' costs -- the direct operational-throughput and revenue consequence of the insider's equipment damage/parameter manipulation, matching Loss of Productivity and Revenue.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "manufacturing-facility-sabotage",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Entry description states the insider 'manipulates process parameters to cause production shutdown, product defects, or safety incidents' -- direct alteration of the control-system parameters governing production equipment behavior.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "manufacturing-facility-sabotage",
+   "domain": "ics",
+   "technique_id": "T0879",
+   "rationale": "Entry description states the insider 'deliberately damages or disables production equipment' -- physical damage/destruction to plant equipment, and the calibration_anchor notes losses reaching '$5M-$20M for food/pharma sectors' from equipment destruction.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "mfa-fatigue-prompt-bombing",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Uber's own newsroom disclosure of the 2022 incident states 'it is likely that the attacker purchased the contractor's Uber corporate password on the dark web' and that 'the attacker then repeatedly tried to log in to the contractor's account' -- abuse of the purchased/compromised password as a valid credential is the entry's described first step ('obtains a target's username and password... via credential stuffing or phishing') preceding the push-bombing phase.",
+   "provenance": "cited",
+   "citations": [
+    "Uber Newsroom, 'Security update' (2022-09-16), https://www.uber.com/newsroom/security-update/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "mfa-fatigue-prompt-bombing",
+   "domain": "enterprise",
+   "technique_id": "T1621",
+   "rationale": "The same Uber disclosure states 'each time, the contractor received a two-factor login approval request, which initially blocked access. Eventually, however, the contractor accepted one, and the attacker successfully logged in' -- the repeated MFA push-notification generation this entry names as 'MFA Fatigue Attack \u2014 Push Notification Bombing', matching the Uber 2022 example_incident.",
+   "provenance": "cited",
+   "citations": [
+    "Uber Newsroom, 'Security update' (2022-09-16), https://www.uber.com/newsroom/security-update/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "moveit-class-zero-day-mft",
+   "domain": "enterprise",
+   "technique_id": "T1005",
+   "rationale": "Mandiant documents LEMURLOOT enumerating files/folders and retrieving configuration data from the compromised MOVEit host, i.e. collecting data resident on the local system prior to theft -- matching the entry's 'mass-exfiltrate data' description.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'Zero-Day Vulnerability in MOVEit Transfer Exploited for Data Theft' (2023-06-02), https://cloud.google.com/blog/topics/threat-intelligence/zero-day-moveit-data-theft (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "moveit-class-zero-day-mft",
+   "domain": "enterprise",
+   "technique_id": "T1041",
+   "rationale": "Mandiant reports data theft occurring 'within minutes of the deployment of web shells,' exfiltrated via the same HTTP channel used to operate LEMURLOOT -- consistent with this entry's 'minimal dwell time (hours to days)' mass-exfiltration pattern.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'Zero-Day Vulnerability in MOVEit Transfer Exploited for Data Theft' (2023-06-02), https://cloud.google.com/blog/topics/threat-intelligence/zero-day-moveit-data-theft (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "moveit-class-zero-day-mft",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "Mandiant's report on the MOVEit campaign documents SQL-injection exploitation of CVE-2023-34362 against the public-facing MOVEit Transfer web application (POST requests to guestaccess.aspx) -- the zero-day exploitation this entry describes.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'Zero-Day Vulnerability in MOVEit Transfer Exploited for Data Theft' (2023-06-02), https://cloud.google.com/blog/topics/threat-intelligence/zero-day-moveit-data-theft (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "moveit-class-zero-day-mft",
+   "domain": "enterprise",
+   "technique_id": "T1505",
+   "rationale": "Mandiant documents the Cl0p actors deploying the LEMURLOOT web shell (masquerading as human2.aspx, a legitimate MOVEit component) onto compromised servers following exploitation -- the persistence mechanism enabling the entry's mass-exfiltration campaign.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'Zero-Day Vulnerability in MOVEit Transfer Exploited for Data Theft' (2023-06-02), https://cloud.google.com/blog/topics/threat-intelligence/zero-day-moveit-data-theft (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "nation-state-ics-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1195",
+   "rationale": "Symantec's Dragonfly 2.0 analysis states 'Symantec observed the Dragonfly group compromise legitimate software in order to deliver malware to victims' -- the generic trojanized-vendor-software delivery behavior this entry extends specifically to ICS vendor software update portals (Siemens/GE/ABB per the entry's description of Havex embedded 'in legitimate vendor updates').",
+   "provenance": "cited",
+   "citations": [
+    "Broadcom/Symantec (Security.com), 'Dragonfly: Western energy sector targeted by sophisticated attack group' (2017-10-20), https://www.security.com/threat-intelligence/dragonfly-energy-sector-cyber-attacks (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "nation-state-ics-supply-chain",
+   "domain": "ics",
+   "technique_id": "T0862",
+   "rationale": "The same Symantec analysis states that the 'Dragonfly 2.0 campaigns' were 'potentially providing them with access to operational systems, access that could be used for more disruptive purposes in future' -- documenting that this software-supply-chain vector reached the OT/operational layer, distinct from the IT-side trojanized-update compromise itself.",
+   "provenance": "cited",
+   "citations": [
+    "Broadcom/Symantec (Security.com), 'Dragonfly: Western energy sector targeted by sophisticated attack group' (2017-10-20), https://www.security.com/threat-intelligence/dragonfly-energy-sector-cyber-attacks (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "nation-state-ics-supply-chain",
+   "domain": "ics",
+   "technique_id": "T0882",
+   "rationale": "Entry description states the campaign's goal 'is persistent access for intelligence collection and potential future sabotage, not immediate disruption' -- the operational-information-gathering objective this technique covers, distinct from the access-establishment techniques above.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "oem-remote-maintenance-abuse",
+   "domain": "ics",
+   "technique_id": "T0822",
+   "rationale": "Threatpost's reporting on the Oldsmar water-treatment intrusion states 'the attackers accessed the water treatment plant's SCADA controls via TeamViewer, remote access software left reachable' on the network -- an externally-facing OEM/support remote-access tool left exposed, matching this entry's description of 'OEM, integrator, or maintenance-vendor remote-access pathways... remote-support tooling.'",
+   "provenance": "cited",
+   "citations": [
+    "Threatpost, 'Florida Water Plant Hack: Leaked Credentials Found in Breach Database' (2021-02-11), https://threatpost.com/florida-water-plant-hack-credentials-breach/163919/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "oem-remote-maintenance-abuse",
+   "domain": "ics",
+   "technique_id": "T0831",
+   "rationale": "Entry description states these vendor pathways 'carry privileged control access,' so a compromised credential or exposed portal enables 'disruptive commands or a hands-on-keyboard outage' -- direct manipulation of control once the OEM/integrator access is abused.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "oem-remote-maintenance-abuse",
+   "domain": "ics",
+   "technique_id": "T0866",
+   "rationale": "Entry description states a 'compromised vendor credential or exposed service portal yields direct reach into controllers and HMIs' -- exploitation of the remote-access/maintenance service itself to reach OT assets, the step this entry frames as distinct from (and beyond) simply reaching an exposed remote-access endpoint.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ot-network-scanning-reconnaissance",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "CISA/NSA/FBI advisory AA24-038A states Volt Typhoon 'relies on valid accounts... repeatedly exfiltrates domain credentials, ensuring access to current and valid accounts' for long-term undetected persistence -- the 'persistent pre-positioning reconnaissance... for future disruption capability' this entry's example_incidents attributes to Volt Typhoon.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/NSA/FBI Joint Cybersecurity Advisory AA24-038A, 'PRC State-Sponsored Actors Compromise and Maintain Persistent Access to U.S. Critical Infrastructure' (2024-02-07), https://www.cisa.gov/news-events/cybersecurity-advisories/aa24-038a (accessed 2026-07-05), 'Overview' / living-off-the-land TTP section"
+   ]
+  },
+  {
+   "entry_slug": "ot-network-scanning-reconnaissance",
+   "domain": "enterprise",
+   "technique_id": "T1595",
+   "rationale": "Entry description states actors conduct 'active probing of exposed ICS protocols (Modbus, DNP3, BACnet, EtherNet/IP)' -- direct-interaction network probing of victim infrastructure, matching Active Scanning as distinct from the passive Shodan/Censys step.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ot-network-scanning-reconnaissance",
+   "domain": "enterprise",
+   "technique_id": "T1596",
+   "rationale": "Entry description states actors use 'passive scanning (Shodan, Censys)' of OT networks -- T1596 Search Open Technical Databases explicitly covers searching 'public collections of network data/artifacts gathered from traffic and/or scans,' the Shodan/Censys pattern this entry names.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ot-network-scanning-reconnaissance",
+   "domain": "ics",
+   "technique_id": "T0888",
+   "rationale": "Entry describes probing of ICS-specific protocols to footprint exposed devices ahead of a follow-on attack -- once probing reaches the OT network itself this is Remote System Information Discovery ('detailed information about remote systems... make/model, role, and configuration... to aid in targeting'), the ICS-domain counterpart to the entry's IT-side scanning steps.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "package-registry-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1027",
+   "rationale": "The same oss-security disclosure documents the backdoor payload concealed inside binary test fixtures -- 'bad-3-corrupt_lzma2.xz' and 'good-large_compressed.lzma' -- that, 'when decompressed and executed as shell code,' deployed the exploit, evading source-code review; this is the obfuscated-payload-in-plain-sight technique underlying the entry's description of a 'sophisticated multi-year social engineering campaign to insert a backdoor into a widely used compression library.'",
+   "provenance": "cited",
+   "citations": [
+    "Andres Freund, oss-security mailing list, 'backdoor in upstream xz/liblzma leading to ssh server compromise' (2024-03-29), https://www.openwall.com/lists/oss-security/2024/03/29/4 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "package-registry-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1195",
+   "rationale": "Andres Freund's oss-security disclosure documents that the xz/liblzma backdoor's delivery 'is solely in the distributed tarballs' and 'is not in the upstream source' repository -- malicious code inserted into the release/distribution mechanism before receipt by downstream Linux distributions, matching this entry's description of packages that 'execute malicious code when installed by downstream developers or CI/CD pipelines' (example_incidents names XZ Utils/CVE-2024-3094).",
+   "provenance": "cited",
+   "citations": [
+    "Andres Freund, oss-security mailing list, 'backdoor in upstream xz/liblzma leading to ssh server compromise' (2024-03-29), https://www.openwall.com/lists/oss-security/2024/03/29/4 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "package-registry-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1586",
+   "rationale": "Entry description names 'account takeover of a legitimate maintainer' as one of three attacker paths onto public registries (alongside typosquatting and dependency confusion), and example_incidents names the 2018 npm event-stream compromise as this pattern -- an adversary compromising an existing maintainer identity to publish malicious releases.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry's example_incidents names 'Colonial Pipeline May 2021 (ransomware-driven proactive shutdown)'; CISA/FBI advisory AA21-131A Technical Details documents DarkSide's file-encryption impact behavior on Windows hosts -- the ransomware family publicly reported as the cause of Colonial's precautionary pipeline shutdown that this entry's IT-nomination-platform half of its dual attack-surface framing describes.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-131A, 'DarkSide Ransomware: Best Practices for Preventing Business Disruption from Ransomware Attacks', Technical Details section, https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-131a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry description names 'the IT nomination and scheduling platform through which contracted shippers submit daily gas or liquids volumes' as an attack target whose disruption 'forces curtailment of throughput' -- an availability attack on that scheduling platform distinct from the ransomware-encryption path, matching the entry's own 'or' framing of two alternative attack surfaces.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "Entry description states the SCADA-side attack 'forces curtailment of throughput on contracted firm-transportation lanes' -- the OT availability loss underlying the shipper make-whole liability this entry is built around (asset_class=business_process_third_party_revenue).",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Entry description names the alternative attack surface as 'the OT SCADA system controlling compressor stations and valve automation' -- altering the process-control parameters governing compressor/valve operation is this entry's OT-side curtailment mechanism.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-scada-integrity",
+   "domain": "ics",
+   "technique_id": "T0813",
+   "rationale": "Entry describes 'mis-sequencing valves' that defeats the operator's intended control of the pipeline -- an interference with legitimate process control matching Denial of Control.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-scada-integrity",
+   "domain": "ics",
+   "technique_id": "T0832",
+   "rationale": "Entry describes 'falsifying telemetry so leak-detection and operators stay blind' -- presenting operators with misleading process state, the defining behavior of Manipulation of View.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-scada-integrity",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Entry describes an actor 'manipulat[ing] the integrity of pressure, flow, and valve control -- driving line pressure past safe limits,' i.e. altering the process-control parameters governing pipeline pressure/flow.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "pipeline-scada-integrity",
+   "domain": "ics",
+   "technique_id": "T0879",
+   "rationale": "Entry names 'the worst case... a physical pipeline rupture, release, or fire' as the ultimate consequence if pressure/flow manipulation goes unchecked -- direct physical damage to property.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "process-view-manipulation",
+   "domain": "ics",
+   "technique_id": "T0813",
+   "rationale": "The same SANS ICS account states 'field staff at the impacted power companies manned required substations, transferring from automatic to manual mode, and manually re-closed breakers to energize the system' -- operators' normal SCADA-based control access was denied, forcing the manual fallback, matching Denial of Control.",
+   "provenance": "cited",
+   "citations": [
+    "SANS ICS, 'Confirmation of a Coordinated Attack on the Ukrainian Power Grid' (2016-01), https://www.sans.org/blog/confirmation-of-a-coordinated-attack-on-the-ukrainian-power-grid (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "process-view-manipulation",
+   "domain": "ics",
+   "technique_id": "T0829",
+   "rationale": "The SANS ICS blog account of the December 2015 Ukraine grid attack states operators were 'blinded' and that 'the distribution system was being run without the benefit of their SCADA as it was still infected' -- the sustained visibility loss this entry's example_incidents names ('operators locked out... while breakers were opened').",
+   "provenance": "cited",
+   "citations": [
+    "SANS ICS, 'Confirmation of a Coordinated Attack on the Ukrainian Power Grid' (2016-01), https://www.sans.org/blog/confirmation-of-a-coordinated-attack-on-the-ukrainian-power-grid (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "process-view-manipulation",
+   "domain": "ics",
+   "technique_id": "T0830",
+   "rationale": "Entry's example_incidents states 'Stuxnet 2010 (recorded-then-replayed sensor values masked centrifuge sabotage from operators)' -- an in-line interception and substitution of the field-to-HMI signal path, the Adversary-in-the-Middle pattern this entry's Stuxnet reference describes.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "process-view-manipulation",
+   "domain": "ics",
+   "technique_id": "T0832",
+   "rationale": "Entry description states the adversary 'falsifies the data presented to operators -- HMI readings, historian trends, alarm states -- so the displayed process state diverges from physical reality,' which is this entry's own definition of the manipulation-of-view effect it is named for.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "professional-office-physical-theft",
+   "domain": "enterprise",
+   "technique_id": "T1052",
+   "rationale": "Entry describes criminals who 'steal laptops, external drives, or other storage media containing client data, financial records, or attorney-client privileged information' -- physical removal of data-bearing storage media from the office is the exfiltration-via-physical-medium path underlying this entry's 'data-breach notification costs if unencrypted PII was on the stolen media' primary-loss driver.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "professional-payroll-bec",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "The same PSA documents that once 'employees enter their usernames and passwords on the spoofed log-in page,' the subject 'gather[s] and use[s] employee credentials to access the employees' [payroll account information]' -- the account-compromise pivot this entry describes as impersonating 'executives or HR staff via email compromise.'",
+   "provenance": "cited",
+   "citations": [
+    "FBI IC3 PSA190910, 'Business Email Compromise: The $26 Billion Scam' (2019-09-10), https://www.ic3.gov/PSA/2019/PSA190910 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "professional-payroll-bec",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "FBI IC3 PSA190910 documents victim employees 'receiving phishing emails prior to receiving requests for changes to direct deposit accounts,' the emails containing 'a spoofed log-in page for an email host' -- the phishing lure this entry names directly via attack_vector=phishing.",
+   "provenance": "cited",
+   "citations": [
+    "FBI IC3 PSA190910, 'Business Email Compromise: The $26 Billion Scam' (2019-09-10), https://www.ic3.gov/PSA/2019/PSA190910 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "professional-payroll-bec",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "The PSA documents the compromised payroll-account access is used to redirect direct-deposit funds, reporting 1,053 payroll-diversion complaints (Jan 2018-Jun 2019) totaling over $8.3M in losses -- the exact 'direct-deposit fraud' financial-theft impact this entry is built around.",
+   "provenance": "cited",
+   "citations": [
+    "FBI IC3 PSA190910, 'Business Email Compromise: The $26 Billion Scam' (2019-09-10), https://www.ic3.gov/PSA/2019/PSA190910 (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "public-sector-targeted-intrusion",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "The same advisory documents 'successful cyber actors purchased stolen RDP credentials from known darknet marketplaces' and could 'infect a network within hours of purchasing the credentials' -- valid-account reuse via purchased credentials, distinct from the RDP-service-exposure fact cited for T1133.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA18-337A, 'SamSam Ransomware' (2018-12-03), https://www.cisa.gov/news-events/cybersecurity-advisories/aa18-337a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "public-sector-targeted-intrusion",
+   "domain": "enterprise",
+   "technique_id": "T1133",
+   "rationale": "CISA/FBI AA18-337A documents that for SamSam ransomware, RDP 'allows cyber actors to infect victims with minimal detection' -- the 'exposed RDP' initial vector this entry names as an alternative to phishing, consistent with the City of Atlanta 2018 SamSam example_incident.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA18-337A, 'SamSam Ransomware' (2018-12-03), https://www.cisa.gov/news-events/cybersecurity-advisories/aa18-337a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "public-sector-targeted-intrusion",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry description states the actor 'deploy[s] ransomware that halts citizen-facing and internal services (permitting, courts, billing, email, 911-adjacent systems)' -- the defining encryption/availability impact of this archetype; tags include 'ransomware' and 'service_disruption'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "public-sector-targeted-intrusion",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry's attack_vector field names the chain 'phishing_credential_harvest_then_ad_lateral_movement' -- phishing-derived credentials are the first of the three named initial vectors ('phishing-derived credentials, exposed RDP, or unpatched perimeter services').",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-healthcare-small-practice",
+   "domain": "enterprise",
+   "technique_id": "T1133",
+   "rationale": "Entry description names 'exposed RDP' as the alternate initial-access vector for small practices that 'often lack dedicated IT staff' -- an internet-exposed remote-access service reachable without a dedicated security team to harden it.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-healthcare-small-practice",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes 'mandatory HHS OCR breach notification for PHI in the encrypted systems' and 'EHR data recovery costs' -- the ransomware encryption of the practice's EHR/PHI-holding systems that this entry's loss model is built around.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-healthcare-small-practice",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry description names 'phishing' as one of two initial-access vectors ('via phishing or exposed RDP'); attack_vector=email_phishing designates this as the primary vector modeled by this archetype.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-control-layer",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description places the impact 'after an IT-to-OT pivot'; the ransomware families named in example_incidents (LockerGoga, DarkSide, Ekans) reach the control layer by riding valid accounts across the IT/OT boundary before encryption.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-control-layer",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes ransomware 'encrypting or bricking control logic and HMIs' at the DCS layer; AA21-131A Technical Details documents DarkSide's file-encryption impact behavior on Windows hosts, which this entry extends to engineering workstations/HMIs.",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-131A, 'DarkSide Ransomware: Best Practices for Preventing Business Disruption from Ransomware Attacks', Technical Details section, https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-131a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-control-layer",
+   "domain": "ics",
+   "technique_id": "T0816",
+   "rationale": "Entry describes controllers/HMIs being 'bricked' and requiring 'extended, manual restoration' -- a forced device restart/rebuild condition at the DCS/Purdue Level 1-2 layer distinct from the IT-side encryption impact.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-control-layer",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "Entry describes an 'uncontrolled or emergency trip of the physical process' once ransomware reaches the control layer -- the catastrophic-tail OT availability impact the entry's bimodal loss framing is built around.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-fileshare",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes ransomware 'encrypting shared drives, mapped network drives, and backup shares.' The DFIR Report documents that Conti actors 'completed their objective of encrypting all systems' domain-wide via SMB-connected hosts, and that 'Conti scans the network for 445/SMB, looking for machines to encrypt' -- the same Conti-pattern (tag conti_pattern) SMB-driven encryption impact this entry describes.",
+   "provenance": "cited",
+   "citations": [
+    "The DFIR Report, 'Conti Ransomware' (2021-05-12), https://thedfirreport.com/2021/05/12/conti-ransomware/, 'Impact' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-fileshare",
+   "domain": "enterprise",
+   "technique_id": "T1490",
+   "rationale": "Entry states organizations 'without backup segmentation lose both production data and backup copies simultaneously.' Sophos's analysis of the leaked LockBit 3.0 ('Black') builder documents that the ransomware 'sabotage[s] the infected computer's ability to recover from file encryption by deleting the Volume Shadow Copy files' -- the recovery-inhibition mechanism (tag lockbit) underlying this entry's bimodal backup-loss framing.",
+   "provenance": "cited",
+   "citations": [
+    "Sophos News, 'LockBit 3.0 \"Black\" attacks and leaks reveal wormable capabilities and tooling' (2022-11-30), https://www.sophos.com/en-us/blog/lockbit-3-0-black-attacks-and-leaks-reveal-wormable-capabilities-and-tooling/, 'Deletion of shadow copies' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-fileshare",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "Entry description states ransomware 'spreads from an initial phished endpoint,' and attack_vector=smb_propagation_from_phished_endpoint names phishing as the initial-access vector before SMB propagation begins.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-fileshare",
+   "domain": "enterprise",
+   "technique_id": "T1570",
+   "rationale": "Entry describes the ransomware spreading 'to network-accessible file shares via SMB' (tag conti_pattern). The DFIR Report's Conti case study documents the threat actor copying the malicious payload directly onto the ADMIN$ share ('copy 192145.dll \\\\<INTERNAL_IP>\\ADMIN$ /Y /Z') and staging the ransomware binary domain-wide over SMB before execution -- the SMB-based lateral file-transfer step this entry's propagation pattern describes.",
+   "provenance": "cited",
+   "citations": [
+    "The DFIR Report, 'Conti Ransomware' (2021-05-12), https://thedfirreport.com/2021/05/12/conti-ransomware/, 'Lateral Movement' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-historian",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states IT and OT networks 'share domain credentials or VPN tunnels,' making reuse of valid domain accounts the load-bearing pivot from the IT-originated infection into OT; attack_vector=it_ot_bridge.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-historian",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes ransomware that 'encrypt[s] or corrupt[s] the process historian'; AA21-131A Technical Details documents DarkSide's file-encryption impact behavior (Salsa20/RSA), the same ransomware-family impact driving this archetype (Colonial Pipeline).",
+   "provenance": "cited",
+   "citations": [
+    "CISA/FBI Joint Cybersecurity Advisory AA21-131A, 'DarkSide Ransomware: Best Practices for Preventing Business Disruption from Ransomware Attacks', Technical Details section, https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-131a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-historian",
+   "domain": "ics",
+   "technique_id": "T0826",
+   "rationale": "Description states historian loss 'often forc[es] controlled shutdown of the industrial process' -- an availability impact on the OT process driven by the IT-originated ransomware, consistent with the tags 'operational_disruption' and 'industrial'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-historian",
+   "domain": "ics",
+   "technique_id": "T0829",
+   "rationale": "Historian loss 'halts engineering visibility' per the entry description -- the defining OT consequence when a PI/Wonderware historian is encrypted or corrupted, matching ATT&CK for ICS Loss of View (denial of correct process state information to operators/engineers).",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-historian",
+   "domain": "ics",
+   "technique_id": "T0866",
+   "rationale": "Entry description states the ransomware 'propagates across an IT-OT bridge' where the networks 'share domain credentials or VPN tunnels'; attack_vector=it_ot_bridge -- exploitation of remote services across that bridge is the load-bearing IT->OT propagation step.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "ransomware-on-virtualization-stack",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry names Black Basta, LockBit 3.0, Royal, and ALPHV/BlackCat as ESXi-targeting ransomware families. VMware's Security Blog documents that ESXi hosts 'are usually targeted after the threat actors gain access to a VMware vCenter deployment, often by means of stolen credentials' -- documented there for the DarkSide/BlackMatter family specifically; this entry extends the same stolen-credential vCenter-access pattern to the ESXi-targeting families it names, which VMware's companion Part 2 piece analyzes under the same TTP framework.",
+   "provenance": "cited",
+   "citations": [
+    "VMware Security Blog, 'ESXi-Targeting Ransomware: The Threats That Are After Your Virtual Machines (Part 1)' (2022-09-28), https://blogs.vmware.com/security/2022/09/esxi-targeting-ransomware-the-threats-that-are-after-your-virtual-machines-part-1.html, 'DarkSide/BlackMatter' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-virtualization-stack",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry describes 'a single encrypted ESXi host' taking down 'dozens of virtual machines simultaneously.' VMware's Part 2 analysis documents that ESXi encryptors -- including the LockBit and Black Basta families this entry names -- target 'files that contain the metadata of virtual machines,' specifically files with '.log, .vmdk, .vmem, .vswp, .vmsn' extensions, i.e. encrypting the hypervisor-layer files this entry describes rather than individual endpoints.",
+   "provenance": "cited",
+   "citations": [
+    "VMware Security Blog, 'ESXi-Targeting Ransomware: Tactics and Techniques (Part 2)' (2022-10-28), https://blogs.vmware.com/security/2022/10/esxi-targeting-ransomware-tactics-and-techniques-part-2.html, 'Common Tactics and Techniques' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-virtualization-stack",
+   "domain": "enterprise",
+   "technique_id": "T1489",
+   "rationale": "Entry states a compromised ESXi host can 'take down dozens of virtual machines simultaneously,' implying running VMs are forcibly disrupted rather than gracefully shut down. VMware's Part 2 analysis documents that ESXi encryptors (e.g. LockBit, ALPHV/BlackCat) run commands such as 'esxcli vm process kill --type=force' to forcibly stop running VM processes before encryption so files are not locked -- the forced-VM-stop step underlying this entry's blast-radius description. (Black Basta is a documented exception that skips this step; this rationale covers the families for which the forced-stop behavior is confirmed.)",
+   "provenance": "cited",
+   "citations": [
+    "VMware Security Blog, 'ESXi-Targeting Ransomware: Tactics and Techniques (Part 2)' (2022-10-28), https://blogs.vmware.com/security/2022/10/esxi-targeting-ransomware-tactics-and-techniques-part-2.html, 'Common Tactics and Techniques' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "ransomware-on-virtualization-stack",
+   "domain": "enterprise",
+   "technique_id": "T1490",
+   "rationale": "Entry frames restoration as requiring 'complete VM rebuild from clean backups, extending mean time to recovery' -- consistent with recovery paths being deliberately narrowed. VMware's Part 2 analysis documents ALPHV/BlackCat's ESXi encryptor including snapshot-manipulation commands ('vim-cmd vmsvc/snapshot_...') that delete VM snapshots to prevent recovery -- one of the ESXi-targeting, double-extortion families (tag double_extortion) this entry names.",
+   "provenance": "cited",
+   "citations": [
+    "VMware Security Blog, 'ESXi-Targeting Ransomware: Tactics and Techniques (Part 2)' (2022-10-28), https://blogs.vmware.com/security/2022/10/esxi-targeting-ransomware-tactics-and-techniques-part-2.html, 'Common Tactics and Techniques' section (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "retail-ecommerce-checkout-ddos",
+   "domain": "enterprise",
+   "technique_id": "T1498",
+   "rationale": "Entry description states cybercriminals launch 'volumetric ... DDoS attacks against an e-commerce retailer's checkout pipeline and payment processing APIs'; canonical_fair_gap further notes the vulnerability lies in 'the absence of DDoS mitigation (no scrubbing center, CDN without DDoS absorption capacity)' against volumetric saturation of origin infrastructure.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "retail-ecommerce-checkout-ddos",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry description states cybercriminals launch '... or application-layer DDoS attacks against an e-commerce retailer's checkout pipeline and payment processing APIs' -- an application-layer flood targeting the checkout/payment endpoint itself, distinct from the raw-bandwidth volumetric variant named in the same sentence.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "retail-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1005",
+   "rationale": "Entry also describes 'deploying memory-scraping malware on point-of-sale terminals.' Krebs on Security's reporting on the Target 2013 breach (named in this entry's example_incidents) documents BlackPOS malware that 'parses data stored briefly in the memory banks of specific POS devices... captur[ing] the data stored on the card's magnetic stripe in the instant after it has been swiped' -- the POS memory-scraping collection path this entry names as the non-Magecart alternative.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'A First Look at the Target Intrusion, Malware' (2014), https://krebsonsecurity.com/2014/01/a-first-look-at-the-target-intrusion-malware/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "retail-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1041",
+   "rationale": "Entry describes attackers who harvest card data for later sale/fraud via the Magecart checkout-page injection. BleepingComputer's reporting on the British Airways breach documents the modified Modernizr code 'allowed [it] to send payment information from the customer to the attacker's server,' with data sent to 'baways[.]com, which resembles the legitimate domain used by British Airways' -- the exfiltration-channel behavior completing this entry's Magecart chain.",
+   "provenance": "cited",
+   "citations": [
+    "BleepingComputer (Lawrence Abrams), 'British Airways Fell Victim To Card Scraping Attack' (2018), https://www.bleepingcomputer.com/news/security/british-airways-fell-victim-to-card-scraping-attack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "retail-pos-card-skimming",
+   "domain": "enterprise",
+   "technique_id": "T1185",
+   "rationale": "Entry describes 'digital skimming / Magecart formjacking' via 'injecting malicious JavaScript into an e-commerce checkout page or a third-party script.' BleepingComputer's reporting on the British Airways 2018 breach documents that 'the Modernizr JavaScript library had been modified with 22 new lines of code' loaded on the booking/checkout flow to read payment-form data during the active browser session -- the in-browser interception behavior this entry names as digital skimming.",
+   "provenance": "cited",
+   "citations": [
+    "BleepingComputer (Lawrence Abrams), 'British Airways Fell Victim To Card Scraping Attack' (2018), https://www.bleepingcomputer.com/news/security/british-airways-fell-victim-to-card-scraping-attack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "retail-store-employee-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states employees 'exploit POS system access, return-processing privileges, or inventory-management credentials' -- the load-bearing vector is the employee's own legitimate, already-provisioned POS/inventory account.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "retail-store-employee-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1565",
+   "rationale": "Entry description states typical methods include 'voiding sales after cash collection, processing fictitious returns to controlled gift cards, manipulating inventory counts to enable shrinkage' -- direct insertion/manipulation of transaction and inventory records to enable fraud, the defining behavior of Data Manipulation.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "s3-misconfiguration-data-exposure",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "Krebs's Capital One analysis (named in this entry's own example_incidents as 'SSRF -> S3 bucket access; 106M records') documents the excessive WAF role permission that 'allowed to list all of the files in any buckets of data, and to read the contents of each of those files' -- the direct cloud-storage-bucket read this entry describes as 'full exfiltration' once a bucket is accessible; Capital One reached the bucket via a credential-mediated SSRF chain rather than this entry's directly-public-bucket case, a distinction this entry's wording (misconfiguration = passive exposure) makes explicit.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'What We Can Learn from the Capital One Hack' (2019-08-02), https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "s3-misconfiguration-data-exposure",
+   "domain": "enterprise",
+   "technique_id": "T1595",
+   "rationale": "Entry description states 'specialized search tools (GrayhatWarfare, Bucket Finder) enable automated discovery of exposed buckets,' i.e. automated probing of cloud-storage infrastructure to find publicly accessible buckets prior to any exploitation.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "saas-revenue-outage-sabotage",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "BleepingComputer reports the former Cisco engineer 'accessed Cisco's cloud infrastructure hosted on Amazon Web Services without permission' roughly five months after his April 2018 resignation -- access surviving off-boarding is exactly this entry's stated inherent-posture failure mode ('privileged access is not revoked promptly during off-boarding').",
+   "provenance": "cited",
+   "citations": [
+    "BleepingComputer (Sergiu Gatlan), 'Cisco engineer resigns then nukes 16k WebEx accounts, 456 VMs' (2020-08-28), https://www.bleepingcomputer.com/news/security/cisco-engineer-resigns-then-nukes-16k-webex-accounts-456-vms/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "saas-revenue-outage-sabotage",
+   "domain": "enterprise",
+   "technique_id": "T1485",
+   "rationale": "The same BleepingComputer report states the ex-employee 'deployed code from his Google Cloud Project account that resulted in the deletion of 456 virtual machines for Cisco's WebEx Teams application' -- the direct infrastructure/data-destruction act this entry names ('deleting production databases, disabling infrastructure components').",
+   "provenance": "cited",
+   "citations": [
+    "BleepingComputer (Sergiu Gatlan), 'Cisco engineer resigns then nukes 16k WebEx accounts, 456 VMs' (2020-08-28), https://www.bleepingcomputer.com/news/security/cisco-engineer-resigns-then-nukes-16k-webex-accounts-456-vms/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "saas-revenue-outage-sabotage",
+   "domain": "enterprise",
+   "technique_id": "T1489",
+   "rationale": "Entry description names a broader archetype beyond the single Cisco anecdote -- 'disabling infrastructure components, or triggering configuration changes that cause service outages' -- the direct service-stop impact this entry describes as an alternative sabotage mechanism to outright data destruction.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "safety-system-bypass",
+   "domain": "ics",
+   "technique_id": "T0821",
+   "rationale": "TRISIS added a new, non-standard command (Tristation Command 29) to reprogram the safety controller's running logic per Dragos's analysis -- matching this entry's description of attackers reprogramming Triconex controllers' execution.",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "safety-system-bypass",
+   "domain": "ics",
+   "technique_id": "T0836",
+   "rationale": "Dragos's TRISIS analysis documents the malware's 'main function... to manipulate outputs, edit program code, and change and execute new logic' on the Triconex safety controller -- the direct SIS-parameter/logic manipulation this entry describes as attackers having 'reprogrammed... to force a fail-safe state'.",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "safety-system-bypass",
+   "domain": "ics",
+   "technique_id": "T0880",
+   "rationale": "Dragos documents TRISIS's ability to alter safety logic 'even after the keyswitch is placed into RUN or REMOTE modes,' circumventing the operational safeguard against unauthorized safety-logic changes -- the direct SIS-defeat objective this entry describes ('disable or defeat safety functions').",
+   "provenance": "cited",
+   "citations": [
+    "Dragos, 'TRISIS Takeaways: Defensive Techniques and Trench-Building for the Blue Team', https://www.dragos.com/blog/industry-news/trisis-takeaways-defensive-techniques-and-trench-building-for-the-blue-team/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "session-hijack-post-mfa-bypass",
+   "domain": "enterprise",
+   "technique_id": "T1539",
+   "rationale": "Okta's own root-cause report on its October 2023 support-system breach states leaked HAR files 'contained session tokens which could in turn be used for session hijacking attacks' and that 'the threat actor was able to use these session tokens to hijack the legitimate Okta sessions of 5 customers' -- the direct cookie/token theft-and-replay behavior this entry names as nullifying MFA via post-authentication session abuse; example_incidents names this Okta 2023 breach.",
+   "provenance": "cited",
+   "citations": [
+    "Okta Security, 'Unauthorized Access to Okta's Support Case Management System: Root Cause and Remediation' (2023-11-03), https://sec.okta.com/articles/2023/11/unauthorized-access-oktas-support-case-management-system-root-cause/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "session-hijack-post-mfa-bypass",
+   "domain": "enterprise",
+   "technique_id": "T1550",
+   "rationale": "Entry description states stolen sessions are 'used to access SaaS applications, cloud consoles, and corporate VPN portals' without the user's password or second factor -- reuse of the harvested session token as alternate authentication material to bypass normal access controls, consistent with tags 'pass_the_cookie'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "solarwinds-class-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Mandiant/FireEye documents that 'this actor prefers to maintain a light malware footprint, instead preferring legitimate credentials and remote access,' and that '[o]nce the attacker gained access to the network with compromised credentials, they moved laterally using multiple different credentials' -- the abuse of valid accounts driving the entry's description of the attacker selecting 'a small subset of high-value targets for further exploitation' after the initial trojanized update.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog, FireEye), 'Highly Evasive Attacker Leverages SolarWinds Supply Chain to Compromise Multiple Global Victims With SUNBURST Backdoor' (2020-12-13), https://cloud.google.com/blog/topics/threat-intelligence/evasive-attacker-leverages-solarwinds-supply-chain-compromises-with-sunburst-backdoor (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "solarwinds-class-supply-chain",
+   "domain": "enterprise",
+   "technique_id": "T1195",
+   "rationale": "Mandiant/FireEye's SUNBURST report documents that 'FireEye discovered a supply chain attack trojanizing SolarWinds Orion business software updates in order to distribute malware we call SUNBURST,' with 'multiple trojanized updates... digitally signed... and posted to the SolarWinds updates website' -- the exact trojanized-update delivery mechanism this entry describes (attack_vector=trojanized_software_update).",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog, FireEye), 'Highly Evasive Attacker Leverages SolarWinds Supply Chain to Compromise Multiple Global Victims With SUNBURST Backdoor' (2020-12-13), https://cloud.google.com/blog/topics/threat-intelligence/evasive-attacker-leverages-solarwinds-supply-chain-compromises-with-sunburst-backdoor (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "telecom-bgp-route-hijack",
+   "domain": "enterprise",
+   "technique_id": "T1557",
+   "rationale": "Entry describes the hijack 'enabling passive interception, traffic analysis, or disruption of targeted organizations and their customers' by diverting internet traffic through an attacker-controlled AS -- positioning between victim networks to intercept traffic in transit, the defining behavior of this technique; no incident-specific technical primary was found and fetched for this entry (source_citations is empty in the entry itself), so this row stays expert-estimate rather than force-citing a loosely-related BGP report.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-bgp-route-hijack",
+   "domain": "enterprise",
+   "technique_id": "T1590",
+   "rationale": "Entry describes nation-state actors injecting 'fraudulent BGP route announcements' to divert traffic through 'attacker-controlled autonomous systems' -- crafting a convincing, targeted route hijack requires prior knowledge of the victim's IP prefixes and AS-level topology, the network-reconnaissance step this technique covers.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-ddos-core-network",
+   "domain": "enterprise",
+   "technique_id": "T1498",
+   "rationale": "Entry description states attacks are 'volumetric ... DDoS attacks against a telecommunications carrier's core network infrastructure (routing nodes, ... transit links)' -- a bandwidth/network-layer flood against core transit and routing capacity, distinct from application-tier targeting.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-ddos-core-network",
+   "domain": "enterprise",
+   "technique_id": "T1499",
+   "rationale": "Entry description names '... or protocol-level DDoS attacks against ... DNS resolvers, signalling gateways' specifically -- exhausting connection/request-handling capacity of these specific network services rather than raw link bandwidth, matching the resource-exhaustion behavior this technique covers.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-field-cabinet-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1200",
+   "rationale": "Entry describes adversaries gaining 'physical access to street-side telecom distribution cabinets... to install passive interception hardware' -- the wiretap/interception-hardware installation this technique covers; tags include 'wiretap'.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-field-cabinet-tamper",
+   "domain": "enterprise",
+   "technique_id": "T1657",
+   "rationale": "Entry's example_incidents names 'organized-crime groups breaking into telecom junction boxes to clone business lines for toll fraud' -- cloning subscriber lines to commit toll fraud is a technical-theft path aimed at financial gain at the carrier's/subscriber's expense.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-sim-swap-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Entry description states 'the attacker then bypasses SMS-based multi-factor authentication for the subscriber's financial and email accounts' once the number is redirected -- using the hijacked phone number to receive the victim's SMS OTP/reset codes and operate the downstream accounts as a valid, authenticated user.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-sim-swap-fraud",
+   "domain": "enterprise",
+   "technique_id": "T1684",
+   "rationale": "Entry description states cybercriminals 'deceive telecom carrier customer-service representatives or compromise internal systems to redirect a subscriber's phone number to an attacker-controlled SIM card' -- influencing carrier staff to take an unauthorized action (the SIM re-assignment) is the defining social-engineering step; the entry's own canonical_fair_gap names the carrier's identity-verification process, not a technical access control, as the exploited vulnerability.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-subscriber-data-breach",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "Mandiant's UNC5537 report documents that the actor 'obtained access to multiple organizations' Snowflake customer instances via stolen customer credentials' where 'the impacted accounts were not configured with multi-factor authentication,' meaning 'successful authentication only required a valid username and password' -- the credential-driven access into a third-party cloud platform this entry's AT&T 2024 example (subscriber data exposed via a third-party cloud platform) matches, though Mandiant's report does not itself name AT&T.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'A Summer of Extortion: Responding to a Wave of UNC5537 Attacks Against Snowflake Customer Instances' (2024-06-10), https://cloud.google.com/blog/topics/threat-intelligence/unc5537-snowflake-data-theft-extortion (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "telecom-subscriber-data-breach",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "Entry describes exploitation of 'a telecom carrier's customer-data platform, billing system, or identity-management infrastructure,' and example_incidents names 'T-Mobile 2021 (MVNO/prepaid portal exploitation exfiltrated ~76.6M customer records)' -- exploitation of an internet-facing carrier portal as the initial-access step.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "telecom-subscriber-data-breach",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "The same Mandiant report documents the actor issuing 'COPY INTO' SQL commands to exfiltrate data directly out of victims' Snowflake customer database tables -- the cloud-data-warehouse collection/exfiltration mechanism underlying this entry's 'mass PII exfiltration' framing for a third-party-cloud-platform-hosted telecom dataset.",
+   "provenance": "cited",
+   "citations": [
+    "Mandiant (Google Cloud Blog), 'A Summer of Extortion: Responding to a Wave of UNC5537 Attacks Against Snowflake Customer Instances' (2024-06-10), https://cloud.google.com/blog/topics/threat-intelligence/unc5537-snowflake-data-theft-extortion (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "third-party-processor-breach",
+   "domain": "enterprise",
+   "technique_id": "T1195",
+   "rationale": "Huntress's rapid-response analysis of the July 2021 Kaseya VSA incident documents REvil affiliates exploiting a VSA vulnerability and then pushing the ransomware payload through a malicious VSA procedure named 'Kaseya VSA Agent Hot-fix' -- abusing Kaseya's own trusted software-update/procedure delivery mechanism to cascade ransomware to downstream MSP customers, matching this entry's Kaseya example_incident (~1,500 downstream customers).",
+   "provenance": "cited",
+   "citations": [
+    "Huntress, 'Rapid Response: Kaseya VSA Mass MSP Ransomware Incident' (2021-07-02), https://www.huntress.com/blog/rapid-response-kaseya-vsa-mass-msp-ransomware-incident (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "third-party-processor-breach",
+   "domain": "enterprise",
+   "technique_id": "T1199",
+   "rationale": "Entry description states the organization's 'records are breached even though its own perimeter was never touched' because a third party 'processes or hosts the organization's data,' and that the organization 'carries the notification, regulatory, and reputational liability for data held by the processor' -- the trusted third-party relationship this entry frames as the general MSP/SaaS/BPO archetype beyond the Kaseya-specific case.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "third-party-processor-breach",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "Entry names 'a SaaS vendor... or BPO' among the processor types whose compromise breaches the organization's records, and describes 'routine cloud/SaaS processor breaches triggering downstream-customer notification' -- the cloud-hosted-data-access step for the SaaS/cloud-processor variant of this archetype, distinct from Kaseya's on-premises MSP-tooling case.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "tolling-plant-ransomware-customer-liability",
+   "domain": "enterprise",
+   "technique_id": "T1078",
+   "rationale": "calibration_anchor vuln_posture states 'no OT-IT network segmentation... IT ransomware reaches historian and scheduling interfaces' following the spearphishing foothold; entry describes 'historian interfaces that bridge IT and OT' as the pivot path -- reuse of valid accounts across that unsegmented boundary is the load-bearing IT-side step of the pivot into batch-management/historian systems.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "tolling-plant-ransomware-customer-liability",
+   "domain": "enterprise",
+   "technique_id": "T1486",
+   "rationale": "Entry states 'Ransomware encrypts IT systems that orchestrate production lines operated on behalf of brand-owner or brand-principal customers -- ERP scheduling, batch-management systems, quality-management systems' -- the direct encryption impact enabling the contractual make-whole liability this entry models.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "tolling-plant-ransomware-customer-liability",
+   "domain": "enterprise",
+   "technique_id": "T1566",
+   "rationale": "attack_vector=spearphishing_followed_by_lateral_movement names spearphishing as the initial-access step before lateral movement toward the batch-management/historian layer.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "tolling-plant-ransomware-customer-liability",
+   "domain": "ics",
+   "technique_id": "T0828",
+   "rationale": "Entry states 'Production halts for product the toller does not own' and frames the loss as 'missed-delivery penalties, demurrage, reimbursement of customer raw-material holding costs, and lost-margin SLA penalties' -- a production-halt revenue-liability impact on the tolled process matching ATT&CK for ICS's Loss of Productivity and Revenue, here accruing to the third-party brand-owner rather than the toller itself.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "tolling-plant-ransomware-customer-liability",
+   "domain": "ics",
+   "technique_id": "T0866",
+   "rationale": "Entry describes 'historian interfaces that bridge IT and OT' as the pathway ransomware rides into the batch-management/MES layer; from the OT side, this is exploitation of the remote-access services the historian/scheduling interfaces expose across that unsegmented bridge -- distinct from the IT-side valid-account reuse step.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "watering-hole-industry-targeted",
+   "domain": "enterprise",
+   "technique_id": "T1071",
+   "rationale": "The same CISA alert documents that Havex 'is a Remote Access Trojan (RAT) that communicates with a Command and Control (C&C) server' -- the C2 channel established once the entry's 'first-stage implant' silently installs on a victim's browser visit.",
+   "provenance": "cited",
+   "citations": [
+    "CISA, 'ICS Focused Malware (Update A)', ICS-ALERT-14-176-02A, https://www.cisa.gov/news-events/ics-alerts/ics-alert-14-176-02a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "watering-hole-industry-targeted",
+   "domain": "enterprise",
+   "technique_id": "T1189",
+   "rationale": "CISA ICS-ALERT-14-176-02A documents 'trojanized update installers' planted on 'at least 3 industrial control systems (ICS) vendor web sites' in a 'watering hole-style' campaign -- the exact behavior this entry's DragonFly/Energetic Bear example_incidents describes as delivering Havex to energy-sector visitors of compromised ICS vendor sites.",
+   "provenance": "cited",
+   "citations": [
+    "CISA, 'ICS Focused Malware (Update A)', ICS-ALERT-14-176-02A, https://www.cisa.gov/news-events/ics-alerts/ics-alert-14-176-02a (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "watering-hole-industry-targeted",
+   "domain": "enterprise",
+   "technique_id": "T1591",
+   "rationale": "Entry description states the actor compromises 'a website frequently visited by employees of a target industry (trade association portals, regulatory body websites, industry conference sites)' -- identifying which sites a target industry's workforce visits is reconnaissance of the victim community, matching Gather Victim Org Information.",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "web-app-exploitation",
+   "domain": "enterprise",
+   "technique_id": "T1190",
+   "rationale": "Krebs on Security's analysis states the Capital One intruder used 'a well-known method called a Server Side Request Forgery (SSRF) attack, in which a server (in this case, CapOne's WAF) can be tricked into running commands that it should never have been permitted to run' -- exploitation of a weakness in an internet-facing application, matching this entry's SSRF vector; the entry's SQLi/broken-access-control/unauthenticated-API variants are the same class of public-facing-application weakness this technique covers, which this entry extends beyond the SSRF-specific Capital One case.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'What We Can Learn from the Capital One Hack' (2019-08-02), https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/ (accessed 2026-07-05)"
+   ]
+  },
+  {
+   "entry_slug": "web-app-exploitation",
+   "domain": "enterprise",
+   "technique_id": "T1213",
+   "rationale": "Entry describes the objective as reading 'the backing data store' once broken access control / IDOR or SQL injection is exploited -- collection from the application's own database/repository, the generic non-cloud-storage variant of this entry's data-access step (distinct from the S3-specific Capital One case below).",
+   "provenance": "expert-estimate",
+   "citations": []
+  },
+  {
+   "entry_slug": "web-app-exploitation",
+   "domain": "enterprise",
+   "technique_id": "T1530",
+   "rationale": "Krebs documents that the misconfigured WAF role 'was assigned too many permissions, i.e. it was allowed to list all of the files in any buckets of data, and to read the contents of each of those files,' enabling exfiltration of roughly 106 million records from Capital One's S3 buckets -- the cloud-storage-specific collection step this entry names in its Capital One example_incident.",
+   "provenance": "cited",
+   "citations": [
+    "Krebs on Security (Brian Krebs), 'What We Can Learn from the Capital One Hack' (2019-08-02), https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/ (accessed 2026-07-05)"
+   ]
+  }
+ ]
+}

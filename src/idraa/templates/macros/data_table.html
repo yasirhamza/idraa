@@ -1,0 +1,287 @@
+{#
+  data_table — list-table macro. Spec §4.
+
+  Args:
+    rows:        list of mapping OR SimpleNamespace-style objects (NOT raw ORM —
+                 see ROW CONTRACT note below).
+    columns:     list of column dicts:
+                   key:      str  — attribute/key on row (or "_actions" for action menu cells)
+                   label:    str  — header label
+                   sortable: bool — emits HTMX sort link
+                   align:    "left"|"right"|"center"
+                   numeric:  bool — applies font-mono tabular-nums
+                   kind:     "status_pill" | "action_menu" | "plain" (default)
+                   pill_kind: "risk"|"run"|"control" when kind="status_pill"
+                   priority: "primary"|"secondary"|"hidden_on_mobile" (F8 mobile)
+    sort_by, sort_dir, sort_url: HTMX sort state
+    row_href_template: optional format string "/controls/{name}" — uses row attr names
+    exportable, export_url: optional Export CSV button
+    empty: {icon,title,body,cta?} empty-state dict
+    selectable: optional checkbox column
+    compact: bool — h-9 rows instead of h-11 (plan-gate SC-2)
+    page_size, page, total, page_size_key: pagination (plan-gate SC-6+SC-16)
+    filters_slot: optional pre-rendered Markup for filter chips (plan-gate SC-6)
+
+  ROW CONTRACT (plan-gate Arch-6): `rows` MUST be mappings (dict / TypedDict) OR
+  SimpleNamespace-style objects with __dict__ populated. SQLAlchemy ORM instances
+  are NOT supported directly — lazy-loaded relationships make `row.__dict__` incomplete.
+  Callers project ORM → dict / Namespace in the route handler.
+
+  Plan-gate SC-11: header checkbox (when selectable=True) selects ONLY the rows
+  currently rendered on the visible page — never "select all matching filter".
+#}
+{% from "macros/status_pill.html" import status_pill %}
+{% from "macros/action_menu.html" import action_menu %}
+{% from "macros/empty_state.html" import empty_state %}
+
+{% macro _row_value(row, key) -%}
+  {%- if row is mapping -%}{{ row[key] }}{%- else -%}{{ row|attr(key) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro data_table(rows, columns,
+                    sort_by=none, sort_dir='asc', sort_url='',
+                    row_href_template=none,
+                    exportable=False, export_url=none,
+                    empty=none,
+                    selectable=False,
+                    compact=False,
+                    page_size=none, page=none, total=none, page_size_key=none,
+                    filters_slot=none) -%}
+
+  {%- if not rows -%}
+    {%- if empty %}
+      {{ empty_state(empty.icon|default('◇'), empty.title, empty.body, empty.cta|default(none)) }}
+    {%- else %}
+      {{ empty_state('◇', 'No results', 'Try adjusting filters or come back later.') }}
+    {%- endif %}
+  {%- else -%}
+
+    {# Filter / search slot (plan-gate SC-6). #}
+    {% if filters_slot %}{{ filters_slot }}{% endif %}
+
+    {# Exportable: filled brand-color button with download icon. Inline style
+       for background-color because Tailwind Play CDN does not reliably generate
+       `.bg-brand` (verified 2026-05-23 against live — silently no-op'd). #}
+    {% if exportable %}
+    <div class="flex justify-end mb-2">
+      {# hx-boost="false" + download: this is a file download. Under the global
+         <body hx-boost="true"> HTMX would otherwise AJAX-fetch the CSV and swap
+         it into the DOM as text instead of letting the browser download it. #}
+      <a href="{{ export_url or (sort_url ~ '/export.csv') }}"
+         hx-boost="false" download
+         class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white border border-transparent rounded hover:opacity-90 transition"
+         style="background-color: var(--color-brand, #0F4C81);">
+        <span aria-hidden="true">⇩</span> Export CSV
+      </a>
+    </div>
+    {% endif %}
+
+    {# Loading state (plan-gate SC-6): 2 px progress bar shown when this container has hx-request descendant.
+
+       Sticky thead REMOVED 2026-05-23: previously the thead `<tr>` carried
+       `class="sticky z-10 bg-surface-2" style="top: var(--page-header-height)"`
+       per plan-gate SC-13. `position: sticky` on `<tr>` is poorly supported
+       across browsers (especially with `border-collapse: separate` default) —
+       the thead pinned visually but the first data row didn't shift down,
+       producing an overlay where header text and row 1 occupy the same Y
+       coordinate. Tables typically paginate before they outgrow the viewport,
+       so sticky thead is a nice-to-have not a must-have; dropping it removes
+       the regression cleanly. If long-list sticky headers come back later,
+       use `<thead>` (not `<tr>`) sticky inside a fixed-height scroll
+       container — that's the only cross-browser-reliable pattern. #}
+    <div class="hidden md:block overflow-x-auto border border-border-subtle rounded-none data-table-container">
+      <div class="data-table-progress h-0.5 bg-brand opacity-0 transition-opacity"></div>
+      <table class="w-full text-body">
+        <thead class="bg-surface-2 text-ink-2">
+          <tr>
+            {% if selectable %}<th class="w-10 px-3 py-2"><input type="checkbox" class="checkbox checkbox-xs" aria-label="Select all rows on this page"></th>{% endif %}
+            {% for c in columns %}
+            <th class="px-3 py-2 text-meta {% if c.align == 'right' %}text-right{% elif c.align == 'center' %}text-center{% else %}text-left{% endif %} border-b border-border-strong
+                       {% if c.priority == 'hidden_on_mobile' %}hidden md:table-cell{% endif %}">
+              {% if c.sortable and sort_url %}
+                {%- set new_dir = 'desc' if (sort_by == c.key and sort_dir == 'asc') else 'asc' -%}
+                <button type="button"
+                        hx-get="{{ sort_url }}?sort={{ c.key }}&dir={{ new_dir }}"
+                        hx-target="closest table"
+                        hx-swap="outerHTML"
+                        hx-push-url="true"
+                        class="inline-flex items-center gap-1 hover:text-ink-1">
+                  {{ c.label }}
+                  {% if sort_by == c.key %}<span aria-hidden="true">{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                </button>
+              {%- else -%}
+                {{ c.label }}
+              {%- endif %}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {%- set href = none -%}
+          {%- if row_href_template -%}
+            {%- if row is mapping -%}
+              {%- set href = row_href_template.format(**row) -%}
+            {%- else -%}
+              {%- set href = row_href_template.format(**row.__dict__) -%}
+            {%- endif -%}
+          {%- endif -%}
+          {#- Row height = content-driven (2026-05-23). Previously hard-pinned to h-11
+              / h-9 per spec §4's "consistent density" rule; that fights long-text wrap
+              and pushes rows to uneven heights anyway. align-middle vertically centers
+              short cells next to wrapped-long ones. -#}
+          <tr class="border-b border-border-subtle last:border-b-0 hover:bg-surface-2
+                     {% if href %}cursor-pointer{% endif %}">
+            {% if selectable %}<td class="px-3 py-2"><input type="checkbox" class="checkbox checkbox-xs" aria-label="Select row"></td>{% endif %}
+            {# Cell sizing = browser-autofit (2026-05-23).
+                 - align-middle: vertically centers short cells next to wrapped-long ones
+                 - break-words on text cells: let long names/descriptions wrap naturally
+                 - whitespace-nowrap on inherently-short cells (status pill, action menu,
+                   numerics): never break a value mid-string
+                 - No explicit width: table-layout:auto (browser default) sizes columns
+                   from content. Add `nowrap: true` on a column dict to force nowrap for
+                   text cells you don't want wrapping. #}
+            {% for c in columns %}
+            {%- set value = _row_value(row, c.key) -%}
+            {%- set raw_value = row[c.key] if row is mapping else row|attr(c.key) -%}
+            {%- set nowrap = (c.kind in ('status_pill', 'action_menu')) or c.numeric or c.nowrap -%}
+            <td class="px-3 py-2 align-middle
+                       {% if c.align == 'right' %}text-right{% elif c.align == 'center' %}text-center{% else %}text-left{% endif %}
+                       {% if c.numeric %}font-mono tabular-nums{% endif %}
+                       {% if nowrap %}whitespace-nowrap{% else %}break-words{% endif %}
+                       {% if c.priority == 'hidden_on_mobile' %}hidden md:table-cell{% endif %}">
+              {%- if c.kind == 'status_pill' -%}
+                {{ status_pill(value|string|trim, c.pill_kind|default('control')) }}
+              {%- elif c.kind == 'badge' -%}
+                {#- Toned label badge. Cell value is a {label, tone} mapping; tone is a
+                    DaisyUI badge-* class chosen by the caller (e.g. issue #395 stage). -#}
+                <span class="badge badge-xs {{ raw_value.tone }}" title="{{ c.label }}">{{ raw_value.label }}</span>
+              {%- elif c.kind == 'action_menu' -%}
+                {{ action_menu(raw_value, align='end') }}
+              {%- elif href and loop.first and not selectable -%}
+                <a href="{{ href }}" class="block hover:text-brand">{{ value }}</a>
+              {%- elif c.title_key -%}
+                {#- #454 item 3b: humanized cell text with the raw value carried
+                    in a title= tooltip for auditability. The tooltip source is
+                    another row key named by ``title_key``. -#}
+                <span title="{{ _row_value(row, c.title_key) }}">{{ value }}</span>
+              {%- else -%}
+                {{ value }}
+              {%- endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Mobile card stack (<md). Same data, completely different markup.
+       Primary-priority column becomes the card title; hidden_on_mobile columns
+       drop entirely; action_menu relocates to card footer.
+       Plan-gate Arch-10: callers SHOULD declare exactly one or zero primary
+       columns. If multiple, the first wins (Jinja selectattr preserves source order). #}
+    <div class="md:hidden space-y-3">
+      {% for row in rows %}
+        {%- set primary_col = (columns|selectattr('priority', 'equalto', 'primary')|list|first) or columns|first -%}
+        {%- set primary_value = _row_value(row, primary_col.key) -%}
+        {%- set href = none -%}
+        {%- if row_href_template -%}
+          {%- if row is mapping -%}
+            {%- set href = row_href_template.format(**row) -%}
+          {%- else -%}
+            {%- set href = row_href_template.format(**row.__dict__) -%}
+          {%- endif -%}
+        {%- endif -%}
+        <article class="bg-surface-1 border border-border-subtle rounded-card p-3">
+          {% if href %}
+          <a href="{{ href }}" class="text-h3 text-ink-1 hover:text-brand block">{{ primary_value }}</a>
+          {% else %}
+          <p class="text-h3 text-ink-1">{{ primary_value }}</p>
+          {% endif %}
+          {# auto/1fr (not 50/50): short labels take their natural width so long
+             values (e.g. a multi-domain list) get the rest and wrap less. #}
+          <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            {% for c in columns -%}
+            {%- if c.key != primary_col.key and (c.priority|default('secondary')) != 'hidden_on_mobile' and c.kind|default('plain') != 'action_menu' -%}
+              {%- set v = _row_value(row, c.key) -%}
+              <dt class="text-meta text-ink-2">{{ c.label }}</dt>
+              {%- set raw_v = row[c.key] if row is mapping else row|attr(c.key) -%}
+              <dd class="text-body text-ink-1 {% if c.numeric %}font-mono tabular-nums{% endif %}">
+                {% if c.kind == 'status_pill' %}{{ status_pill(v|string|trim, c.pill_kind|default('control')) }}
+                {% elif c.kind == 'badge' %}<span class="badge badge-xs {{ raw_v.tone }}">{{ raw_v.label }}</span>
+                {% else %}{{ v }}{% endif %}
+              </dd>
+            {%- endif -%}
+            {% endfor %}
+          </dl>
+          {%- set action_col = (columns|selectattr('kind', 'equalto', 'action_menu')|list|first) -%}
+          {%- if action_col -%}
+          <div class="mt-2 flex justify-end">
+            {# action_menu wants the raw list-of-dicts, not stringified. Re-extract here. #}
+            {% if row is mapping %}{{ action_menu(row[action_col.key], align='end') }}
+            {% else %}{{ action_menu(row|attr(action_col.key), align='end') }}{% endif %}
+          </div>
+          {%- endif -%}
+        </article>
+      {% endfor %}
+    </div>
+
+    {# Pagination footer (plan-gate SC-6 + SC-16). Opt-in via page_size_key. #}
+    {% if page_size and page_size_key %}
+    <div class="hidden md:flex justify-end items-center gap-4 mt-2 px-1 text-meta text-ink-2"
+         x-data="{
+           size: parseInt('{{ page_size }}', 10),
+           key: 'idraa.pageSize.{{ page_size_key }}',
+           init() {
+             try {
+               var v = localStorage.getItem(this.key);
+               if (v) this.size = parseInt(v, 10);
+             } catch(_){}
+           },
+           apply(newSize) {
+             this.size = newSize;
+             try { localStorage.setItem(this.key, String(newSize)); } catch(_){}
+             var u = new URL(window.location);
+             u.searchParams.set('page_size', String(newSize));
+             u.searchParams.set('page', '1');
+             window.location.href = u.toString();
+           },
+         }">
+      {% if total is not none and page %}
+      <span>Showing {{ (page - 1) * page_size + 1 }}–{{ (page - 1) * page_size + (rows|length) }} of {{ total }}</span>
+      {% endif %}
+      <label class="flex items-center gap-1">
+        <span>Rows per page:</span>
+        <select class="select select-xs"
+                :value="size"
+                @change="apply(parseInt($event.target.value, 10))">
+          {% for opt in [25, 50, 100] %}
+          <option value="{{ opt }}" {% if opt == page_size %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if total and page %}
+        {%- set last_page = ((total + page_size - 1) // page_size) -%}
+      <nav class="flex items-center gap-1" aria-label="Pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&page_size={{ page_size }}"
+           hx-get="?page={{ page - 1 }}&page_size={{ page_size }}"
+           hx-target="closest .data-table-container" hx-swap="outerHTML"
+           hx-push-url="true"
+           class="btn btn-xs btn-ghost">‹</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ last_page }}</span>
+        {% if page < last_page %}
+        <a href="?page={{ page + 1 }}&page_size={{ page_size }}"
+           hx-get="?page={{ page + 1 }}&page_size={{ page_size }}"
+           hx-target="closest .data-table-container" hx-swap="outerHTML"
+           hx-push-url="true"
+           class="btn btn-xs btn-ghost">›</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+    </div>
+    {% endif %}
+  {%- endif %}
+{%- endmacro %}

@@ -1,0 +1,162 @@
+{#
+  Sidebar shell — replaces _nav.html. Spec §2; plan-gate SC-1 / Arch-14.
+
+  Carries a tri-defaulted collapse state (240 px expanded vs 64 px icon-only)
+  persisted in localStorage under `idraa.sidebar`. Pre-paint bootstrap in
+  base.html (F2) already resolved the initial state into the
+  `data-sidebar-collapsed` attribute on <html> — Alpine init() reads that
+  attribute (no localStorage re-evaluation) so there's no FOUC layout snap.
+
+  Mobile (<md): hidden by default; drawer-toggled by the hamburger checkbox.
+  Inline x-data per CLAUDE.md UI rendering conventions (HTMX swap race).
+#}
+{%- set is_admin = current_user is not none and current_user.role.value == "admin" -%}
+{%- set badge_count = request.state.maintenance_badge_count|default(0) -%}
+
+{# Hamburger trigger for <md. #}
+<input type="checkbox" id="sidebar-drawer" class="peer/drawer hidden" aria-hidden="true">
+<label for="sidebar-drawer"
+       class="md:hidden fixed top-4 left-4 z-50 btn btn-square btn-sm btn-ghost"
+       aria-label="Open navigation">
+  <span aria-hidden="true">☰</span>
+</label>
+
+<aside id="sidebar"
+       x-data="{
+         collapsed: document.documentElement.getAttribute('data-sidebar-collapsed') === 'true',
+         toggle() {
+           this.collapsed = !this.collapsed;
+           try { localStorage.setItem('idraa.sidebar', this.collapsed ? 'collapsed' : 'expanded'); } catch(_){}
+           document.documentElement.setAttribute('data-sidebar-collapsed', this.collapsed ? 'true' : 'false');
+         },
+         init() {
+           document.documentElement.setAttribute('data-sidebar-collapsed', this.collapsed ? 'true' : 'false');
+         },
+       }"
+       :class="collapsed ? 'w-16' : 'w-60'"
+       class="
+         fixed inset-y-0 left-0 z-40
+         bg-surface-1 border-r border-border-subtle
+         flex flex-col
+         -translate-x-full peer-checked/drawer:translate-x-0
+         md:translate-x-0
+         transition-[transform,width] duration-150
+       "
+       aria-label="Primary navigation">
+
+  {# Brand header — collapses to wordmark glyph when icon-only. #}
+  <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+    <a href="/" class="text-h3 font-semibold text-ink-1 hover:text-brand">
+      <span x-show="!collapsed">Idraa</span>
+      <span x-show="collapsed" aria-hidden="true">▣</span>
+    </a>
+    <button type="button"
+            @click="toggle()"
+            class="btn btn-xs btn-ghost px-1 hidden md:inline-flex"
+            :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            :title="collapsed ? 'Expand' : 'Collapse'">
+      <span aria-hidden="true" x-text="collapsed ? '›' : '‹'"></span>
+    </button>
+  </div>
+  {% if current_user %}
+  <p class="px-4 pt-1 text-micro text-ink-3 truncate" x-show="!collapsed" title="{{ current_user.email }}">{{ current_user.email }}</p>
+  {% endif %}
+
+  {% if current_user %}
+  <nav class="flex-1 overflow-y-auto py-3" aria-label="Main">
+    {# WORK #}
+    <p class="px-4 mb-1 text-meta text-ink-3" x-show="!collapsed">WORK</p>
+    <ul class="mb-4">
+      {% for href, label in [
+        ('/', 'Dashboard'),
+        ('/scenarios', 'Scenarios'),
+        ('/scenarios/attack-coverage', 'ATT&CK coverage'),
+        ('/analyses', 'Analyses'),
+        ('/reports', 'Reports'),
+      ] %}
+      <li>
+        <a href="{{ href }}"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == href %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">{{ label }}</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">{{ label[0] }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+
+    {# CONFIGURE #}
+    <p class="px-4 mb-1 text-meta text-ink-3" x-show="!collapsed">CONFIGURE</p>
+    <ul class="mb-4">
+      {# Controls link + maintenance badge are SIBLING anchors inside the <li>.
+         They must NOT be nested (<a> inside <a> is invalid HTML — the browser
+         hoists the inner anchor out, dropping the badge onto its own line). #}
+      <li class="flex items-center justify-between px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2">
+        <a href="/controls"
+           class="flex items-center gap-2 flex-1"
+           {% if request.url.path == '/controls' %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Controls</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">C</span>
+        </a>
+        {% if badge_count > 0 %}
+        <a href="/controls/maintenance"
+           data-badge="maintenance"
+           class="badge badge-warning badge-sm"
+           title="{{ badge_count }} controls need attention"
+           x-show="!collapsed">{{ badge_count }}</a>
+        {% endif %}
+      </li>
+      {% for href, label in [
+        ('/overlays', 'Overlays'),
+        ('/library', 'Library'),
+        ('/organization', 'Organization'),
+        ('/help', 'Help'),
+      ] %}
+      <li>
+        <a href="{{ href }}"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == href or (href == '/help' and request.url.path.startswith('/help/')) %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">{{ label }}</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">{{ label[0] }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if is_admin %}
+    <p class="px-4 mb-1 text-meta text-ink-3" x-show="!collapsed">ADMIN</p>
+    <ul class="mb-4">
+      <li>
+        <a href="/users"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/users' %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Users</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">U</span>
+        </a>
+      </li>
+      <li>
+        <a href="/fx-rates"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/fx-rates' %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">FX rates</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">FX</span>
+        </a>
+      </li>
+    </ul>
+    {% endif %}
+  </nav>
+
+  {# Footer: theme toggle + sign-out #}
+  <div class="border-t border-border-subtle px-4 py-3 space-y-2" x-show="!collapsed">
+    {% include "layouts/_theme_toggle.html" %}
+    <form action="/logout" method="post">
+      {{ csrf_field() }}
+      <button class="btn btn-outline btn-xs w-full">Sign out</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="flex-1 flex items-center justify-center p-4">
+    <a href="/login" class="btn btn-primary btn-sm">Sign in</a>
+  </div>
+  {% endif %}
+</aside>

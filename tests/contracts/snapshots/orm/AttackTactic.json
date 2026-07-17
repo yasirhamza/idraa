@@ -1,0 +1,72 @@
+{
+  "columns": {
+    "description": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "TEXT"
+    },
+    "display_order": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "INTEGER"
+    },
+    "domain": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(16)"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "name": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(128)"
+    },
+    "shortname": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(64)"
+    },
+    "tactic_id": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(16)"
+    },
+    "url": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(256)"
+    }
+  },
+  "indexes": [
+    "ix_attack_tactics_domain"
+  ],
+  "table_name": "attack_tactics"
+}

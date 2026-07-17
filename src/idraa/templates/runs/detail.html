@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/kpi_card.html" import kpi_card %}
+{% from "macros/status_pill.html" import status_pill %}
+{% from "macros/action_menu.html" import action_menu %}
+{% from "runs/components/controls_snapshot.html" import controls_snapshot %}
+
+{% block title %}{% if run.run_type.value == "single" %}Run · {{ scenario.name }}{% else %}Aggregate analysis run · {{ run.aggregate_scenario_ids | length }} scenarios{% endif %}{% endblock %}
+
+{% block content %}
+
+{%- if run.run_type.value == "single" -%}
+  {%- set _title = "Run for “" ~ scenario.name ~ "”" -%}
+  {%- set _breadcrumb = [("Home", "/"), ("Scenarios", "/scenarios"), (scenario.name, "/scenarios/" ~ scenario.id), ("Run", none)] -%}
+  {%- set _back_href = "/scenarios/" ~ scenario.id -%}
+  {%- set _back_label = "← Back to scenario" -%}
+{%- else -%}
+  {%- set _title = "Aggregate run — " ~ (run.aggregate_scenario_ids | length) ~ " scenarios" -%}
+  {%- set _breadcrumb = [("Home", "/"), ("New analysis", "/analyses/new"), ("Aggregate run", none)] -%}
+  {%- set _back_href = "/analyses/new" -%}
+  {%- set _back_label = "← New analysis" -%}
+{%- endif -%}
+
+{#- Header actions (completed runs only): the executive PDF is the primary
+    export; the verification workbook (independent in-Excel Monte Carlo) is the
+    secondary export beside it. Both routes 404 on non-completed, so they share
+    the same guard. (PDF was a standalone section pre-redesign, T7c.) -#}
+{%- set _actions = [] -%}
+{% if run.status.value == "completed" %}
+  {%- set _ = _actions.append({"label": "Download report (PDF)", "style": "primary", "href": "/reports/run/" ~ run.id, "download": true}) -%}
+  {%- set _ = _actions.append({"label": "Download verification workbook (Excel)", "style": "outline", "href": "/reports/run/" ~ run.id ~ "/verification.xlsx", "download": true}) -%}
+{% endif %}
+
+{{ page_header(
+    title=_title,
+    breadcrumb=_breadcrumb,
+    actions=_actions,
+    meta="Started " ~ (run.created_at | format_datetime) ~ (" by " ~ creator_label if creator_label else "")
+) }}
+
+{# #438: staleness callout — the run completed, but a control it used was
+   re-synced to a newer library curation afterwards. #}
+{% if run.is_stale %}
+<div class="alert alert-warning mt-4" role="status">
+  <p class="text-body">A control used by this run was re-synced to a newer
+    library curation after it completed — these results reflect the old
+    values. Re-run the analysis to update them.</p>
+</div>
+{% endif %}
+
+{#- Overflow ⋯ menu — top-right cluster (spec §3/§4). CSV export is open to any
+    org member; re-run + danger items (purge/delete) are analyst/admin only so a
+    viewer never sees an action the server would 403 (plan-gate Sec-R1/Sec-N1). -#}
+{%- set _menu_items = [] -%}
+{% if run.run_type.value == "aggregate" and run.status.value == "completed" %}
+  {%- set _ = _menu_items.append({"label": "Export attribution matrix (CSV)",
+       "href": "/runs/" ~ run.id ~ "/control-matrix.csv", "download": true}) -%}
+{% endif %}
+{% if run.status.value == "completed" and run.run_type.value == "aggregate" %}
+  {%- set _ = _menu_items.append({"label": "Start new analysis", "href": "/analyses/new"}) -%}
+{% endif %}
+{% if current_user and current_user.role.value in ("analyst", "admin") %}
+  {% if run.status.value == "completed" and run.run_type.value == "single" %}
+    {%- set _ = _menu_items.append({"label": "Re-run with same inputs",
+         "action": "/scenarios/" ~ run.scenario_id ~ "/run", "method": "post",
+         "hidden": {"mc_iterations": run.mc_iterations,
+                    "random_seed": run.random_seed if run.random_seed is not none else 42}}) -%}
+  {% endif %}
+  {%- set _ = _menu_items.append({"label": "Purge sample arrays…",
+       "action": "/runs/" ~ run.id ~ "/purge-samples", "method": "post", "danger": true,
+       "confirm": "Purge sample arrays for this run? The run and summary are kept; full-distribution export is lost.",
+       "hidden": {"confirm": "1"}}) -%}
+  {%- set _ = _menu_items.append({"label": "Delete run…",
+       "action": "/runs/" ~ run.id ~ "/delete", "method": "post", "danger": true,
+       "confirm": "Delete this run permanently? This cannot be undone.",
+       "hidden": {"confirm": "1", "force": "1"} if run.status.value in ("running", "queued") else {"confirm": "1"}}) -%}
+{% endif %}
+{% if _menu_items %}
+<div class="max-w-5xl mx-auto flex justify-end -mt-2 mb-2">{{ action_menu(_menu_items) }}</div>
+{% endif %}
+
+<div class="run-detail max-w-5xl mx-auto">
+
+  <div id="run-status">
+    {% include "runs/_status_poll.html" %}
+  </div>
+
+  {# Cost summary — single point of truth for per-run cost vs risk-reduction.
+     Emitted by services/run_executor.py:_build_cost_summary (SINGLE) /
+     _build_aggregate_results_payload (AGGREGATE, dedup'd across scenarios).
+     Optional: missing on legacy runs predating the cost-aware payload.
+     P3: use converted_cost_summary (pre-converted at route level by reporting currency). #}
+  {%- set cost = converted_cost_summary -%}
+  {%- set _csym = (display_results.currency.symbol if display_results and display_results.currency else "$") -%}
+  {# T7e: aggregate cost now lives in the verdict strip (Summary view). Only
+     SINGLE runs keep the standalone 4-up KPI cards (their results panel is out
+     of redesign scope). #}
+  {% if cost and run.run_type.value == "single" %}
+    <section class="run-cost-summary mt-6 mb-4">
+      <h2 class="text-h3 text-ink-1 mb-3">Cost vs risk reduction</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {{ kpi_card(
+            label="Total annual cost",
+            value=(cost.get('total_annual_cost') or 0) if cost is mapping else (cost.total_annual_cost or 0),
+            format="money",
+            currency=_csym
+        ) }}
+        {{ kpi_card(
+            label="Risk reduction (ALE)",
+            value=(cost.get('total_risk_reduction') or 0) if cost is mapping else (cost.total_risk_reduction or 0),
+            format="money",
+            currency=_csym
+        ) }}
+        {{ kpi_card(
+            label="Net benefit",
+            value=(cost.get('net_benefit') or 0) if cost is mapping else (cost.net_benefit or 0),
+            format="money",
+            currency=_csym
+        ) }}
+        {{ kpi_card(
+            label="ROI",
+            value=cost.get('aggregate_roi') if cost is mapping else cost.aggregate_roi,
+            format="ratio"
+        ) }}
+      </div>
+      {% if (cost is mapping and cost.get('n_unique_controls') is not none) or (cost is not mapping and cost.n_unique_controls is defined) %}
+        <p class="text-micro text-ink-3 mt-2">
+          Aggregate cost dedup'd across {{ cost.n_unique_controls }} unique
+          control(s) shared by the run's scenarios.
+        </p>
+      {% endif %}
+      {# Issue #413: control-value dollars rest on implementation-calibrated
+         composition weights (fair_cam weights_provenance), not FAIR-Standard-grounded.
+         M4: gate the indistinguishable sentence on weight_robustness presence so legacy
+         runs don't reference absent flags. #}
+      {%- set _detail_wr = display_results.weight_robustness if display_results else none -%}
+      <p class="text-micro text-ink-3 mt-2">{% if _detail_wr %}{{ control_weight_provenance_disclaimer }}{% else %}{{ control_weight_provenance_disclaimer_base }}{% endif %}</p>
+    </section>
+  {% endif %}
+
+  {# T7d: condensed controls snapshot component (spec §controls_snapshot).
+     Verbatim v1/v2/v3 expansion body + v2-reinterpret banner + overridden
+     badge, moved into the shared macro (single-source). #}
+  {{ controls_snapshot(run, has_reinterpreted_v2_snapshot, controls_overridden=controls_overridden) }}
+
+  {# T7c: the danger-zone section and the standalone PDF-download section are
+     retired — those actions now live in the header (PDF) and the top-right
+     overflow menu (purge/delete/re-run/CSV). #}
+
+  {# Audit affordance (#454 item 1): the reproducibility hash is developer
+     noise at the top of the page, but must remain present in the DOM as an
+     audit anchor. Demoted to a collapsed, subdued mono line near the bottom.
+     id anchors the trust-chip "inputs …" link (T7f). #}
+  <details id="run-inputs-hash" class="run-inputs-hash mt-8">
+    <summary class="text-micro text-ink-3 cursor-pointer select-none">Reproducibility</summary>
+    <p class="text-micro text-ink-3 font-mono mt-2">
+      Inputs hash: <code>{{ run.inputs_hash }}</code>
+    </p>
+  </details>
+
+  <p class="mt-6">
+    <a href="{{ _back_href }}" class="link">{{ _back_label }}</a>
+  </p>
+</div>
+{% endblock %}

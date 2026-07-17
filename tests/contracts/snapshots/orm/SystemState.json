@@ -1,0 +1,32 @@
+{
+  "columns": {
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "last_retention_sweep_at": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "organization_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    }
+  },
+  "indexes": [
+    "ix_system_state_organization_id"
+  ],
+  "table_name": "system_state"
+}

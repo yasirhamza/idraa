@@ -1,0 +1,98 @@
+{#
+  action_menu(items, align?) — overflow ⋯ menu. Spec §3/§4.
+  items: list of {label, href?, action?, method?, danger?, download?, confirm?, hidden?}
+    Either href (GET link) OR action+method (form submission with CSRF).
+    download=True on an href item → file download: emits `hx-boost="false"`
+      (opt out of the global <body hx-boost="true">) + the `download` attr so
+      the browser downloads the attachment instead of HTMX swapping its bytes
+      into the DOM as text.
+    confirm (form items): JS confirm() prompt string — submission is gated on
+      the operator clicking OK. Used for destructive actions (delete).
+    hidden (form items): dict of name→value extra hidden inputs (e.g.
+      {"confirm": "1"} for routes with a mandatory confirm field, or
+      {"active": "0"} for the activate/deactivate toggle).
+  align: "end" (default) | "start"
+
+  Inline x-data pattern per CLAUDE.md UI rendering conventions — HTMX 1.9
+  swap-race avoidance. Alpine's MutationObserver fires on new x-data nodes
+  BEFORE trailing scripts run, so global-dependent components capture stale
+  values. Inlining eliminates the race.
+
+  Plan-gate Arch-13 (mitigated): the absolute-positioned dropdown opens downward
+  by default, which clipped below the viewport on the last card of the mobile
+  card-stack and below the last row inside data_table's overflow-x-auto desktop
+  wrapper. `flipUp` now measures the button's distance to the viewport bottom on
+  open and anchors the menu above the button (`bottom-full`) when there isn't
+  room below — fixing both the mobile last-card and the desktop last-row clip.
+  (A full Alpine x-anchor/popper port remains a post-MVP nicety.)
+#}
+{% macro action_menu(items, align='end') -%}
+<div x-data="{ open: false, flipUp: false, busy: false }"
+     @keydown.escape.window="open = false"
+     @click.outside="open = false"
+     class="relative inline-block">
+  <button type="button"
+          class="btn btn-xs btn-ghost px-2"
+          aria-haspopup="menu"
+          :aria-expanded="open ? 'true' : 'false'"
+          @click="open = !open; flipUp = open && (window.innerHeight - $el.getBoundingClientRect().bottom) < 180">
+    <span aria-hidden="true">⋯</span>
+    <span class="sr-only">Actions</span>
+  </button>
+  <div x-show="open" x-cloak
+       class="absolute z-20 min-w-[10rem] bg-surface-1 border border-border-strong rounded-card shadow-sm{% if align == 'end' %} right-0{% else %} left-0{% endif %}"
+       :class="flipUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+       role="menu">
+    <ul class="py-1">
+      {%- for item in items %}
+      <li>
+        {%- if item.href %}
+        <a href="{{ item.href }}"
+           {%- if item.download %} hx-boost="false" download
+           {#- Tap feedback + debounce: server-side generation can take a few
+               seconds; show "Generating…" instantly and block re-taps for 8s so
+               repeated taps can't stack downloads (which exhausted the DB pool /
+               pegged the CPU — prod outage 2026-06-15). No preventDefault on the
+               first tap, so the browser download still fires. -#}
+           @click="busy ? $event.preventDefault() : (busy = true, open = true, setTimeout(() => busy = false, 8000))"
+           :class="busy ? 'pointer-events-none opacity-60' : ''"
+           :aria-busy="busy ? 'true' : 'false'"{% endif %}
+           class="block px-3 py-1.5 text-body hover:bg-surface-2 {% if item.danger %}text-status-critical{% else %}text-ink-1{% endif %}"
+           role="menuitem">{%- if item.download %}<span x-show="!busy">{{ item.label }}</span><span x-show="busy" x-cloak>⏳ Generating…</span>{%- else %}{{ item.label }}{%- endif %}</a>
+        {%- elif item.action %}
+        <form method="{{ item.method|default('post') }}" action="{{ item.action }}" class="m-0"
+              {#- Sec-B1: SINGLE-quote the attribute. `tojson` escapes `'` (→ &#39;)
+                  but NOT `"`, so a confirm string containing `"` inside a
+                  DOUBLE-quoted attribute truncates the handler (fail-open on the
+                  only human gate) AND injects attributes at call sites that
+                  interpolate user strings (scenario name, email).
+                  T8 e2e finding: MUST call `window.confirm`, not bare `confirm`.
+                  Destructive items also render a hidden `<input name="confirm"
+                  value="1">` (the mandatory-confirm server contract) inside
+                  THIS SAME form. Per-spec, an inline `on*` handler on a form
+                  element runs with that form injected into its scope chain,
+                  so an unqualified `confirm` identifier resolves to the named
+                  form control (`form.confirm`), not `window.confirm` -- the
+                  call then throws "confirm is not a function", the exception
+                  aborts the handler before `return false` executes, and the
+                  browser submits the form as if nothing happened. That means
+                  the ONLY human gate on Delete/Purge silently never fired.
+                  Qualifying with `window.` performs a property lookup instead
+                  of an identifier lookup, which bypasses the scope-chain
+                  shadowing entirely. -#}
+              {%- if item.confirm %} onsubmit='return window.confirm({{ item.confirm | tojson }});'{% endif %}>
+          {{ csrf_field() }}
+          {%- if item.hidden %}{% for hk, hv in item.hidden.items() %}
+          <input type="hidden" name="{{ hk }}" value="{{ hv }}">
+          {%- endfor %}{% endif %}
+          <button type="submit"
+                  class="block w-full text-left px-3 py-1.5 text-body hover:bg-surface-2 {% if item.danger %}text-status-critical{% else %}text-ink-1{% endif %}"
+                  role="menuitem">{{ item.label }}</button>
+        </form>
+        {%- endif %}
+      </li>
+      {%- endfor %}
+    </ul>
+  </div>
+</div>
+{%- endmacro %}

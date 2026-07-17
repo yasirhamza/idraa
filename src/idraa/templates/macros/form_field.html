@@ -1,0 +1,150 @@
+{#
+  form_field(name, label, input_type, value, help, error, required, prefix, suffix,
+             options, disabled, mode, placeholder, autocomplete, rows) — Spec §6.
+
+  F9 implements: text, email, password, url, number, money, percent, count, select, textarea.
+  F10 adds:      date, toggle, radio_group, checkbox_group.
+
+  mode="edit"     (default) — full input
+  mode="display"            — read-only label + value (no border / no input)
+
+  Spec §6 rules:
+  - Label: text-meta, uppercase via CSS class (already constrained by font-size scale).
+  - REQUIRED chip (NOT `*`).
+  - Error replaces help (never both).
+  - Focus ring: 2 px brand offset 2 px.
+  - Disabled: bg-surface-2, ink-3, cursor-not-allowed.
+  - Single-column default; max-w-md per input.
+#}
+
+{% macro _label(name, label, required) -%}
+<div class="flex items-center justify-between">
+  <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}</label>
+  {% if required %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro _help_or_error(help, error) -%}
+{% if error %}
+  <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ error }}</p>
+{% elif help %}
+  <p class="text-micro text-ink-2 mt-1">{{ help }}</p>
+{% endif %}
+{%- endmacro %}
+
+{% macro _input_classes(error, disabled) -%}
+h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2{% if disabled %} bg-surface-2 text-ink-3 cursor-not-allowed{% endif %}
+{%- endmacro %}
+
+{% macro form_field(name, label, input_type='text', value=none,
+                    help=none, error=none, required=False,
+                    prefix=none, suffix=none, options=none,
+                    disabled=False, mode='edit', placeholder=none,
+                    autocomplete=none, rows=4, step=none) -%}
+
+{% if mode == 'display' %}
+<div class="space-y-1 max-w-md">
+  <p class="text-meta text-ink-2">{{ label }}</p>
+  <p class="text-body text-ink-1">{{ value if value is not none else '&#8212;' }}</p>
+</div>
+{% else %}
+<div class="max-w-md">
+  {{ _label(name, label, required) }}
+
+  {% if input_type in ('text','email','password','url') %}
+    <input id="{{ name }}" name="{{ name }}" type="{{ input_type }}"
+           value="{{ value if value is not none else '' }}"
+           {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+           {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+           {% if required %}required aria-required="true"{% endif %}
+           {% if disabled %}disabled{% endif %}
+           class="{{ _input_classes(error, disabled) }}">
+
+  {% elif input_type in ('number','money','percent','count') %}
+    {%- set step = step if step is not none else ('0.01' if input_type in ('money','percent') else '1') -%}
+    <div class="relative">
+      {% if input_type == 'money' or prefix %}
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix or '$' }}</span>
+      {% endif %}
+      <input id="{{ name }}" name="{{ name }}" type="number"
+             inputmode="decimal" step="{{ step }}"
+             {% if input_type == 'percent' %}min="0" max="100"{% endif %}
+             value="{{ value if value is not none else '' }}"
+             {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+             {% if required %}required aria-required="true"{% endif %}
+             {% if disabled %}disabled{% endif %}
+             class="{{ _input_classes(error, disabled) }}{% if input_type == 'money' or prefix %} pl-7{% endif %}{% if input_type == 'percent' or suffix %} pr-7{% endif %} font-mono tabular-nums">
+      {% if input_type == 'percent' or suffix %}
+        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-ink-2" aria-hidden="true">{{ suffix or '%' }}</span>
+      {% endif %}
+    </div>
+
+  {% elif input_type == 'select' %}
+    <select id="{{ name }}" name="{{ name }}"
+            {% if required %}required aria-required="true"{% endif %}
+            {% if disabled %}disabled{% endif %}
+            class="{{ _input_classes(error, disabled) }}">
+      {% for opt_value, opt_label in (options or []) %}
+      <option value="{{ opt_value }}"{% if opt_value == value %} selected{% endif %}>{{ opt_label }}</option>
+      {% endfor %}
+    </select>
+
+  {% elif input_type == 'textarea' %}
+    <textarea id="{{ name }}" name="{{ name }}"
+              rows="{{ rows }}"
+              {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+              {% if required %}required aria-required="true"{% endif %}
+              {% if disabled %}disabled{% endif %}
+              class="{{ _input_classes(error, disabled) }} h-auto py-2 min-h-24 max-h-64 resize-y">{{ value if value is not none else '' }}</textarea>
+
+  {% elif input_type == 'date' %}
+    <input id="{{ name }}" name="{{ name }}" type="date"
+           value="{{ value if value is not none else '' }}"
+           {% if required %}required aria-required="true"{% endif %}
+           {% if disabled %}disabled{% endif %}
+           class="{{ _input_classes(error, disabled) }}">
+
+  {% elif input_type == 'toggle' %}
+    <label class="inline-flex items-center gap-2">
+      <input id="{{ name }}" name="{{ name }}" type="checkbox"
+             value="true"
+             {% if value %}checked{% endif %}
+             {% if disabled %}disabled{% endif %}
+             class="toggle toggle-primary">
+      <span class="text-body text-ink-1">{% if value %}On{% else %}Off{% endif %}</span>
+    </label>
+
+  {% elif input_type == 'radio_group' %}
+    <fieldset class="space-y-2">
+      <legend class="sr-only">{{ label }}</legend>
+      {% for opt in (options or []) %}
+        {%- set ov = opt[0] -%}
+        {%- set ol = opt[1] -%}
+        {%- set od = opt[2] if opt|length > 2 else none -%}
+      <label class="flex items-start gap-3 p-3 rounded-card border border-border-subtle cursor-pointer hover:bg-surface-2">
+        <input type="radio" name="{{ name }}" value="{{ ov }}"{% if ov == value %} checked{% endif %}{% if disabled %} disabled{% endif %} class="radio radio-sm mt-0.5">
+        <span>
+          <span class="text-body text-ink-1 font-medium">{{ ol }}</span>
+          {% if od %}<span class="block text-meta text-ink-2 mt-0.5">{{ od }}</span>{% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </fieldset>
+
+  {% elif input_type == 'checkbox_group' %}
+    <fieldset class="space-y-2">
+      <legend class="sr-only">{{ label }}</legend>
+      {%- set selected = value or [] -%}
+      {% for ov, ol in (options or []) %}
+      <label class="flex items-center gap-3">
+        <input type="checkbox" name="{{ name }}" value="{{ ov }}"{% if ov in selected %} checked{% endif %}{% if disabled %} disabled{% endif %} class="checkbox checkbox-sm">
+        <span class="text-body text-ink-1">{{ ol }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+  {% endif %}
+
+  {{ _help_or_error(help, error) }}
+</div>
+{% endif %}
+{%- endmacro %}

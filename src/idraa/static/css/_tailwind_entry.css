@@ -1,0 +1,7 @@
+/* src/idraa/static/css/_tailwind_entry.css
+   Tailwind build entry. DaisyUI is NOT imported here — it ships as the
+   separate vendored file (static/vendor/daisyui-4.12.10.min.css), keeping
+   this build free of any npm dependency. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

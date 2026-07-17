@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Delete scenario — {{ scenario.name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/scenarios">Scenarios</a> /
+    <a class="link" href="/scenarios/{{ scenario.id }}">{{ scenario.name }}</a> /
+    Delete
+  </p>
+  <h1 class="text-2xl font-bold mb-4">
+    Delete scenario &laquo;{{ scenario.name }}&raquo;?
+  </h1>
+
+  <div class="alert alert-warning mb-6" role="alert">
+    <div>
+      <h2 class="font-semibold">This scenario has {{ run_count }} analysis run(s).</h2>
+      <p class="text-sm mt-1">
+        Deleting it will permanently delete those run(s) and their results.
+        This cannot be undone. Aggregate (multi-scenario) runs are not
+        affected — they keep their own saved snapshots.
+      </p>
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <form method="post" action="/scenarios/{{ scenario.id }}/delete">
+      {{ csrf_field() }}
+      <input type="hidden" name="confirm_cascade" value="1">
+      <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+      <button type="submit" class="btn btn-error">
+        Delete scenario and {{ run_count }} run(s)
+      </button>
+    </form>
+    <a href="/scenarios/{{ scenario.id }}" class="btn btn-ghost">Cancel</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Re-sync — {{ c.name }}{% endblock %}
+{% block content %}
+
+{{ page_header(
+    title="Re-sync from library",
+    breadcrumb=[("Home", "/"), ("Controls", "/controls"), (c.name, "/controls/" ~ c.id), ("Re-sync", none)]
+) }}
+
+<div class="max-w-3xl mx-auto space-y-4">
+
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <p class="text-body text-ink-1">
+      <span class="font-medium">{{ c.name }}</span> was adopted from library entry
+      v{{ info.pinned_version }}; the entry is now at
+      <span class="font-medium">v{{ info.current_version }}</span>.
+    </p>
+    {% if not info.has_snapshot %}
+    <p class="text-body text-ink-2 mt-2">
+      <span class="badge badge-warning badge-outline badge-sm align-middle">coarse diff</span>
+      This control predates as-adopted snapshots, so the comparison below is
+      <em>current control vs current entry</em> — it cannot separate your own
+      edits from library changes. Values you edited will show as differences.
+    </p>
+    {% endif %}
+  </div>
+
+  {% macro _fmt(v) -%}
+    {%- if v is none -%}—{%- elif v is mapping or v is sequence and v is not string -%}{{ v | tojson }}{%- else -%}{{ v }}{%- endif -%}
+  {%- endmacro %}
+
+  {% for section, rows in [("Fields", info.fields), ("Function assignments", info.assignments)] %}
+  {% if rows %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-3">{{ section }}</h2>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="bg-surface-2">
+            <th class="text-meta uppercase">{{ "Sub-function" if section == "Function assignments" else "Field" }}</th>
+            {% if info.has_snapshot %}<th class="text-meta uppercase">As adopted (v{{ info.pinned_version }})</th>{% endif %}
+            <th class="text-meta uppercase">This control now</th>
+            <th class="text-meta uppercase">Entry v{{ info.current_version }}</th>
+            {% if info.has_snapshot %}<th class="text-meta uppercase">Why different</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td class="font-medium">{{ r.field }}</td>
+            {% if info.has_snapshot %}<td class="text-ink-2">{{ _fmt(r.adopted) }}</td>{% endif %}
+            <td>{{ _fmt(r.control_now) }}</td>
+            <td class="text-ink-1">{{ _fmt(r.entry_now) }}</td>
+            {% if info.has_snapshot %}
+            <td>
+              {% if r.user_modified and r.library_changed %}<span class="badge badge-warning badge-sm">both changed</span>
+              {% elif r.user_modified %}<span class="badge badge-ghost badge-sm">your edit</span>
+              {% elif r.library_changed %}<span class="badge badge-info badge-sm">library change</span>
+              {% else %}—{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  <div class="bg-surface-1 border border-border-strong rounded-card p-6">
+    <p class="text-body text-ink-2 mb-3">Applying replaces this control's
+      library-derived fields and ALL function assignments with entry
+      v{{ info.current_version }} values (assignments land unconfirmed, like a fresh
+      adoption — your edits above are overwritten). Completed runs that used this
+      control will be marked stale so you can re-run them.</p>
+    <div class="flex gap-2">
+      <form method="post" action="/controls/{{ c.id }}/resync">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-primary btn-sm">Apply re-sync</button>
+      </form>
+      <a class="btn btn-ghost btn-sm" href="/controls/{{ c.id }}">Cancel</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

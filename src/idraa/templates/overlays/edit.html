@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+{% from "macros/viewport_block_authoring.html" import viewport_block_authoring, only_on_md %}
+
+{% block title %}{% if overlay %}Edit overlay — {{ overlay.tag }}{% else %}New overlay{% endif %}{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{% if overlay %}
+  {% set _bc = breadcrumb_for(request) %}
+  {{ page_header(title="Edit overlay — " ~ overlay.tag,
+                 breadcrumb=_bc,
+                 actions=[]) }}
+{% else %}
+  {{ page_header(title="New overlay",
+                 breadcrumb=breadcrumb_for(request),
+                 actions=[]) }}
+{% endif %}
+
+{{ viewport_block_authoring(reason="Editing overlays requires a tablet or desktop.") }}
+
+{%- set errors_dict = errors if errors is mapping else {} -%}
+
+{% call only_on_md() %}
+<form method="post" action="{{ action }}"
+      class="space-y-6">
+  {{ csrf_field() }}
+  {% if overlay %}
+  {# B8 optimistic-lock: hidden field carries the version this form was rendered against. #}
+  <input type="hidden" name="expected_version" value="{{ overlay.version }}">
+  {% endif %}
+
+  {{ form_error_summary(errors_dict) }}
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Identity</legend>
+
+    {# Tag — readonly after creation; pattern-validated on new #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="tag" class="text-meta text-ink-2">Tag</label>
+        <span class="text-micro text-ink-3">REQUIRED</span>
+      </div>
+      <input id="tag" name="tag" type="text"
+             value="{{ form.tag }}"
+             required maxlength="64"
+             {% if overlay %}readonly{% else %}pattern="[a-z][a-z0-9_]*"{% endif %}
+             class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get('tag') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono{% if overlay %} bg-surface-2 text-ink-3 cursor-not-allowed{% endif %}">
+      <p class="text-micro text-ink-2 mt-1">
+        snake_case identifier — lowercase letters, digits, and underscores; starts with a letter.
+        {% if overlay %}Tag cannot be renamed after creation.{% endif %}
+      </p>
+      {% if errors_dict.get('tag') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_dict['tag'] }}</p>
+      {% endif %}
+    </div>
+
+    {{ form_field(name="display_name", label="Display name", value=form.display_name,
+                  required=True, error=errors_dict.get('display_name')) }}
+  </fieldset>
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Multipliers</legend>
+
+    {{ form_field(name="frequency_multiplier", label="Frequency multiplier",
+                  input_type="number", value=form.frequency_multiplier,
+                  required=True,
+                  help="Applied to LEF; typical 0.5–10",
+                  error=errors_dict.get('frequency_multiplier')) }}
+
+    {{ form_field(name="magnitude_multiplier", label="Magnitude multiplier",
+                  input_type="number", value=form.magnitude_multiplier,
+                  required=True,
+                  help="Applied to LM; typical 0.5–10",
+                  error=errors_dict.get('magnitude_multiplier')) }}
+  </fieldset>
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Methodology</legend>
+
+    {{ form_field(name="sources", label="Sources",
+                  value=form.sources,
+                  help="Semicolon-separated list of citation paths or URLs.",
+                  error=errors_dict.get('sources')) }}
+
+    {{ form_field(name="methodology", label="Methodology", input_type="textarea",
+                  value=form.methodology, rows=6, required=True,
+                  help="At least 20 non-whitespace characters. Explain how the multipliers were derived.",
+                  error=errors_dict.get('methodology')) }}
+
+    {{ form_field(name="methodology_change_reason", label="Methodology change reason",
+                  value=form.methodology_change_reason, required=True,
+                  help="Recorded in the audit log alongside this revision.",
+                  error=errors_dict.get('methodology_change_reason')) }}
+  </fieldset>
+
+  {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <a href="/overlays{% if overlay %}/{{ overlay.id }}{% endif %}" class="btn btn-outline btn-sm">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-sm">
+      {% if overlay %}Save changes{% else %}Create overlay{% endif %}
+    </button>
+  </div>
+</form>
+{% endcall %}
+
+{% endblock %}

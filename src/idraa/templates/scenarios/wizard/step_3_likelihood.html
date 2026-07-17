@@ -1,0 +1,49 @@
+{# src/idraa/templates/scenarios/wizard/step_3_likelihood.html #}
+{% extends "scenarios/wizard/_shell.html" %}
+{% block step_body %}
+
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.store('smeDirectory', {{ sme_directory_for_dropdown | tojson }});
+  });
+</script>
+
+<form method="post" action="/scenarios/new/wizard/step/3?tx={{ state.tx_id }}">
+  {{ csrf_field() }}
+  {# Plan-gate A-I1: NO version_token field here. The per-page step 3/4 POST
+     uses advance_step's legacy blind-write path (matching steps 2 & 5), which
+     does not read version_token — a hidden field here would be decorative and
+     invite a future dev to assume CAS protection that isn't enforced. The
+     optimistic-lock token lives only on the step-6 review Save form, where
+     finalize reads it for the real CAS. #}
+
+  <div class="flex gap-2 mb-4 flex-wrap">
+    {% if org_industry and org_revenue_tier %}
+      <button type="button" class="btn btn-sm btn-outline"
+              hx-post="/scenarios/wizard/prefill-from-industry"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-vals='{"tx": "{{ state.tx_id }}", "page": "likelihood"}'
+              hx-target="#fair-params-inner" hx-swap="outerHTML">
+        Reset likelihood to baseline ({{ org_industry }} / {{ org_revenue_tier }})
+      </button>
+    {% endif %}
+    {% for overlay in available_overlays %}
+      <button type="button" class="btn btn-sm btn-outline"
+              hx-post="/scenarios/wizard/apply-overlay"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              hx-include="#fair-params-inner input"
+              hx-vals='{"tx": "{{ state.tx_id }}", "overlay_id": "{{ overlay.id }}", "page": "likelihood"}'
+              hx-target="#fair-params-inner" hx-swap="outerHTML">
+        Apply: {{ overlay.display_name }}
+      </button>
+    {% endfor %}
+  </div>
+
+  {% include "scenarios/wizard/_fair_params_form_inner.html" %}
+
+  <div class="flex justify-end mt-6">
+    <button type="submit" class="btn btn-primary">Next →</button>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,282 @@
+{# src/idraa/templates/controls/_assignment_row.html  (F16 re-skin)
+   Single repeating assignment row. Rendered:
+     - Initially via form.html on /new (one blank row) or /edit (one per existing assignment)
+     - On "+ Add assignment" click via GET /controls/_assignment_row?index=N
+     - On sub-function <select> change via GET /controls/_assignment_row?index=N&sub_function=<value>
+       (PR μ.1b #129 T5 — server-side unit-aware widget dispatch via unit_input macro)
+
+   Field naming convention: assignments[N][fieldname] — FastAPI Form() parses
+   into nested dict, ControlFunctionAssignmentDTO.model_validate consumes.
+
+   Sub-function dropdown excludes DSC_CORR_MISALIGNED (virtual sub-function
+   that requires derived_from_assignment_id, which is reserved-but-unused
+   in PR iota; service raises ValueError if non-NULL).
+
+   F16: Label chrome updated to match form_field design-system pattern
+   (text-meta text-ink-2 labels, focus:ring-brand inputs). Coverage and
+   Reliability simple inputs rendered via form_field macro. The sub_function
+   combobox and capability (unit_input) keep their existing Alpine/HTMX
+   wiring — form_field's combobox variant does not support HTMX row-swap.
+#}
+{% from "macros/unit_aware_inputs.html" import unit_input, unit_label_suffix %}
+{% from "macros/form_field.html" import form_field %}
+<div class="assignment-row card bg-base-200 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
+  {# Layout contract: 6-column grid on md+; sub_function takes 2 cols
+     (long enum values like ``lec_prev_resistance`` need the room),
+     capability takes 2 cols (UAT 2026-05-21 — the currency widget label
+     "Capability ($/event)" wrapped at 1-col width, and the input itself
+     had too little room for thousand-separated values), coverage and
+     reliability take 1 col each (just hold a single 0.0–1.0 number).
+     Every input/select uses ``w-full`` so it fills its cell — never
+     ``min-w-*`` (causes overflow + overlap with adjacent cells). #}
+  <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+
+    {# Sub-function cell — custom HTMX-wired combobox. Chrome updated to
+       form_field label pattern (text-meta text-ink-2). #}
+    <div class="md:col-span-2">
+      <div class="flex items-center justify-between mb-1">
+        <label for="sf-input-{{ index }}" class="text-meta text-ink-2">Sub-function</label>
+      </div>
+
+      {# Tier-2 combobox: typeahead + grouped + ARIA-compliant. Wraps a
+         hidden native <select> so the form-data shape, HTML5 required
+         validation, and the HTMX widget swap all keep working unchanged.
+         Background: PR μ.1b #129 T5 wired the hx-get on the <select>'s
+         change event to re-render the row with the unit-aware capability
+         widget. We preserve that by dispatching a synthetic change event
+         on the hidden select from the combobox's commit() handler.
+
+         Issue #150 fix is still relevant: do NOT add ``hx-params="none"``
+         to the hidden select — it would wipe hx-vals at HTMX-filter time. #}
+      {# Compute initial value defensively. `assignment` arrives in three
+         shapes depending on the render path:
+           - None (initial blank row on /controls/new)
+           - SimpleNamespace with .sub_function = FairCamSubFunction enum
+             (swap partial response with sub_function in the query)
+           - dict with .sub_function = string slug (form re-render after a
+             422 validation failure via _render_form_with_errors)
+         Handle all three without tripping Jinja's strict-undefined check. #}
+      {% set sf_initial = "" %}
+      {% if assignment %}
+        {% set sf_val = assignment.sub_function %}
+        {% if sf_val is string %}
+          {% set sf_initial = sf_val %}
+        {% elif sf_val %}
+          {% set sf_initial = sf_val.value %}
+        {% endif %}
+      {% endif %}
+      {# `groups` is inlined into the x-data props (not read from
+         `window.SUB_FUNCTION_GROUPS`) so hx-boost navigation cannot race
+         the trailing-script-tag setter. HTMX 1.9 swaps via innerHTML and
+         sequences script execution separately, which leaves Alpine's
+         MutationObserver free to fire on the new x-data nodes BEFORE
+         the SUB_FUNCTION_GROUPS setter has run — producing an empty
+         combobox label on edit pages reached by clicking from a list
+         view. Inlining eliminates the race entirely. #}
+      <div
+        x-data='subFunctionCombobox({
+          initialValue: {{ sf_initial | tojson }},
+          index: {{ index }},
+          groups: {{ sub_function_groups_json | tojson }}
+        })'
+        @click.outside="close()"
+        @keydown.escape.window="open && close({ refocus: true })"
+        class="relative"
+      >
+        {# Closed state: a select-style BUTTON (not a free-text input), so the
+           widget reads unambiguously as a dropdown and arbitrary typing can
+           never become the value. #}
+        <button
+          type="button"
+          x-ref="button"
+          id="sf-input-{{ index }}"
+          @click="toggle()"
+          @keydown="onButtonKeydown($event)"
+          role="combobox"
+          aria-haspopup="listbox"
+          :aria-expanded="open ? 'true' : 'false'"
+          :aria-controls="`sf-listbox-${index}`"
+          class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+        >
+          <span class="truncate"
+                :class="buttonLabel ? 'text-ink-1' : 'text-ink-2'"
+                x-text="buttonLabel || 'Select a sub-function…'"></span>
+          <svg class="w-4 h-4 opacity-60 shrink-0 transition-transform"
+               :class="open && 'rotate-180'"
+               viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        {# Hidden native select: source of truth for form submit + HTMX swap.
+           Unchanged contract (issue #150: do NOT add hx-params="none"). #}
+        <select
+          x-ref="hiddenSelect"
+          name="assignments[{{ index }}][sub_function]"
+          class="sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          hx-get="/controls/_assignment_row?index={{ index }}"
+          hx-vals='js:{sub_function: event.target.value}'
+          hx-target="closest .assignment-row"
+          hx-swap="outerHTML"
+          hx-trigger="change"
+          required
+        >
+          <option value=""></option>
+          {% for sf in sub_function_choices %}
+            <option value="{{ sf.value }}" {% if assignment and assignment.sub_function == sf %}selected{% endif %}>{{ sf.value }}</option>
+          {% endfor %}
+        </select>
+
+        {# Open panel: search box on top, grouped listbox below. z-30 + the
+           row card's overflow-visible (set on .assignment-row) keep the panel
+           floating ABOVE subsequent rows instead of being clipped or colliding
+           with the fields below (issue #395 'intrudes into the area below'). #}
+        <div
+          x-show="open"
+          x-cloak
+          x-transition.opacity
+          class="absolute z-30 mt-1 w-full rounded-lg border border-base-300 bg-base-100 shadow-lg overflow-hidden"
+        >
+          <div class="p-2 border-b border-base-200">
+            <input
+              type="text"
+              x-ref="search"
+              x-model="query"
+              @input="onSearchInput()"
+              @keydown="onSearchKeydown($event)"
+              :aria-controls="`sf-listbox-${index}`"
+              aria-label="Filter sub-functions"
+              autocomplete="off"
+              placeholder="Type to filter (e.g. monitoring, loss)…"
+              class="h-9 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </div>
+          <ul
+            x-ref="listbox"
+            :id="`sf-listbox-${index}`"
+            role="listbox"
+            aria-label="FAIR-CAM sub-functions"
+            class="max-h-72 overflow-y-auto"
+          >
+            <template x-for="group in filteredGroups" :key="group.domain">
+              <li role="presentation">
+                <div
+                  role="presentation"
+                  class="sticky top-0 bg-base-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
+                  x-text="group.label"
+                ></div>
+                <template x-for="opt in group.options" :key="opt.value">
+                  <div
+                    role="option"
+                    :id="`sf-opt-${index}-${opt.value}`"
+                    :data-value="opt.value"
+                    :aria-selected="opt.value === selectedValue ? 'true' : 'false'"
+                    :class="opt.value === highlightedValue ? 'bg-primary text-primary-content' : 'hover:bg-base-200'"
+                    @mousedown.prevent="commit(opt.value)"
+                    @mouseenter="highlightedValue = opt.value"
+                    class="cursor-pointer px-3 py-2"
+                  >
+                    <div class="font-medium text-sm" x-text="opt.label"></div>
+                    <div class="text-xs opacity-70 line-clamp-2" x-text="opt.description"></div>
+                  </div>
+                </template>
+              </li>
+            </template>
+            <li x-show="!hasMatches" class="px-3 py-2 text-sm opacity-60">
+              No matches. Try "monitoring", "loss", "deterrence"…
+            </li>
+          </ul>
+        </div>
+
+        {# Persistent description of the committed selection. #}
+        <p
+          class="text-micro text-ink-2 mt-1"
+          x-show="selectedValue"
+          x-cloak
+          x-text="selectedDescription"
+        ></p>
+      </div>
+    </div>
+
+    {# Capability cell — unit-aware widget (chrome updated to text-meta label). #}
+    <div class="md:col-span-2">
+      {# Label carries unit context (" ($/event)" / " (days)") so the
+         input row can stay narrow and unit-decoration-free. Currency case
+         in particular was unusable inline — see unit_aware_inputs.html
+         docstring. #}
+      <div class="flex items-center justify-between mb-1">
+        <label class="text-meta text-ink-2">Capability{{ unit_label_suffix(assignment) }}</label>
+      </div>
+      {% if assignment %}
+        {# Sub-function chosen — render unit-aware widget (days / dollars /
+           bounded [0,1]) per SUB_FUNCTION_UNITS dispatch. #}
+        {{ unit_input(assignment, index) }}
+        {# Issue #129 T6: "x clear" trigger for existing persisted assignments
+           with a non-NULL capability_value. Opens the NULL-fallback warning
+           modal (unit-type-dispatched copy). Mount guard ensures we only
+           render for rows that have both (a) a real persisted id (so the
+           modal id is collision-free across rows / re-renders) AND (b) a
+           value to clear (NULL rows already use the fallback so a clear
+           button is no-op + confusing). Sec-I2 plan-gate fix. #}
+        {% if assignment.id is defined and assignment.id and assignment.capability_value is not none %}
+          <button type="button" class="btn btn-xs btn-ghost mt-1 self-end"
+                  @click="document.getElementById('clear-capability-modal-{{ assignment.id }}').showModal()">
+            &times; clear
+          </button>
+          {% include "controls/_clear_capability_modal.html" %}
+        {% endif %}
+      {% else %}
+        {# Initial blank row — no sub-function chosen yet, default widget.
+           When the user picks a sub-function, the <select>'s hx-get above
+           swaps the entire row with one whose assignment is set, falling
+           into the unit_input branch above. #}
+        <input
+          name="assignments[{{ index }}][capability_value]"
+          type="number"
+          step="0.01"
+          class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums" />
+      {% endif %}
+    </div>
+
+    {# Coverage — explicit bounded [0,1] input. NOT form_field: its number
+       branch defaults step=1 (rejects 0.9 → "nearest 0.8/1.8") and sets no max
+       (would allow >1 client-side), and its justify-between REQUIRED chip
+       collides with the neighbour in this cramped 6-col grid. Plain label
+       matches the Capability cell; min/max/step mirror the probability widget. #}
+    <div>
+      <label for="assignments[{{ index }}][coverage]" class="text-meta text-ink-2">Coverage</label>
+      <input id="assignments[{{ index }}][coverage]"
+             name="assignments[{{ index }}][coverage]"
+             type="number" inputmode="decimal" min="0" max="1" step="0.01"
+             value="{{ assignment.coverage if assignment else 0.8 }}"
+             required aria-required="true"
+             class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums" />
+    </div>
+
+    {# Reliability — explicit bounded [0,1] input (same rationale as Coverage). #}
+    <div>
+      <label for="assignments[{{ index }}][reliability]" class="text-meta text-ink-2">Reliability</label>
+      <input id="assignments[{{ index }}][reliability]"
+             name="assignments[{{ index }}][reliability]"
+             type="number" inputmode="decimal" min="0" max="1" step="0.01"
+             value="{{ assignment.reliability if assignment else 0.8 }}"
+             required aria-required="true"
+             class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums" />
+    </div>
+
+  </div>
+  <p class="text-micro text-ink-2 mt-1">
+    Capability bounds depend on sub-function unit (probability [0,1] or magnitude ≥0).
+  </p>
+
+  <div class="mt-2 flex justify-end">
+    <button
+      type="button"
+      class="btn btn-sm btn-error btn-outline"
+      @click="$el.closest('.assignment-row').remove()">
+      × Remove
+    </button>
+  </div>
+</div>

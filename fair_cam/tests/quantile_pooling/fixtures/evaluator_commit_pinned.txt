@@ -1,0 +1,8 @@
+# Pinned for the quantile_pooling port. Per CLAUDE.md "primary-cited gate."
+# When evaluator/collector is updated, regenerate r_oracle_outputs.json via
+# scripts/regen_r_oracle.R and bump these three values.
+
+repo:      github.com/davidski/collector
+commit:    061fc18d92c94509b5e72d0877763448d8580994
+permalink: https://github.com/davidski/collector/blob/061fc18d92c94509b5e72d0877763448d8580994/R/fit_distributions.R
+accessed:  2026-05-24

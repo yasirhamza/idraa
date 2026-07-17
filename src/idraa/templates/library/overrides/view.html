@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Override v{{ override.version }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-2xl font-bold mb-4">Override v{{ override.version }}</h1>
+
+  <div class="card bg-base-100 shadow p-6 grid grid-cols-1 gap-4">
+    <div class="form-control">
+      <span class="label-text font-semibold">Entry</span>
+      <a href="/library/entries/{{ override.library_entry_id }}" class="link text-primary">{{ override.library_entry_id }}</a>
+    </div>
+
+    <div class="form-control">
+      <span class="label-text font-semibold">Reason</span>
+      <p class="whitespace-pre-wrap">{{ override.reason }}</p>
+    </div>
+
+    {% if override.methodology_change_reason %}
+    <div class="form-control">
+      <span class="label-text font-semibold">Methodology change</span>
+      <p class="whitespace-pre-wrap">{{ override.methodology_change_reason }}</p>
+    </div>
+    {% endif %}
+
+    {# PR #247 UAT bug fix: consistent numeric display via the per-class
+       input filters — rates 4dp (TEF), probabilities 4dp (Vuln), money
+       2dp (PL/SL), all suppress scientific notation. #}
+    {% if override.threat_event_frequency %}
+    <div class="form-control">
+      <span class="label-text font-semibold">Threat event frequency override</span>
+      <p class="font-mono">
+        Low: {{ override.threat_event_frequency.low | format_rate_input }},
+        Mode: {{ override.threat_event_frequency.mode | format_rate_input }},
+        High: {{ override.threat_event_frequency.high | format_rate_input }}
+      </p>
+    </div>
+    {% endif %}
+
+    {% if override.vulnerability %}
+    <div class="form-control">
+      <span class="label-text font-semibold">Vulnerability override</span>
+      <p class="font-mono">
+        Low: {{ override.vulnerability.low | format_probability_input }},
+        Mode: {{ override.vulnerability.mode | format_probability_input }},
+        High: {{ override.vulnerability.high | format_probability_input }}
+      </p>
+    </div>
+    {% endif %}
+
+    {% if override.primary_loss %}
+    <div class="form-control">
+      <span class="label-text font-semibold">Primary loss override</span>
+      <p class="font-mono">
+        Low: {{ override.primary_loss.low | format_money_input }},
+        Mode: {{ override.primary_loss.mode | format_money_input }},
+        High: {{ override.primary_loss.high | format_money_input }}
+      </p>
+    </div>
+    {% endif %}
+
+    {% if override.secondary_loss %}
+    <div class="form-control">
+      <span class="label-text font-semibold">Secondary loss override</span>
+      <p class="font-mono">
+        Low: {{ override.secondary_loss.low | format_money_input }},
+        Mode: {{ override.secondary_loss.mode | format_money_input }},
+        High: {{ override.secondary_loss.high | format_money_input }}
+      </p>
+    </div>
+    {% endif %}
+
+    <div class="form-control">
+      <span class="label-text font-semibold">Created</span>
+      <p class="font-mono text-sm">{{ override.created_at | format_datetime }}</p>
+    </div>
+
+    {% if override.deleted_at %}
+    <div class="alert alert-warning">
+      <span>Tombstoned: {{ override.deleted_at | format_datetime }}</span>
+    </div>
+    {% endif %}
+
+    <div class="flex gap-2 mt-4">
+      <a href="/library/overrides" class="btn btn-ghost">Back</a>
+      <a href="/library/overrides/{{ override.id }}/edit" class="btn btn-primary">Edit</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

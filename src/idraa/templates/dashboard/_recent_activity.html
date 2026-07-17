@@ -1,0 +1,159 @@
+{#- Recent activity band (Task 6, #476-#480 dashboard redesign).
+
+    Params (from the enclosing dashboard/index.html context):
+      data          = DashboardData (services/dashboard.py)
+      current_user  = authed User
+
+    Consumes (unchanged view-model, services/dashboard_view_model.py):
+      data.top_scenarios             = list[TopScenarioRow]
+                                        {scenario_name, residual_ale, base_ale|None, source}
+      data.recent_runs               = list[RecentRunRow]
+                                        {id, display_name, run_type, status, created_at, headline_ale|None}
+      data.total_scenarios_with_runs = int
+
+    Panel 1 reuses the shipped CSS-dumbbell pattern (see
+    runs/components/scenario_dumbbell.html: .dumbbell-track/.dumbbell-bar/
+    .dumbbell-dot, var(--chart-inherent) for "without controls" /
+    var(--chart-residual) for "with controls") adapted for TopScenarioRow —
+    same field names (scenario_name/base_ale/residual_ale) the run-detail
+    macro already expects, so the geometry math below mirrors that macro
+    line-for-line. Not a direct macro call: that macro's signature takes a
+    run-detail view-model object (`dr.per_scenario_ale_rows`), and duplicating
+    the ~15-line scaling loop here keeps this partial's only dependency on
+    `data.top_scenarios` explicit. Replaces the old per_scenario_ale_bar
+    chart-vendor bar chart (dead code removed from index.html by this same task).
+
+    Panel 2 is the recent-runs feed, unchanged in shape from the old
+    index.html card — just relocated into this partial. -#}
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/rbac.html" import analyst_or_admin %}
+
+{%- set _code = data.currency.code if data.currency else "USD" -%}
+
+<div>
+  <h2 class="text-h3 text-ink-1 mb-3">Recent activity</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+
+    {# ---- Panel 1: top scenarios by residual risk (CSS dumbbell) ---- #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5">
+      <h3 class="text-h4 text-ink-1 mb-0.5">Top scenarios by residual risk</h3>
+      <p class="text-micro text-ink-3 mb-4">Mean annualized loss, without &rarr; with controls</p>
+
+      {% if not data.top_scenarios %}
+        <p class="text-body text-ink-2">No completed runs yet.</p>
+      {% else %}
+        {% if data.total_scenarios_with_runs > data.top_scenarios|length %}
+          <p class="text-meta text-ink-2 mb-2">
+            Top {{ data.top_scenarios|length }} of {{ data.total_scenarios_with_runs }}
+          </p>
+        {% endif %}
+
+        {%- set _rows = data.top_scenarios -%}
+        {%- set _has_base = _rows | selectattr("base_ale", "ne", none) | list | length > 0 -%}
+        {#- Jinja scoping: {% set %} inside {% for %} does not leak out — use a
+            namespace() accumulator to find the track's 100% reference (max
+            base_ale), matching scenario_dumbbell.html's approach. -#}
+        {%- set mns = namespace(max=0) -%}
+        {%- for r in _rows -%}
+          {%- if _has_base -%}
+            {%- if r.base_ale is not none and r.base_ale > mns.max -%}
+              {%- set mns.max = r.base_ale -%}
+            {%- endif -%}
+          {%- else -%}
+            {%- if r.residual_ale is not none and r.residual_ale > mns.max -%}
+              {%- set mns.max = r.residual_ale -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+
+        <div class="flex items-center gap-4 mb-3 text-micro text-ink-3">
+          {% if _has_base %}
+          <span class="inline-flex items-center gap-1">
+            <span class="inline-block rounded-full" style="width:10px;height:10px;background:var(--chart-inherent);"></span>
+            Without controls
+          </span>
+          {% endif %}
+          <span class="inline-flex items-center gap-1">
+            <span class="inline-block rounded-full" style="width:10px;height:10px;background:var(--chart-residual);"></span>
+            With controls
+          </span>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          {% for row in _rows %}
+            {%- set base_pct = (row.base_ale / mns.max * 100) if (mns.max and row.base_ale is not none) else none -%}
+            {%- set residual_pct = (row.residual_ale / mns.max * 100) if (mns.max and row.residual_ale is not none) else none -%}
+            {%- set bar_left = [base_pct, residual_pct] | min if (base_pct is not none and residual_pct is not none) else none -%}
+            {%- set bar_width = (base_pct - residual_pct) | abs if (base_pct is not none and residual_pct is not none) else 0 -%}
+          <div class="grid items-center gap-3" style="grid-template-columns: 140px 1fr 130px;">
+            <span class="text-body text-ink-1 truncate" title="{{ row.scenario_name }}">{{ row.scenario_name }}</span>
+            <div class="dumbbell-track">
+              {% if bar_left is not none %}
+              <div class="dumbbell-bar" style="left:{{ bar_left }}%; width:{{ bar_width }}%"></div>
+              {% endif %}
+              {% if base_pct is not none %}
+              <div class="dumbbell-dot" style="left:{{ base_pct }}%; background:var(--chart-inherent);"></div>
+              {% endif %}
+              {% if residual_pct is not none %}
+              <div class="dumbbell-dot" style="left:{{ residual_pct }}%; background:var(--chart-residual);"></div>
+              {% endif %}
+            </div>
+            <span class="text-micro font-mono text-ink-2 text-right">
+              {%- if row.base_ale is not none -%}
+                {{ row.base_ale | money(_code) }} &rarr; {{ row.residual_ale | money(_code) }}
+              {%- else -%}
+                {{ row.residual_ale | money(_code) }}
+              {%- endif -%}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if data.top_scenarios[0].source == "single" %}
+          <p class="text-micro text-ink-3 mt-2">
+            Sourced from latest single-scenario runs.
+          </p>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    {# ---- Panel 2: recent runs ---- #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5">
+      <h3 class="text-h4 text-ink-1 mb-0.5">Recent runs</h3>
+      <p class="text-micro text-ink-3 mb-4">Latest analyses across the org</p>
+
+      {% if not data.recent_runs %}
+        <p class="text-body text-ink-2">No runs yet.</p>
+        {% call analyst_or_admin(current_user) %}
+          <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run your first analysis</a>
+        {% endcall %}
+      {% else %}
+        {%- set run_rows = [] -%}
+        {% for row in data.recent_runs %}
+          {%- set _ = run_rows.append({
+            "id":          row.id,
+            "name":        row.display_name,
+            "run_type":    row.run_type.value,
+            "status":      row.status.value,
+            "created_at":  row.created_at | format_datetime,
+            "ale":         row.headline_ale | money(_code),
+          }) -%}
+        {% endfor %}
+        {{ data_table(
+            rows=run_rows,
+            columns=[
+              {"key": "name",       "label": "Name",    "priority": "primary"},
+              {"key": "run_type",   "label": "Type"},
+              {"key": "status",     "label": "Status",  "kind": "status_pill", "pill_kind": "run"},
+              {"key": "created_at", "label": "Created", "priority": "hidden_on_mobile"},
+              {"key": "ale",        "label": data.currency.code ~ " ALE",   "numeric": true},
+            ],
+            row_href_template="/runs/{id}",
+            exportable=true,
+            export_url="/analyses/export.csv",
+        ) }}
+      {% endif %}
+    </div>
+
+  </div>
+</div>

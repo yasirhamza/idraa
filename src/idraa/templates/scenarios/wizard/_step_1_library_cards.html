@@ -1,0 +1,22 @@
+{% for entry in library_entries %}
+  {# `:has(input:checked)` (Tailwind 3.4+) gives the card a visible
+     selected state when its hidden radio is toggled by a label click. #}
+  <label class="card bg-base-100 shadow cursor-pointer hover:bg-base-200
+                [&:has(input:checked)]:ring-2
+                [&:has(input:checked)]:ring-primary
+                [&:has(input:checked)]:bg-primary/5">
+    <input type="radio" name="library_entry_id" value="{{ entry.id }}" class="hidden"
+           {% if state.library_entry_id == entry.id|string %}checked{% endif %}>
+    <div class="card-body">
+      <h3 class="card-title">{{ entry.name }}</h3>
+      <div class="badges">
+        <span class="badge">{{ entry.threat_actor_type.value }}</span>
+        <span class="badge badge-secondary">{{ entry.threat_event_type.value }}</span>
+      </div>
+      <p class="text-sm">{{ entry.description[:120] }}{% if entry.description|length > 120 %}...{% endif %}</p>
+      <p class="text-xs muted">FAIR gap: {{ entry.canonical_fair_gap[:80] }}...</p>
+    </div>
+  </label>
+{% else %}
+  <p class="col-span-2 text-sm text-base-content/60 py-4">No library entries match your filters.</p>
+{% endfor %}

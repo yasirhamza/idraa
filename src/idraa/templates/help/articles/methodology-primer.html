@@ -1,0 +1,136 @@
+<h2 class="text-h3 text-ink-1 mb-3">The FAIR model &mdash; concept spine</h2>
+<p class="text-body text-ink-2 mb-3">
+  Idraa is built on <strong>FAIR</strong> (Factor Analysis of Information
+  Risk), an Open FAIR&trade; standard for expressing cyber risk as a financial
+  quantity. Every number the engine produces traces back to the three
+  relationships below. Understanding them tells you exactly what you are
+  estimating when you fill in a scenario form.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">1. Risk = Loss Event Frequency &times; Loss Magnitude</h3>
+<p class="text-body text-ink-2 mb-3">
+  <em>How often does a harmful event occur, and how much does it cost each
+  time?</em> Those two quantities &mdash; Open FAIR nodes <strong>Loss Event
+  Frequency (LEF)</strong> and <strong>Loss Magnitude (LM)</strong> &mdash;
+  are the top-level factors. Risk is their product, sampled thousands of times
+  across your input ranges by Monte Carlo simulation.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">2. LEF = Threat Event Frequency &times; Vulnerability</h3>
+<p class="text-body text-ink-2 mb-3">
+  Not every attempt causes a loss. <strong>Threat Event Frequency (TEF)</strong>
+  counts how often a threat actor tries the attack per year. <strong>Vulnerability</strong>
+  is the probability that any one attempt succeeds. Loss Event Frequency is
+  their product: the expected number of successful harmful events per year.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">3. Vulnerability = P(Threat Capability &gt; Control&nbsp;Strength)</h3>
+<p class="text-body text-ink-2 mb-3">
+  Formally, Vulnerability is the probability that a threat actor&rsquo;s
+  capability exceeds the asset&rsquo;s resistance. In the scenario wizard you
+  author the <em>inherent</em> Vulnerability &mdash; the baseline before any of
+  your controls are applied. The controls you tick are modelled separately and
+  reduce this probability in the simulation; entering a mentally-discounted
+  figure would credit them twice. The Open FAIR nodes involved are
+  <strong>Threat Capability (TC)</strong> and
+  <strong>Control Strength / Resistance Strength (CS)</strong>.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">4. LM = Primary Loss + Secondary Loss (per loss event)</h3>
+<p class="text-body text-ink-2 mb-6">
+  Loss Magnitude is the total cost <strong>per loss event</strong>, not an
+  annual figure. It splits into two Open FAIR nodes:
+  <strong>Primary Loss (PL)</strong> &mdash; direct costs such as incident
+  response, recovery, and ransom &mdash; and
+  <strong>Secondary Loss (SL)</strong> &mdash; knock-on costs such as
+  regulatory fines, lost business, and reputational damage. The engine
+  annualises them by multiplying each simulated per-event magnitude by the
+  simulated event count for that year.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">ALE: the mean annual loss</h2>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Annualized Loss Expectancy (ALE)</strong> is the mean of the
+  simulated annual-loss distribution &mdash; the long-run expected loss per
+  year. It is a v3 view-model derivation (not itself a named Open FAIR node)
+  computed from the LEF &times; LM product distribution. Because cyber-loss
+  distributions are heavily right-skewed, the mean exceeds the median; ALE
+  always refers to the <em>mean</em>, never the median. Use the
+  <a class="text-brand hover:underline" href="/help/run-and-read-analyses">Run &amp; read analyses</a>
+  article for guidance on reading the full distribution rather than relying on
+  ALE alone.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Monte Carlo simulation</h2>
+<p class="text-body text-ink-2 mb-3">
+  Nobody knows the exact value of TEF, Vulnerability, PL, or SL. You enter
+  a <strong>low&ndash;high range</strong> &mdash; the bounds you are 90%
+  confident contain the true value (formally, the 5th and 95th percentiles of
+  your belief distribution). The engine draws thousands of random samples from
+  that range, computes Risk = LEF &times; LM for each draw, and collects the
+  results into an annual-loss distribution. The result is not one number but a
+  realistic spread: the typical year, a bad year, and the rare disaster.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The 5th and 95th percentile framing is a 90% credible interval, not hard
+  min/max limits. For frequency and magnitude inputs the sampled distribution
+  has tails that extend beyond your stated range &mdash; this is intentional,
+  because rare extremes are exactly what risk analysis must not truncate away.
+  Vulnerability is always a probability (0&ndash;100%) and is always sampled
+  within the range you enter.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Lognormal authoring &mdash; the distribution assumption</h2>
+<p class="text-body text-ink-2 mb-3">
+  Cyber loss quantities (frequency, magnitude) are modelled as
+  <strong>lognormal</strong> distributions: non-negative, right-skewed, with a
+  heavy upper tail. The lognormal assumption is well-supported in the
+  calibration literature. Douglas Hubbard and Richard Seiersen note (in
+  <em>How to Measure Anything in Cybersecurity Risk</em>, 2nd&nbsp;ed., 2023,
+  ch.&nbsp;6) that 90% credible intervals elicited as low&ndash;high estimates
+  map naturally onto lognormal parameters via the 5th&ndash;95th percentile
+  pair. Jack Jones and the FAIR Institute document the same distributional
+  assumption in the FAIR-CAM calibration framework.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  When you enter a low and a high estimate, Idraa derives the lognormal
+  mean and sigma that place those values at the <strong>5th</strong> and
+  <strong>95th</strong> percentiles respectively. The sampled distribution is
+  <em>untruncated</em> &mdash; the tails extend beyond your stated low and high,
+  reflecting the reality that rare events can exceed expert expectations. This
+  is why a &ldquo;high&rdquo; estimate is not a ceiling; it is where you are
+  95% confident the true value falls below.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  For scenario authoring guidance, see
+  <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Glossary</h2>
+<p class="text-body text-ink-2 mb-3">Every term and acronym used in Idraa, spelled out.</p>
+<div class="overflow-x-auto">
+  <table class="table table-sm w-full">
+    <thead>
+      <tr class="text-meta text-ink-3 text-left">
+        <th>Term</th><th>Full name</th><th>Plain meaning</th>
+      </tr>
+    </thead>
+    <tbody class="text-body text-ink-2">
+      <tr><td>FAIR</td><td>Factor Analysis of Information Risk</td><td>The standard method this app uses to measure risk in money.</td></tr>
+      <tr><td>Monte Carlo</td><td>Monte Carlo simulation</td><td>Running the calculation thousands of times across your input ranges to get a spread of outcomes.</td></tr>
+      <tr><td>ALE</td><td>Annualized Loss Expectancy</td><td>Your expected (mean) total loss per year for a scenario.</td></tr>
+      <tr><td>Residual ALE</td><td>Residual Annualized Loss Expectancy</td><td>The yearly loss that remains after your controls are applied.</td></tr>
+      <tr><td>TEF</td><td>Threat Event Frequency</td><td>How often a threat attempts the event, per year.</td></tr>
+      <tr><td>Vulnerability (Vuln)</td><td>Vulnerability</td><td>The inherent chance an attempt succeeds, before your controls &mdash; the controls you tick reduce it in the analysis.</td></tr>
+      <tr><td>LEF</td><td>Loss Event Frequency</td><td>How often an attempt actually causes loss (Threat Event Frequency &times; Vulnerability).</td></tr>
+      <tr><td>PL</td><td>Primary Loss</td><td>The direct cost of an event (response, repair, ransom).</td></tr>
+      <tr><td>SL</td><td>Secondary Loss</td><td>The knock-on cost (fines, reputation, lost business).</td></tr>
+      <tr><td>LM</td><td>Loss Magnitude</td><td>The total cost per event (Primary plus Secondary Loss).</td></tr>
+      <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level.</td></tr>
+      <tr><td>EPC</td><td>Exceedance Probability Curve</td><td>A companion view of the loss exceedance curve, showing the probability of exceeding each loss amount.</td></tr>
+      <tr><td>VaR</td><td>Value at Risk</td><td>A loss level at a chosen confidence, e.g. &ldquo;95% Value at Risk&rdquo;.</td></tr>
+      <tr><td>ROI</td><td>Return on Investment</td><td>How much risk a control removes relative to its cost.</td></tr>
+      <tr><td>NPV</td><td>Net Present Value</td><td>Future costs and savings expressed in today&rsquo;s money.</td></tr>
+    </tbody>
+  </table>
+</div>

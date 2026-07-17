@@ -1,0 +1,151 @@
+<h2 class="text-h3 text-ink-1 mb-3">Running a Monte Carlo analysis</h2>
+<p class="text-body text-ink-2 mb-3">
+  Once you have built at least one scenario and ticked its controls, navigate to
+  <a class="text-brand hover:underline" href="/analyses/new">Analyses &rarr; New</a>.
+  Select one or more scenarios to include in the run and click <strong>Run
+  analysis</strong>.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Idraa runs a <strong>Monte Carlo</strong> simulation: it samples across your
+  low&ndash;high input ranges thousands of times, each time computing an annual
+  loss figure, to produce a realistic spread of outcomes &mdash; the typical year,
+  a bad year, and the rare but costly disaster. The default is
+  <strong>10,000 iterations</strong>; the server enforces a maximum of
+  <strong>100,000 iterations</strong>. More iterations improve tail precision but
+  take longer.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  For the statistical foundations behind the simulation, see the
+  <a class="text-brand hover:underline" href="/help/methodology-primer">FAIR methodology primer</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Single scenario vs. aggregate run</h2>
+<p class="text-body text-ink-2 mb-3">
+  A <strong>single-scenario</strong> run simulates one threat scenario in
+  isolation and is the right starting point when assessing a specific risk or
+  justifying a targeted control investment.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  An <strong>aggregate run</strong> includes several scenarios and reports their
+  combined annual loss exposure &mdash; the sum of per-scenario annualised loss
+  distributions plus the associated control attribution across all included
+  scenarios. Use it to size total cyber-insurance limits or present an
+  organisation-wide risk posture to a board or risk committee. Aggregate outputs
+  are additive summaries of independent FAIR scenarios; they do not apply
+  portfolio-finance adjustments such as correlation weighting.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Reading the outputs</h2>
+<p class="text-body text-ink-2 mb-3">
+  Each result is built to drive a specific decision. Here is who each output is
+  for and what to do with it.
+</p>
+<div class="overflow-x-auto mb-6">
+  <table class="table table-sm w-full">
+    <thead>
+      <tr class="text-meta text-ink-3 text-left">
+        <th>Output</th><th>Who it&rsquo;s for</th><th>What to do with it</th>
+      </tr>
+    </thead>
+    <tbody class="text-body text-ink-2">
+      <tr>
+        <td>
+          <strong>Annualized Loss Expectancy (ALE)</strong> &amp; Residual ALE
+        </td>
+        <td>Board / CFO</td>
+        <td>
+          Your expected (mean) annual loss in dollars, before and after controls.
+          ALE is the mean of the simulated annual-loss distribution &mdash;
+          because cyber-loss distributions are right-skewed, the mean exceeds the
+          median, and ALE is the correct summary for budgeting purposes. Compare
+          Residual ALE against your organisation&rsquo;s stated risk appetite.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Return on Investment (ROI)</strong> &amp; Control Value</td>
+        <td>Security leader / budget owner</td>
+        <td>
+          Decide which controls are worth funding: how much annual loss each
+          control removes relative to its yearly cost.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <strong>Loss Exceedance Curve</strong> &amp;
+          <strong>Value at Risk (VaR)</strong>
+        </td>
+        <td>Risk committee / insurance</td>
+        <td>
+          Understand the bad-year, worst-case tail. The
+          <strong>Loss Exceedance Curve</strong> plots P(annual loss &ge; X) for
+          each dollar amount X. <strong>Value at Risk (VaR)</strong> at a chosen
+          confidence level q is the q-th percentile of the simulated annual-loss
+          distribution &mdash; the threshold you are q% confident you will not
+          exceed in a given year. Use VaR levels to size cyber-insurance limits
+          or set board-level risk tolerances.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Control matrix</strong></td>
+        <td>Security team</td>
+        <td>
+          See which controls help which scenarios &mdash; a to-do list for what
+          to implement or strengthen next.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="text-h3 text-ink-1 mb-3">Expected Shortfall (ES)</h2>
+<p class="text-body text-ink-2 mb-3">
+  The results page also shows <strong>Expected Shortfall (ES)</strong> at
+  selected confidence levels (95%, 99%, 99.9%). ES at level q is the
+  <em>mean</em> of all simulated annual-loss outcomes that fall
+  <strong>at or above</strong> the q-th percentile &mdash; the average of the
+  worst (1&nbsp;&minus;&nbsp;q)% of years. ES is a conditional tail mean, not a
+  single worst-case figure: it answers &ldquo;given that we end up in the tail,
+  how bad is the average outcome?&rdquo;
+</p>
+<p class="text-body text-ink-2 mb-6">
+  ES is more informative than VaR for tail risk because it captures the severity
+  of losses beyond the threshold, not just their probability.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Tail reliability at default iteration counts</h2>
+<p class="text-body text-ink-2 mb-6">
+  At the default 10,000 iterations, the deepest tail &mdash; around the
+  <strong>99.9th percentile (VaR 99.9% and ES 99.9%)</strong> &mdash; rests on
+  approximately 10 samples. This makes those figures the least reliable readings
+  on the page. Treat them as indicative. If tail precision matters (for example,
+  when sizing insurance limits at the 99.9% level), increase the iteration count
+  toward the 100,000 server maximum and re-run. Mid-range confidence levels (VaR
+  95% and ES 99%) are substantially more reliable at the default count.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Random seed and reproducibility</h2>
+<p class="text-body text-ink-2 mb-3">
+  Every run uses a fixed <strong>random seed</strong> (default&nbsp;42) so that
+  identical inputs plus the same seed always produce identical numbers &mdash;
+  making results <strong>reproducible</strong> across re-runs and between
+  colleagues. The seed is shown on the run results page and is included in the
+  exported PDF.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Because a fixed seed locks in one particular Monte Carlo realisation, it also
+  locks in a specific tail shape. To see <strong>sampling variability</strong>
+  &mdash; especially in the deep tail (e.g. p99.9, which rests on &asymp;&thinsp;10
+  samples at 10,000 iterations) &mdash; <strong>vary the seed</strong> across
+  several runs and compare results, or raise the iteration count toward the
+  100,000 server maximum. The seed is a simulation parameter only; it is
+  <em>not</em> a security or cryptographic value.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Downloading the data</h2>
+<p class="text-body text-ink-2 mb-6">
+  Every chart on the results page has a <strong>Download data (CSV)</strong>
+  button in its toolbar. Use it to pull the underlying simulation numbers into a
+  spreadsheet or your own reporting pipeline. For a formatted executive summary,
+  see the
+  <a class="text-brand hover:underline" href="/help/reports">Reports guide</a>.
+</p>

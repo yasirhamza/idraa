@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+
+{% block title %}Organization{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{{ page_header(title="Organization profile",
+               breadcrumb=breadcrumb_for(request),
+               actions=[]) }}
+
+{#
+  Re-render preservation:
+  - On validation-error 400, the route passes `form_data` (raw POST dict).
+    Each value falls back to that map first so the user's typed-in
+    values aren't visually erased on submit.
+  - `errors_by_field` carries per-field validation messages from
+    Pydantic's ValidationError.errors() loc[0].
+  The `_v(name)` macro centralizes the form-vs-org fallback.
+#}
+{%- macro _v(name) -%}
+{%- if form_data and name in form_data -%}{{ form_data[name] }}{%- else -%}{{ org[name] if org[name] is not none else '' }}{%- endif -%}
+{%- endmacro -%}
+
+{%- set errors_dict = {} -%}
+{%- if errors_by_field -%}
+  {%- for k, v in errors_by_field.items() -%}
+    {%- set _ = errors_dict.update({k: v | join('; ')}) -%}
+  {%- endfor -%}
+{%- endif -%}
+
+<form method="post" action="/organization"
+      class="space-y-6">
+  {{ csrf_field() }}
+
+  {{ form_error_summary(errors_dict) }}
+
+  {# ── Identity ─────────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Identity</legend>
+
+    {# Name — free text #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="name" class="text-meta text-ink-2">Name</label>
+        <span class="text-micro text-ink-3">REQUIRED</span>
+      </div>
+      <input id="name" name="name" type="text" required aria-required="true"
+             value="{{ _v('name') }}"
+             class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('name') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+      {% if errors_by_field.get('name') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_by_field['name'] | join('; ') }}</p>
+      {% endif %}
+    </div>
+
+    {# Industry — enum select #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="industry_type" class="text-meta text-ink-2">Industry</label>
+      </div>
+      {% set sel_industry = (form_data['industry_type'] if form_data and 'industry_type' in form_data else (org.industry_type.value if org.industry_type else '')) %}
+      <select id="industry_type" name="industry_type"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('industry_type') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        {% for ind in industries %}
+        {# #454 item 3: humanize the option display text; the stored value is unchanged. #}
+        <option value="{{ ind.value }}" {% if sel_industry == ind.value %}selected{% endif %}>{{ ind.value | humanize_slug }}</option>
+        {% endfor %}
+      </select>
+      {% if errors_by_field.get('industry_type') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_by_field['industry_type'] | join('; ') }}</p>
+      {% endif %}
+    </div>
+
+    {# Size — enum select #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="organization_size" class="text-meta text-ink-2">Size</label>
+      </div>
+      {% set sel_size = (form_data['organization_size'] if form_data and 'organization_size' in form_data else (org.organization_size.value if org.organization_size else '')) %}
+      <select id="organization_size" name="organization_size"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('organization_size') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        {% for sz in sizes %}
+        {# Polish-4: humanize the option display text; the stored value is unchanged. #}
+        <option value="{{ sz.value }}" {% if sel_size == sz.value %}selected{% endif %}>{{ sz.value | humanize_slug }}</option>
+        {% endfor %}
+      </select>
+      {% if errors_by_field.get('organization_size') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_by_field['organization_size'] | join('; ') }}</p>
+      {% endif %}
+    </div>
+
+    {{ form_field(name="employee_count", label="Employees", input_type="number",
+                  value=_v('employee_count'), error=errors_by_field.get('employee_count', []) | join('; ') or none) }}
+
+    {# Annual revenue with live IRIS tier echo — requires Alpine, kept inline per CLAUDE.md rule #}
+    <div class="max-w-md"
+         x-data='{
+           value: {{ _v("annual_revenue") | tojson }},
+           label(v) {
+             if (v === "" || v === null || v === undefined) return null;
+             const n = Number(v);
+             if (!isFinite(n)) return null;
+             if (n < 10000000) return "< $10M";
+             if (n < 100000000) return "$10M – $100M";
+             if (n < 1000000000) return "$100M – $1B";
+             if (n < 10000000000) return "$1B – $10B";
+             if (n < 100000000000) return "$10B – $100B";
+             return "> $100B";
+           }
+         }'>
+      <div class="flex items-center justify-between">
+        <label for="annual_revenue" class="text-meta text-ink-2">Annual revenue</label>
+      </div>
+      <div class="relative">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">$</span>
+        <input id="annual_revenue" name="annual_revenue" type="number"
+               inputmode="decimal" step="0.01"
+               x-model="value"
+               value="{{ _v('annual_revenue') }}"
+               class="h-10 w-full px-3 pl-7 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('annual_revenue') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      </div>
+      <p class="text-micro text-ink-2 mt-1" x-show="label(value) !== null">
+        Range: <span x-text="label(value)"></span>
+      </p>
+      <p class="text-micro text-ink-2 mt-1">
+        Enter total annual revenue in USD (e.g. 5000000000 for $5 billion).
+      </p>
+      {% if errors_by_field.get('annual_revenue') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_by_field['annual_revenue'] | join('; ') }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+
+  {# ── Posture ──────────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Security posture</legend>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="security_maturity" class="text-meta text-ink-2">Security maturity</label>
+      </div>
+      {% set sel_mat = (form_data['security_maturity'] if form_data and 'security_maturity' in form_data else (org.security_maturity.value if org.security_maturity else '')) %}
+      <select id="security_maturity" name="security_maturity"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('security_maturity') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        {% for m in maturities %}
+        {# Polish-4: humanize the option display text; the stored value is unchanged. #}
+        <option value="{{ m.value }}" {% if sel_mat == m.value %}selected{% endif %}>{{ m.value | humanize_slug }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="risk_appetite" class="text-meta text-ink-2">Risk appetite</label>
+      </div>
+      {% set sel_app = (form_data['risk_appetite'] if form_data and 'risk_appetite' in form_data else (org.risk_appetite.value if org.risk_appetite else '')) %}
+      <select id="risk_appetite" name="risk_appetite"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('risk_appetite') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        {% for a in appetites %}
+        {# Polish-4: humanize the option display text; the stored value is unchanged. #}
+        <option value="{{ a.value }}" {% if sel_app == a.value %}selected{% endif %}>{{ a.value | humanize_slug }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </fieldset>
+
+  {# ── Risk tolerance ───────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Risk tolerance — drives the LEC overlay</legend>
+    <p class="text-meta text-ink-2">
+      Defines a single point on the LEC plane: annual losses at or above this dollar amount,
+      occurring at or above this probability per year, are flagged as exceeding tolerance.
+      Both fields are optional — leave blank to render the LEC without the overlay.
+    </p>
+
+    {{ form_field(name="loss_tolerance_amount", label="Loss tolerance amount (USD)",
+                  input_type="money", value=_v('loss_tolerance_amount'),
+                  placeholder="e.g. 1000000",
+                  error=errors_by_field.get('loss_tolerance_amount', []) | join('; ') or none) }}
+
+    {{ form_field(name="loss_tolerance_probability", label="Loss tolerance probability (0–1)",
+                  input_type="percent", value=_v('loss_tolerance_probability'),
+                  placeholder="e.g. 0.05 for 5% per year",
+                  error=errors_by_field.get('loss_tolerance_probability', []) | join('; ') or none) }}
+  </fieldset>
+
+  {# ── Insurance ────────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Cyber insurance</legend>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="has_cyber_insurance" class="text-meta text-ink-2">Has cyber insurance</label>
+      </div>
+      {% set checked_ins = (('has_cyber_insurance' in form_data) if form_data else org.has_cyber_insurance) %}
+      <label class="inline-flex items-center gap-2 mt-1">
+        <input id="has_cyber_insurance" name="has_cyber_insurance" type="checkbox"
+               value="true"
+               {% if checked_ins %}checked{% endif %}
+               class="toggle toggle-primary">
+        <span class="text-body text-ink-1">{% if checked_ins %}On{% else %}Off{% endif %}</span>
+      </label>
+    </div>
+
+    {{ form_field(name="annual_security_budget", label="Annual security budget (USD)",
+                  input_type="money", value=_v('annual_security_budget'),
+                  error=errors_by_field.get('annual_security_budget', []) | join('; ') or none) }}
+
+    {{ form_field(name="cyber_insurance_limit", label="Insurance limit (USD)",
+                  input_type="money", value=_v('cyber_insurance_limit'),
+                  error=errors_by_field.get('cyber_insurance_limit', []) | join('; ') or none) }}
+
+    {{ form_field(name="cyber_insurance_deductible", label="Insurance deductible (USD)",
+                  input_type="money", value=_v('cyber_insurance_deductible'),
+                  error=errors_by_field.get('cyber_insurance_deductible', []) | join('; ') or none) }}
+  </fieldset>
+
+  {# ── Compliance + context ─────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Compliance &amp; context</legend>
+
+    {{ form_field(name="compliance_requirements", label="Compliance requirements (comma-separated)",
+                  value=form_data['compliance_requirements'] if form_data and 'compliance_requirements' in form_data else org.compliance_requirements | join(', '),
+                  error=errors_by_field.get('compliance_requirements', []) | join('; ') or none) }}
+
+    {{ form_field(name="regulatory_environment", label="Regulatory environment (comma-separated)",
+                  value=form_data['regulatory_environment'] if form_data and 'regulatory_environment' in form_data else org.regulatory_environment | join(', '),
+                  error=errors_by_field.get('regulatory_environment', []) | join('; ') or none) }}
+
+    {{ form_field(name="geographic_regions", label="Geographic regions (comma-separated)",
+                  value=form_data['geographic_regions'] if form_data and 'geographic_regions' in form_data else org.geographic_regions | join(', '),
+                  error=errors_by_field.get('geographic_regions', []) | join('; ') or none) }}
+
+    {{ form_field(name="technology_stack", label="Technology stack (comma-separated)",
+                  value=form_data['technology_stack'] if form_data and 'technology_stack' in form_data else org.technology_stack | join(', '),
+                  error=errors_by_field.get('technology_stack', []) | join('; ') or none) }}
+  </fieldset>
+
+  {# ── Localisation ─────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Localisation</legend>
+
+    {%- set currency_opts = [] -%}
+    {%- for c in selectable_currencies -%}
+      {%- set _ = currency_opts.append((c, c)) -%}
+    {%- endfor -%}
+    {%- set sel_currency = (form_data['preferred_currency'] if form_data and 'preferred_currency' in form_data else org.preferred_currency) -%}
+    {{ form_field(name="preferred_currency", label="Reporting currency", input_type="select",
+                  value=sel_currency,
+                  options=currency_opts,
+                  error=errors_by_field.get('preferred_currency', []) | join('; ') or none) }}
+    {%- if selectable_currencies | length <= 1 -%}
+    <p class="text-micro text-ink-2 -mt-2">Only USD is available. Add exchange rates in
+      <a class="link" href="/fx-rates">FX rates</a> to report in other currencies.</p>
+    {%- endif -%}
+
+    {{ form_field(name="preferred_language", label="Language", value=_v('preferred_language'),
+                  error=errors_by_field.get('preferred_language', []) | join('; ') or none) }}
+  </fieldset>
+
+  {# #454-sweep2 item 1: bottom clearance so the last fields clear the
+     translucent sticky action bar when scrolled to the viewport edge.
+     Same treatment as #454 item 2 on scenarios/form.html, generalized via
+     the `form:has(.sticky-action-bar)` rule in app.css instead of a
+     per-form marker class. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <a href="/" class="btn btn-outline btn-sm">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  </div>
+</form>
+
+{# Bring the validation-error alert into view on 400 re-render so the
+   user — who clicked Save at the bottom of the form — can see what
+   went wrong without scrolling up.
+   No CSP yet (Phase 2 issue #6); inline script is the simplest fix. #}
+<script>
+  (function () {
+    var errorBox = document.querySelector('[role="alert"]');
+    if (errorBox) {
+      errorBox.scrollIntoView({behavior: 'smooth', block: 'center'});
+      errorBox.focus();
+    }
+    var form = document.querySelector('form[action="/organization"]');
+    if (form) {
+      form.addEventListener('submit', function () {
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+          btn.setAttribute('disabled', 'disabled');
+          btn.textContent = 'Saving...';
+        }
+      });
+    }
+  })();
+</script>
+
+{% endblock %}

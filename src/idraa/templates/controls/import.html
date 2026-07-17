@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Import controls{% endblock %}
+{% block content %}
+
+{{ page_header(
+    title="Import controls",
+    breadcrumb=[("Home", "/"), ("Controls", "/controls"), ("Import", none)]
+) }}
+
+{# Mobile tranche 2e: the control import page is no longer device-gated — it is a
+   single upload form (file input + sticky action bar) that reflows full-width on
+   phones. Server-side require_role remains the real authorization gate. #}
+
+<div class="max-w-2xl mx-auto space-y-6">
+
+  {# Upload custom CSV #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-1">Upload custom CSV</h2>
+    <form method="post" action="/controls/import" enctype="multipart/form-data"
+          class="space-y-4">
+      {{ csrf_field() }}
+      <div class="max-w-md">
+        <p class="text-meta text-ink-2 mb-2">CSV file (FAIR-CAM format)</p>
+        <input class="file-input file-input-bordered w-full" type="file"
+               name="file" accept=".csv" required/>
+        <p class="text-micro text-ink-2 mt-2">
+          Expected columns (in order): blank, <code>name</code>, <code>description</code>,
+          <code>fair-cam paths</code> (newline-separated), <code>type</code>,
+          <code>annual_cost</code>, and an optional 7th <code>capability_value</code>.
+          When provided on a single-path row, <code>capability_value</code> overrides
+          the per-unit default (PROBABILITY/PERCENT_REDUCTION in [0, 1];
+          ELAPSED_TIME/CURRENCY non-negative, up to 1e10). ELAPSED_TIME values
+          are interpreted as <strong>days</strong> (matching the edit form widget),
+          not hours &mdash; for a 24-hour SLA, use <code>1</code>. 6-column CSVs
+          continue to import unchanged. Duplicates (by name) are skipped.
+        </p>
+      </div>
+
+      {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+      <div class="pb-24" aria-hidden="true"></div>
+
+      {# Sticky action bar #}
+      <div class="sticky-action-bar sticky bottom-0 z-20 bg-surface-0/95 backdrop-blur border-t border-border-subtle -mx-6 px-6 py-3 flex gap-3 mt-6">
+        <a href="/controls" class="btn btn-ghost btn-sm">Cancel</a>
+        <button type="submit" class="btn btn-primary btn-sm">Import</button>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+{% endblock %}

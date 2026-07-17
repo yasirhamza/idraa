@@ -1,0 +1,20 @@
+{# src/idraa/templates/macros/help_trigger.html
+   help_trigger(slug, label='?') — a "?" button that loads a help article into
+   the slide-over drawer. help_url(slug) (Jinja global) raises on an unknown
+   slug, so a typo fails a render/test instead of emitting a 404ing button.
+
+   `btn-circle` pins the button to a one-glyph square — correct for the bare
+   "?" icon, but it CLIPS + OVERLAPS any multi-word label (e.g. the control
+   form's "Sub-function help" wrapped over the neighbouring text). So we only
+   apply btn-circle in icon mode; a text label gets a content-sized pill. #}
+{% macro help_trigger(slug, label='?') -%}
+{%- set _icon_only = (label == '?') -%}
+<button type="button"
+        x-data
+        class="btn btn-ghost btn-xs align-middle {% if _icon_only %}btn-circle{% else %}gap-1 px-2 normal-case font-normal whitespace-nowrap{% endif %}"
+        hx-get="{{ help_url(slug) }}"
+        hx-target="#help-drawer-body"
+        hx-swap="innerHTML"
+        @click="$store.helpDrawer.show()"
+        aria-label="Help">{{ label }}</button>
+{%- endmacro %}

@@ -1,0 +1,3236 @@
+[
+  {
+    "slug": "ransomware-on-ehr",
+    "name": "Ransomware on EHR Cluster",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "email_phishing",
+    "tags": [
+      "healthcare",
+      "credential_compromise",
+      "double_extortion",
+      "phi"
+    ],
+    "description": "Cybercriminal ransomware deployment against an electronic health record cluster, typically via phishing-derived credentials and lateral movement to EHR application servers. Double-extortion variants exfiltrate PHI before encryption, triggering HIPAA breach notification requirements and regulatory fines in addition to business continuity losses. Clinical disruption secondary loss is often larger than the ransom demand itself.",
+    "example_incidents": "Universal Health Services 2020 (~$67M reported impact); Scripps Health 2021 (patient diversion lasting weeks); Hillel Yaffe Medical Center 2021 (Israel); Change Healthcare 2024 (~$870M healthcare sector disruption per AHA estimates).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's MALWARE category does not segment ransomware by target asset class; healthcare-EHR scenarios have distinct frequency (healthcare sector is top-3 ransomware target per FBI IC3 2024) and magnitude profile (regulatory tail under HIPAA + clinical-disruption secondary loss that can exceed the ransom 10:1) that warrant a dedicated archetype separate from generic ransomware.",
+    "applicable_industries": [
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 1.5,
+      "high": 4.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.3,
+      "high": 0.55
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 15955.6628554057,
+      "mode": 15955.6628554057,
+      "high": 10080000.000343738
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 5540.1607139477,
+      "mode": 5540.1607139477,
+      "high": 3500000.00028685
+    },
+    "calibration_anchor": {
+      "industry": "healthcare",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 healthcare pair (p50=$557,000, p95=$14,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9602032156. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.3333333333"
+    },
+    "suggested_control_ids": [
+      "email-security-protection",
+      "endpoint-detection-response",
+      "data-backup-recovery",
+      "multi-factor-authentication",
+      "network-segmentation",
+      "security-awareness-training"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.42
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ransomware-on-historian",
+    "name": "Ransomware Propagation to OT Historian",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "ot_systems",
+    "attack_vector": "it_ot_bridge",
+    "tags": [
+      "ot_ics",
+      "historian",
+      "operational_disruption",
+      "industrial",
+      "needs_phase_1_5b_recalibration"
+    ],
+    "description": "Ransomware that originates on the IT network propagates across an IT-OT bridge to encrypt or corrupt the process historian (OSIsoft PI, Wonderware). Even without directly targeting safety systems, historian loss halts engineering visibility, often forcing controlled shutdown of the industrial process. Operational disruption losses dominate; data recovery and process restart can take weeks. Observed in oil & gas and electric utility environments where IT and OT networks share domain credentials or VPN tunnels.",
+    "example_incidents": "Norsk Hydro 2019 (~$75M total impact, shutdown of multiple aluminum plants); Colonial Pipeline 2021 (IT ransomware caused proactive OT shutdown, ~$4.4M ransom + multi-day fuel supply disruption).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR canonical does not separate OT-targeted ransomware (where impact is operational process disruption + potential safety consequence) from IT-targeted ransomware (where impact is data + business continuity). OT historian ransomware has distinct frequency/magnitude curves: lower base frequency (hardened perimeter) but dramatically higher magnitude tail driven by production shutdown hours rather than data recovery costs.",
+    "applicable_industries": [
+      "utilities",
+      "manufacturing",
+      "mining"
+    ],
+    "applicable_sub_sectors": [
+      "oil_and_gas",
+      "electric_utility",
+      "pipeline",
+      "process_manufacturing"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.12,
+      "mode": 0.578947,
+      "high": 2.3
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.25,
+      "high": 0.5
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 4973.733333749,
+      "mode": 4973.733333749,
+      "high": 2100000.0000271937
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1776.3333334483,
+      "mode": 1776.3333334483,
+      "high": 749999.9999955812
+    },
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "endpoint-detection-response",
+      "data-backup-recovery",
+      "network-detection-response",
+      "patch-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.4
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "unauthorized-plc-modification",
+    "name": "Unauthorized PLC Logic Modification",
+    "status": "published",
+    "threat_event_type": "ot_safety_tampering",
+    "threat_actor_type": "nation_state",
+    "asset_class": "ot_systems",
+    "attack_vector": "engineering_workstation_compromise",
+    "tags": [
+      "ot_ics",
+      "plc",
+      "nation_state",
+      "triton_pattern",
+      "process_safety"
+    ],
+    "description": "Nation-state or sophisticated threat actor gains access to an engineering workstation to modify programmable logic controller (PLC) ladder logic or function block diagrams. Modified logic may introduce latent failure conditions that activate only under specific process states, evading normal commissioning tests. Discovered cases involve malware that overwrites PLC firmware or injects rogue rungs while masking changes from the HMI display. The severity ranges from process upset to catastrophic equipment damage.",
+    "example_incidents": "Triton/TRISIS 2017 (Triconex safety instrumented system attack at Middle East petrochemical facility, attributed to TEMP.Veles / Russian SANDWORM); Stuxnet 2010 (Siemens S7-315 PLC at Natanz enrichment facility).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DATA_TAMPERING category was designed for IT data integrity scenarios; it does not capture OT control-logic tampering where the primary loss is safety system compromise and potential physical consequence (equipment damage, environmental release, personnel injury). The frequency profile is far lower than IT tampering but the magnitude is orders of magnitude higher, requiring a separate archetype with a heavy magnitude tail.",
+    "applicable_industries": [
+      "manufacturing",
+      "utilities",
+      "mining"
+    ],
+    "applicable_sub_sectors": [
+      "chemical_manufacturing",
+      "process_manufacturing",
+      "oil_and_gas",
+      "nuclear"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.02,
+      "mode": 0.1,
+      "high": 0.5
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.12,
+      "high": 0.3
+    },
+    "primary_loss": {
+      "distribution": "lognormal",
+      "mean": 13.5923670067,
+      "sigma": 2.2723417799
+    },
+    "secondary_loss": {
+      "distribution": "lognormal",
+      "mean": 11.2897819137,
+      "sigma": 2.2723417799
+    },
+    "calibration_anchor": {
+      "industry": "manufacturing",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "file-integrity-monitoring",
+      "network-detection-response",
+      "user-access-control",
+      "change-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.42
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.22
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.16
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.08
+      }
+    ],
+    "loss_shape": "catastrophic"
+  },
+  {
+    "slug": "safety-system-bypass",
+    "name": "Safety Instrumented System (SIS) Bypass or Defeat",
+    "status": "published",
+    "threat_event_type": "ot_safety_tampering",
+    "threat_actor_type": "nation_state",
+    "asset_class": "safety_systems",
+    "attack_vector": "engineering_workstation_compromise",
+    "tags": [
+      "ot_ics",
+      "sis",
+      "esd",
+      "safety_critical",
+      "triton_pattern",
+      "needs_phase_1_5b_recalibration"
+    ],
+    "description": "Adversary targets a Safety Instrumented System (SIS) or Emergency Shutdown Device (ESD) to disable or defeat safety functions, enabling unsafe process conditions to persist without triggering protective shutdowns. Triton/TRISIS is the canonical case: attackers reprogrammed Schneider Electric Triconex controllers to force a fail-safe state (causing unplanned shutdown) while attempting to mask the SIS from detecting abnormal process conditions. The intent was to enable a separate process upset to occur without SIS intervention, potentially causing a catastrophic explosion or toxic release.",
+    "example_incidents": "Triton/TRISIS 2017 at unnamed Middle Eastern petrochemical plant; attackers caused two unplanned shutdowns before discovery. No confirmed physical consequence \u2014 the attack failed before achieving final objective.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR has no archetype for safety-layer attacks where the primary loss is the defeat of physical safety barriers. Standard FAIR magnitude models (productivity loss, response cost, competitive advantage, legal/regulatory, reputation) do not capture the catastrophic-tail loss associated with loss of SIS protection: a major industrial accident (explosion, toxic release, fatalities) could result in losses exceeding the entire enterprise value. This archetype requires a bimodal magnitude distribution \u2014 near-zero if attack fails pre-consequence, catastrophic if process upset occurs unprotected.",
+    "applicable_industries": [
+      "utilities",
+      "manufacturing",
+      "mining"
+    ],
+    "applicable_sub_sectors": [
+      "oil_and_gas",
+      "chemical_manufacturing",
+      "nuclear",
+      "pipeline"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.01,
+      "mode": 0.05,
+      "high": 0.25
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.15,
+      "high": 0.4
+    },
+    "primary_loss": {
+      "distribution": "lognormal",
+      "mean": 13.6529916285,
+      "sigma": 2.2723417799
+    },
+    "secondary_loss": {
+      "distribution": "lognormal",
+      "mean": 11.4075649493,
+      "sigma": 2.2723417799
+    },
+    "calibration_anchor": {
+      "industry": "manufacturing",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "file-integrity-monitoring",
+      "user-access-control",
+      "security-information-event-management",
+      "change-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.45
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.09
+      }
+    ],
+    "loss_shape": "catastrophic"
+  },
+  {
+    "slug": "denial-of-control",
+    "name": "Denial of Control \u2014 Grid / Pipeline / Water",
+    "status": "published",
+    "threat_event_type": "ot_availability",
+    "threat_actor_type": "nation_state",
+    "asset_class": "ot_systems",
+    "attack_vector": "protocol_exploitation",
+    "tags": [
+      "ot_ics",
+      "industroyer",
+      "scada",
+      "grid",
+      "availability",
+      "critical_infrastructure"
+    ],
+    "description": "Adversary deploys malware or exploits ICS protocols (IEC 104, IEC 61850, DNP3) to send malicious commands or disrupt communications between SCADA master and field devices, causing loss of control over physical assets such as circuit breakers, pipeline pressure control valves, or water treatment dosing equipment. Industroyer (2016) and Industroyer2 (2022) demonstrated real-world capability to command grid substations via native protocols, resulting in power outages. The attack does not require destructive intent \u2014 loss of control alone causes the operational consequence.",
+    "example_incidents": "Industroyer (CrashOverride) 2016 \u2014 Ukrainian power grid blackout (~225k customers affected); Industroyer2 2022 \u2014 attempted blackout targeting Ukrainian high-voltage substation (disrupted by CERT-UA + ESET); Stuxnet frequency-manipulation 2010.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DENIAL_OF_SERVICE category models IT availability disruption; it does not capture OT protocol-exploitation attacks where the loss event is physical loss-of-control (not merely IT service unavailability). The frequency/magnitude profile differs materially: OT denial-of-control has lower base frequency but affects physical infrastructure with long restoration timelines (days to weeks vs. hours for IT DoS) and potential cascading physical consequences that dwarf standard IT availability losses.",
+    "applicable_industries": [
+      "utilities",
+      "transportation"
+    ],
+    "applicable_sub_sectors": [
+      "electric_utility",
+      "water_utility",
+      "pipeline",
+      "oil_and_gas"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.035,
+      "mode": 0.14,
+      "high": 0.7
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.2,
+      "high": 0.5
+    },
+    "primary_loss": {
+      "distribution": "lognormal",
+      "mean": 11.6682183494,
+      "sigma": 1.8377081683
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "network-detection-response",
+      "incident-response",
+      "business-continuity-disaster-recovery",
+      "secure-remote-access"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.55
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "catastrophic"
+  },
+  {
+    "slug": "hmi-credential-compromise",
+    "name": "HMI Credential Compromise \u2014 Remote Access Exploitation",
+    "status": "published",
+    "threat_event_type": "ot_availability",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "ot_systems",
+    "attack_vector": "remote_access_exploitation",
+    "tags": [
+      "ot_ics",
+      "hmi",
+      "scada_remote_access",
+      "water_utility",
+      "credential_abuse"
+    ],
+    "description": "Attacker obtains credentials to a remotely accessible Human-Machine Interface (HMI) \u2014 often via exposed VNC, TeamViewer, or RDP on the OT network perimeter \u2014 and manipulates process setpoints directly. The Oldsmar Florida 2021 incident demonstrated that a single operator credential exposed via remote access software allowed an attacker to adjust sodium hydroxide dosing levels to dangerous concentrations. Water utility and small-to-mid industrial facilities are disproportionately exposed due to limited IT/OT segmentation and budget constraints.",
+    "example_incidents": "Oldsmar, Florida water treatment plant 2021 (attacker raised NaOH setpoint 111\u00d7 normal; operator detected and reversed); Aliquippa, Pennsylvania MVWA 2023 (Iranian-linked Cyber Av3ngers compromised Unitronics HMI at booster pump station).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not have an archetype for OT process-setpoint manipulation via remote HMI access; this attack pattern conflates physical process control with IT credential abuse, creating a hybrid loss model where primary loss is operational disruption + potential public safety consequence rather than data confidentiality or system availability in the IT sense. Small water utilities with minimal security budgets face elevated vulnerability that the FAIR calibrated baseline does not reflect.",
+    "applicable_industries": [
+      "utilities",
+      "manufacturing"
+    ],
+    "applicable_sub_sectors": [
+      "water_utility",
+      "process_manufacturing"
+    ],
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.2,
+      "mode": 1.0,
+      "high": 5.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.4,
+      "high": 0.7
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 4476.3600001853,
+      "mode": 4476.3600001853,
+      "high": 1889999.9999447674
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "multi-factor-authentication",
+      "secure-remote-access",
+      "network-access-control",
+      "user-access-control",
+      "network-detection-response"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.45
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.18
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "it-ot-bridge-compromise",
+    "name": "IT-OT Bridge Compromise \u2014 Pivot to Industrial Network",
+    "status": "published",
+    "threat_event_type": "malware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "ot_systems",
+    "attack_vector": "spearphishing_followed_by_lateral_movement",
+    "tags": [
+      "ot_ics",
+      "lateral_movement",
+      "it_ot_segmentation",
+      "pipeline",
+      "oil_and_gas"
+    ],
+    "description": "Attacker compromises a host or service that bridges the IT corporate network and OT operational network \u2014 a jump server, historian, data diode misconfiguration, or shared vendor VPN. From this foothold, the attacker pivots to OT assets. Unlike direct OT exploitation, the IT-OT bridge compromise often begins as a routine phishing or credential-stuffing attack on IT assets, with the OT pivot as the escalation step. Colonial Pipeline 2021 is the canonical case: IT ransomware on the business network prompted a proactive OT shutdown to prevent spread.",
+    "example_incidents": "Colonial Pipeline 2021 (DarkSide ransomware on IT network; operator shut OT pipeline control systems as precaution; ~$4.4M ransom; multi-day fuel supply disruption across US East Coast); Norsk Hydro 2019 (LockerGoga propagated via Active Directory to OT-adjacent systems).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not model the IT\u2192OT pivot escalation path as a distinct loss event type. The standard FAIR MALWARE archetype captures IT-layer losses; it does not account for the secondary operational consequence when an IT security event triggers a proactive OT shutdown \u2014 a loss that is categorically different from an IT business continuity event and involves separate liability, regulatory notification, and recovery cost streams (NERC CIP, TSA Security Directives).",
+    "applicable_industries": [
+      "utilities",
+      "transportation",
+      "mining"
+    ],
+    "applicable_sub_sectors": [
+      "oil_and_gas",
+      "pipeline",
+      "electric_utility"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.5,
+      "high": 2.5
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.3,
+      "high": 0.6
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 4689.5200000305,
+      "mode": 4689.5200000305,
+      "high": 1979999.999873047
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 923.6933333993,
+      "mode": 923.6933333993,
+      "high": 390000.0000003013
+    },
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "network-detection-response",
+      "endpoint-detection-response",
+      "network-firewall",
+      "security-information-event-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.38
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.28
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.13
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "nation-state-ics-supply-chain",
+    "name": "Nation-State ICS Supply Chain Pre-positioning",
+    "status": "published",
+    "threat_event_type": "supply_chain",
+    "threat_actor_type": "nation_state",
+    "asset_class": "ot_systems",
+    "attack_vector": "trusted_vendor_software_update",
+    "tags": [
+      "ot_ics",
+      "supply_chain",
+      "nation_state",
+      "pre_positioning",
+      "dragonfly",
+      "berserk_bear"
+    ],
+    "description": "Nation-state actors compromise ICS vendor software update mechanisms or trusted vendor access pathways to pre-position access inside energy sector OT networks. The DragonFly / Energetic Bear / Berserk Bear campaign series (2012-2020) demonstrated sustained intrusion into hundreds of US, European, and Middle Eastern energy sector organizations via trojanized ICS software packages (Havex RAT embedded in legitimate vendor updates from Siemens, GE, and ABB portals). The goal is persistent access for intelligence collection and potential future sabotage, not immediate disruption.",
+    "example_incidents": "Berserk Bear / Dragonfly 2.0 \u2014 CISA/FBI AA20-296A confirmed intrusions into US energy, nuclear, water, aviation, and critical manufacturing sectors 2011-2019; SolarWinds-adjacent CISA advisory AA20-352A (Solorigate) impacting energy sector organizations.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's SUPPLY_CHAIN category was built around software supply chain integrity for IT systems; it does not capture the pre-positioning model where the attacker's primary objective is persistent access rather than immediate loss, and the eventual loss event (if the pre-positioning is weaponized) is physical infrastructure disruption. The frequency of pre-positioning is meaningfully different from the frequency of the weaponized follow-on attack, requiring a two-stage loss model not supported by the canonical taxonomy.",
+    "applicable_industries": [
+      "utilities",
+      "mining"
+    ],
+    "applicable_sub_sectors": [
+      "electric_utility",
+      "oil_and_gas",
+      "nuclear",
+      "pipeline"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.043,
+      "mode": 0.216379,
+      "high": 1.3
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.35,
+      "high": 0.65
+    },
+    "primary_loss": {
+      "distribution": "lognormal",
+      "mean": 11.4605789846,
+      "sigma": 1.8377081683
+    },
+    "secondary_loss": {
+      "distribution": "lognormal",
+      "mean": 10.1765634726,
+      "sigma": 1.8377081683
+    },
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "third-party-risk-management",
+      "software-bill-of-materials",
+      "network-segmentation",
+      "file-integrity-monitoring",
+      "threat-intelligence-program"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.35
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.3
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.18
+      }
+    ],
+    "loss_shape": "catastrophic"
+  },
+  {
+    "slug": "hacktivist-ot-disruption",
+    "name": "Hacktivist OT Disruption \u2014 HMI Defacement or Process Interference",
+    "status": "published",
+    "threat_event_type": "ot_availability",
+    "threat_actor_type": "hacktivists",
+    "asset_class": "ot_systems",
+    "attack_vector": "remote_access_exploitation",
+    "tags": [
+      "ot_ics",
+      "hacktivism",
+      "hmi",
+      "water_utility",
+      "volt_typhoon_adjacent"
+    ],
+    "description": "Hacktivist or ideologically motivated actors target exposed OT human-machine interfaces (HMIs) and SCADA systems at utilities and critical infrastructure, typically to demonstrate capability or cause reputational damage. Unlike nation-state actors, hacktivists often target low-hanging fruit (default credentials, internet-exposed Unitronics, AutomationDirect, or other PLCs). CISA's November 2023 advisory documented Iran-linked Cyber Av3ngers compromising Unitronics PLCs at multiple US water utilities. While disruptive, these attacks typically do not achieve physical safety consequences due to operator vigilance and physical safeguards.",
+    "example_incidents": "Cyber Av3ngers / IRGC-CyberAv3ngers 2023 \u2014 attacks on Unitronics Vision Series PLCs at water utilities in Pennsylvania, Texas, and other states (CISA AA23-335A); Pro-Russian Killnet DDoS attacks on US airport and financial sector SCADA-adjacent systems 2022.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not differentiate hacktivist OT attacks from hacktivist IT attacks; OT hacktivism has a distinct threat actor profile (lower technical sophistication but willingness to take physical action on exposed HMIs), different vulnerability surface (legacy OT devices with default credentials vs. hardened enterprise IT), and a loss model dominated by reputational damage and regulatory scrutiny rather than the financial losses typical of cybercriminal IT attacks.",
+    "applicable_industries": [
+      "utilities",
+      "public"
+    ],
+    "applicable_sub_sectors": [
+      "water_utility",
+      "electric_utility",
+      "pipeline"
+    ],
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.2,
+      "mode": 1.5,
+      "high": 8.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.15,
+      "mode": 0.38,
+      "high": 0.68
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 3197.4000002002,
+      "mode": 3197.4000002002,
+      "high": 1349999.9999891848
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "secure-remote-access",
+      "multi-factor-authentication",
+      "network-detection-response"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.35
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "bec-fraud-financial",
+    "name": "Business Email Compromise \u2014 Financial Sector Wire Fraud",
+    "status": "published",
+    "threat_event_type": "social_engineering",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "email_social_engineering",
+    "tags": [
+      "bec",
+      "wire_fraud",
+      "financial",
+      "executive_impersonation"
+    ],
+    "description": "Cybercriminals impersonate executives, vendors, or financial counterparties via email to redirect wire transfers or ACH payments to attacker-controlled accounts. Attacks range from simple display-name spoofing to sophisticated account takeover of legitimate supplier email accounts. The financial sector faces elevated exposure due to high transaction volumes and routine wire instructions. FBI IC3 2024 reported BEC as the top cybercrime by financial loss, with $2.9B in adjusted losses in 2023.",
+    "example_incidents": "Generic Conti/Business Email Compromise pattern \u2014 IC3 reports thousands of events annually. Puerto Rico government BEC 2020 ($2.6M wire fraud); Toyota Boshoku 2019 ($37M BEC loss).",
+    "source_citations": [
+      "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
+    ],
+    "canonical_fair_gap": "FAIR's SOCIAL_ENGINEERING category does not distinguish BEC (financially motivated impersonation with direct payment redirection) from credential phishing or general social engineering. BEC has a distinct loss distribution profile \u2014 primary loss is the diverted payment amount (typically $50k-$5M per event per FBI IC3), recovery rate is low (<15% per FBI IC3), and there is no significant secondary loss tail (unlike ransomware). Conflating BEC with other social engineering understates primary loss and overstates secondary loss for this archetype.",
+    "applicable_industries": [
+      "financial",
+      "professional",
+      "real_estate"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 1.0,
+      "mode": 3.0,
+      "high": 12.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.2,
+      "high": 0.45
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 3.7573034111,
+      "mode": 3.7573034111,
+      "high": 141409.8711597068
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "financial",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "no citeable anchor (C-ii-b sweep) \u2014 analyst-judged PERT retained"
+    },
+    "suggested_control_ids": [
+      "email-security-protection",
+      "multi-factor-authentication",
+      "security-awareness-training",
+      "data-loss-prevention"
+    ],
+    "standards_references": null,
+    "loss_tier": "vendor",
+    "loss_form_profile": [
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the financial_services envelope (disclosed shape assumption, A1 parity).",
+        "citations": [
+          "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
+        ],
+        "verified": true,
+        "composition_role": "dominant",
+        "share": null
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ransomware-on-virtualization-stack",
+    "name": "Ransomware Targeting Virtualization Infrastructure",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "vmware_esxi_exploitation",
+    "tags": [
+      "ransomware",
+      "virtualization",
+      "esxi",
+      "manufacturing",
+      "vsan",
+      "double_extortion"
+    ],
+    "description": "Modern ransomware families (Black Basta, LockBit 3.0, Royal, ALPHV/BlackCat) explicitly target VMware ESXi hypervisors and vSAN storage to maximize blast radius. A single encrypted ESXi host can take down dozens of virtual machines simultaneously, covering production ERP, MES, and file servers. Manufacturing and food-production organizations are disproportionately impacted due to reliance on legacy virtualized systems for production planning. Restoration of the hypervisor layer often requires complete VM rebuild from clean backups, extending mean time to recovery.",
+    "example_incidents": "JBS Foods 2021 (~$11M ransom; all US beef processing halted for several days); Hyundai 2022; Dish Network 2023 (ESXi ransomware); CISA AA23-061A advisory on ESXi-Args campaign.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's RANSOMWARE archetype does not segment by attack surface depth \u2014 hypervisor-layer ransomware has a fundamentally different blast radius and recovery cost profile than endpoint-layer ransomware. When the hypervisor is encrypted, the restoration path (rebuild ESXi, validate VMs, restore from backup) is an order of magnitude more expensive and time-consuming than restoring individual endpoints, and production downtime loss dominates total loss rather than ransom payment.",
+    "applicable_industries": [
+      "manufacturing",
+      "retail",
+      "transportation"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.3,
+      "mode": 1.0,
+      "high": 4.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.3,
+      "high": 0.55
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 16190.4761903013,
+      "mode": 16190.4761903013,
+      "high": 28560000.003033664
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 3333.3333331668,
+      "mode": 3333.3333331668,
+      "high": 5880000.000394365
+    },
+    "calibration_anchor": {
+      "industry": "manufacturing",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+    },
+    "suggested_control_ids": [
+      "multi-factor-authentication",
+      "endpoint-detection-response",
+      "data-backup-recovery",
+      "network-segmentation",
+      "patch-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.38
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.14
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "insider-data-theft-financial",
+    "name": "Insider Data Theft \u2014 Financial Records and PII Exfiltration",
+    "status": "published",
+    "threat_event_type": "insider_misuse",
+    "threat_actor_type": "insider_malicious",
+    "asset_class": "data",
+    "attack_vector": "privileged_access_misuse",
+    "tags": [
+      "insider_threat",
+      "data_exfiltration",
+      "financial",
+      "pii",
+      "capital_one_pattern"
+    ],
+    "description": "Malicious insider (employee, contractor, or privileged vendor) with legitimate access to financial records, customer PII, or transactional data exfiltrates large datasets \u2014 often to sell to competitors, facilitate fraud, or as leverage in an employment dispute. The Capital One 2019 breach demonstrated that cloud misconfiguration combined with a privileged insider pattern can expose ~100M customer records. Insider exfiltration is frequently detected months after the fact, increasing secondary loss from regulatory notification and litigation.",
+    "example_incidents": "Capital One 2019 (misconfigured AWS IAM exploited by a former AWS employee; ~106M records; $190M class action settlement + $80M OCC fine); Morgan Stanley 2019-2020 (financial advisor exfiltrated ~15M client records to a competing firm).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DATA_DISCLOSURE category aggregates accidental data leakage with intentional insider exfiltration. Insider exfiltration has a substantially different actor sophistication profile (insider has legitimate credential, bypasses perimeter controls), detection lag (median 197 days per Ponemon 2023), and secondary loss structure (regulatory fine + civil litigation from affected individuals) compared to external data disclosure. These factors materially elevate the total loss distribution relative to the FAIR DATA_DISCLOSURE baseline.",
+    "applicable_industries": [
+      "financial",
+      "healthcare",
+      "professional"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.4,
+      "mode": 1.5,
+      "high": 6.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.22,
+      "high": 0.48
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1030.9278351993,
+      "mode": 1030.9278351993,
+      "high": 38799999.999856174
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1546.3917527864,
+      "mode": 1546.3917527864,
+      "high": 58199999.99930907
+    },
+    "calibration_anchor": {
+      "industry": "financial",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+    },
+    "suggested_control_ids": [
+      "data-loss-prevention",
+      "user-entity-behavior-analytics",
+      "user-access-control",
+      "data-classification-handling",
+      "security-information-event-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.2
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.18
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.12
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "insider-ip-theft-manufacturing",
+    "name": "Insider IP Theft \u2014 Manufacturing and Semiconductor",
+    "status": "published",
+    "threat_event_type": "insider_misuse",
+    "threat_actor_type": "insider_malicious",
+    "asset_class": "data",
+    "attack_vector": "privileged_access_misuse",
+    "tags": [
+      "insider_threat",
+      "ip_theft",
+      "manufacturing",
+      "trade_secrets",
+      "economic_espionage"
+    ],
+    "description": "Engineering employee or contractor exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets \u2014 often in the context of departure to a competing employer or in response to foreign intelligence tasking. The US Department of Justice prosecutes dozens of such cases annually. Unlike financial-data insider theft, IP theft has a primary loss dominated by competitive advantage loss (difficult to quantify) and a secondary loss dominated by litigation costs and potential criminal investigation exposure.",
+    "example_incidents": "Multiple DOJ Economic Espionage Act prosecutions 2020-2024 (semiconductor IP theft cases involving TSMC, Apple, Micron, and Google). General Electric IP theft case 2023 (former GE engineer convicted of stealing turbine technology for China).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)",
+      "LOSS UNDERSTATED: the dominant competitive-advantage / IP-theft loss channel is UNMODELED -- no defensible public magnitude source (adjudicated-damages sweep found none; the entry's prior IP cites are the gap-report mis-cites). Only incident-response + reputation are modeled here. Explicit sec6-materiality-bar waiver (plan-gate R11)."
+    ],
+    "canonical_fair_gap": "FAIR's DATA_DISCLOSURE category aggregates accidental leaks with insider exfiltration; insider IP theft has a categorically different loss model where primary loss is the competitive advantage loss (value of the stolen IP to the adversary minus the value retained by the victim) rather than breach notification cost. This loss component is absent from the standard FAIR primary loss taxonomy and requires a custom loss form that captures trade-secret value erosion over time.",
+    "applicable_industries": [
+      "manufacturing",
+      "information",
+      "professional"
+    ],
+    "applicable_sub_sectors": [
+      "chemical_manufacturing",
+      "process_manufacturing"
+    ],
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.16,
+      "mode": 0.8,
+      "high": 4.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.08,
+      "mode": 0.25,
+      "high": 0.5
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 4285.714285582,
+      "mode": 4285.714285582,
+      "high": 7560000.000651396
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 3571.4285712968,
+      "mode": 3571.4285712968,
+      "high": 6300000.000504745
+    },
+    "calibration_anchor": {
+      "industry": "manufacturing",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.1000000000"
+    },
+    "suggested_control_ids": [
+      "data-loss-prevention",
+      "user-entity-behavior-analytics",
+      "data-classification-handling",
+      "user-access-control"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.18
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      },
+      {
+        "form": "competitive_advantage",
+        "kind": "primary",
+        "magnitude_basis": "UNMODELED -- dominant IP/trade-secret loss, no defensible public magnitude source (beyond-envelope, sec6 waiver).",
+        "citations": [],
+        "verified": false,
+        "composition_role": "provenance_only",
+        "share": null
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "cloud-account-takeover",
+    "name": "Cloud Account Takeover \u2014 SaaS-Stack-Wide Blast Radius",
+    "status": "published",
+    "threat_event_type": "malware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "stolen_credentials_or_mfa_bypass",
+    "tags": [
+      "cloud",
+      "account_takeover",
+      "iam",
+      "aws",
+      "saas",
+      "credential_stuffing"
+    ],
+    "description": "Attacker obtains or bypasses cloud provider credentials (AWS IAM, Azure AD, GCP) \u2014 via credential stuffing, phishing, or SIM-swapping \u2014 and establishes persistent access to the cloud environment. Unlike on-premises account takeover, a single cloud IAM compromise can grant access to all data in all services associated with the account. Capital One 2019 demonstrated the SSRF\u2192IAM-role-credential pattern. Modern attackers immediately enumerate S3 buckets, disable GuardDuty/CloudTrail, and begin exfiltration or cryptomining.",
+    "example_incidents": "Capital One 2019 (SSRF \u2192 IAM role credential \u2192 S3 exfiltration; 106M records; $270M total loss including $80M OCC fine); Multiple AWS cryptomining campaigns via exposed IAM keys 2021-2024 (Palo Alto Unit 42 2022 report).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's standard threat actor + asset class taxonomy does not model the SaaS-stack-wide blast radius of a cloud account takeover; a single IAM compromise can affect every service in an organization's cloud tenant simultaneously, making the loss event fundamentally different from a workstation compromise. The total asset at risk is the aggregate data value across all cloud services, and the loss form includes cryptomining charges (a novel loss type not present in the FAIR canonical taxonomy).",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional",
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.75,
+      "mode": 3.0,
+      "high": 12.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.2,
+      "high": 0.5
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1377.8982489497,
+      "mode": 1377.8982489497,
+      "high": 125859999.99355005
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 356.3529953981,
+      "mode": 356.3529953981,
+      "high": 32549999.996515933
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+    },
+    "suggested_control_ids": [
+      "multi-factor-authentication",
+      "saas-security-posture-management",
+      "user-entity-behavior-analytics",
+      "user-access-control",
+      "cloud-security-posture-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.3
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.28
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "api-key-leak-devops",
+    "name": "API Key Leak \u2014 DevOps Tool and CI/CD Side-Channel",
+    "status": "published",
+    "threat_event_type": "data_disclosure",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "secrets_in_source_control_or_ci",
+    "tags": [
+      "devops",
+      "api_key",
+      "secrets",
+      "ci_cd",
+      "travisci_pattern",
+      "circleci_pattern"
+    ],
+    "description": "Secrets (API keys, OAuth tokens, cloud credentials, database passwords) committed to source control repositories or logged by CI/CD pipeline systems are harvested by attackers scanning public GitHub repositories or exploiting CI provider breaches. TravisCI 2022 and CircleCI 2023 demonstrated that CI provider breaches can expose customer secrets at scale. Once harvested, API keys enable direct API access to cloud services, payment processors, communication platforms, or production databases \u2014 often persisting until manually rotated.",
+    "example_incidents": "TravisCI 2022 (CI/CD breach exposed repository secrets for thousands of open-source projects); CircleCI 2023 (employee device compromise led to customer environment variable and secrets exposure); Uber 2022 (threat actor used stolen credentials from a contractor to access AWS, GSuite, Slack).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DATA_DISCLOSURE category models data exposure from breach events; it does not capture secrets-as-data-disclosure where the disclosed item is an API key rather than a record set. API key exposure has a fundamentally different loss model: the primary loss is determined by what the key grants access to (potentially unbounded \u2014 a leaked AWS root key grants access to all services), and the key remains valid until rotated, creating a time-dependent exposure window not captured in standard breach cost models.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 1.0,
+      "mode": 4.0,
+      "high": 15.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.3,
+      "high": 0.6
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 451.3804608538,
+      "mode": 451.3804608538,
+      "high": 41229999.99706164
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1069.0589862285,
+      "mode": 1069.0589862285,
+      "high": 97649999.9926619
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+    },
+    "suggested_control_ids": [
+      "secure-coding-practices",
+      "software-bill-of-materials",
+      "static-application-security-testing",
+      "data-loss-prevention",
+      "secure-remote-access"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.19
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.13
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.2
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.12
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ddos-extortion-financial",
+    "name": "DDoS Extortion \u2014 Financial and Payment Sector",
+    "status": "published",
+    "threat_event_type": "denial_of_service",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "volumetric_ddos_with_ransom_demand",
+    "tags": [
+      "ddos",
+      "extortion",
+      "financial",
+      "payment_processor",
+      "mirai",
+      "meris"
+    ],
+    "description": "Cybercriminals launch volumetric DDoS attacks (Mirai/Meris botnets, DNS amplification, BGP hijack-assisted) against financial institutions or payment processors, accompanied by a ransom demand. Attacks typically target internet-facing services \u2014 online banking portals, card payment APIs, trading platforms \u2014 during peak transaction periods (Black Friday, quarter-end) to maximize business pressure. Financial sector attacks are disproportionately sophisticated relative to other sectors due to established cybercriminal specialization in financial targeting.",
+    "example_incidents": "REvil-affiliated DDoS extortion campaign against US financial firms 2021; Killnet DDoS attacks on US financial sector 2022-2023 (FBI FLASH MU-000167-DD); Lazarus Group-adjacent DDoS threats against South Korean financial sector 2022.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DENIAL_OF_SERVICE category does not distinguish DDoS extortion (where the threat actor explicitly demands payment to cease the attack) from standard DDoS availability disruption. DDoS extortion has a different decision tree for the defender: the loss model includes a ransom payment branch that does not exist in standard DDoS events, and the attacker's persistence is conditional on payment, creating a loss structure that is not captured by the standard frequency \u00d7 magnitude decomposition.",
+    "applicable_industries": [
+      "financial",
+      "retail"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 2.0,
+      "high": 10.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.15,
+      "high": 0.4
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1804.1237115349,
+      "mode": 1804.1237115349,
+      "high": 67899999.99734288
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 412.3711340691,
+      "mode": 412.3711340691,
+      "high": 15519999.999541325
+    },
+    "calibration_anchor": {
+      "industry": "financial",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+    },
+    "suggested_control_ids": [
+      "ddos-protection",
+      "web-application-firewall",
+      "business-continuity-disaster-recovery",
+      "incident-response"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.3
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.08
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "solarwinds-class-supply-chain",
+    "name": "Software Supply Chain \u2014 SolarWinds-Class Backdoor",
+    "status": "published",
+    "threat_event_type": "supply_chain",
+    "threat_actor_type": "nation_state",
+    "asset_class": "systems",
+    "attack_vector": "trojanized_software_update",
+    "tags": [
+      "supply_chain",
+      "nation_state",
+      "solarwinds",
+      "solorigate",
+      "sunburst",
+      "government",
+      "enterprise"
+    ],
+    "description": "Nation-state actor compromises a widely-used IT management or monitoring vendor's software build pipeline, injecting a backdoor (SUNBURST, SUNSPOT) into a signed software update that is distributed to thousands of customers. The attacker selects a small subset of high-value targets for further exploitation. SolarWinds 2020 affected ~100 government agencies and Fortune 500 companies. Key characteristics: extremely long dwell time (9+ months), signed and trusted delivery mechanism, and OPSEC discipline that limits detection to sophisticated threat hunters.",
+    "example_incidents": "SolarWinds Orion SUNBURST 2020 (18,000+ installs; ~100 organizations further exploited; attributed to Cozy Bear / APT29; US government investigation cost estimated >$100M); 3CX POXNIX supply chain 2023 (Lazarus Group; second-stage supply chain via compromised financial application).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's SUPPLY_CHAIN category does not model the cascading nature of a multi-organization supply chain breach where a single compromised vendor creates simultaneous exposure across all customers. Standard FAIR analyzes loss from the perspective of a single organization; supply chain events require a portfolio-level loss model (total loss = sum of individual organization losses) that the canonical taxonomy does not support, and the loss distribution is highly skewed by the attacker's target selection logic.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "public",
+      "professional"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.043,
+      "mode": 0.170421,
+      "high": 0.85
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.12,
+      "mode": 0.35,
+      "high": 0.7
+    },
+    "primary_loss": {
+      "distribution": "lognormal",
+      "mean": 13.1275499041,
+      "sigma": 3.4721527617
+    },
+    "secondary_loss": {
+      "distribution": "lognormal",
+      "mean": 11.8747869356,
+      "sigma": 3.4721527617
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "no citeable anchor (C-ii-b sweep) \u2014 analyst-judged PERT retained"
+    },
+    "suggested_control_ids": [
+      "software-bill-of-materials",
+      "third-party-risk-management",
+      "file-integrity-monitoring",
+      "network-detection-response",
+      "threat-intelligence-program"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.4
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.3
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.2
+      }
+    ],
+    "loss_shape": "catastrophic"
+  },
+  {
+    "slug": "moveit-class-zero-day-mft",
+    "name": "Zero-Day Exploitation of Managed File Transfer (MFT) Platform",
+    "status": "published",
+    "threat_event_type": "data_disclosure",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "zero_day_exploitation",
+    "tags": [
+      "zero_day",
+      "mft",
+      "moveit",
+      "clop",
+      "mass_exploitation",
+      "supply_chain_adjacent"
+    ],
+    "description": "Cybercriminal group exploits a zero-day vulnerability in a widely-deployed managed file transfer (MFT) platform (MOVEit Transfer, GoAnywhere MFT, Accellion FTA) to mass-exfiltrate data from hundreds of organizations simultaneously. Clop ransomware group conducted the canonical MOVEit campaign in 2023, affecting 2,600+ organizations across healthcare, financial services, government, and education sectors with minimal dwell time (hours to days). The attack pattern bypasses traditional security controls because it exploits a trusted file transfer service.",
+    "example_incidents": "MOVEit Transfer zero-day (CVE-2023-34362) 2023 \u2014 Clop/Cl0p group; 2,600+ organizations affected including US Department of Energy, Maximus (11M SSNs), Aon, PricewaterhouseCoopers; estimated total losses >$10B across all victims.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's standard threat frequency model assumes attacker capability and intent targeting a single organization; MFT zero-day campaigns target all vulnerable instances simultaneously, making the threat frequency for any individual organization essentially determined by whether they have the vulnerable software installed rather than by targeted attacker interest. This mass exploitation pattern requires a different frequency model where vulnerability (software installation) is the primary frequency driver, not attacker targeting selection.",
+    "applicable_industries": [
+      "healthcare",
+      "financial",
+      "public",
+      "professional",
+      "education"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.5,
+      "high": 2.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.2,
+      "mode": 0.5,
+      "high": 0.9
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 7647.4729415425,
+      "mode": 7647.4729415425,
+      "high": 4080000.0000424404
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 18800.0376468725,
+      "mode": 18800.0376468725,
+      "high": 10029999.99952489
+    },
+    "calibration_anchor": {
+      "industry": "professional",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9088254741. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+    },
+    "suggested_control_ids": [
+      "web-application-firewall",
+      "network-detection-response",
+      "patch-management",
+      "data-loss-prevention",
+      "vulnerability-assessment"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.24
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.16
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.25
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.18
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "session-hijack-post-mfa-bypass",
+    "name": "Browser Session Hijack \u2014 Post-MFA Credential Abuse",
+    "status": "published",
+    "threat_event_type": "malware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "infostealer_malware_session_token_theft",
+    "tags": [
+      "session_hijacking",
+      "mfa_bypass",
+      "infostealer",
+      "pass_the_cookie",
+      "genesis_market"
+    ],
+    "description": "Infostealer malware (Raccoon, RedLine, Vidar) harvests browser session cookies, enabling attackers to bypass MFA by replaying valid authenticated sessions. Stolen sessions are packaged and sold on criminal markets (Genesis Market, Russian Market, 2easy.shop) and used to access SaaS applications, cloud consoles, and corporate VPN portals. This attack pattern effectively nullifies MFA as a control \u2014 the attacker does not need the user's password or second factor, only the post-authentication session token. Okta 2022 demonstrated this pattern at a vendor support level.",
+    "example_incidents": "Okta support system breach 2023 (stolen session tokens from Okta's support case management tool; affected BeyondTrust, Cloudflare, 1Password, and hundreds of downstream customers); Uber 2022 (MFA fatigue + session token theft via social engineering of contractor).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's threat model treats MFA as a significant vulnerability-reducing control; the session-hijack pattern invalidates this assumption by operating on post-authentication sessions. Standard FAIR vulnerability estimates calibrated to 'has MFA' substantially understate the actual vulnerability of organizations whose employees use infested personal devices or fall victim to targeted phishing. A separate archetype with MFA-bypass-adjusted vulnerability is required to avoid systematic underestimation of this risk.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional",
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.75,
+      "mode": 3.0,
+      "high": 15.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.08,
+      "mode": 0.22,
+      "high": 0.5
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1496.6825806882,
+      "mode": 1496.6825806882,
+      "high": 136709999.98682648
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 308.839262691,
+      "mode": 308.839262691,
+      "high": 28209999.998127893
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+    },
+    "suggested_control_ids": [
+      "endpoint-detection-response",
+      "user-entity-behavior-analytics",
+      "secure-web-gateway",
+      "user-access-control"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.33
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.3
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.13
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "watering-hole-industry-targeted",
+    "name": "Watering Hole Attack \u2014 Industry-Targeted Drive-By",
+    "status": "published",
+    "threat_event_type": "malware",
+    "threat_actor_type": "nation_state",
+    "asset_class": "systems",
+    "attack_vector": "compromised_industry_website",
+    "tags": [
+      "watering_hole",
+      "drive_by",
+      "industry_targeting",
+      "nation_state",
+      "holy_water"
+    ],
+    "description": "Nation-state or sophisticated threat actor compromises a website frequently visited by employees of a target industry (trade association portals, regulatory body websites, industry conference sites) and injects exploit code or malware. Visiting the site with a vulnerable browser silently installs a first-stage implant. The Holy Water campaign 2020 targeted religious and humanitarian organizations via compromised WordPress sites. Energy sector organizations have been targeted via compromised ICS vendor websites (DragonFly campaign). The technique is highly targeted with low detectability.",
+    "example_incidents": "DragonFly / Energetic Bear (2012-2014): compromised ICS vendor websites used to deliver Havex RAT to energy sector employees; Holy Water Campaign 2020 (Trend Micro analysis): targeted Asian religious and humanitarian orgs via compromised sites; LightBasin (CrowdStrike 2021): telecom sector watering holes.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not distinguish watering hole attacks (where the victim visits an attacker-controlled or compromised site in the normal course of work) from generic malware delivery. Watering hole attacks have a distinct vulnerability profile: the victim's vulnerability is determined by browser patch state and whether they visit the targeted site, not by whether they click a phishing link. Frequency is determined by attacker reconnaissance quality and victim browsing patterns, not by attacker targeting volume.",
+    "applicable_industries": [
+      "utilities",
+      "manufacturing",
+      "information",
+      "public"
+    ],
+    "applicable_sub_sectors": [
+      "electric_utility",
+      "oil_and_gas"
+    ],
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.5,
+      "high": 3.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.2,
+      "high": 0.45
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 3694.7733335236,
+      "mode": 3694.7733335236,
+      "high": 1559999.9999701746
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 852.6400000383,
+      "mode": 852.6400000383,
+      "high": 359999.999990751
+    },
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 energy_utilities pair (p50=$146,000, p95=$3,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.8377081683. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+    },
+    "suggested_control_ids": [
+      "secure-web-gateway",
+      "endpoint-detection-response",
+      "patch-management",
+      "network-detection-response",
+      "security-awareness-training"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.3
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.22
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.12
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "s3-misconfiguration-data-exposure",
+    "name": "Cloud Storage Misconfiguration \u2014 Mass S3/Blob Data Exposure",
+    "status": "published",
+    "threat_event_type": "data_disclosure",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "misconfigured_cloud_storage_public_access",
+    "tags": [
+      "cloud",
+      "misconfiguration",
+      "s3",
+      "data_exposure",
+      "pii",
+      "accidental"
+    ],
+    "description": "Organization inadvertently configures a cloud storage bucket (AWS S3, Azure Blob, GCP Cloud Storage) with public read access, exposing sensitive customer data, internal documents, or application credentials to unauthenticated access. Specialized search tools (GrayhatWarfare, Bucket Finder) enable automated discovery of exposed buckets. Unlike active attack patterns, misconfiguration exposure is a passive vulnerability \u2014 the data is accessible until the misconfiguration is corrected. Discovery by a malicious actor typically results in full exfiltration without any observable access log anomaly.",
+    "example_incidents": "Capital One 2019 (SSRF \u2192 S3 bucket access; 106M records); Twitch 2021 (125GB internal data exposed); Microsoft Power Apps portals misconfiguration 2021 (38M records from 47 US government and private sector entities per UpGuard research).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's DATA_DISCLOSURE category models disclosure primarily as the result of an active attack; misconfiguration-driven exposure is a passive vulnerability state that requires a different frequency/vulnerability decomposition. The 'threat event' is the attacker discovering the misconfiguration (not an attack per se), and the vulnerability is essentially 1.0 once discovered, making standard FAIR vulnerability estimation meaningless for this archetype \u2014 the key risk driver is detection probability and time-to-remediation.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "healthcare",
+      "public",
+      "retail"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.6,
+      "mode": 2.5,
+      "high": 12.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.3,
+      "mode": 0.7,
+      "high": 0.95
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 522.6510599402,
+      "mode": 522.6510599402,
+      "high": 47739999.99698552
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1259.1139171365,
+      "mode": 1259.1139171365,
+      "high": 115009999.99345027
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+    },
+    "suggested_control_ids": [
+      "cloud-security-posture-management",
+      "data-classification-handling",
+      "security-configuration-assessment",
+      "data-at-rest-encryption"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.22
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.14
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.24
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "package-registry-supply-chain",
+    "name": "Open Source Package Registry Compromise",
+    "status": "published",
+    "threat_event_type": "supply_chain",
+    "threat_actor_type": "nation_state",
+    "asset_class": "systems",
+    "attack_vector": "malicious_open_source_package",
+    "tags": [
+      "supply_chain",
+      "open_source",
+      "npm",
+      "pypi",
+      "xz_utils",
+      "dependency_confusion"
+    ],
+    "description": "Adversary publishes malicious packages to public registries (npm, PyPI, RubyGems, Go modules) \u2014 either via typosquatting, dependency confusion, or account takeover of a legitimate maintainer \u2014 that execute malicious code when installed by downstream developers or CI/CD pipelines. XZ Utils 2024 demonstrated a sophisticated multi-year social engineering campaign to insert a backdoor into a widely used compression library targeting SSH servers. Dependency confusion attacks exploit private package naming to have build systems pull attacker-controlled packages.",
+    "example_incidents": "XZ Utils (liblzma) backdoor 2024 (CVE-2024-3094) \u2014 attributed to Jia Tan persona; would have affected SSH server authentication across multiple Linux distributions if not discovered by Andres Freund; npm event-stream compromise 2018 (malicious code targeting Copay Bitcoin wallet).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's SUPPLY_CHAIN category does not distinguish open source package compromise from vendor software backdoor. Open source package attacks have a fundamentally different threat actor access model (any actor can publish to public registries; no vendor relationship required) and a different vulnerability surface (dependency graph depth and breadth vs. vendor trust relationships). The blast radius is determined by download count and transitive dependency structure rather than by customer count.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 3.0,
+      "high": 12.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.2,
+      "high": 0.55
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1330.3845161093,
+      "mode": 1330.3845161093,
+      "high": 121519999.9829903
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 380.1098617818,
+      "mode": 380.1098617818,
+      "high": 34719999.99845117
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "no citeable anchor (C-ii-b sweep) \u2014 analyst-judged PERT retained"
+    },
+    "suggested_control_ids": [
+      "software-bill-of-materials",
+      "secure-coding-practices",
+      "static-application-security-testing",
+      "third-party-risk-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.32
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.24
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.16
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ddos-financial-seasonal-peak",
+    "name": "DDoS at Financial Seasonal Peak \u2014 Payment and Banking",
+    "status": "published",
+    "threat_event_type": "denial_of_service",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "volumetric_ddos_botnet",
+    "tags": [
+      "ddos",
+      "financial",
+      "seasonal",
+      "payment_processor",
+      "high_availability"
+    ],
+    "description": "Volumetric DDoS attacks targeting payment processors, online banking portals, or retail checkout systems during peak transaction periods (Black Friday, tax season, quarter-end financial close). Attackers time attacks to maximize business pressure \u2014 a 1-hour outage of a payment processor during Black Friday has a loss that is orders of magnitude higher than the same outage in January. Mirai and MerisBot botnets have demonstrated multi-terabit attack capability. The financial loss is dominated by transaction revenue foregone during the outage.",
+    "example_incidents": "Meris botnet DDoS against Yandex 2021 (21.8M RPS peak); DDoS attacks against major US banks (Bank of America, JPMorgan, PNC, US Bank) 2012-2013 (attributed to Iran, Operation Ababil); Killnet DDoS against US banking and financial sector 2023.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's standard loss magnitude model for DDoS does not account for time-of-attack seasonality; the same attack on a payment processor generates 100\u00d7 the productivity loss on Black Friday versus a normal Tuesday, but the standard FAIR PERT distribution uses a fixed magnitude range that does not reflect this seasonality. Organizations with strong business seasonality need a time-conditioned loss model that adjusts primary loss magnitude based on attack timing relative to peak transaction windows.",
+    "applicable_industries": [
+      "financial",
+      "retail"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.6,
+      "mode": 2.5,
+      "high": 9.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.15,
+      "high": 0.45
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 1546.3917527864,
+      "mode": 1546.3917527864,
+      "high": 58199999.99930907
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "financial",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+    },
+    "suggested_control_ids": [
+      "ddos-protection",
+      "web-application-firewall",
+      "system-capacity-planning",
+      "business-continuity-disaster-recovery"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.28
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.02
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "phishing-ad-compromise-ransomware",
+    "name": "Phishing-Derived Active Directory Compromise Leading to Ransomware",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "phishing_credential_harvest_then_ad_lateral_movement",
+    "tags": [
+      "ransomware",
+      "active_directory",
+      "phishing",
+      "lateral_movement",
+      "msp",
+      "education",
+      "kaseya_pattern"
+    ],
+    "description": "Cybercriminals phish a user's domain credentials, escalate to domain administrator via AD misconfigurations (Kerberoasting, DCSync, PrintNightmare), then deploy ransomware across the entire domain via GPO or PsExec. This multi-stage attack chain is the dominant ransomware delivery pattern for mid-market and MSP-managed organizations. Kaseya 2021 demonstrated the MSP supply-chain variant where a single RMM tool compromise enabled ransomware deployment across ~1,500 downstream MSP customers simultaneously. Education sector faces elevated exposure due to flat AD architectures.",
+    "example_incidents": "Kaseya VSA ransomware 2021 (~1,500 organizations affected via MSP supply chain; REvil demanded $70M ransom); LAUSD 2022 (Los Angeles Unified School District ransomware via AD compromise); multiple UK schools and universities 2020-2023 (NCSC advisories).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR treats ransomware as a single-stage event; the phishing\u2192AD-compromise\u2192domain-wide-ransomware kill chain is a multi-stage event where each stage has distinct frequency and vulnerability parameters. The AD compromise stage is the critical leverage point \u2014 a single set of domain admin credentials enables ransomware deployment to 100% of domain-joined systems. FAIR's standard vulnerability estimation does not account for this 'amplifier' dynamic where partial access (one phishing victim) enables total loss (full domain encryption).",
+    "applicable_industries": [
+      "education",
+      "professional",
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium",
+      "large"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 2.0,
+      "high": 8.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.35,
+      "high": 0.65
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 7233.4500003516,
+      "mode": 7233.4500003516,
+      "high": 4199999.999727714
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1240.0200000124,
+      "mode": 1240.0200000124,
+      "high": 719999.9999255008
+    },
+    "calibration_anchor": {
+      "industry": "education",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 education pair (p50=$249,000, p95=$6,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9345562423. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+    },
+    "suggested_control_ids": [
+      "email-security-protection",
+      "multi-factor-authentication",
+      "endpoint-detection-response",
+      "user-access-control",
+      "security-awareness-training",
+      "data-backup-recovery"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.4
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.12
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ransomware-on-fileshare",
+    "name": "Ransomware on Fileshare \u2014 SMB Network Propagation",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "smb_propagation_from_phished_endpoint",
+    "tags": [
+      "ransomware",
+      "fileshare",
+      "smb",
+      "small_business",
+      "conti_pattern",
+      "lockbit"
+    ],
+    "description": "Ransomware spreads from an initial phished endpoint to network-accessible file shares via SMB, encrypting shared drives, mapped network drives, and backup shares. This is the most common ransomware pattern for small and medium organizations that rely on Windows file shares for document storage. Conti and LockBit affiliates widely used this pattern. Organizations without backup segmentation lose both production data and backup copies simultaneously. Recovery requires either ransom payment or full restore from offline backup.",
+    "example_incidents": "Conti ransomware generic SMB propagation pattern (2020-2022, thousands of incidents per FBI IC3 2022); LockBit 3.0 affiliate attacks on SME sector 2022-2024 (CISA AA23-075A advisory); WannaCry 2017 (EternalBlue-based SMB worm affecting 200,000+ organizations globally).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not distinguish SMB-propagating ransomware (where the blast radius is determined by network share topology and backup segmentation) from endpoint-only ransomware. SMB-propagation ransomware has a bimodal loss distribution: organizations with proper backup segmentation experience data loss limited to the share propagation scope; those without backup segmentation face total data loss with recovery costs 10-20\u00d7 higher. The backup posture variable is a critical moderator absent from the standard FAIR ransomware magnitude model.",
+    "applicable_industries": [
+      "professional",
+      "healthcare",
+      "manufacturing",
+      "education"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 1.0,
+      "mode": 3.0,
+      "high": 10.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.35,
+      "high": 0.65
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 22305.1294128007,
+      "mode": 22305.1294128007,
+      "high": 11900000.000106998
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 4779.6705882047,
+      "mode": 4779.6705882047,
+      "high": 2549999.9998881537
+    },
+    "calibration_anchor": {
+      "industry": "professional",
+      "revenue_tier": "10m_to_100m",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9088254741. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "endpoint-detection-response",
+      "data-backup-recovery",
+      "file-integrity-monitoring",
+      "user-access-control"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.4
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.25
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "credential-stuffing-consumer-portal",
+    "name": "Credential Stuffing \u2014 Consumer-Facing Portal Account Takeover",
+    "status": "published",
+    "threat_event_type": "malware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "automated_credential_stuffing_from_breach_databases",
+    "tags": [
+      "credential_stuffing",
+      "account_takeover",
+      "consumer",
+      "retail",
+      "financial",
+      "automation"
+    ],
+    "description": "Automated credential stuffing tools (Sentry MBA, Snipr, Openbullet) test username/password combinations from breached credential databases against consumer-facing portals (loyalty accounts, banking, retail, streaming). Successful matches grant account takeover \u2014 attackers drain loyalty points, redirect payment instruments, make fraudulent purchases, or sell valid account credentials. Akamai reports credential stuffing as the dominant attack category for retail and financial portals by traffic volume. Low sophistication required; tools and breach databases are commoditized.",
+    "example_incidents": "Dunkin Donuts 2019 (credential stuffing of loyalty app; FTC settlement); Chipotle 2017 loyalty account compromise via stuffing; NCSC UK multiple financial sector credential stuffing advisory 2022; Okta 2022 customer portal credential stuffing incident.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR does not natively distinguish a credential-stuffing campaign from a discrete unauthorized-access incident; the campaign-level model used here treats each credential-stuffing campaign as a threat event (TEF in campaigns/year) that, if it achieves material account takeover, produces a per-incident loss event (via the Retail sector loss anchor). This framing aligns with Akamai's campaign-frequency reporting and avoids the prior per-attempt model where the extremely-low per-attempt vulnerability collapsed the loss event frequency to near-zero \u2014 incoherent with the Retail per-incident anchor magnitude. The model is inherent-posture (control-naive): controls (rate-limiting, credential monitoring, MFA) reduce either the campaign success rate (vuln) or the incident frequency (TEF), but are not embedded in the seed values.",
+    "applicable_industries": [
+      "retail",
+      "financial",
+      "hospitality"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 1,
+      "mode": 5,
+      "high": 20
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.3,
+      "high": 0.6
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 6430.8515557352,
+      "mode": 6430.8515557352,
+      "high": 23400000.00031829
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 1855.0533333466,
+      "mode": 1855.0533333466,
+      "high": 6749999.999951531
+    },
+    "calibration_anchor": {
+      "industry": "retail",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.4924358626. secondary sigma inherited from primary; location scaled by analyst-judged campaign-level secondary/primary ratio R=1.0000000000 (rule 7 override: pre-curation per-ATO R=200 semantically inapplicable after campaign reinterpretation)"
+    },
+    "suggested_control_ids": [
+      "multi-factor-authentication",
+      "web-application-firewall",
+      "user-entity-behavior-analytics",
+      "password-management-policies"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.28
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.24
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.15
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "mfa-fatigue-prompt-bombing",
+    "name": "MFA Fatigue Attack \u2014 Push Notification Bombing",
+    "status": "published",
+    "threat_event_type": "social_engineering",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "mfa_push_notification_bombing",
+    "tags": [
+      "mfa_bypass",
+      "social_engineering",
+      "lapsus_group",
+      "uber_pattern",
+      "authentication_abuse"
+    ],
+    "description": "Attacker obtains a target's username and password (via credential stuffing or phishing), then triggers repeated MFA push notifications until the user approves one out of notification fatigue. Sometimes augmented with social engineering \u2014 calling the target pretending to be IT support while simultaneously flooding push notifications. Lapsus$ group used this technique extensively against Uber, Microsoft, Samsung, and Okta in 2022. The attack bypasses strong MFA (TOTP, push) without SIM swapping or device compromise.",
+    "example_incidents": "Uber 2022 (Lapsus$ affiliate conducted MFA fatigue + social engineering on contractor; accessed Slack, Confluence, internal admin tools; HackerOne bug bounty database); Microsoft 2022 (Lapsus$ accessed internal source code and DevOps systems via MFA fatigue); Cisco 2022 (MFA fatigue on employee's personal Google account synced to work device).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR vulnerability models treat MFA enrollment as a significant vulnerability-reducing control with a fixed multiplicative reduction; MFA fatigue invalidates this model for push-notification-based MFA implementations, which are the dominant deployment. Organizations with push MFA but not phishing-resistant MFA (FIDO2, hardware tokens) have materially higher vulnerability than the FAIR calibrated baseline assumes for 'has MFA', requiring a separate archetype with MFA-type-adjusted vulnerability curves.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.4,
+      "mode": 1.5,
+      "high": 7.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.05,
+      "mode": 0.25,
+      "high": 0.55
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 570.164792668,
+      "mode": 570.164792668,
+      "high": 52079999.99725153
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 237.5686636007,
+      "mode": 237.5686636007,
+      "high": 21699999.997854467
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+    },
+    "suggested_control_ids": [
+      "multi-factor-authentication",
+      "security-awareness-training",
+      "user-entity-behavior-analytics",
+      "user-access-control"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.24
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ransomware-healthcare-small-practice",
+    "name": "Ransomware on Small Healthcare Practice",
+    "status": "published",
+    "threat_event_type": "ransomware",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "systems",
+    "attack_vector": "email_phishing",
+    "tags": [
+      "ransomware",
+      "healthcare",
+      "small_practice",
+      "hipaa",
+      "dental",
+      "clinic"
+    ],
+    "description": "Cybercriminal ransomware targeting small and mid-size healthcare practices \u2014 dental clinics, physician groups, behavioral health, specialty practices \u2014 via phishing or exposed RDP. Unlike large hospital systems, small practices often lack dedicated IT staff, maintain minimal backups, and face the same HIPAA breach notification obligations. The loss is dominated by practice downtime (patient appointments cancelled for days to weeks), EHR data recovery costs, and mandatory HHS OCR breach notification for PHI in the encrypted systems. Ransom demands for small practices are typically $50k-$500k.",
+    "example_incidents": "Multiple small dental and physician practice ransomware incidents per HHS OCR breach portal 2020-2024 (hundreds of sub-500-record incidents annually); HHS OCR reports ransomware affecting ~45M individuals in 2023 across all healthcare entity sizes.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's healthcare ransomware models are calibrated to large health systems (which have dedicated security staff, cyber insurance, and incident response capabilities); small practices face dramatically higher vulnerability (no dedicated IT, legacy EHR systems, minimal backup) and different magnitude profiles (practice closure risk, personal liability for HIPAA violations for sole proprietors) that are absent from models calibrated on enterprise-scale healthcare incidents. A separate small-practice archetype with adjusted vulnerability and magnitude distributions is required.",
+    "applicable_industries": [
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "small",
+      "medium"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.42,
+      "mode": 1.696,
+      "high": 6.8
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.15,
+      "mode": 0.45,
+      "high": 0.75
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 13739.5985709077,
+      "mode": 13739.5985709077,
+      "high": 8680000.000911977
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 4432.1285712211,
+      "mode": 4432.1285712211,
+      "high": 2800000.000269268
+    },
+    "calibration_anchor": {
+      "industry": "healthcare",
+      "revenue_tier": "less_than_10m",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "no citeable anchor (C-ii-b sweep) \u2014 analyst-judged PERT retained"
+    },
+    "suggested_control_ids": [
+      "endpoint-detection-response",
+      "data-backup-recovery",
+      "email-security-protection",
+      "multi-factor-authentication",
+      "security-awareness-training"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "productivity",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.35
+      },
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.22
+      },
+      {
+        "form": "replacement",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.12
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.08
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "ot-network-scanning-reconnaissance",
+    "name": "OT Network Scanning and Reconnaissance \u2014 Pre-Attack Footprinting",
+    "status": "published",
+    "threat_event_type": "ot_availability",
+    "threat_actor_type": "nation_state",
+    "asset_class": "ot_systems",
+    "attack_vector": "passive_network_scanning_and_active_probing",
+    "tags": [
+      "ot_ics",
+      "reconnaissance",
+      "nation_state",
+      "volt_typhoon",
+      "pre_positioning",
+      "shodan"
+    ],
+    "description": "Nation-state actors and sophisticated threat groups conduct systematic reconnaissance of OT networks using passive scanning (Shodan, Censys), active probing of exposed ICS protocols (Modbus, DNP3, BACnet, EtherNet/IP), and spearphishing for engineering documentation. Volt Typhoon's CISA-documented campaigns (2023-2024) demonstrated persistent pre-positioning reconnaissance in US critical infrastructure OT networks specifically for future disruptive capability. The loss event at the reconnaissance stage is primarily the value of intelligence delivered to the adversary; the downstream loss if reconnaissance enables a follow-on attack is the key risk.",
+    "example_incidents": "Volt Typhoon 2023-2024 \u2014 CISA AA24-038A documented pre-positioning in US water, power, and communications OT networks; attributed to PRC state-sponsored actors for future disruption capability; CISA Shields Up advisories 2022 noting increased OT reconnaissance by Russian threat actors.",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR models threat events as discrete loss-causing incidents; reconnaissance is a pre-incident activity that does not directly cause a loss event but materially increases the probability and magnitude of future attacks. FAIR has no standard mechanism for modeling the value of intelligence delivered to an adversary during reconnaissance as a loss component, nor for modeling how reconnaissance pre-positioning elevates the frequency parameter for future attack archetypes. A two-stage model linking reconnaissance to downstream attack frequency is absent from the canonical taxonomy.",
+    "applicable_industries": [
+      "utilities",
+      "transportation",
+      "public"
+    ],
+    "applicable_sub_sectors": [
+      "electric_utility",
+      "water_utility",
+      "pipeline",
+      "oil_and_gas"
+    ],
+    "applicable_org_sizes": [
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 3.0,
+      "high": 15.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.2,
+      "mode": 0.5,
+      "high": 0.85
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 213.1600000138,
+      "mode": 213.1600000138,
+      "high": 89999.9999994778
+    },
+    "secondary_loss": null,
+    "calibration_anchor": {
+      "industry": "utilities",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+    },
+    "suggested_control_ids": [
+      "network-segmentation",
+      "network-detection-response",
+      "deception-technology",
+      "security-information-event-management"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.03
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "data-breach-notification-regulatory-tail",
+    "name": "Data Breach \u2014 GDPR/CCPA Regulatory Notification Tail",
+    "status": "published",
+    "threat_event_type": "data_disclosure",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "external_network_exploitation",
+    "tags": [
+      "gdpr",
+      "ccpa",
+      "regulatory",
+      "data_breach",
+      "notification",
+      "fine",
+      "class_action"
+    ],
+    "description": "Data breach events that trigger mandatory notification obligations under GDPR (72-hour notification to supervisory authority, individual notification if high risk), CCPA/CPRA (California AG notification, private right of action), HIPAA, or state breach notification laws. The regulatory response timeline \u2014 notification cost, supervisory authority investigation, potential fine, and class action exposure \u2014 is a secondary loss that can dwarf the primary breach cost for large-scale personal data exposure. GDPR fines can reach 4% of global annual revenue; CCPA statutory damages are $100-$750 per consumer per incident.",
+    "example_incidents": "British Airways 2018 (GDPR \u00a320M fine \u2014 reduced from initial \u00a3183M; 430k customers affected); Marriott International 2018-2020 (GDPR \u00a318.4M fine; 339M guest records); T-Mobile US 2021-2023 multiple breaches ($350M settlement).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR's standard secondary loss model includes a 'legal and regulatory' component but does not distinguish jurisdiction-specific regulatory frameworks (GDPR vs. CCPA vs. HIPAA vs. state law) with their distinct fine calculation methodologies and notice requirements. GDPR fines based on global revenue require a revenue-conditional loss model, not a fixed distribution; this is architecturally absent from the canonical secondary loss taxonomy and requires a custom loss form that takes organizational revenue as an input.",
+    "applicable_industries": [
+      "retail",
+      "financial",
+      "healthcare",
+      "information",
+      "hospitality"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.25,
+      "mode": 1.241667,
+      "high": 6.2
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.28,
+      "high": 0.55
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 2473.4044445814,
+      "mode": 2473.4044445814,
+      "high": 9000000.000369353
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 5194.1493334683,
+      "mode": 5194.1493334683,
+      "high": 18900000.00022038
+    },
+    "calibration_anchor": {
+      "industry": "retail",
+      "revenue_tier": "10b_to_100b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.4924358626. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=1.0000000000"
+    },
+    "suggested_control_ids": [
+      "data-loss-prevention",
+      "data-classification-handling",
+      "incident-response",
+      "cyber-insurance",
+      "data-privacy-policy"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.2
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.22
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.2
+      }
+    ],
+    "loss_shape": "capped"
+  },
+  {
+    "slug": "generative-ai-prompt-injection",
+    "name": "Generative AI Prompt Injection \u2014 Enterprise LLM Abuse",
+    "status": "published",
+    "threat_event_type": "data_disclosure",
+    "threat_actor_type": "cybercriminals",
+    "asset_class": "data",
+    "attack_vector": "indirect_prompt_injection_via_rag_or_tool_use",
+    "tags": [
+      "ai_security",
+      "prompt_injection",
+      "llm",
+      "rag",
+      "emerging_threat",
+      "needs_phase_1_5b_recalibration"
+    ],
+    "description": "Adversary crafts malicious content (in documents, emails, web pages) that is processed by an enterprise LLM assistant and instructs the model to exfiltrate data, bypass guardrails, or execute unauthorized actions via connected tools. Indirect prompt injection is the dominant attack vector: content retrieved by RAG pipelines or agentic tool use can override system instructions. With enterprise LLMs gaining access to email, calendar, document stores, and internal APIs, a successful injection can exfiltrate large volumes of data or perform fraudulent actions without user awareness.",
+    "example_incidents": "Multiple proof-of-concept demonstrations at DEF CON 2023 and 2024 showing indirect prompt injection via documents processed by GPT-4-powered assistants; Samsung source code leak via ChatGPT 2023 (employees pasting proprietary code into ChatGPT \u2014 a different but related LLM data exposure vector).",
+    "source_citations": [
+      "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
+    ],
+    "canonical_fair_gap": "FAIR has no archetype for AI-system adversarial manipulation; the threat event (prompt injection) does not map to any category in the FAIR Feb 2025 taxonomy (MALWARE, DATA_DISCLOSURE, SOCIAL_ENGINEERING are all poor fits). The vulnerability factors are entirely different from any existing FAIR archetype \u2014 they depend on LLM architecture decisions (system prompt robustness, RAG retrieval scope, tool permission model) rather than traditional IT vulnerability factors. This represents a genuine taxonomy gap requiring new threat event category, not just a calibration adjustment.",
+    "applicable_industries": [
+      "information",
+      "financial",
+      "professional",
+      "healthcare"
+    ],
+    "applicable_sub_sectors": null,
+    "applicable_org_sizes": [
+      "medium",
+      "large",
+      "enterprise"
+    ],
+    "threat_event_frequency": {
+      "distribution": "PERT",
+      "low": 0.5,
+      "mode": 3.0,
+      "high": 20.0
+    },
+    "vulnerability": {
+      "distribution": "PERT",
+      "low": 0.1,
+      "mode": 0.35,
+      "high": 0.7
+    },
+    "primary_loss": {
+      "distribution": "PERT",
+      "low": 498.8941935468,
+      "mode": 498.8941935468,
+      "high": 45569999.99415558
+    },
+    "secondary_loss": {
+      "distribution": "PERT",
+      "low": 665.1922580945,
+      "mode": 665.1922580945,
+      "high": 60759999.99513729
+    },
+    "calibration_anchor": {
+      "industry": "information",
+      "revenue_tier": "1b_to_10b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
+      "loss_anchor": "no citeable anchor (C-ii-b sweep) \u2014 analyst-judged PERT retained"
+    },
+    "suggested_control_ids": [
+      "secure-coding-practices",
+      "data-loss-prevention",
+      "security-awareness-training",
+      "threat-modeling"
+    ],
+    "standards_references": null,
+    "loss_tier": "paginated",
+    "loss_form_profile": [
+      {
+        "form": "response",
+        "kind": "primary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "dominant",
+        "share": 0.21
+      },
+      {
+        "form": "reputation",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.18
+      },
+      {
+        "form": "fines",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.1
+      }
+    ],
+    "loss_shape": "capped"
+  }
+]

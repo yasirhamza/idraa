@@ -1,0 +1,89 @@
+{
+  "columns": {
+    "as_of_date": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATE"
+    },
+    "code": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(3)"
+    },
+    "created_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "is_active": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "BOOLEAN"
+    },
+    "organization_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "source": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(255)"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "usd_rate": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "NUMERIC(20, 8)"
+    },
+    "version": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "INTEGER"
+    }
+  },
+  "indexes": [
+    "ix_fx_rates_organization_id",
+    "ux_fx_rate_active_per_code"
+  ],
+  "table_name": "fx_rates"
+}

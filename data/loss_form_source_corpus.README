@@ -1,0 +1,107 @@
+data/loss_form_source_corpus.json — DEV/CURATION RESEARCH ARTIFACT (Epic D-ii-a, #497)
+================================================================================
+
+WHAT THIS IS
+------------
+A catalogue of the repo-internal primary sources that carry a FAIR loss-FORM
+magnitude, one row per (form, source). It shortlists the sources the D-ii-b
+adversarial (sector x form) magnitude sweep starts from, and is the companion
+input (with data/loss_form_targets.json) to that sweep. Six forms:
+productivity, response, replacement, fines, competitive_advantage, reputation
+(the D-i literals; see docs/reference/loss-magnitude-forms.md).
+
+WHAT THIS IS NOT
+----------------
+This is NOT app-runtime seed data. The application does NOT load this file at
+runtime (no glob loader; the seeding path reads only named seed files). The
+canonical runtime seed library lives in:
+  - data/seed_library_entries.json           (31 entries)
+  - data/seed_library_entries_extension.json (54 entries)
+Consumed only by D-ii-b / D-iii tooling and humans during curation. Do not wire
+it into the seeding path.
+
+ROW SCHEMA
+----------
+  form              one of the six FAIR loss forms
+  source            short name of the publication (null on a `none` gap row)
+  loss_tier         "paginated" | "vendor" | "none"
+                      paginated — figure/table/page locator (Epic C TIER-1 class)
+                      vendor    — named report + https permalink + accessed date
+                      none      — NO repo source for this form; an honest gap that
+                                  becomes a D-ii-b loss-magnitude research target
+  locator           PRIMARY reference (figure/page for paginated; permalink for
+                    vendor). Empty on `none` rows.
+  sectors_covered   sectors the source informs (empty on `none` rows)
+  carries           one line: what the source actually carries for this form
+  blended_headline  bool — true if the source's figure blends >1 loss form
+  single_form_slice required when blended_headline (or when the source backs >1
+                    form): names the EXACT sub-metric used, so the same blended
+                    number is never pulled into two forms (see BLENDED-DOUBLE-PULL)
+  secondary_url     optional traceability URL (never a primary locator)
+  accessed          ISO date; required for vendor rows
+
+FORM -> SOURCE PROVENANCE (as of D-ii-a)
+----------------------------------------
+The repo's loss-magnitude evidence is thin at the FORM level — by design this
+is why D-ii-b exists. Catalogued:
+  - response      IBM Cost of a Data Breach 2025 — 3 of CODB's 4 activity cost
+                  centers (detection & escalation + notification + post-breach
+                  response). GLOBAL, not per-sector.
+  - productivity  IBM CODB 2025 lost-business cost center (blended), AND Cyentia
+                  IRIS 2025 Figure A3 p.35 sector total (blended, Epic C anchor).
+  - fines / replacement / competitive_advantage / reputation
+                  NONE — no clean repo source. Honest `none` gap rows; D-ii-b
+                  must research these.
+Verizon DBIR is a FREQUENCY (TEF) source, not a loss magnitude — it is NOT in
+this corpus; it belongs to the D-ii-b TEF/vulnerability threat-intel table.
+IC3 2025 carries direct FRAUD/BEC loss (excludes productivity/BI); it does not
+map to a single FAIR loss form and is catalogued only as context on the `fines`
+gap row.
+
+TIER-HONESTY POLICY
+-------------------
+TIER-2/3-dominant / many-`none` is EXPECTED and correct at D-ii-a — most forms
+lack a paginated per-sector repo source. Do NOT claim `paginated` without a
+figure/table/page locator, or `vendor` without a permalink + accessed date.
+Do NOT fabricate a source to avoid a `none` row.
+
+BLENDED-DOUBLE-PULL RULE (meth M1)
+----------------------------------
+A source whose headline blends >1 form (IRIS sector total; CODB lost-business =
+productivity + reputation) is marked blended_headline:true and MUST name its
+single_form_slice. A source may back two forms ONLY via two DISTINCT sub-metrics
+(distinct single_form_slice). The same blended number may NEVER be pulled into
+two forms — that would let D-iii's Fenton-Wilkinson composition double-count it
+(exactly the loss flattening Epic D exists to fix). Enforced by
+tests/unit/test_loss_form_source_corpus.py::test_multi_form_source_slices_are_distinct.
+
+CORPUS LOCATORS ARE HINTS, NOT PRE-VERIFIED
+-------------------------------------------
+These locators are single-agent transcriptions from the vendored
+docs/reference/calibration-sources/ notes. Only Epic C's
+data/loss_anchor_tables.json sources are adversarially verified. D-ii-b MUST
+re-confirm every corpus locator during its sweep (protocol step b).
+
+C-iii HANDOFF CONSTRAINT (Sec-I1, security carry-forward)
+---------------------------------------------------------
+`locator` and `secondary_url` values may later be rendered as hyperlinks in the
+D-iii entry-detail "how this loss was built" disclosure. The consuming template
+MUST allowlist `https://` (route through `linkify_https`) before any `href` use
+— Jinja autoescape covers text nodes, NOT href attributes. This tripwire flows
+corpus -> data/loss_form_anchor_tables.json -> the D-iii render surface
+(src/idraa/templates/library/entry_detail.html).
+
+FORBIDDEN SOURCES (meth M2)
+---------------------------
+The four gap-report mis-cited citations may NEVER appear here or in an
+attestation: FBI PSA I-091019-PSA, DOJ 15-1433, CISA AA22-186A, PREPA/AMI
+(docs/analysis/2026-07-05-attack-library-gap-report.md "Data-quality byproduct").
+Enforced by ::test_no_forbidden_citation_in_corpus.
+
+GUARDS + COMPLETENESS GATE
+--------------------------
+tests/unit/test_loss_form_source_corpus.py encodes the row-level contracts:
+  uv run pytest tests/unit/test_loss_form_source_corpus.py -v
+The (sector x form) work-list closure gate is LOSS_FORM_RESEARCH_COMPLETE, armed
+but skipped on data/loss_form_targets.json; D-ii-b flips it green when no
+needs_fresh_research cell remains.

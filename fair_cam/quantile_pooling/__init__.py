@@ -1,0 +1,51 @@
+"""Quantile-fitted distribution helpers for the wizard-step-3 elicitation flow.
+
+Port of evaluator/collector R package (MIT, pinned commit per
+tests/quantile_pooling/fixtures/evaluator_commit_pinned.txt). Pure functions;
+zero coupling to idraa or pyfair. See spec §7.1 + §10 (MD-1 through MD-8)."""
+
+from ._cleaning import clean_quantile_pair
+from ._lognormal import (
+    combine_lognorm_trunc,
+    fit_lognorm_trunc,
+    lognormal_to_pert_approx,
+)
+from ._lognormal_native import (
+    Z_0_95,
+    lognormal_from_median_mean,
+    lognormal_from_quantiles,
+    lognormal_mean,
+    lognormal_quantiles,
+)
+from ._normal import combine_norm, fit_norm_trunc, normal_to_pert_approx
+from ._types import (
+    ClampEvent,
+    DeadlineCallback,
+    LogNormalTruncFit,
+    ModeClampReason,
+    NormalTruncFit,
+    PertTriple,
+    QuantilePoolingError,
+)
+
+__all__ = [
+    "Z_0_95",
+    "ClampEvent",
+    "DeadlineCallback",
+    "LogNormalTruncFit",
+    "ModeClampReason",
+    "NormalTruncFit",
+    "PertTriple",
+    "QuantilePoolingError",
+    "clean_quantile_pair",
+    "combine_lognorm_trunc",
+    "combine_norm",
+    "fit_lognorm_trunc",
+    "fit_norm_trunc",
+    "lognormal_from_median_mean",
+    "lognormal_from_quantiles",
+    "lognormal_mean",
+    "lognormal_quantiles",
+    "lognormal_to_pert_approx",
+    "normal_to_pert_approx",
+]

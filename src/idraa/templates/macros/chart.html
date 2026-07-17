@@ -1,0 +1,511 @@
+{# Server-rendered charts. epic #547 abandoned the prior JS chart vendor for
+   first-party SVG: P1 (dual LEC/EPC cards) shipped in #552/#553/#554; P2
+   (this file's remaining chart macros) ported the last vendor-JS callers to
+   SVG and deleted 2 confirmed-dead macros; P3 removed the vendor bundle and
+   its server-side renderer entirely. chart_svg (services/chart_svg.py) is
+   the geometry source every macro below calls into.
+
+   Usage:
+     {% from "macros/chart.html" import loss_exceedance_curve %}
+     {{ loss_exceedance_curve(display_results.loss_exceedance_curve) }}
+
+     {% from "macros/chart.html" import pert_distribution_chart %}
+     {{ pert_distribution_chart("tef-chart", entry.threat_event_frequency, "Threat event frequency") }}
+#}
+
+{% macro pert_distribution_chart(chart_id, distribution, label="", fmt="money") -%}
+  {# Tabular summary for a PERT or lognormal distribution dict.
+
+     distribution = {"distribution": "PERT", "low": N, "mode": N, "high": N}
+               or  {"distribution": "lognormal", "mean": N, "sigma": N}
+
+     For PERT: renders Low / Mode / High cells.
+     For lognormal: renders 5th pct / Median / Mean / 95th pct (Epic B #326).
+       The Mean row is mandatory — lognormal mean = exp(mean+sigma²/2) > median,
+       so a median-only view would understate expected loss.
+
+     fmt: "money" (PL/SL, 2dp) or "rate" (TEF, 4dp). Dispatches via the
+     format_dist_value filter which reuses format_money_input/format_rate_input.
+
+     Tabular display is intentional: entry_detail.html is not a charting page.
+     A future phase could swap this macro body for an inline first-party SVG
+     density curve if that becomes a UX priority.
+  #}
+  <div id="{{ chart_id }}" class="pert-distribution-chart">
+    {% if label %}<h4 class="text-sm font-semibold mb-1">{{ label }}</h4>{% endif %}
+    {% if distribution %}
+      {% if distribution.distribution == "PERT" %}
+        <table class="table table-xs w-full">
+          <thead>
+            <tr>
+              <th>Low</th>
+              <th>Mode</th>
+              <th>High</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{{ distribution.low | format_dist_value(fmt) }}</td>
+              <td>{{ distribution.mode | format_dist_value(fmt) }}</td>
+              <td>{{ distribution.high | format_dist_value(fmt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="text-xs text-base-content/60 mt-1">Distribution: PERT</p>
+      {% elif distribution.distribution == "lognormal" %}
+        {% set rows = lognormal_display_rows(distribution) %}
+        {# fmt is passed by the caller: "money" for pl/sl, "rate" for tef.
+           Use the SAME format_dist_value filter (reuses format_money_input/
+           format_rate_input) so values render formatted consistent with the
+           PERT rows on the same page — NOT round(2). #}
+        <table class="table table-xs w-full">
+          <tbody>
+            <tr>
+              <td>5th pct</td>
+              <td class="text-right font-mono">{{ rows.p5 | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>Median</td>
+              <td class="text-right font-mono">{{ rows.median | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>Mean</td>
+              <td class="text-right font-mono">{{ rows.mean | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>95th pct</td>
+              <td class="text-right font-mono">{{ rows.p95 | format_dist_value(fmt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="text-xs text-base-content/60 mt-1">Distribution: Lognormal</p>
+      {% else %}
+        <p class="text-sm text-base-content/60">
+          Distribution: {{ distribution.distribution }}
+        </p>
+      {% endif %}
+    {% else %}
+      <p class="text-sm text-base-content/60 italic">No distribution data.</p>
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro loss_exceedance_curve(points, tolerance=None, currency=None) -%}
+  {#- Single-curve LEC for SINGLE-run displays (epic #547 P2 — first-party
+     SVG). Same axis convention as
+     dual_lec_curve (log $ x, linear % y) so SINGLE and AGGREGATE detail
+     pages render the same chart shape — reuses chart_svg.dual_curve's scale
+     math via the single_lec_curve wrapper (an EMPTY with_controls series;
+     the "P2 single-curve figure reuse" note designed for in P1). Tolerance
+     overlay opt-in via the same {amount, probability} dict shape.
+     currency = {code, symbol} from the view-model; defaults to USD. Values
+     are already converted — the symbol is a LABEL ONLY. Hover-only
+     hydration (data-chart-hydrate="curve"): NO crosshair, NO slider, NO log
+     toggle — those stay exclusive to the dual LEC card. -#}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  {%- set g = chart_svg.single_lec_curve(points, tolerance, currency_symbol=_sym) -%}
+  <div class="loss-exceedance-curve-container">
+  {%- if g is none -%}
+    <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
+  {%- else -%}
+  {%- set uid = chart_uid() -%}
+  <figure class="m-0" data-chart="lec-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%"
+         role="img" aria-label="Loss exceedance curve{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
+         class="chart-svg">
+      <desc>Exceedance probability vs loss on a logarithmic loss axis.</desc>
+      {%- for t in g.x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      {%- for t in g.y_ticks %}
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }} (log scale)</text>
+      {%- for s in g.series %}
+      <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round" stroke="var(--chart-residual)" data-series="{{ s.key }}"/>
+      {%- endfor %}
+      {%- if g.tolerance_marker %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
+      <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
+      {%- endif %}
+    </svg>
+    <script type="application/json" data-chart-data>{{ {
+        "series": {"without": points or [], "with": []},
+        "tolerance": tolerance if tolerance else none,
+        "currency": _sym,
+        "kind": "lec",
+        "view": {"w": g.view_w, "h": g.view_h, "margin": g.margin}
+      } | tojson }}</script>
+  </figure>
+  {%- endif -%}
+  </div>
+{%- endmacro %}
+
+{% macro exceedance_probability_curve(points, tolerance=None, currency=None) -%}
+  {#- Single-curve EPC for SINGLE-run displays (epic #547 P2 — first-party
+     SVG). Axis-swapped like dual_epc_curve: x = exceedance probability
+     (linear 0-1), y = loss (log). Reuses chart_svg.epc_curve's scale math
+     via the single_epc_curve wrapper (an EMPTY with_controls series). Reads
+     as: "X% chance the loss exceeds <sym>Y". The persisted points dicts
+     carry `percentile` (= P(loss <= L)); chart_svg.epc_curve flips to
+     exceedance probability (= 1 - percentile = P(loss > L)) internally.
+     currency = {code, symbol} from the view-model; defaults to USD. Values
+     are already converted — the symbol is a LABEL ONLY. Hover-only
+     hydration (data-chart-hydrate="curve"): NO crosshair, NO slider, NO log
+     toggle (p-space affordances are LEC-only). -#}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  {%- set g = chart_svg.single_epc_curve(points, tolerance, currency_symbol=_sym) -%}
+  <div class="exceedance-probability-curve-container">
+  {%- if g is none -%}
+    <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
+  {%- else -%}
+  {%- set uid = chart_uid() -%}
+  <figure class="m-0" data-chart="epc-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%"
+         role="img" aria-label="Exceedance probability vs loss{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
+         class="chart-svg">
+      <desc>Loss on a logarithmic axis vs exceedance probability (linear axis).</desc>
+      {%- for t in g.x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      {%- for t in g.y_ticks %}
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }}</text>
+      {%- for s in g.series %}
+      <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round" stroke="var(--chart-residual)" data-series="{{ s.key }}"/>
+      {%- endfor %}
+      {%- if g.tolerance_marker %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
+      <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
+      {%- endif %}
+    </svg>
+    <script type="application/json" data-chart-data>{{ {
+        "series": {"without": points or [], "with": []},
+        "tolerance": tolerance if tolerance else none,
+        "currency": _sym,
+        "kind": "epc",
+        "view": {"w": g.view_w, "h": g.view_h, "margin": g.margin}
+      } | tojson }}</script>
+  </figure>
+  {%- endif -%}
+  </div>
+{%- endmacro %}
+
+{% macro headline_ale_with_ci_band(headline, currency=None) -%}
+  {# Run-detail headline: residual ALE + CI band.
+     headline = {value, lo, hi, has_ci_band}.
+     currency = {code, symbol} from the view-model; defaults to USD.
+     Values are already converted — symbol is a LABEL ONLY.
+     PR nu §1.4a — see docs/plans/2026-05-03-pr-nu-run-detail-viz-design.md #}
+  {%- set _code = (currency.code if currency and currency.code else "USD") -%}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  <div class="headline-ale-block bg-base-100 rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-sm uppercase tracking-wide opacity-70 mb-2">
+      Residual annualized loss expectancy
+    </h2>
+    <div class="flex items-baseline gap-3 mb-3">
+      <span class="text-4xl font-bold">
+        {{ headline.value | money(_code) }}
+      </span>
+      {#- Issue #202: empirical central-95% percentile band (p2.5/p97.5) over the
+          modeled annualized-loss distribution — NOT a confidence interval. The
+          macro/CSS identifiers (headline_ale_with_ci_band / headline-ale-ci-band)
+          intentionally retain "ci" — renaming them is out of scope (cosmetic). -#}
+      {%- if headline.has_ci_band -%}
+        <span class="text-sm opacity-70">
+          Central 95% of modeled losses:
+          {{ headline.lo | money(_code) }}
+          –
+          {{ headline.hi | money(_code) }}
+        </span>
+      {%- else -%}
+        <span class="text-sm opacity-50 italic">
+          95% interval not available for legacy runs
+        </span>
+      {%- endif -%}
+    </div>
+    {%- set g = chart_svg.ci_band(headline, currency_symbol=_sym) -%}
+    {%- if g is not none -%}
+      {#- Band as a filled SVG shape (a rounded rect, not a stroked line) +
+         static, direct value labels — no hydration (epic #547 P2: "CI band
+         is static, no hydration needed beyond value labels"). -#}
+      <div class="headline-ale-ci-band">
+        <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" role="img"
+             aria-label="Central 95% modeled-loss range {{ g.lo_label }} to {{ g.hi_label }}, residual ALE {{ g.value_label }}"
+             class="chart-svg">
+          <desc>Horizontal band showing the central 95% modeled-loss range with the residual ALE marker.</desc>
+          <rect x="{{ g.band.x0 }}" y="{{ g.band.y - 6 }}" width="{{ g.band.x1 - g.band.x0 }}" height="12" rx="6"
+                fill="var(--chart-residual)" opacity="0.35"/>
+          <circle cx="{{ g.marker.x }}" cy="{{ g.marker.y }}" r="7" fill="var(--chart-residual)"/>
+          <text x="{{ g.band.x0 }}" y="{{ g.band.y - 14 }}" text-anchor="start" class="chart-annotation">{{ g.lo_label }}</text>
+          <text x="{{ g.band.x1 }}" y="{{ g.band.y - 14 }}" text-anchor="end" class="chart-annotation">{{ g.hi_label }}</text>
+          <text x="{{ g.marker.x }}" y="{{ g.marker.y + 24 }}" text-anchor="middle" class="chart-annotation">{{ g.value_label }}</text>
+        </svg>
+      </div>
+    {%- endif -%}
+  </div>
+{%- endmacro %}
+
+{% macro control_effectiveness_bar(rows) -%}
+  {#- Per-control effectiveness scores (0-1), first-party SVG bars (epic #547
+     P2). Already sorted desc by the
+     view-model builder; this macro is a pure renderer.
+     rows = list[{control_id, name, effectiveness}].
+
+     Geometry from chart_svg.effectiveness_bars — the row order it returns
+     IS the display order (the view-model's own effectiveness DESC / name
+     ASC sort), so no client-side re-ordering is needed the way the retired
+     chart vendor's categoryorder emulated.
+
+     Single-series bars use the --chart-residual token (matches the
+     single-run LEC/EPC curve convention: one series, no inherent/residual
+     pairing to distinguish). Native <title> per <rect> is the no-JS
+     fallback; charts.js wires a shared hover tooltip (data-chart-hydrate="bars").
+
+     Empty/None rows renders the DaisyUI alert instead of an empty chart —
+     effectiveness_bars returns None in that case (PR nu §1.4a origin). #}
+  <div class="control-effectiveness-bar-container mt-6">
+    <h3 class="text-lg font-bold mb-2">Control effectiveness</h3>
+    {%- set g = chart_svg.effectiveness_bars(rows) -%}
+    {%- if g is none -%}
+      <div class="alert alert-info">
+        <span>No controls applied to this run.</span>
+      </div>
+    {%- else -%}
+    {#- data-chart-hydrate lives on this wrapping DIV, not the <svg> itself:
+       the hover tooltip charts.js attaches is an HTML element, and SVG only
+       renders SVG-namespaced children (plus <foreignObject>) — an HTML <div>
+       appended directly under an <svg> would not render. Same wrapper
+       pattern as the LEC/EPC <figure>. -#}
+    <div class="chart-bars-wrap" data-chart="control-effectiveness" data-chart-hydrate="bars">
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" role="img"
+         aria-label="Control effectiveness scores, 0 to 1" class="chart-svg">
+      <desc>Horizontal bars showing each control's effectiveness score from 0 to 1.</desc>
+      {%- for t in g.x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">Effectiveness (0–1)</text>
+      {%- for b in g.bars %}
+      <text x="{{ g.margin.left - 8 }}" y="{{ b.y_center + 4 }}" text-anchor="end" class="chart-tick">{{ b.name }}</text>
+      <rect data-role="bar" x="{{ b.x0 }}" y="{{ b.bar_y0 }}" width="{{ b.x1 - b.x0 }}" height="{{ b.bar_h }}" rx="2" fill="var(--chart-residual)"><title>{{ b.name }}&#10;Effectiveness: {{ b.value_label }}</title></rect>
+      <text x="{{ b.x1 + 6 }}" y="{{ b.y_center + 4 }}" text-anchor="start" class="chart-annotation">{{ b.value_label }}</text>
+      {%- endfor %}
+    </svg>
+    </div>
+    {%- endif -%}
+  </div>
+{%- endmacro %}
+
+
+{%- macro _chart_legend(marker, csv_name) -%}
+  {#- Shared dual-series legend (HTML, above the SVG) + the "Download data"
+      affordance. Identity via swatch + TEXT label + line style (with =
+      dashed), never color alone (Spec-I5). Replaces the former on-curve
+      endpoint labels, which clipped/overlapped where the dual curves converge
+      at the bottom-right. The Download-data button restores the CSV export the
+      retired chart vendor's modebar provided pre-SVG (charts.js serializes the
+      embedded points — kind-aware, formula-injection-escaped). -#}
+  <div class="chart-legend">
+    <span class="chart-legend-item"><span class="chart-legend-line chart-legend-line--inherent"></span>Without controls</span>
+    <span class="chart-legend-item"><span class="chart-legend-line chart-legend-line--residual chart-legend-line--dashed"></span>With controls</span>
+    {%- if marker %}<span class="chart-legend-item"><span class="chart-legend-dot"></span>Risk appetite {{ marker.label }}</span>{%- endif %}
+    <button type="button" class="btn btn-ghost btn-xs ml-auto" data-role="csv" aria-label="Download {{ csv_name }} data as CSV">Download data</button>
+  </div>
+{%- endmacro -%}
+
+{%- macro _lec_figure(payload, tolerance, currency, x_label) -%}
+  {#- LEC figure: with/without-controls exceedance curves. Emits BOTH y-scale
+      variants + its OWN controls block (p-slider + linear/log toggle + readout)
+      + a legend row + embedded hydration JSON (raw points + view geometry).
+      Geometry from chart_svg.dual_curve. Series colors via the EXISTING
+      --chart-inherent / --chart-residual tokens (never redefined here);
+      identity carried by the legend (swatch + text + dash), never color alone.
+      No-data: same note the prior chart-vendor version rendered. -#}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  {%- set lin = chart_svg.dual_curve(payload, tolerance, x_label=x_label, y_scale="linear", currency_symbol=_sym) -%}
+  {%- if lin is none -%}
+    <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
+  {%- else -%}
+  {%- set log = chart_svg.dual_curve(payload, tolerance, x_label=x_label, y_scale="log", currency_symbol=_sym) -%}
+  {%- set uid = chart_uid() -%}
+  {%- set _init_p = (tolerance.probability if tolerance and tolerance.probability is not none else 0.05) -%}
+  <figure class="m-0" data-chart="dual-lec" data-chart-hydrate="lec" data-chart-uid="{{ uid }}">
+    <div class="flex items-center gap-3 flex-wrap mb-2" data-chart-controls>
+      <label class="text-micro text-ink-2 whitespace-nowrap" for="p-slider-{{ uid }}">Exceedance probability</label>
+      <input type="range" id="p-slider-{{ uid }}" data-role="p-slider" min="0" max="100" step="1"
+             value="{{ chart_svg.slider_pos(_init_p) }}" class="flex-1 min-w-[160px]">
+      <span class="text-micro tabular-nums" data-role="p-readout">—</span>
+      <div class="tabs tabs-boxed bg-surface-2 ml-auto">
+        <a class="tab tab-sm tab-active" data-role="y-linear" role="button">Linear y</a>
+        <a class="tab tab-sm" data-role="y-log" role="button">Log y</a>
+      </div>
+    </div>
+    {{ _chart_legend(lin.tolerance_marker, "loss-exceedance") }}
+    {%- for g, scale in [(lin, "linear"), (log, "log")] %}
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" data-y-scale="{{ scale }}"
+         role="img" aria-label="{{ x_label }} exceedance curves, with and without controls{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
+         {% if scale == "log" %}hidden{% endif %} class="chart-svg">
+      <desc>Exceedance probability vs {{ x_label|lower }} on a logarithmic loss axis.</desc>
+      {%- for t in g.x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      {%- for t in g.y_ticks %}
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ x_label }} (log scale)</text>
+      {%- for s in g.series %}
+      <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round"
+            stroke="{{ 'var(--chart-inherent)' if s.key == 'without' else 'var(--chart-residual)' }}"
+            {% if s.key == 'with' %}stroke-dasharray="6 4"{% endif %} data-series="{{ s.key }}"/>
+      {%- endfor %}
+      {%- if g.tolerance_marker %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
+      <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
+      {%- endif %}
+      <g data-role="slider-marker"></g>
+      <g data-role="hover-layer"></g>
+    </svg>
+    {%- endfor %}
+    <script type="application/json" data-chart-data>{{ {
+        "series": {"without": payload.without_controls or [], "with": payload.with_controls or []},
+        "tolerance": tolerance if tolerance else none,
+        "currency": _sym,
+        "view": {"w": lin.view_w, "h": lin.view_h, "margin": lin.margin}
+      } | tojson }}</script>
+  </figure>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro dual_lec_curve(payload, tolerance=None, currency=None) -%}
+  {{ _lec_figure(payload, tolerance, currency, "Annual loss") }}
+{%- endmacro %}
+
+{%- macro _epc_figure(payload, tolerance, currency, y_label) -%}
+  {#- EPC figure: axis-swapped exceedance-PROBABILITY curve (x = exceedance
+      probability = 1 - percentile, LINEAR [0,1] with 0 at left; y = loss, LOG,
+      high loss on top) — preserves the retired chart-vendor dual_epc_curve
+      orientation. Hover-only hydration: NO slider, NO log toggle (p-space
+      affordances are LEC-only). Geometry from chart_svg.epc_curve; series
+      colors via the EXISTING --chart-inherent / --chart-residual tokens. -#}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  {%- set g = chart_svg.epc_curve(payload, tolerance, y_label=y_label, currency_symbol=_sym) -%}
+  {%- if g is none -%}
+    <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
+  {%- else -%}
+  {%- set uid = chart_uid() -%}
+  <figure class="m-0" data-chart="dual-epc" data-chart-hydrate="epc" data-chart-uid="{{ uid }}">
+    {{ _chart_legend(g.tolerance_marker, "exceedance-probability") }}
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" data-y-scale="log"
+         role="img" aria-label="Exceedance probability vs {{ g.y_label|lower }}{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
+         class="chart-svg">
+      <desc>{{ g.y_label }} on a logarithmic axis vs exceedance probability (linear axis).</desc>
+      {%- for t in g.x_ticks %}
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      {%- for t in g.y_ticks %}
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
+      {%- endfor %}
+      <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }}</text>
+      {%- for s in g.series %}
+      <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round"
+            stroke="{{ 'var(--chart-inherent)' if s.key == 'without' else 'var(--chart-residual)' }}"
+            {% if s.key == 'with' %}stroke-dasharray="6 4"{% endif %} data-series="{{ s.key }}"/>
+      {%- endfor %}
+      {%- if g.tolerance_marker %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
+      <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
+      {%- endif %}
+      <g data-role="hover-layer"></g>
+    </svg>
+    <script type="application/json" data-chart-data>{{ {
+        "series": {"without": payload.without_controls or [], "with": payload.with_controls or []},
+        "tolerance": tolerance if tolerance else none,
+        "currency": _sym,
+        "kind": "epc",
+        "view": {"w": g.view_w, "h": g.view_h, "margin": g.margin}
+      } | tojson }}</script>
+  </figure>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro dual_epc_curve(payload, tolerance=None, currency=None) -%}
+  {{ _epc_figure(payload, tolerance, currency, "Annual loss") }}
+{%- endmacro %}
+
+
+{% macro risk_comparison_bar(comparison, currency=None) -%}
+  {#- 3 horizontal bars (Base / Residual / Reduction) on a shared currency
+     axis (epic #547 P2 — first-party SVG).
+     comparison = {base, residual, reduction, reduction_pct}.
+     currency = {code, symbol} from the view-model; defaults to USD.
+     Values are already converted — the symbol is a LABEL ONLY.
+
+     Geometry (bar positions only) from chart_svg.comparison_bars, which
+     also selects the CSS-var token per bar (base->inherent,
+     residual->residual — reusing the existing 2 series tokens; reduction
+     gets its OWN --chart-reduction token, epic #547 P2 milestone-gate
+     finding 1, since this panel ALSO renders the LEC/EPC tolerance markers
+     in --chart-appetite and sharing that token would conflate two unrelated
+     quantities). Bar TEXT labels stay in Jinja: money-filter (Babel,
+     currency-code-aware) formatting the currency-symbol-agnostic geometry
+     module should not own.
+
+     The Reduction bar's text label is built via explicit if/else blocks
+     (NOT a Jinja conditional expression) — Jinja's `A if cond else B`
+     binds less tightly than `~`, so the seemingly-correct expression
+       (red | money) ~ (' (' ~ pct ~ '%)' if pct is not none else ' (—)')
+     actually parses as
+       ((red | money) ~ ' (' ~ pct ~ '%)') if pct is not none else ' (—)'
+     which loses the dollar amount entirely when reduction_pct is None.
+     The block form below is unambiguous and verified by F6 Step 1's test.
+
+     PR nu §1.4a #}
+  {%- set _code = (currency.code if currency and currency.code else "USD") -%}
+  {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
+  {%- set base_text = comparison.base | money(_code) -%}
+  {%- set residual_text = comparison.residual | money(_code) -%}
+  {%- set reduction_amount = comparison.reduction | money(_code) -%}
+  {%- if comparison.reduction_pct is not none -%}
+    {%- set reduction_pct_text = '%.1f' | format(comparison.reduction_pct) -%}
+    {%- set reduction_text = reduction_amount ~ ' (' ~ reduction_pct_text ~ '%)' -%}
+  {%- else -%}
+    {%- set reduction_text = reduction_amount ~ ' (—)' -%}
+  {%- endif -%}
+  {%- set label_by_key = {'base': 'Base ALE', 'residual': 'Residual ALE', 'reduction': 'Reduction'} -%}
+  {%- set text_by_key = {'base': base_text, 'residual': residual_text, 'reduction': reduction_text} -%}
+  {%- set g = chart_svg.comparison_bars(comparison) -%}
+  <div class="risk-comparison-bar-container mt-6">
+    <h3 class="text-lg font-bold mb-2">Risk comparison</h3>
+    {%- if g is not none -%}
+    <div class="chart-bars-wrap" data-chart="risk-comparison" data-chart-hydrate="bars">
+    <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" role="img"
+         aria-label="Risk comparison: base risk, residual risk, and the reduction" class="chart-svg">
+      <desc>Three horizontal bars comparing base risk, residual risk, and the reduction.</desc>
+      {%- for b in g.bars %}
+      <text x="{{ g.margin.left - 8 }}" y="{{ b.y_center + 4 }}" text-anchor="end" class="chart-tick">{{ label_by_key[b.key] }}</text>
+      <rect data-role="bar" x="{{ b.x0 }}" y="{{ b.bar_y0 }}" width="{{ b.x1 - b.x0 }}" height="{{ b.bar_h }}" rx="2" fill="var(--chart-{{ b.token }})"><title>{{ label_by_key[b.key] }}&#10;{{ text_by_key[b.key] }}</title></rect>
+      <text x="{{ b.x1 + 6 }}" y="{{ b.y_center + 4 }}" text-anchor="start" class="chart-annotation">{{ text_by_key[b.key] }}</text>
+      {%- endfor %}
+    </svg>
+    </div>
+    {%- endif -%}
+  </div>
+{%- endmacro %}

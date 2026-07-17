@@ -1,0 +1,66 @@
+{% extends "scenarios/wizard/_shell.html" %}
+{% block step_body %}
+<form method="post" action="/scenarios/new/wizard/step/1?tx={{ state.tx_id }}">
+  {{ csrf_field() }}
+
+  {# ---- Search + facet filter bar ---- #}
+  {# All filter controls live in a separate GET form that drives the HTMX card refresh.
+     The radio cards are inside the POST form below; HTMX swaps only the card grid so
+     the CSRF + submit buttons are never disrupted. #}
+  <div class="mb-4 space-y-2"
+       hx-get="/scenarios/new/wizard/_partials/library_cards"
+       hx-trigger="input changed delay:300ms from:[name='q'], change from:[name='asset_class'], change from:[name='threat_actor_type']"
+       hx-target="#wizard-library-cards"
+       hx-include="#wizard-picker-filters">
+    <div id="wizard-picker-filters" class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+      {# Search box #}
+      <input
+        class="input input-bordered input-sm w-full sm:w-64"
+        type="search"
+        name="q"
+        placeholder="Search library…"
+        value="{{ filters.search_text or '' if filters is defined else '' }}"
+        autocomplete="off">
+
+      {# Asset class filter — show only present values (data-driven via facets) #}
+      {% if facets is defined and facets.asset_class %}
+      <select class="select select-bordered select-sm" name="asset_class">
+        <option value="">All asset classes</option>
+        {% for opt in facets.asset_class %}
+          <option value="{{ opt.value }}"
+            {% if filters is defined and opt.value in (filters.asset_classes | map(attribute='value') | list) %}selected{% endif %}>
+            {{ opt.label }} ({{ opt.count }})
+          </option>
+        {% endfor %}
+      </select>
+      {% endif %}
+
+      {# Threat actor filter — show only present values #}
+      {% if facets is defined and facets.threat_actor_type %}
+      <select class="select select-bordered select-sm" name="threat_actor_type">
+        <option value="">All threat actors</option>
+        {% for opt in facets.threat_actor_type %}
+          <option value="{{ opt.value }}"
+            {% if filters is defined and opt.value in (filters.threat_actor_types | map(attribute='value') | list) %}selected{% endif %}>
+            {{ opt.label }} ({{ opt.count }})
+          </option>
+        {% endfor %}
+      </select>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---- Card grid (HTMX swap target) ---- #}
+  <div id="wizard-library-cards"
+       class="library-picker grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    {% include "scenarios/wizard/_step_1_library_cards.html" %}
+  </div>
+
+  <div class="flex justify-between items-center">
+    <button type="submit" name="skip_library" value="1" class="btn btn-link">
+      Skip — start blank
+    </button>
+    <button type="submit" class="btn btn-primary">Next →</button>
+  </div>
+</form>
+{% endblock %}

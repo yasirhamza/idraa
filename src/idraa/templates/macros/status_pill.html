@@ -1,0 +1,48 @@
+{#
+  status_pill(value, kind) — coloured pill (dot + text). Spec §3.
+  kind="risk":    low/moderate/high/critical
+  kind="run":     queued/running/completed/failed/cancelled
+  kind="control": active/maintenance/inactive
+  kind="entity":  draft/active/deprecated/deleted (EntityStatus)
+  Dot + text — never colour alone (a11y).
+#}
+{% set _map_risk = {
+  'low':      ('status-success', '●'),
+  'moderate': ('status-warning', '●'),
+  'high':     ('status-critical','●'),
+  'critical': ('status-critical','●'),
+} %}
+{% set _map_run = {
+  'queued':    ('status-info',     '●'),
+  'running':   ('status-info',     '●'),
+  'completed': ('status-success',  '●'),
+  'failed':    ('status-critical', '●'),
+  'cancelled': ('ink-3',           '○'),
+} %}
+{% set _map_control = {
+  'active':      ('status-success', '●'),
+  'confirmed':   ('status-success', '●'),
+  'maintenance': ('status-warning', '●'),
+  'inactive':    ('ink-3',          '○'),
+} %}
+{# EntityStatus lifecycle (draft/active/deprecated/deleted) — distinct from the
+   control operational map, which lacks the draft/deprecated/deleted keys and
+   so dropped them to neutral grey (issue #265). #}
+{% set _map_entity = {
+  'draft':      ('status-info',     '●'),
+  'active':     ('status-success',  '●'),
+  'deprecated': ('status-warning',  '●'),
+  'deleted':    ('status-critical', '○'),
+} %}
+
+{% macro status_pill(value, kind) -%}
+  {%- set _tables = {'risk': _map_risk, 'run': _map_run, 'control': _map_control, 'entity': _map_entity} -%}
+  {%- set _table = _tables.get(kind, {}) -%}
+  {%- set _entry = _table.get(value|lower, ('ink-2', '○')) -%}
+  {%- set _colour = _entry[0] -%}
+  {%- set _dot = _entry[1] -%}
+<span class="inline-flex items-center gap-1 text-meta text-{{ _colour }}" aria-label="{{ kind }}: {{ value }}">
+  <span aria-hidden="true">{{ _dot }}</span>
+  <span>{{ value|title }}</span>
+</span>
+{%- endmacro %}

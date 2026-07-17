@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}New analysis{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{{ page_header(title="New analysis",
+               breadcrumb=breadcrumb_for(request),
+               actions=[]) }}
+{{ help_trigger('run-and-read-analyses') }}
+
+{# Mobile tranche 2f: the analysis form is no longer device-gated. It is a
+   single-column form (run name, a stacked scenario-checkbox list, wrap-flow
+   mitigating-control badges, and a fixed-width iteration input) that reflows
+   on phones. Server-side require_role remains the real authorization gate. #}
+
+<form method="post" action="/analyses"
+      hx-post="/analyses"
+      class="space-y-6"
+      {# x-data MUST be single-quoted: |tojson emits raw double-quotes (e.g.
+         ["id"]), which would terminate a double-quoted attribute. tojson
+         escapes ' < > & to \uXXXX, so single-quoted is the XSS-safe form
+         (issue #257 follow-up — reviewer BLOCKER). Inner JS string literals
+         are double-quoted for the same reason. #}
+      x-data='{
+        selectedScenarios: {{ prefill_scenario_ids | tojson }},
+        allScenarioIds: {{ scenarios | map(attribute="id") | map("string") | list | tojson }},
+        scenarioToMitigating: {{ scenario_to_mitigating | tojson }},
+        nameById: {{ name_by_id | tojson }},
+        mcIterations: {{ default_mc_iterations | tojson }},
+        highFidelityThreshold: {{ high_fidelity_threshold | tojson }},
+        onScenarioToggle(sid, checked) {
+          if (checked) this.selectedScenarios = [...this.selectedScenarios, sid];
+          else this.selectedScenarios = this.selectedScenarios.filter(x => x !== sid);
+        },
+        get runType() {
+          return this.selectedScenarios.length >= 2 ? "AGGREGATE" : "SINGLE";
+        }
+      }'>
+
+  {{ csrf_field() | safe }}
+
+  {{ form_error_summary({}) }}
+
+  {# ── Run name ────────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Run details</legend>
+
+    {{ form_field(name="name", label="Name", value=default_run_name,
+                  placeholder="e.g. Q2 ransomware drill",
+                  help="Optional — a label for this analysis run.") }}
+  </fieldset>
+
+  {# ── Scenario selection ───────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Scenarios</legend>
+    <p class="text-meta text-ink-2">
+      Pick 1 for a single-scenario analysis; pick 2+ for an aggregate portfolio analysis.
+    </p>
+
+    {% if scenarios %}
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="btn btn-xs btn-outline"
+              @click="selectedScenarios = [...allScenarioIds]"
+              :disabled="selectedScenarios.length === allScenarioIds.length">
+        Select all
+      </button>
+      <button type="button" class="btn btn-xs btn-ghost"
+              @click="selectedScenarios = []"
+              :disabled="selectedScenarios.length === 0">
+        Clear
+      </button>
+      <span class="text-meta text-ink-2"
+            x-text="selectedScenarios.length + ' of ' + allScenarioIds.length + ' selected'"></span>
+    </div>
+    {% endif %}
+
+    <div class="space-y-2">
+      {% for s in scenarios %}
+      <label class="flex items-start gap-3 p-3 rounded-card border border-border-subtle cursor-pointer hover:bg-surface-2">
+        <input type="checkbox" name="scenario_ids" value="{{ s.id }}"
+               :checked="selectedScenarios.includes('{{ s.id }}')"
+               @change="onScenarioToggle('{{ s.id }}', $event.target.checked)"
+               class="checkbox checkbox-sm mt-0.5">
+        <span class="text-body text-ink-1">{{ s.name | e }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <p class="text-meta text-ink-2">
+      Run type: <span class="badge" x-text="runType"></span>
+    </p>
+  </fieldset>
+
+  {# ── Mitigating controls (read-only; issue #89) ── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Mitigating controls</legend>
+    <p class="text-micro text-ink-2">
+      Each scenario uses the controls configured on its own scenario record.
+      To change, edit the scenario.
+    </p>
+
+    <template x-if="selectedScenarios.length === 0">
+      <p class="text-meta text-ink-2">Pick a scenario to see its mitigating controls.</p>
+    </template>
+    <template x-if="selectedScenarios.length === 1">
+      <div class="flex flex-wrap gap-1">
+        <template x-for="cid in (scenarioToMitigating[selectedScenarios[0]] || [])" :key="cid">
+          <span class="badge badge-sm" x-text="nameById[cid] || cid"></span>
+        </template>
+        <span x-show="(scenarioToMitigating[selectedScenarios[0]] || []).length === 0"
+              class="text-meta text-ink-2">No controls configured for this scenario.</span>
+      </div>
+    </template>
+    <template x-if="selectedScenarios.length >= 2">
+      <div class="space-y-2">
+        <template x-for="sid in selectedScenarios" :key="sid">
+          <div class="border-l-2 border-border-subtle pl-3">
+            <p class="text-body text-ink-1 font-semibold" x-text="nameById[sid] || sid"></p>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <template x-for="cid in (scenarioToMitigating[sid] || [])" :key="cid">
+                <span class="badge badge-sm" x-text="nameById[cid] || cid"></span>
+              </template>
+              <span x-show="(scenarioToMitigating[sid] || []).length === 0"
+                    class="text-micro text-ink-2">No controls configured.</span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </fieldset>
+
+  {# ── Iteration count ──────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Simulation settings</legend>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="mc_iterations" class="text-meta text-ink-2">Iteration count</label>
+      </div>
+      <input id="mc_iterations" name="mc_iterations" type="number"
+             x-model.number="mcIterations"
+             value="{{ default_mc_iterations }}"
+             min="100" max="{{ max_mc_iterations }}"
+             class="h-10 w-32 px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      <p class="text-micro text-ink-2 mt-1">
+        Default {{ "{:,}".format(default_mc_iterations) }}; cap
+        {{ "{:,}".format(max_mc_iterations) }} on this deployment.
+        Higher = tighter VaR / LEC tails but more compute + memory.
+      </p>
+      <p class="text-micro text-warning mt-1" x-show="mcIterations >= highFidelityThreshold" x-cloak>
+        High-fidelity run (250k+ iterations): a stable deep-tail ES and a tighter
+        95% MC interval, but slower and larger to store &mdash; use when you need
+        the 99.9% tail. 500k&ndash;1M gives the most stable ES(99.9%).
+      </p>
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="random_seed" class="text-meta text-ink-2">Random seed</label>
+      </div>
+      <input id="random_seed" name="random_seed" type="number"
+             value="{{ default_random_seed }}" min="0" max="4294967295"
+             class="h-10 w-32 px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      <p class="text-micro text-ink-2 mt-1">
+        Default 42 → reproducible results. Change the seed (or raise iterations) to see
+        Monte Carlo sampling variability, especially in the deep tail. This is a
+        simulation seed, not a security value.
+      </p>
+    </div>
+  </fieldset>
+
+  {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <a href="/scenarios" class="btn btn-outline btn-sm">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-sm"
+            :disabled="selectedScenarios.length === 0">
+      Run analysis
+    </button>
+  </div>
+</form>
+
+{% endblock %}

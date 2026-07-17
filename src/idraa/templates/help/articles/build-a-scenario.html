@@ -1,0 +1,176 @@
+<h2 class="text-h3 text-ink-1 mb-3">What a scenario is</h2>
+<p class="text-body text-ink-2 mb-3">
+  A scenario is one specific way your organisation could suffer a loss &mdash; for
+  example, ransomware encrypting your production servers, or an insider copying
+  customer data. Each scenario is modelled independently; you can include multiple
+  scenarios in a single
+  <a class="text-brand hover:underline" href="/help/run-and-read-analyses">analysis run</a>
+  to see your combined exposure.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The scenario wizard collects four FAIR inputs. Each is entered as a
+  <strong>low&ndash;high range</strong> &mdash; the range you are 90% confident
+  contains the true value (formally, the 5th and 95th percentiles). The engine
+  samples across that range thousands of times (Monte Carlo simulation) to
+  produce a realistic spread of outcomes rather than a single point. For the
+  statistical foundations, see the
+  <a class="text-brand hover:underline" href="/help/methodology-primer">FAIR methodology primer</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">The four FAIR inputs</h2>
+
+<h3 class="text-h4 text-ink-1 mb-2">1. Threat Event Frequency (TEF)</h3>
+<p class="text-body text-ink-2 mb-6">
+  How often the threat actor tries the attack against this asset, expressed as a
+  number of attempts per year. Enter the low and high ends of your 90% range.
+  A ransomware group scanning your public-facing systems might attempt entry
+  dozens of times a year; a targeted campaign against a specific OT network
+  might be much rarer. The industry-calibrated starting point displayed in the
+  wizard is an IRIS-2025 industry median baseline &mdash; a starting prior to be
+  adjusted for your organisation&rsquo;s context, not a definitive value.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">2. Vulnerability</h3>
+<p class="text-body text-ink-2 mb-3">
+  The probability that an attempt succeeds &mdash; that is, the chance the
+  threat actor&rsquo;s capability exceeds the asset&rsquo;s resistance. In FAIR
+  terms: <em>P(Threat Capability &gt; Control Strength)</em>.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Critical framing:</strong> you are estimating the asset&rsquo;s
+  <em>inherent</em> susceptibility,
+  <strong>before counting your controls</strong>. Do not mentally discount the
+  figure for protections you already have &mdash; the controls you tick are
+  modelled separately and reduce it in the analysis. Counting them here would
+  credit them twice. The industry pre-fill is labelled &ldquo;inherent
+  baseline&rdquo; for the same reason.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Vulnerability is always a probability (0&ndash;100%). The low and high
+  inputs bound the 90% range and the engine samples within it; it never
+  exceeds 100%. The IRIS-2025 industry median shown as a starting point is a
+  median, not a prescription &mdash; your SME judgement adjusts it up or down.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">3. Primary Loss</h3>
+<p class="text-body text-ink-2 mb-6">
+  The direct financial cost <strong>per loss event</strong> &mdash; what you
+  spend when a single incident occurs: incident response, system recovery, ransom
+  payment, productivity loss during downtime. This is a per-event magnitude, not
+  an annual figure. The engine multiplies it by Loss Event Frequency across
+  thousands of simulated years to produce an annualised loss distribution. Enter
+  low and high estimates in dollars for that 90% range.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">4. Secondary Loss</h3>
+<p class="text-body text-ink-2 mb-6">
+  The knock-on cost <strong>per loss event</strong> &mdash; fines, regulatory
+  penalties, reputational damage, lost customers, and legal liability that arise
+  after the incident. Like Primary Loss, this is a per-event magnitude. The two
+  are added to form Loss Magnitude for each simulated event; annualisation
+  happens in the Monte Carlo layer, not in your input. If secondary consequences
+  are negligible or unknown, set both low and high to zero and revisit later.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">SME estimates and pooling</h2>
+<p class="text-body text-ink-2 mb-3">
+  For each input, the wizard lets you record estimates from several subject-matter
+  experts. When you have multiple expert judgements, Idraa pools them into one
+  distribution using percentile pooling &mdash; pooled ranges preserve more of
+  the between-expert uncertainty than a simple collapse would.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The industry calibration baselines shown in the wizard are IRIS-2025 industry
+  <strong>median</strong> values &mdash; the midpoint of observed industry
+  distributions, not population means. They are starting priors designed to be
+  SME-adjusted for your organisation&rsquo;s specific context, threat landscape,
+  and asset exposure.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Controls step</h2>
+<p class="text-body text-ink-2 mb-6">
+  After the four FAIR inputs, the wizard asks you to tick the controls that apply
+  to this scenario. Controls are modelled as effectiveness reductions on Threat
+  Event Frequency and Vulnerability in the simulation; they do not alter the
+  inherent Vulnerability estimate you entered. This is why you author inherent
+  Vulnerability independently and let the engine apply controls on top. Adopt
+  controls from the
+  <a class="text-brand hover:underline" href="/controls/library">Control Library</a>
+  or create custom ones at
+  <a class="text-brand hover:underline" href="/controls">Controls</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Worked example &mdash; mid-sized manufacturer</h2>
+<p class="text-body text-ink-2 mb-3">
+  Suppose you run security for a mid-sized manufacturer with roughly 1,500 staff
+  and $400&nbsp;million in annual revenue. Here is the shortest path to a useful
+  answer. <span class="text-ink-3">(Numbers below are illustrative to show input
+  shape &mdash; not recommended values for your business.)</span>
+</p>
+
+<ol class="list-decimal pl-5 space-y-4 text-body text-ink-2 mb-6">
+  <li>
+    <strong>Organisation setup:</strong> industry &ldquo;Manufacturing&rdquo;,
+    size &ldquo;Large&rdquo;, revenue $400M, maturity &ldquo;Developing&rdquo;.
+    This sets the IRIS-2025 industry median baselines in the wizard pre-fills.
+  </li>
+  <li>
+    <strong>Controls:</strong> adopt three from the library &mdash;
+    multi-factor sign-in, immutable (tamper-proof) backups, and email filtering
+    &mdash; and enter each one&rsquo;s yearly cost.
+  </li>
+  <li>
+    <strong>Scenario &mdash; &ldquo;Ransomware on production servers&rdquo;:</strong>
+    <ul class="list-disc pl-5 mt-2 space-y-2">
+      <li>
+        <strong>Threat Event Frequency (TEF):</strong> low 1, high 4 attempts
+        per year. (A mid-market manufacturing firm is a plausible ransomware
+        target; the range reflects uncertainty in campaign cadence.)
+      </li>
+      <li>
+        <strong>Vulnerability:</strong> low 10%, high 30% &mdash; the inherent
+        chance an attempt succeeds, before counting your controls. The three
+        controls above will be applied in the simulation to reduce this.
+      </li>
+      <li>
+        <strong>Primary Loss</strong> per loss event: low $250,000, high
+        $2,000,000 (recovery labour, downtime, potential ransom).
+      </li>
+      <li>
+        <strong>Secondary Loss</strong> per loss event: low $100,000, high
+        $1,500,000 (regulatory fines, customer churn, reputational damage).
+      </li>
+    </ul>
+    Tick the three controls above as reducing this scenario, then save.
+  </li>
+  <li>
+    <strong>Run it.</strong> Navigate to
+    <a class="text-brand hover:underline" href="/analyses/new">Analyses &rarr; New</a>,
+    select this scenario, and run. Idraa returns a distribution of annual
+    losses, the expected (mean) annual loss (ALE), and the risk-reduction value and
+    ROI for each control. See
+    <a class="text-brand hover:underline" href="/help/run-and-read-analyses">Run &amp; read analyses</a>
+    for a guide to reading the results page.
+  </li>
+</ol>
+<p class="text-body text-ink-2 mb-6">
+  That single scenario is enough to start a budget conversation. Add more
+  scenarios over time &mdash; phishing, OT network intrusion, supply-chain
+  compromise &mdash; to build a fuller picture of your exposure.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Starting from the Scenario Library</h2>
+<p class="text-body text-ink-2 mb-6">
+  Rather than filling every field from scratch, browse the
+  <a class="text-brand hover:underline" href="/library">Scenario Library</a>
+  for a ready-made entry close to your threat, adopt it into your workspace, and
+  adjust the low&ndash;high ranges for your context. Library entries carry
+  IRIS-2025 industry median calibration baselines; your SME adjustments layer on
+  top via the wizard. When you adopt a scenario from a different industry, the
+  Primary Loss and Secondary Loss pre-fills are re-scaled to your organisation&rsquo;s
+  <strong>revenue tier</strong> (the entry&rsquo;s industry tag is advisory and is
+  not used in the rescale); the Impact-page calibration banner shows the multiplier
+  applied &mdash; review and tweak every value before saving. Admins can also
+  bulk-import scenarios from CSV or JSON at
+  <a class="text-brand hover:underline" href="/scenarios">Scenarios &rarr; Import</a>.
+</p>

@@ -1,0 +1,92 @@
+{# Status-poll fragment. Self-stopping: terminal-state renders omit
+   the hx-trigger attribute so HTMX naturally stops polling. #}
+
+<div id="run-status-inner"
+     {% if run.status.value in ("queued", "running") %}
+       hx-get="/runs/{{ run.id }}/status"
+       hx-trigger="every 1s"
+       hx-swap="outerHTML"
+     {% endif %}>
+
+  {% if run.status.value == "queued" %}
+    <div class="alert">
+      <span class="loading loading-spinner loading-sm"></span>
+      Queued&hellip;
+    </div>
+
+  {% elif run.status.value == "running" %}
+    <div class="alert">
+      <span class="loading loading-spinner loading-sm"></span>
+      Running ({{ run.mc_iterations }} iterations)&hellip;
+      <form hx-post="/runs/{{ run.id }}/cancel"
+            hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+            hx-target="#run-status-inner"
+            hx-swap="outerHTML"
+            class="inline-block ml-2">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-sm btn-warning">Cancel</button>
+      </form>
+    </div>
+
+  {% elif run.status.value == "completed" %}
+    <div class="alert alert-success">
+      Completed
+      {% if run.completed_at and run.started_at %}
+        in {{ ((run.completed_at - run.started_at).total_seconds() | round(1)) }}s
+      {% endif %}
+      &mdash;
+      Random seed: {{ run.random_seed if run.random_seed is not none else "not recorded" }}
+    </div>
+    {% if run.run_type.value == "aggregate" %}
+      {% include "runs/_aggregate_results_panel.html" %}
+    {% else %}
+      {% include "runs/_results_panel.html" %}
+    {% endif %}
+
+  {% elif run.status.value == "failed" %}
+    <div class="alert alert-error">
+      <p>Failed: <code>{{ run.error_message }}</code></p>
+      {% if run.run_type.value == "single" %}
+        {# Issue #89: re-run replays the scenario's CURRENT mitigating_controls,
+           NOT the snapshot's frozen set. The snapshot is the audit/replay
+           record for THIS run; a fresh run is a fresh decision. #}
+        <form hx-post="/scenarios/{{ run.scenario_id }}/run"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              class="mt-2">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="mc_iterations" value="{{ run.mc_iterations }}">
+          <input type="hidden" name="random_seed" value="{{ run.random_seed if run.random_seed is not none else 42 }}">
+          <button type="submit" class="btn btn-sm btn-primary">
+            Re-run with same inputs
+          </button>
+        </form>
+      {% else %}
+        <a href="/analyses/new" class="btn btn-sm btn-primary mt-2">
+          Start new analysis
+        </a>
+      {% endif %}
+    </div>
+
+  {% elif run.status.value == "cancelled" %}
+    <div class="alert">
+      <p>Cancelled at {{ run.completed_at | format_datetime }}</p>
+      {% if run.run_type.value == "single" %}
+        {# Issue #89: see comment above. #}
+        <form hx-post="/scenarios/{{ run.scenario_id }}/run"
+              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+              class="mt-2">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="mc_iterations" value="{{ run.mc_iterations }}">
+          <input type="hidden" name="random_seed" value="{{ run.random_seed if run.random_seed is not none else 42 }}">
+          <button type="submit" class="btn btn-sm btn-primary">
+            Re-run with same inputs
+          </button>
+        </form>
+      {% else %}
+        <a href="/analyses/new" class="btn btn-sm btn-primary mt-2">
+          Start new analysis
+        </a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

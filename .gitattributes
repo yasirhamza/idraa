@@ -1,0 +1,65 @@
+# Enforce LF line endings everywhere — cross-platform repo (Windows + Linux/WSL)
+# This kills the "LF will be replaced by CRLF" warnings and ensures the repo state
+# is identical regardless of which OS Claude Code (or any other tool) writes from.
+
+* text=auto eol=lf
+
+# Source code
+*.py text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.html text eol=lf
+*.j2 text eol=lf
+*.jinja text eol=lf
+*.jinja2 text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+
+# Config
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.env text eol=lf
+.env.example text eol=lf
+
+# Notebooks (JSON; treat as text so diffs work)
+*.ipynb text eol=lf
+
+# Shell scripts — always LF (broken on Windows if CRLF, but git-bash handles it)
+*.sh text eol=lf
+
+# Windows-only scripts — always CRLF (they ONLY run on Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — never touch
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.pptx binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

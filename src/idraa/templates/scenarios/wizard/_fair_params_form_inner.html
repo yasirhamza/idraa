@@ -1,0 +1,378 @@
+{# src/idraa/templates/scenarios/wizard/_fair_params_form_inner.html
+
+   Shared parametrized SME-row partial for the split step-3 wizard
+   (Likelihood: TEF+Vuln, Impact: PL+SL). Renamed from _step3_form_inner.html
+   by the 2026-05-28 step-3 redesign.
+
+   Parametrized by the route context (``_fair_page_context``):
+     - ``fieldsets_on_page``  list of (key, label) tuples for THIS page only
+     - ``fieldset_tooltips``  {key: tooltip-string} for the (i) explainers
+     - ``show_calibration_banner``  gate the calibration/override banner
+       (Impact page only — PL/SL is the only calibrated half)
+     - ``page``  "likelihood" | "impact" (drives HTMX scoping in the parents)
+
+   The "Reset to baseline" and "Apply overlay" buttons use HTMX with
+   ``hx-target="#fair-params-inner" hx-swap="outerHTML"``. The endpoints return
+   just THIS fragment (rendered via ``_fair_page_context``) so the wizard chrome
+   is not nested inside the swap target. Keep this and the two page shells in
+   sync — each shell includes this partial for the initial GET, so there's a
+   single source of truth for the inner content. #}
+
+<div id="fair-params-inner">
+  {# PR γ-2 (#103) / T-fixup: calibration / override banner. Lives INSIDE the
+     HTMX swap target so "Reset to baseline" and "Apply overlay" re-render it
+     from the latest route-provided context. Gated on show_calibration_banner —
+     PL/SL is the only calibrated half, so this renders on the Impact page only. #}
+  {% if show_calibration_banner %}
+    {% if override_active %}
+      <div class="alert alert-warning mb-4" role="status">
+        <span>
+          PL/SL pre-fill from your organization's saved override for this entry.
+        </span>
+      </div>
+    {% else %}
+      {# Org revenue-tier loss scaling was removed 2026-07-07 — the IRIS sector
+         envelope IS the calibration; org size influences risk via controls, not
+         a loss pre-multiplier. #}
+      <div class="alert alert-info mb-4" role="status">
+        <span>
+          PL/SL reflect the curated reference-class loss for this scenario —
+          not scaled to your org size. You can adjust below.
+        </span>
+      </div>
+    {% endif %}
+  {% endif %}
+  {% for fieldset_key, label in fieldsets_on_page %}
+    <fieldset class="mb-8">
+      <legend class="text-lg font-semibold">
+        {{ label }}
+        {# PR γ-2 (#103) / T-fixup: per-fieldset calibration/override badge on
+           PL/SL only. TEF and Vuln stay archetype-curated, no badge. On the
+           Likelihood page these keys never appear in fieldsets_on_page. #}
+        {% if fieldset_key in ('pl', 'sl') %}
+          {% if override_active %}
+            <span class="badge badge-warning badge-sm tooltip"
+                  data-tip="From your saved override, not calibrated.">
+              override
+            </span>
+          {% endif %}
+        {% endif %}
+        {# methodology/vuln-inherent-framing: vulnerability is the asset's
+           INHERENT (control-naive) susceptibility. The IRIS industry baseline is
+           adopted as that inherent anchor — industry-typical and biased low
+           (an optimistic, risk-understating bias — NOT "conservative")
+           (adopted from IRIS as a controlled-world conversion-rate prior;
+           FAIR-modeled, not measured — see docs/reference/fair-cam-methodology.md
+           → "Vulnerability anchor") — and the org's modelled controls reduce it
+           separately in the analysis. The badge makes the anchor explicit at the
+           point of entry so analysts do NOT net out their current controls here
+           (that would double-count). #}
+        {% if fieldset_key == 'vuln' %}
+          <span class="badge badge-ghost badge-sm tooltip"
+                data-tip="Enter the asset's INHERENT susceptibility — its weakness before your controls. The IRIS industry baseline is adopted as this inherent anchor (industry-typical — and if anything LOW, so raise it if your asset is softer than typical); your mitigating controls reduce it separately in the analysis. Don't net out your current controls here.">
+            inherent baseline
+          </span>
+        {% endif %}
+      </legend>
+      <p class="text-sm text-gray-600 mb-2">
+        {{ rendered_questions[fieldset_key] }}
+        {% set _tip = fieldset_tooltips.get(fieldset_key) %}
+        {% if _tip %}
+          <span class="tooltip tooltip-right align-middle" data-tip="{{ _tip }}">
+            <span class="badge badge-ghost badge-xs cursor-help" aria-label="More info">i</span>
+          </span>
+        {% endif %}
+      </p>
+
+      {# Plan-gate B-Arch-1: smeDirectory hoisted to Alpine.store (registered
+         in the page shells step_3_likelihood.html / step_4_impact.html via
+         alpine:init) — per-fieldset x-data no longer carries its own clone.
+         References below use $store.smeDirectory so a save-to-directory in any
+         fieldset propagates reactively to all rows on the page. #}
+      <div x-data='{{ {
+            "fieldset": fieldset_key,
+            "rows": initial_rows[fieldset_key],
+          } | tojson }}'>
+        {# Mobile tranche 2d: this SME estimate grid is rendered with CSS grid
+           (not a <table>) so each row card-stacks on phones — field label +
+           control stacked — and lines up as aligned columns from the md
+           breakpoint up. All Alpine bindings (x-for / x-model / the SME
+           combobox x-data / the :name hidden inputs / $store.smeDirectory refs)
+           are unchanged; only the row/cell wrapper elements + classes changed.
+           The header and every row share the same 5-column md grid
+           template (Source · SME · Low · High · remove); on phones they fall
+           back to grid-cols-1 (a stacked card per row). #}
+        <div>
+          {# Column header — desktop only. On phones each cell carries its own
+             inline md:hidden label instead (the body Source cell can be briefly
+             empty during an HTMX swap repaint, so a shared header would show a
+             gap; per-cell labels avoid that). #}
+          <div class="hidden md:grid md:grid-cols-[5.5rem_minmax(0,1fr)_7rem_7rem_2.25rem] md:gap-3 md:items-end pb-1 text-meta text-ink-2">
+            <div>Source</div>
+            <div>SME</div>
+            <div>Low (5%)</div>
+            <div>High (95%)</div>
+            <div></div>
+          </div>
+          <div>
+            {# Bug 2 fix (PR #248): per-row ordinal label so analysts can
+               distinguish rows when there are multiple estimates for the
+               same fieldset.
+               UAT R2 Bug C fix: drop the "SME " prefix — the column header
+               "#" already says it's an ordinal.
+               UAT R2 Bug G fix: the IRIS-seeded row (sme_id maps to an
+               is_system_owned=true SME in smeDirectory) renders as
+               "Baseline" — analysts shouldn't see it as just "1" alongside
+               actual SME submissions. Real-SME rows are numbered "SME 1",
+               "SME 2", ... where the ordinal is computed by filtering out
+               IRIS rows so the numbering stays contiguous regardless of
+               where the Baseline row sits in the list. The column header
+               flipped from "#" to "Source" to match the new mixed-content
+               (label-or-ordinal) semantics. #}
+            <template x-for="(row, idx) in rows" :key="idx">
+              <div class="grid grid-cols-1 gap-2 py-3 border-b border-border-subtle
+                          md:grid-cols-[5.5rem_minmax(0,1fr)_7rem_7rem_2.25rem] md:gap-3 md:items-center md:py-1.5 md:border-0">
+                {# Defensive `($store.smeDirectory || [])` chain: under HTMX
+                   fragment swaps (Reset to industry baseline, Apply overlay) the
+                   inline store registration script in the page shells
+                   (step_3_likelihood.html / step_4_impact.html) does NOT
+                   re-execute, and on certain Alpine 3.x init orderings the per-row
+                   x-data evaluates `$store.smeDirectory.find(...)` before the store
+                   proxy is wired in — that throws and Alpine silently renders the
+                   cell empty (UAT R3 screenshot showed all source-label cells blank
+                   on a freshly-prefilled wizard). The `|| []` fallback degrades to
+                   "SME N" (unknown sme_id treated as non-IRIS) instead of blank.
+                   Same defensive pattern applied to the combobox below. #}
+                <div class="flex items-baseline gap-2 text-sm text-ink-2 md:block">
+                  <span class="md:hidden text-meta text-ink-2">Source</span>
+                  <span class="whitespace-nowrap"
+                        x-text="($store.smeDirectory || []).find(s => s.id === row.sme_id)?.is_system_owned
+                                  ? 'Baseline'
+                                  : 'SME ' + rows.filter((r, i) => i <= idx && !($store.smeDirectory || []).find(s => s.id === r.sme_id)?.is_system_owned).length"></span>
+                </div>
+                <div>
+                  <span class="md:hidden text-meta text-ink-2 block mb-1">SME</span>
+                  {# 2026-05-25 combobox: text input + filtered dropdown + Save-to-directory
+                     footer item. Two hidden inputs (sme_id_N + sme_name_N) carry the row's
+                     identity; exactly one is non-empty per submit (DB CHECK enforces XOR).
+                     - Pick from directory: row.sme_id = sme.id, row.sme_name = null
+                     - Type-then-blur: row.sme_id = null, row.sme_name = q
+                     - Save to directory: POST /scenarios/wizard/request-sme, then atomically
+                       reassign row.sme_id = newSme.id, row.sme_name = null #}
+                  <div x-data="{
+                        q: (row.sme_name || ($store.smeDirectory || []).find(s => s.id === row.sme_id)?.name || ''),
+                        open: false,
+                        get filtered() {
+                          const needle = this.q.toLowerCase();
+                          return ($store.smeDirectory || []).filter(s =>
+                            !s.is_system_owned && s.name.toLowerCase().includes(needle)
+                          );
+                        },
+                        get exactMatch() {
+                          const needle = this.q.toLowerCase();
+                          return ($store.smeDirectory || []).some(s => s.name.toLowerCase() === needle);
+                        },
+                        pick(sme) {
+                          row.sme_id = sme.id;
+                          row.sme_name = null;
+                          this.q = sme.name;
+                          this.open = false;
+                        },
+                        async saveToDirectory() {
+                          const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                          const resp = await fetch('/scenarios/wizard/request-sme', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'X-CSRF-Token': csrf
+                            },
+                            body: JSON.stringify({name: this.q.trim()})
+                          });
+                          if (!resp.ok) {
+                            alert('Could not save SME: ' + (await resp.text()));
+                            return;
+                          }
+                          const sme = await resp.json();
+                          {# Defensive: in the unlikely case the store wasn't
+                             registered (race on initial alpine:init), create it
+                             so the push lands somewhere reactive. #}
+                          if (!$store.smeDirectory) {
+                            Alpine.store('smeDirectory', []);
+                          }
+                          $store.smeDirectory.push({
+                            id: sme.id,
+                            name: sme.name,
+                            role_title: sme.role_title,
+                            is_system_owned: false
+                          });
+                          row.sme_id = sme.id;
+                          row.sme_name = null;
+                          this.q = sme.name;
+                          this.open = false;
+                        }
+                      }"
+                       class="relative"
+                       @click.outside="open = false">
+                    {# No name attribute on the visible input — the two hidden inputs below
+                       carry the form-submitted identity. Omitting `name` per plan-gate Sec-N1
+                       keeps the POST body lean (no _sme_display_N noise). #}
+                    <input type="text"
+                           x-model="q"
+                           @input="row.sme_id = null; row.sme_name = q || null"
+                           @focus="open = true"
+                           placeholder="Type SME name or pick from directory"
+                           required
+                           class="input input-bordered input-sm w-full">
+                    <input type="hidden"
+                           :name="fieldset + '_sme_id_' + idx"
+                           :value="row.sme_id || ''">
+                    <input type="hidden"
+                           :name="fieldset + '_sme_name_' + idx"
+                           :value="row.sme_name || ''">
+                    <ul x-show="open"
+                        x-cloak
+                        class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-base-100 shadow">
+                      <template x-for="sme in filtered" :key="sme.id">
+                        {# Use x-text (textContent), never x-html (innerHTML), for sme.name —
+                           sme.name is user-provided free text in the new design and must not
+                           be interpolated into HTML directly. textContent is XSS-safe. #}
+                        <li @mousedown.prevent="pick(sme)"
+                            class="cursor-pointer px-3 py-1 hover:bg-base-200"
+                            x-text="sme.name + (sme.role_title ? ' (' + sme.role_title + ')' : '')"></li>
+                      </template>
+                      <li x-show="filtered.length === 0 && q.length === 0"
+                          class="px-3 py-1 text-sm italic text-gray-500">
+                        No saved SMEs yet — type a name above.
+                      </li>
+                      <li x-show="q.length >= 1 && !exactMatch"
+                          @mousedown.prevent="saveToDirectory()"
+                          class="cursor-pointer border-t px-3 py-1 text-sm font-medium hover:bg-base-200">
+                        + Save "<span x-text="q"></span>" to directory
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                {# UAT R2 Bug B fix: money inputs (PL/SL) render as
+                   ``type="text" inputmode="decimal"`` so HTML's <input
+                   type=number> doesn't strip trailing zeros (e.g.
+                   "388920.40" → "388920.4"). The backend ``_parse_sme_rows_subset``
+                   coerces every low/high via ``float(_str(...))`` (with
+                   defensive comma-stripping for the formatted-display fix
+                   below) so accepting strings here is safe; Pydantic +
+                   ScenarioSMEEstimate constraints (low > 0, high >= low)
+                   still enforce shape. TEF (rate) and Vuln (probability)
+                   keep ``type="number"`` — trailing zeros + comma formatting
+                   aren't UX concerns there.
+
+                   UAT R3 formatted-display fix (Option A): PL/SL inputs show
+                   human-readable comma-grouped numbers ("388,920.40") on blur
+                   and strip commas on focus so the analyst can type raw
+                   digits. Nested x-data per money input keeps display state
+                   (the formatted string) separate from the parent combobox
+                   scope. The visible input's `:name` still submits the
+                   display string; the backend defensively strips commas
+                   before float parsing in case the user clicks Finalize
+                   while an input is focused (displaying raw digits).
+                   `pattern` accepts both `[0-9,]` and a decimal portion. #}
+                <div>
+                  <span class="md:hidden text-meta text-ink-2 block mb-1">Low (5%)</span>
+                  <template x-if="['pl', 'sl'].includes(fieldset)">
+                    <div x-data="{
+                          display: '',
+                          init() { this.display = this.fmt(row.low); },
+                          fmt(v) {
+                            if (v === '' || v === null || v === undefined) return '';
+                            const n = parseFloat(String(v).replace(/,/g, ''));
+                            return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          },
+                          strip(s) { return s ? String(s).replace(/,/g, '') : ''; }
+                        }">
+                      <input type="text" inputmode="decimal"
+                             pattern="[0-9,]+(\.[0-9]+)?" required
+                             class="input input-bordered input-sm w-full"
+                             x-model="display"
+                             @focus="display = strip(display)"
+                             @blur="row.low = strip(display); display = fmt(row.low)"
+                             :name="fieldset + '_low_' + idx">
+                    </div>
+                  </template>
+                  <template x-if="!['pl', 'sl'].includes(fieldset)">
+                    {# Vulnerability is a probability [0,1] -> max=1; TEF is a
+                       frequency (events/yr) -> no upper bound. Both >= 0. #}
+                    <input type="number" step="any" min="0"
+                           :max="fieldset === 'vuln' ? 1 : false" required
+                           class="input input-bordered input-sm w-full"
+                           x-model.number="row.low"
+                           :name="fieldset + '_low_' + idx">
+                  </template>
+                </div>
+                <div>
+                  <span class="md:hidden text-meta text-ink-2 block mb-1">High (95%)</span>
+                  <template x-if="['pl', 'sl'].includes(fieldset)">
+                    <div x-data="{
+                          display: '',
+                          init() { this.display = this.fmt(row.high); },
+                          fmt(v) {
+                            if (v === '' || v === null || v === undefined) return '';
+                            const n = parseFloat(String(v).replace(/,/g, ''));
+                            return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                          },
+                          strip(s) { return s ? String(s).replace(/,/g, '') : ''; }
+                        }">
+                      <input type="text" inputmode="decimal"
+                             pattern="[0-9,]+(\.[0-9]+)?" required
+                             class="input input-bordered input-sm w-full"
+                             x-model="display"
+                             @focus="display = strip(display)"
+                             @blur="row.high = strip(display); display = fmt(row.high)"
+                             :name="fieldset + '_high_' + idx">
+                      {% if org_annual_revenue %}
+                      {# Milestone B (#loss-pert-overhaul): display-only
+                         %-of-revenue hint for the capped ceiling. Reads the
+                         page-level Alpine scope (catastrophic, annualRevenue)
+                         set on the step-4 form; the route supplies
+                         org_annual_revenue for step 4 ONLY (A-N2). #}
+                      <span class="text-meta text-ink-2 block mt-1"
+                            data-revenue-hint data-annual-revenue="{{ org_annual_revenue }}"
+                            x-show="!catastrophic && strip(display)"
+                            x-text="'≈ ' + ((parseFloat(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>
+                      {% endif %}
+                    </div>
+                  </template>
+                  <template x-if="!['pl', 'sl'].includes(fieldset)">
+                    {# High must be >= Low (inline guard; backend also enforces).
+                       Vulnerability capped at 1 (probability); TEF unbounded. #}
+                    <input type="number" step="any" :min="row.low || 0"
+                           :max="fieldset === 'vuln' ? 1 : false" required
+                           class="input input-bordered input-sm w-full"
+                           x-model.number="row.high"
+                           :name="fieldset + '_high_' + idx">
+                  </template>
+                </div>
+                <div class="flex justify-end md:justify-center md:items-center">
+                  <button type="button"
+                          class="btn btn-ghost btn-sm text-status-critical md:btn-xs"
+                          @click="rows.splice(idx, 1)"
+                          aria-label="Remove this estimate">
+                    × <span class="md:hidden">Remove</span>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="flex gap-2 mt-2">
+          {# 2026-05-25: new rows start with both identity fields null. The
+             combobox's @input handler fills sme_name as the user types, or
+             pick() fills sme_id when the user picks from the directory.
+             The text input's `required` attr forces the analyst to enter
+             something before submit. #}
+          <button type="button" class="btn btn-sm"
+                  @click="rows.push({sme_id: null, sme_name: null, low: 0, high: 0})">
+            + Add SME estimate
+          </button>
+        </div>
+      </div>
+    </fieldset>
+  {% endfor %}
+</div>

@@ -1,0 +1,233 @@
+{#
+  Design-system styleguide. Each section demonstrates one macro or one design
+  primitive in multiple configurations. Updated as new macros land (F5-F14).
+#}
+{% extends "base.html" %}
+{% block title %}Styleguide{% endblock %}
+{% block content %}
+
+<h1 class="text-display text-ink-1">Design system</h1>
+<p class="text-body text-ink-2 mt-1 mb-8">Live preview of every design-system primitive. Use this page to verify visual changes touch every macro consistently.</p>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">Design tokens</h2>
+  <p class="text-meta text-ink-2 mb-4">Colour swatches — light + dark switch via the sidebar footer toggle.</p>
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+    {% for name in [
+      'surface-0','surface-1','surface-2','border-subtle','border-strong',
+      'ink-1','ink-2','ink-3','brand',
+      'status-critical','status-warning','status-success','status-info',
+      'numeric-pos','numeric-neg'
+    ] %}
+    <div class="p-3 rounded-card bg-surface-1 border border-border-subtle">
+      <div class="h-8 rounded mb-2" style="background-color: var(--color-{{ name }})"></div>
+      <p class="text-micro text-ink-2">{{ name }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">Typography</h2>
+  <div class="space-y-2 bg-surface-1 border border-border-subtle rounded-card p-4">
+    <p class="text-display text-ink-1">text-display — 28/36, 600</p>
+    <p class="text-h2 text-ink-1">text-h2 — 20/28, 600</p>
+    <p class="text-h3 text-ink-1">text-h3 — 16/24, 600</p>
+    <p class="text-body text-ink-1">text-body — 14/20, 400 (default)</p>
+    <p class="text-meta text-ink-2">TEXT-META — 12/16, 500, UPPER, LS 0.05EM</p>
+    <p class="text-micro text-ink-3">text-micro — 11/16, 500</p>
+    <p class="text-number-lg text-ink-1 font-mono tabular-nums">$12,345,678 — text-number-lg</p>
+    <p class="text-number-md text-ink-1 font-mono tabular-nums">$12,345.67 — text-number-md</p>
+  </div>
+</section>
+
+{# Section placeholders — each filled in by its owning task (F5-F14). #}
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">page_header</h2>
+  {% from "macros/page_header.html" import page_header %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    {{ page_header(
+      title="Controls",
+      breadcrumb=[("Home","/"),("Controls", none)],
+      actions=[
+        {"label":"Export CSV","href":"#","style":"outline"},
+        {"label":"+ New control","href":"#","style":"primary"},
+      ],
+      meta="Showing 1–25 of 184",
+    ) }}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">breadcrumb</h2>
+  {% from "macros/breadcrumb.html" import breadcrumb %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 space-y-2">
+    {{ breadcrumb([("Home", none)]) }}
+    {{ breadcrumb([("Home","/"),("Controls", none)]) }}
+    {{ breadcrumb([("Home","/"),("Controls","/controls"),("Edit", none)]) }}
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">status_pill</h2>
+  {% from "macros/status_pill.html" import status_pill %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 grid grid-cols-3 gap-3">
+    {% for v in ['low','moderate','high','critical'] %}<div>{{ status_pill(v, "risk") }}</div>{% endfor %}
+    {% for v in ['queued','running','completed','failed','cancelled'] %}<div>{{ status_pill(v, "run") }}</div>{% endfor %}
+    {% for v in ['active','maintenance','inactive'] %}<div>{{ status_pill(v, "control") }}</div>{% endfor %}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">empty_state</h2>
+  {% from "macros/empty_state.html" import empty_state %}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {{ empty_state("◇", "Nothing here", "The list is empty.") }}
+    {{ empty_state("⛨", "No controls yet",
+                   "Create one, or import the FAIR-CAM library CSV.",
+                   cta=[{"label":"+ New control","href":"#","style":"primary"},
+                        {"label":"Import CSV","href":"#","style":"outline"}]) }}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">action_menu</h2>
+  {% from "macros/action_menu.html" import action_menu %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 flex gap-8">
+    <div>
+      <p class="text-meta text-ink-2 mb-2">Normal</p>
+      {{ action_menu([
+        {"label":"Edit","href":"#"},
+        {"label":"Duplicate","action":"#","method":"post"},
+      ]) }}
+    </div>
+    <div>
+      <p class="text-meta text-ink-2 mb-2">With danger</p>
+      {{ action_menu([
+        {"label":"Edit","href":"#"},
+        {"label":"Delete","action":"#","method":"post","danger":true},
+      ]) }}
+    </div>
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">data_table</h2>
+  {% from "macros/data_table.html" import data_table %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    {{ data_table(
+      rows=sample_control_rows,
+      columns=sample_control_columns,
+      sort_by="name", sort_dir="asc", sort_url="/_dev/styleguide",
+      exportable=True, export_url="#",
+      page_size=25, page=1, total=184, page_size_key="styleguide_demo",
+    ) }}
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">form_field</h2>
+  {% from "macros/form_field.html" import form_field %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 space-y-4">
+    {{ form_field(name="org_name", label="Organization name", input_type="text", value="Acme",
+                  help="Shown on reports.", required=True) }}
+    {{ form_field(name="ale_ceiling", label="ALE ceiling", input_type="money", value="10000000",
+                  help="Maximum tolerable single-event loss.") }}
+    {{ form_field(name="vuln", label="Vulnerability (annual)", input_type="percent", value="14.2") }}
+    {{ form_field(name="control_type", label="Type", input_type="select", value="prev",
+                  options=[("prev","Preventive"),("det","Detective"),("resp","Responsive")]) }}
+    {{ form_field(name="desc", label="Description", input_type="textarea", rows=4,
+                  value="Longer free-text description...") }}
+    {{ form_field(name="bad", label="Bad number", input_type="number", value="-1",
+                  error="Must be a positive number.") }}
+    {{ form_field(name="readonly_name", label="Readonly view", input_type="text",
+                  value="Acme Corp", mode="display") }}
+    {{ form_field(name="due_on", label="Due date", input_type="date", value="2026-06-01") }}
+    {{ form_field(name="enabled", label="Enabled", input_type="toggle", value=True) }}
+    {{ form_field(name="sim_mode", label="Simulation mode", input_type="radio_group", value="enhanced",
+                  options=[
+                    ("baseline", "Baseline", "FAIR baseline only"),
+                    ("enhanced", "Enhanced", "Apply control effects"),
+                  ]) }}
+    {{ form_field(name="domains", label="Domains", input_type="checkbox_group", value=["V","R"],
+                  options=[("V","Vulnerability"),("R","Response"),("T","Threat")]) }}
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">form_error_summary</h2>
+  {% from "macros/form_error_summary.html" import form_error_summary %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 space-y-4">
+    {{ form_error_summary({"name":"Name must not be empty.","ale_ceiling":"ALE ceiling must be positive."}) }}
+    <p class="text-micro text-ink-3">(empty-errors variant renders nothing)</p>
+    {{ form_error_summary({}) }}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">kpi_card</h2>
+  {% from "macros/kpi_card.html" import kpi_card %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    {{ kpi_card(label="Annual loss exposure", value=12345678, format="money") }}
+    {{ kpi_card(label="Coverage", value=0.873, format="percent",
+                delta=0.085, delta_format="pct", footer="vs. previous run") }}
+    {{ kpi_card(label="Total runs", value=12500, format="count") }}
+    {{ kpi_card(label="Mean residual", value=485000, format="money",
+                delta=-125000, delta_format="money") }}
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">data_grid</h2>
+  {% from "macros/data_grid.html" import data_grid %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    {{ data_grid(
+      matrix=sample_matrix,
+      row_label_header="Scenario",
+      show_totals=True,
+      column_subscript="(Shapley $)",
+    ) }}
+  </div>
+</section>
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">viewport_block_authoring</h2>
+  {% from "macros/viewport_block_authoring.html" import viewport_block_authoring, only_on_md %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    <p class="text-meta text-ink-2 mb-4">Resize below 768 px to see the block; ≥md shows the real form placeholder.</p>
+    {{ viewport_block_authoring(reason="Wizards need a wider screen. Switch to a tablet or desktop to continue.") }}
+    {% call only_on_md() %}
+    <div class="bg-surface-2 border border-border-subtle rounded-card p-3">
+      <p class="text-meta text-ink-2">Authoring form would render here on md+.</p>
+    </div>
+    {% endcall %}
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">chart (existing macro — first-party server-rendered SVG)</h2>
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 text-meta text-ink-2">
+    <p class="mb-2"><code class="font-mono">macros/chart.html</code> emits chart geometry as inline SVG, sourced from <code class="font-mono">services/chart_svg.py</code>'s pure geometry functions (epic #547). Theming is pure CSS custom properties (<code class="font-mono">--chart-inherent</code> / <code class="font-mono">--chart-residual</code> / <code class="font-mono">--chart-appetite</code> / <code class="font-mono">--chart-reduction</code>) recomputed by the browser on the <code class="font-mono">data-theme</code> attribute flip — no client-side JS restyle. Crosshair/tooltip/slider/log-toggle hydration + CSV export are wired by <code class="font-mono">static/js/charts.js</code>.</p>
+    <p>Named macros exported by this file (call-site sample):</p>
+    <ul class="list-disc pl-5">
+      <li><code class="font-mono">loss_exceedance_curve(points, tolerance, currency)</code></li>
+      <li><code class="font-mono">exceedance_probability_curve(points, tolerance, currency)</code></li>
+      <li><code class="font-mono">dual_lec_curve(payload, tolerance, currency)</code></li>
+      <li><code class="font-mono">dual_epc_curve(payload, tolerance, currency)</code></li>
+      <li><code class="font-mono">headline_ale_with_ci_band(headline, currency)</code></li>
+      <li><code class="font-mono">control_effectiveness_bar(rows)</code></li>
+      <li><code class="font-mono">risk_comparison_bar(comparison, currency)</code></li>
+    </ul>
+    <p class="mt-2">No live demo here — charts need real view-model data shapes; consult the calling templates (<code>runs/_results_panel.html</code>, <code>dashboard/index.html</code>).</p>
+  </div>
+</section>
+
+<section class="mb-12">
+  <h2 class="text-h2 mb-2">unit_aware_inputs (existing macro — 119 lines)</h2>
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4 text-meta text-ink-2">
+    <p class="mb-2"><code class="font-mono">macros/unit_aware_inputs.html</code> dispatches on a sub-function's unit type (elapsed_time, currency, probability) to render the matched input widget. Wraps form_field's label/help/error chrome where applicable.</p>
+    <p>Named macros exported by this file:</p>
+    <ul class="list-disc pl-5">
+      <li><code class="font-mono">unit_input(name, unit, value, ...)</code></li>
+      <li><code class="font-mono">unit_label_suffix(unit)</code></li>
+      <li><code class="font-mono">unit_display(unit, value)</code></li>
+    </ul>
+    <p class="mt-2">No live demo here — sub-function unit dispatch needs the controls/_assignment_row context.</p>
+  </div>
+</section>
+
+{% endblock %}

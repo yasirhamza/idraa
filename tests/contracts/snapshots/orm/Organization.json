@@ -1,0 +1,222 @@
+{
+  "columns": {
+    "annual_revenue": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "annual_security_budget": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "cloud_usage": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(32)"
+    },
+    "compliance_requirements": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "created_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "cyber_insurance_deductible": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "cyber_insurance_limit": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "digital_maturity": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(32)"
+    },
+    "employee_count": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "INTEGER"
+    },
+    "geographic_regions": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "has_cyber_insurance": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "BOOLEAN"
+    },
+    "headquarters_location": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(255)"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "industry_sub_sector": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(22)"
+    },
+    "industry_type": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(14)"
+    },
+    "loss_tolerance_amount": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "loss_tolerance_probability": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "naics_code": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(12)"
+    },
+    "name": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(255)"
+    },
+    "organization_size": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(10)"
+    },
+    "preferred_currency": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(3)"
+    },
+    "preferred_language": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(8)"
+    },
+    "regulatory_environment": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "risk_appetite": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(12)"
+    },
+    "security_maturity": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(10)"
+    },
+    "technology_stack": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    }
+  },
+  "indexes": [],
+  "table_name": "organizations"
+}

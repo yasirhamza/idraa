@@ -1,0 +1,69 @@
+{# src/idraa/templates/controls/_clear_capability_modal.html
+   Issue #129 §3, T6 -- NULL-fallback warning modal.
+
+   Rendered alongside the capability input in `_assignment_row.html`
+   whenever an EXISTING assignment row has a non-NULL capability_value
+   that the user might want to clear. The "x clear" trigger button in
+   the row opens this dialog; "Yes, clear value" zeroes the
+   capability_value input and closes the dialog.
+
+   Round-1 + round-2 + round-3 plan-gate fixes:
+   - Meth-B1: copy dispatches by unit type (CURRENCY != opeff=0.5)
+   - Meth-B2: dropped "industry-median" framing -- 0.5 is the algebraic
+     anchor at t = tau * ln(2), not an empirical median
+   - Sec-I2: modal id uses assignment.id (uuid) not loop index (collision
+     risk across re-renders / multi-row forms)
+   - Sec-2-I2 + Sec-3-T6-I1: bracket lookup on sub_function_units_map
+     (NOT .get(default)); the
+     `tests/contracts/test_sub_function_units_map_exhaustive.py`
+     contract test is the real safety net for enum-vs-map drift.
+#}
+{% set unit = sub_function_units_map[assignment.sub_function] %}
+<dialog id="clear-capability-modal-{{ assignment.id }}"
+        class="modal backdrop:bg-ink-1/50">
+  <div class="bg-surface-0 border border-border-subtle rounded-card shadow-xl p-6 max-w-md w-full mx-auto">
+    <h3 class="text-h3 text-ink-1 font-bold mb-4">Clear capability value?</h3>
+    <p class="text-body text-ink-2 mb-6">
+      {% if unit == "elapsed_time" %}
+        Clearing this value falls back to the model midpoint
+        (operational effectiveness = 0.5, by construction at
+        t = &tau; &middot; ln(2)). Your modeled ALE for scenarios using
+        this control may change.
+      {% elif unit == "currency" %}
+        Clearing this value disables the per-event loss-reduction
+        subtractor for this control; loss magnitude reverts to its
+        uncalibrated distribution. Your modeled ALE for scenarios
+        using this control may <strong>increase</strong> (the subtractor
+        was reducing per-event secondary loss; without it the
+        reduction no longer applies).
+      {% else %}
+        Clearing this value removes the calibrated capability for this
+        sub-function. Your modeled ALE for scenarios using this control
+        may change.
+      {% endif %}
+    </p>
+    {# IMPORTANT: do NOT wrap these buttons in `<form method="dialog">`.
+       This modal is rendered inside `#control-form` (per
+       _assignment_row.html), and a nested `<form>` causes the browser
+       to auto-close the OUTER form at the inner-form's opening tag.
+       That truncates `#control-form` so the "+ Add assignment" and
+       "Save changes" buttons end up OUTSIDE the form → clicking Save
+       does nothing on EDIT pages with persisted assignments.
+       Discovered live 2026-05-19. Use plain buttons + JS close
+       (matches the "Yes" button's pattern). #}
+    <div class="flex justify-end gap-3">
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        onclick="this.closest('dialog').close()">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="btn btn-warning btn-sm"
+        @click="document.querySelector('input[name=\'assignments[{{ index }}][capability_value]\']').value = ''; this.closest('dialog').close();">
+        Yes, clear value
+      </button>
+    </div>
+  </div>
+</dialog>

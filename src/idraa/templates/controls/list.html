@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/_control.html" import control_domains %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}Controls{% endblock %}
+{% block content %}
+
+{# Header actions matched to route RBAC gates (PR-5 review follow-through):
+   export + library browse are viewer+; import is admin-only; /controls/new
+   is analyst+. Don't render buttons that 403. #}
+{{ page_header(
+  title="Controls",
+  breadcrumb=breadcrumb_for(request),
+  actions=[
+    {"label": "Export CSV", "href": "/controls/export.csv", "style": "brand", "icon": "⇩", "download": True},
+  ] + (
+    [{"label": "Import CSV", "href": "/controls/import", "style": "outline"}]
+      if (current_user and current_user.role.value == "admin") else []
+  ) + [
+    {"label": "Browse library", "href": "/controls/library", "style": "outline"},
+  ] + (
+    [{"label": "+ New control", "href": "/controls/new", "style": "primary"}]
+      if (current_user and current_user.role.value in ("analyst", "admin")) else []
+  ),
+) }}
+{{ help_trigger('controls-overlays') }}
+
+{# Source provenance filter (P2b Task 9). Plain links that set ?source=; the
+   active option is highlighted. Kept minimal/consistent with the page. #}
+{% set source_filters = [
+  {"label": "All",          "value": none,             "href": "/controls"},
+  {"label": "Custom",       "value": "custom",         "href": "/controls?source=custom"},
+  {"label": "From library", "value": "library_derived","href": "/controls?source=library_derived"},
+] %}
+<div class="flex items-center gap-2 mb-3 text-meta">
+  <span class="text-ink-2">Source:</span>
+  {% for f in source_filters %}
+  <a href="{{ f.href }}"
+     class="px-2 py-0.5 rounded-none border
+            {% if active_source == f.value %}border-brand text-brand font-medium{% else %}border-border-subtle text-ink-2 hover:text-ink-1{% endif %}">
+    {{ f.label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% set columns = [
+  {"key": "name",         "label": "Name",   "sortable": True, "priority": "primary"},
+  {"key": "domains_label","label": "Domain", "priority": "secondary"},
+  {"key": "type_value",   "label": "Type",   "priority": "secondary"},
+  {"key": "source_label", "label": "Source", "priority": "secondary"},
+  {"key": "status_value", "label": "Status", "kind": "status_pill", "pill_kind": "entity"},
+  {"key": "stage_badge",  "label": "Stage",  "kind": "badge"},
+  {"key": "_actions",     "label": "",       "kind": "action_menu"},
+] %}
+
+{% set rows = [] %}
+{% for c in controls %}
+{# Implementation stage (issue #395). The control LIBRARY list shows ALL stages;
+   this badge just labels them. Non-active stages get a warning tone (they are
+   excluded from analyses until Active); active is quiet/neutral. Uses the enum's
+   canonical .label (plan-gate Arch-S1) — never value|replace|title. #}
+{%- set _stage = c.implementation_stage -%}
+{%- set _ = rows.append({
+  "id":           c.id | string,
+  "name":         c.name,
+  "domains_label": (c.domains | map(attribute="value") | sort | map("humanize_slug") | join(", ")) if c.domains else "—",
+  "type_value":   c.type.value,
+  "source_label": "From library" if c.source == ControlSource.LIBRARY_DERIVED else "Custom",
+  "status_value": c.status.value,
+  "stage_badge":  {"label": _stage.label, "tone": "badge-warning" if _stage.value != "active" else "badge-ghost"},
+  "_actions": [
+    {"label": "Edit",      "href": "/controls/" ~ c.id ~ "/edit"},
+    {"label": "Duplicate", "action": "/controls/" ~ c.id ~ "/duplicate", "method": "post"},
+  ],
+}) -%}
+{% endfor %}
+
+{# Empty-state CTAs matched to each target route's RBAC gate (review
+   finding, applied here for parity with scenarios/list.html): library
+   browse is viewer+, /controls/new is analyst/admin, import is admin-only
+   — don't show buttons that 403. #}
+{% set _empty_ctas = [] %}
+{% if current_user and current_user.role.value in ("analyst", "admin") %}
+  {% set _ = _empty_ctas.append({"label": "+ New control", "href": "/controls/new", "style": "primary"}) %}
+{% endif %}
+{% set _ = _empty_ctas.append({"label": "Browse library", "href": "/controls/library", "style": "outline"}) %}
+{% if current_user and current_user.role.value == "admin" %}
+  {% set _ = _empty_ctas.append({"label": "Import CSV", "href": "/controls/import", "style": "ghost"}) %}
+{% endif %}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  sort_by=sort_by|default("name"),
+  sort_dir=sort_dir|default("asc"),
+  sort_url="/controls",
+  row_href_template="/controls/{id}",
+  empty={
+    "icon": "⛨",
+    "title": "No controls yet",
+    "body": "Create one, or browse the control library to adopt a curated control.",
+    "cta": _empty_ctas,
+  },
+) }}
+
+{% endblock %}

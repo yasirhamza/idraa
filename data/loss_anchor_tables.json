@@ -1,0 +1,1562 @@
+[
+  {
+    "archetype": "ransomware-on-ehr",
+    "sector": "healthcare",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 557000,
+    "p95": 14000000,
+    "note": "sector-generic IRIS pair; archetype-specific source not found",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Appendix — Loss magnitude statistics by sector)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ransomware-healthcare-small-practice",
+    "sector": "healthcare",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "citation shape failure (B-METH-7): numbers confirmed in primary whitepaper via third-party copy but official Sophos locator gated/unreachable; re-verify-eligible for C-iii with corrected locator. Official Sophos whitepaper landing page (https://www.sophos.com/en-us/whitepaper/state-of-ransomware-in-healthcare) serves the 2025 edition, not 2024; https://www.sophos.com/en-us/whitepaper/state-of-ransomware-in-healthcare-2024 returns HTTP 404. To restore: cite 'Sophos State of Ransomware in Healthcare 2024 whitepaper, p. [N] — Recovery Costs in Healthcare section' with the official Sophos-published PDF URL as secondary_url.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "accidental-insider-exposure",
+    "sector": "healthcare",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source publishes per-org median or mean loss magnitude specifically for accidental insider exposure (misdelivery, misconfiguration, unintentional PHI disclosure) as a discrete financial event in healthcare. IBM CODB 2024 reports a malicious insider mean of $4.99M but this is (a) malicious not accidental, (b) cross-sector not healthcare-specific, and (c) a mean not a percentile pair. Verizon DBIR 2024 notes 70% of healthcare breaches are insider-caused but does not publish per-event loss figures for the accidental subset. NetDiligence 2018 data (average crisis response $676K for healthcare) is too old and does not isolate accidental insiders. The sector-generic IRIS 2025 Figure A3 p.35 pair (p50=$557K / p95=$14M) is appropriate for ransomware-class incidents but would overclaim for the accidental-insider threat profile, which typically involves HIPAA notification costs and regulatory exposure well below the ransomware tail. No within-archetype or within-NAICS-family source found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "healthcare-record-alteration",
+    "sector": "healthcare",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for healthcare EHR data integrity tampering (malicious record alteration by insider) as a discrete threat category with financial percentiles. IBM CODB, Verizon DBIR, Sophos, NetDiligence, and Coveware do not publish a data-tampering-specific loss distribution for healthcare. HHS OCR enforcement data covers regulatory penalties (max tier-4 cap $2.13M per year) but not the full loss event magnitude including litigation, remediation, and patient harm. The threat type (data_tampering / insider_malicious) is structurally distinct from breach/exfiltration: harm may be clinical (patient safety, malpractice) rather than purely financial, and no actuarial cyber-insurance body has published a loss distribution for this sub-category that meets TIER-2 criteria. This is a genuine data gap — no honest TIER-2 anchor exists.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "healthcare-staff-credential-phish",
+    "sector": "healthcare",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 557000,
+    "p95": 14000000,
+    "note": "sector-generic IRIS pair; archetype-specific source not found",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Appendix — Loss magnitude statistics by sector)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "moveit-class-zero-day-mft",
+    "sector": "professional_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 736000,
+    "p95": 17000000,
+    "note": "sector-generic IRIS pair (Professional sector); MoveIT-class per-victim total-loss distribution not publicly published — Cl0p 2023 settlement/regulatory figures are entity-level disclosures, not a population distribution. IRIS 2025 Figure A3 'Professional' row is the best available full-loss anchor for this archetype.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Professional row: Median $736K, 95th percentile $17M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "phishing-ad-compromise-ransomware",
+    "sector": "education",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 249000,
+    "p95": 6000000,
+    "note": "sector-generic IRIS pair (Education sector). Sophos State of Ransomware in Education 2024 (blog, https://www.sophos.com/en-us/blog/the-state-of-ransomware-in-education-2024/) reports median ransom payment of $6.6M (lower ed, n=99) and $4.4M (higher ed, n=92), and mean recovery cost of $3.76M / $4.02M. These cannot serve as FAIR loss-magnitude lognormal legs because: (a) ransom payment is a partial loss component, not total FAIR Loss Magnitude; (b) the mean recovery cost and the median ransom payment are different statistical moments of different loss components — combining them would violate both-legs traceability (Hard Rule 1) and Policy A/B requirements. IRIS sector-generic p50+p95 pair is the best available full-loss anchor. The Sophos figures are noted as contextual support for a higher-than-median tail in this archetype.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Education row: Median $249K, 95th percentile $6M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ransomware-on-fileshare",
+    "sector": "professional_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 736000,
+    "p95": 17000000,
+    "note": "sector-generic IRIS pair (Professional sector). No professional-services-specific ransomware loss distribution found with both percentile legs from the same source. IRIS 2025 Figure 12 (p. 17) provides a trend panel for Professional sector (p50=$1.5M, p90=$21.1M in 2024) but uses p90 not p95, and that statistic differs from Figure A3's p95 — cannot substitute p90 for p95 without changing the quantile semantics. Figure A3 p50+p95 used as the primary TIER-1 pair.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Professional row: Median $736K, 95th percentile $17M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "public-sector-targeted-intrusion",
+    "sector": "government_public",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 214000,
+    "p95": 18000000,
+    "note": "sector-generic IRIS pair (Public sector). Sophos State of Ransomware in State and Local Government 2024 (blog, https://www.sophos.com/en-us/blog/the-state-of-ransomware-in-state-and-local-government-2024/) reports median ransom payment $2.2M (n=49) and mean recovery cost $2.83M. These cannot serve as FAIR loss-magnitude lognormal legs: median ransom payment is a partial loss component (not total loss magnitude), and the mean recovery cost and median ransom payment are different statistical moments of different loss components — combining them violates both-legs traceability (Hard Rule 1). IRIS Figure 12 does not include a Public/Government trend panel. IRIS Figure A3 p50+p95 is the best available full-loss anchor.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Public row: Median $214K, 95th percentile $18M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "education-research-ip-exfiltration",
+    "sector": "education",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published per-org financial loss distribution exists for nation-state IP exfiltration from education institutions. The loss profile for this archetype is primarily long-term strategic economic harm (loss of R&D competitive advantage, pre-publication data value) rather than the immediate financial losses (ransomware response, notification, regulatory) that IRIS 2025 captures. Applying the IRIS 'Education' sector-generic pair (p50=$249K, p95=$6M) would misrepresent the loss profile — those figures reflect the central tendency of all education cyber events, which are dominated by ransomware and data breach incidents with immediate financial impact, not IP-value destruction events. CISA/FBI advisories on Chinese/Russian APT targeting of university research (e.g., CISA AA22-186A) document frequency and TTPs but contain no per-org financial loss distributions. IBM CODB 2024 does not publish an education-sector IP-theft sub-category. No vendor (NetDiligence, Coveware, Sophos) publishes a per-org loss distribution specific to nation-state IP exfiltration from education. Honest 'none' until a dedicated source is identified in C-iii curation.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "education-student-records-insider",
+    "sector": "education",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 249000,
+    "p95": 6000000,
+    "note": "sector-generic IRIS pair (Education sector). No insider-misuse-specific education loss distribution found. The IRIS 'Education' sector-generic pair covers all reported cyber event losses in education, including insider incidents. Student-records insider loss profile (FERPA regulatory costs, notification, remediation) is plausibly within the IRIS distribution range, though likely below median for incidents without exfiltration-for-resale. Sector-generic anchor used; archetype-specific source not found.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Education row: Median $249K, 95th percentile $6M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "gov-citizen-portal-ddos",
+    "sector": "government_public",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 214000,
+    "p95": 18000000,
+    "note": "sector-generic IRIS pair (Public sector). No government-sector DDoS-specific loss distribution found with paginated or vendor-report per-org percentile data. DDoS losses against government citizen portals (service disruption, incident response, potential regulatory costs) are within the scope of what IRIS captures as public-sector cyber event losses. IC3 2024 reports Government Facilities as having 238 ransomware and 180 data breach complaints (p. 12) but no dollar breakdown by sector. IRIS Figure A3 p50+p95 is the best available anchor; archetype-specific source not found.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Public row: Median $214K, 95th percentile $18M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "gov-records-tampering",
+    "sector": "government_public",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 214000,
+    "p95": 18000000,
+    "note": "sector-generic IRIS pair (Public sector). Government data tampering by malicious insider is a rare event type; no published per-org financial loss distribution found for this specific archetype. Loss drivers include forensic investigation, regulatory/legal costs, public trust remediation, and remediation of corrupted records — plausibly within the IRIS 'Public' distribution range. IRIS Figure A3 p50+p95 is the best available anchor; archetype-specific source not found.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Public row: Median $214K, 95th percentile $18M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "professional-payroll-bec",
+    "sector": "professional_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 736000,
+    "p95": 17000000,
+    "note": "sector-generic IRIS pair (Professional sector). IC3 2024 (p. 9-10) reports BEC total losses of $2,770,151,146 across 21,442 complaints — an aggregate total, not a per-org percentile distribution. The implied mean (~$129K) is noise-diluted by consumer complaints and zero-loss complaints per the IRIS-vs-IC3 reconciliation guidance, and is a mean not a median. No professional-services-specific BEC per-org loss percentile pair was found in NetDiligence (PDF gated/404), Coveware (sector-level BEC not published), or other accessible primary sources. IRIS 'Professional' sector-generic pair applied; BEC direct-transfer losses may be partially recovered (IC3 RAT recovery rate ~66% per p. 13), so the actual net-loss distribution for BEC may be lower than the IRIS all-cause professional-sector distribution suggests. Flag for C-iii calibration refinement.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Professional row: Median $736K, 95th percentile $17M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "professional-office-physical-theft",
+    "sector": "professional_services",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "Physical theft of office equipment (laptops, servers, storage media) by criminals is outside the scope of cyber event loss data captured by IRIS 2025, which covers cyber incidents (ransomware, data breach, intrusion, DDoS, BEC). The asset_class is 'facilities' and threat_type is 'physical_tampering' — loss drivers are hardware replacement costs, data breach notification (if storage media containing PII is stolen), and operational disruption, which are structurally different from the cyber-event loss distribution IRIS measures. Applying IRIS 'Professional' p50/p95 would cross the boundary into misrepresenting the loss profile of a physical-theft event as equivalent to a cyber-breach event, constituting an inappropriate anchor. No cyber-insurer or vendor report found that publishes a per-org loss distribution specifically for professional-services physical office equipment theft. Honest 'none' until a dedicated source (e.g., property/crime insurer loss data) is identified in C-iii curation.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "education-campus-facility-tamper",
+    "sector": "education",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "Physical tampering of campus facilities (e.g., IT infrastructure, power systems, access control) by hacktivists is outside the scope of cyber event loss data captured by IRIS 2025. The asset_class is 'facilities' and threat_type is 'physical_tampering' — loss drivers are physical repair/replacement, operational disruption (class cancellations, research downtime), and potentially data exposure if tampered devices contained PII. These are structurally different from the cyber-event loss distribution IRIS measures. Applying IRIS 'Education' p50/p95 would misrepresent the loss profile of a physical facility tampering event. No cyber-insurer or vendor report found that publishes a per-org loss distribution for education campus physical facility tampering. GAO reports on K-12 cybersecurity (GAO-22-105024) document incident counts but contain no financial loss distribution for physical tampering events. Honest 'none' until a dedicated source is identified in C-iii curation.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "gov-employee-insider-leak",
+    "sector": "government_public",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 214000,
+    "p95": 18000000,
+    "note": "sector-generic IRIS pair (Public sector). No government-sector insider-leak-specific loss distribution found with both percentile legs from the same source. Government insider leaks (whistleblower/malicious disclosure of classified or sensitive records) drive losses via legal/litigation costs, remediation, reputation harm, and potential regulatory penalties — within scope of what IRIS 'Public' captures as government cyber-event losses. IC3 2024 records government impersonation complaints ($405M aggregate, p. 10) but this is a different threat type and an aggregate total, not per-org percentile data. IRIS Figure A3 p50+p95 is the best available anchor; archetype-specific source not found.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "Figure A3, p. 35 (Loss magnitude summary statistics by sector — Public row: Median $214K, 95th percentile $18M)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ransomware-on-historian",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OT/SCADA historian archetype; electric-utility sub-sector magnitude lift 2.7x over NAICS-22 (energy_utilities) sector-generic IRIS baseline. Baseline (Utilities median=$146K, p95=$3M from IRIS 2025 Fig A3 p.35) scaled by electric_utility 2.7x multiplier per vendored sub-sector note.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "denial-of-control",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OT availability / nation-state archetype targeting control-layer denial. Electric-utility sub-sector magnitude lift 2.7x. Nation-state attacks on bulk-electric-system entities (Industroyer 2016/2022 precedent) represent the upper tail; 2.7x reflects mid-range of §10.4 plausible 2.0-3.5x window.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "hmi-credential-compromise",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OT HMI credential compromise in energy/electric-utility OT environment. Electric-utility sub-sector magnitude lift 2.7x. HMI compromise is a recognized electric-utility attack surface (CISA ICS advisories cite HMI/SCADA products consistently); 2.7x reflects electric-utility grid-disruption tail magnitude premium.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "it-ot-bridge-compromise",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "IT-OT network bridge compromise in energy/electric-utility environment. Electric-utility sub-sector 2.7x lift: IT-OT convergence incidents in grid-connected utilities carry grid-disruption tail risk (Industroyer/Industroyer2 spread via IT-OT lateral movement). 2.7x mid-range of §10.4 window.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "nation-state-ics-supply-chain",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "Nation-state ICS supply-chain compromise in energy sector. Electric-utility 2.7x: supply-chain attack against ICS/OT components (e.g., Dragos-class grid-product advisories) targets bulk-electric-system assets with grid-disruption tail. No dedicated OT supply-chain dollar anchor exists; 2.7x electric-utility multiplier is the best available TIER-2 calibration.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "hacktivist-ot-disruption",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "Hacktivist OT disruption (e.g., CyberAv3ngers-class Internet-exposed OT targeting of energy sector assets). Electric-utility 2.7x: hacktivist campaigns against energy OT assets (notably Predatory Sparrow 2022 steel-plant; Iranian-affiliated campaigns against grid product lines) carry operational-disruption magnitude premium. Hacktivist incidents at lower tail than nation-state; 2.7x is conservative relative to worst-case but appropriate for a sector-wide sub-sector estimate.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "watering-hole-industry-targeted",
+    "sector": "energy_utilities",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 146000,
+    "p95": 3000000,
+    "note": "IT-side archetype (is_ot=false, asset_class=systems). No OT sub-sector lift applies to IT watering-hole scenarios against corporate IT systems. Sector-generic IRIS Utilities pair: median=$146K, p95=$3M per IRIS 2025 Figure A3 p.35.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ot-network-scanning-reconnaissance",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OT network scanning / reconnaissance archetype (nation-state, is_ot=true). Reconnaissance alone has lower realized loss than kinetic OT attacks; however, the archetype represents the threat class whose consequence is grid-class exploitation (Volt Typhoon-style pre-positioning). Electric-utility 2.7x applied as the archetype's loss anchor reflects the consequence-class of the threat the reconnaissance enables, not the reconnaissance act itself. C-iii authoring should note this distinction in the scenario's calibration_anchor.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "process-view-manipulation",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OT integrity / process-view manipulation (nation_state, is_ot=true). Manipulation of sensor/SCADA views to deceive operators — the Industroyer2 and Crashoverride attack class. High potential for cascading grid physical damage. Electric-utility 2.7x captures the grid-disruption magnitude premium. Note: actual realized harm in documented incidents (Ukraine 2016, 2022) was prevented at the last step; multiplier anchored to structural tail, not realized loss.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "oem-remote-maintenance-abuse",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "OEM remote maintenance channel abuse in energy OT environments (cybercriminal actor, is_ot=true). Remote access to OT via vendor VPN/jump host is a documented attack vector in CISA ICS advisories (Siemens, Schneider, ABB product lines). Electric-utility 2.7x: once remote access is abused in a grid-connected utility, the consequence class is the same as direct OT compromise.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "grid-protective-relay-manipulation",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 2.7,
+    "sub_sector": "electric_utility",
+    "note": "Protective relay manipulation targeting bulk-electric-system (nation_state, is_ot=true). Grid-specific archetype: protective relay (SEL, GE, ABB) manipulation can cause cascading transmission-line tripping and blackout — the highest-consequence class in electric-utility OT. Electric-utility 2.7x is the appropriate multiplier; C-iii authoring should note that the tail of this archetype may exceed the 2.7x central estimate if a transmission-scale blackout realizes.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_electric_utility.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/ics-advisories/icsa-17-181-01 (Industroyer/CrashOverride advisory); sub_sector_electric_utility.md magnitude_multiplier=2.7; supported by NERC E-ISAC annual reviews and NetDiligence 2024 utilities supplement",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "pipeline-scada-integrity",
+    "sector": "energy_utilities",
+    "loss_tier": "vendor",
+    "anchor_type": "multiplier_over_baseline",
+    "baseline_sector": "energy_utilities",
+    "multiplier": 3.0,
+    "sub_sector": "pipeline",
+    "note": "Pipeline SCADA integrity attack (nation_state, is_ot=true, ot_integrity). Pipeline-specific sub-sector: 3.0x magnitude lift over energy_utilities sector-generic IRIS baseline per vendored oil_and_gas note. IMPORTANT CAVEAT (per source-catalogue): this multiplier is NEAR-TIER-3 — anchored almost entirely to Colonial Pipeline 2021 ($4.4M ransom + unaudited $20-50M analyst range); no second audited US pipeline incident with disclosed financials exists. C-iii authoring MUST note the near-TIER-3 provenance and the single-incident anchor risk. Methodology note: the sub_sector_pipeline.md note uses NAICS-48 transportation as its population baseline, which is a cross-family application for this energy_utilities archetype. The sub_sector_oil_and_gas.md note (NAICS-21 mining, same extractive/energy super-family as NAICS-22 utilities) carries the identical 3.0x multiplier anchored to the same energy-OT incidents (Colonial 2021, Shamoon 2012, Triton 2017, CISA Energy advisories) and is better NAICS-family-aligned for this archetype. Citation updated accordingly per methodology gate ruling.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "baseline"
+      },
+      {
+        "source": "sub_sector_oil_and_gas.md (vendored calibration note)",
+        "locator": "https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-131a (Colonial Pipeline 2021, $4.4M ransom + analyst $20-50M operational range); sub_sector_oil_and_gas.md magnitude_multiplier=3.0; also: CISA AA12-241A (Shamoon 2012 ~$15M IT), CISA aa20-205a (Triton 2017)",
+        "accessed": "2026-06-10",
+        "supports": "multiplier"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "energy-billing-system-tamper",
+    "sector": "energy_utilities",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 146000,
+    "p95": 3000000,
+    "note": "IT-side archetype (is_ot=false, asset_class=business_process_cost). Billing system tampering is an IT/data-integrity attack, not an OT/grid-disruption attack; no sub-sector OT multiplier applies. Sector-generic IRIS Utilities pair: median=$146K, p95=$3M per IRIS 2025 Figure A3 p.35. No archetype-specific dollar anchor found for energy billing fraud in the vendored corpus or targeted web research.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "credential-stuffing-consumer-portal",
+    "sector": "retail_ecommerce",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 746000,
+    "p95": 45000000,
+    "note": "Sector-generic IRIS Retail pair: median=$746K, p95=$45M per IRIS 2025 Figure A3 p.35. No archetype-specific credential-stuffing dollar anchor found in the vendored corpus (DBIR 2024 is frequency-only for retail; no vendor report provides retail-specific credential-stuffing percentile loss data). Retail IRIS anchor is the best available TIER-1 quantile pair.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "data-breach-notification-regulatory-tail",
+    "sector": "retail_ecommerce",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 746000,
+    "p95": 45000000,
+    "note": "Sector-generic IRIS Retail pair: median=$746K, p95=$45M per IRIS 2025 Figure A3 p.35. Regulatory notification tail is a component of the realized loss distribution, not a separate loss source requiring its own anchor — it is already embedded in the IRIS observed-loss corpus (IRIS captures full incident cost including regulatory fines, notification costs, legal settlements). No separate regulatory-tail-specific percentile anchor found. Retail IRIS pair covers this archetype adequately.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "retail-pos-card-skimming",
+    "sector": "retail_ecommerce",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No qualifying primary-source percentile anchor found for POS card-skimming per-organization loss distribution. Sources investigated: DBIR 2024 (frequency-only, no per-org loss percentiles for retail skimming); Nilson Report (gated, no public percentile data reachable); IC3 2024 (aggregate card-fraud totals, not per-org distributions — expressly prohibited); NetDiligence 2024 (full report gated; no per-sector PCI/skimming percentile data confirmed accessible). The Retail IRIS pair (median=$746K, p95=$45M) covers all incident patterns in the IRIS retail corpus and could be applied as a sector-generic anchor; however, POS card-skimming incidents have a structurally different loss profile (typically lower per-org realization — card-brand fines, notification, card reissuance) relative to the full retail distribution that includes ransomware and data breaches. Applying the full Retail IRIS pair would overstate the central loss for this archetype. C-iii authoring should either (a) use the full Retail IRIS pair with a calibration note acknowledging the overstatement risk, or (b) defer to PERT with a floor/ceiling from known postmortems (Target 2013 ~$162M total, Home Depot 2014 ~$200M — but these are very large retailers; smaller-org POS skimming is under-reported). Filed as none/anecdotal.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "retail-ecommerce-checkout-ddos",
+    "sector": "retail_ecommerce",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No qualifying primary-source percentile anchor found for e-commerce checkout DDoS per-organization loss distribution. Sources investigated: NETSCOUT DDoS Threat Intelligence Report (attack volume data only, no financial loss figures for retail sector); DBIR 2024 (frequency/technique only, no per-org DDoS loss percentiles); IC3 2024 (aggregate totals, not per-org distributions); NetDiligence 2024 (full report gated; DDoS claims are a minority slice and no retail DDoS percentile data confirmed accessible). DDoS financial impact is predominantly business-interruption (revenue downtime), which is highly org-size-dependent and not well-captured in public loss-distribution databases. The Retail IRIS pair (median=$746K, p95=$45M) blends all event types including ransomware-dominated tail events, making it a poor central estimate for a DDoS-specific scenario. No archetype-specific anchor available; filed as none/anecdotal.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "retail-store-employee-fraud",
+    "sector": "retail_ecommerce",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No qualifying primary-source percentile anchor found for retail insider/employee fraud per-organization cyber-loss distribution. Sources investigated: NRF National Retail Security Survey 2023 (aggregate shrinkage total $112.1B / 1.6% of retail sales — expressly an aggregate total, not a per-org loss distribution; aggregate totals are prohibited anchors per protocol §1); IC3 2024 (complaint totals by crime type, not per-org distributions); DBIR 2024 (insider-misuse frequency/pattern data, no per-org loss percentiles for retail employee fraud specifically). NRF shrinkage figures blend external theft, employee theft, administrative error, and vendor fraud — not a cyber-incident loss distribution. No vendor report found providing retail insider-fraud per-org loss percentiles (median, p95) that would qualify as a TIER-2 anchor. Filed as none/anecdotal.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "logistics-disruption",
+    "sector": "transportation_logistics",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 490000,
+    "p95": 23000000,
+    "note": "Sector-generic IRIS Transportation pair (Figure A3, p.35). 'Transportation' NAICS category in IRIS aligns to NAICS 48-49 (Transportation and Warehousing), which is the correct NAICS family for logistics/trucking/warehousing operators. No archetype-specific (ransomware-on-logistics) paginated or named-vendor loss distribution found; sector-generic pair is the highest available tier. The sub_sector_pipeline multiplier (3.0x over NAICS-48 baseline) is NOT applicable here — logistics-disruption is truck/warehouse IT ransomware, not pipeline OT; cross-sub-sector borrowing is forbidden (B-METH-4). Pipeline sub-sector is a refinement within NAICS-48, but only applies when the archetype itself is pipeline-flavored.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "logistics-tms-data-tampering",
+    "sector": "transportation_logistics",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for TMS (transportation management system) data-tampering as a discrete threat category with financial percentiles. Data-tampering by cybercriminals (cargo diversion, manifest falsification, route-data manipulation) in logistics is a recognised threat pattern (e.g., FBI PSA I-030318, port-of-entry cargo diversion schemes) but no TIER-1 or TIER-2 source publishes a per-org loss distribution for this archetype. The sector-generic IRIS 2025 Transportation pair (p50=$490K / p95=$23M, Figure A3 p.35) covers incident losses across all event types and would overclaim by applying a ransomware-class tail to a fraud/tampering threat whose realised losses are typically dominated by cargo theft, re-routing fraud, and regulatory penalties — structurally different from ransomware-BI loss profiles. IC3 2024 publishes aggregate BEC/fraud totals but not per-incident logistics-fraud distributions. No within-archetype NAICS-48 source found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "logistics-warehouse-physical-intrusion",
+    "sector": "transportation_logistics",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published cyber-insurance or cyber-loss source provides per-org loss magnitude statistics for cyber-assisted physical intrusion in warehouses (e.g., access-control bypass, CCTV manipulation enabling cargo theft). This archetype bridges physical security and cyber — the cyber component is the enabler, not the primary loss driver; primary losses are cargo theft and inventory shrinkage. Cargo theft surveys (TAPA, FreightWatch) publish incident rates and cargo values but are physical-security sources, not cyber-loss distributions, and do not meet TIER-2 criteria. The IRIS 2025 Transportation p50/p95 pair covers cyber-financial losses and would significantly overclaim applied to a physical-intrusion archetype whose cyber footprint is a secondary enabler. No cyber-specific within-NAICS-48 loss distribution for physical-intrusion archetypes found in any catalogued or web-accessible source.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "hospitality-pos-card-skimming",
+    "sector": "hospitality",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 600000,
+    "p95": 62000000,
+    "note": "Sector-generic IRIS Hospitality pair (Figure A3, p.35). IRIS 'Hospitality' NAICS category aligns to NAICS 72 (Accommodation and Food Services), the correct family for hotels and restaurants. No archetype-specific POS-skimming paginated or named-vendor per-org loss distribution was found. Verizon DBIR 2024 covers Accommodation sector as a named industry vertical and notes POS intrusions as a dominant pattern (historically driven by Magecart and similar) but publishes no per-org loss percentiles for POS breaches — DBIR is frequency/technique only per source-catalogue. The Hospitality p95 ($62M) is notably high (103x the median), reflecting fat-tail incidents (large hotel-chain card-data breaches with card-replacement costs and notification; e.g. Marriott 2018 class action + GDPR fine were hospitality sector). The sector-generic pair is the highest achievable tier for this archetype; no POS-specific sub-sector distribution exists in any catalogued source.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "hospitality-loyalty-account-takeover",
+    "sector": "hospitality",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 600000,
+    "p95": 62000000,
+    "note": "Sector-generic IRIS Hospitality pair (Figure A3, p.35). No archetype-specific loyalty-ATO paginated or named-vendor per-org loss distribution found. Loyalty-program ATO losses span point/mile redemption fraud (operator-absorbed), credential-stuffing remediation costs, and customer notification. These costs appear in the broader Hospitality IRIS corpus but no insurer or vendor report isolates them. The sector-generic pair is the highest achievable tier.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "hospitality-booking-ddos-peak-season",
+    "sector": "hospitality",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for DDoS-on-booking-platform as a discrete threat category with financial percentiles in the hospitality sector. DDoS loss magnitude is highly variable and context-dependent (revenue per peak-season booking hour × downtime hours × capacity fraction), making sector-generic IRIS hospitality pair (p50=$600K / p95=$62M, Figure A3 p.35) an overclaim — the IRIS pair reflects the full breach-event corpus (dominated by data breaches) and should not be applied to a DDoS/availability archetype whose primary loss component is revenue disruption, not breach-associated costs. Neustar/NETSCOUT publish DDoS attack frequency/size statistics but not per-hospitality-org revenue-loss distributions at TIER-2 quality. No TIER-1 or TIER-2 DDoS-specific hospitality loss anchor found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "hospitality-guest-data-insider",
+    "sector": "hospitality",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 600000,
+    "p95": 62000000,
+    "note": "Sector-generic IRIS Hospitality pair (Figure A3, p.35). Insider misuse / guest data exfiltration in hospitality results in breach notification costs, regulatory (PCI-DSS, GDPR/CCPA) fines, and litigation — all captured in the IRIS corpus. No archetype-specific insider-misuse paginated or named-vendor per-org loss distribution found. IBM CODB 2024 reports a malicious-insider mean of $4.99M (cross-sector, p.N, not hospitality-specific) — this is a cross-sector mean, not a p50 for hospitality, so it cannot serve as a σ leg per tiering rules. The sector-generic IRIS pair is the highest achievable tier.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "food-cold-chain-ransomware",
+    "sector": "food_agriculture",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "IRIS 2025 Figure A3 (p.35) does publish an Agriculture sector row (p50=$2M, p95=$3M), but this pair is methodologically disqualified as a lognormal anchor for this archetype for two reasons: (1) The p95/p50 ratio of 1.5x implies an implausibly low sigma (σ≈0.247) — effectively a near-point-mass distribution. All other IRIS sectors show p95/p50 ratios of 10x–200x (σ in the 1.5–3.0 range). The extreme σ-compression is a strong indicator of a sparse-sample artifact, since agriculture is among the least-frequently-incident sectors in the IRIS corpus; the resulting p95 estimate is almost certainly unreliable. Applying this pair would produce a near-point-mass lognormal that misrepresents the actual uncertainty. (2) The 'food-cold-chain-ransomware' archetype maps to food manufacturing/processing (NAICS 311-312), not NAICS 01-02 Agriculture; the IRIS 'Agriculture' sector (crop farming, livestock, fishing) is not the right NAICS family for food cold-chain operations. The JBS Foods ($11M ransom, CISA Advisory AA21-243A) is the best-known food-sector incident but is a single disclosed incident = TIER-3 context only, per tiering rules. No TIER-1 or TIER-2 food-sector per-org ransomware loss distribution found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "food-recall-data-tampering",
+    "sector": "food_agriculture",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for food-safety data tampering (malicious insider altering ERP/quality-system records to trigger or suppress a recall) as a discrete threat category. FDA enforcement data covers recall scope (units recalled, distribution span) but not the full loss event magnitude (litigation, brand, BI, regulatory penalties combined). The Agriculture IRIS row is disqualified on two grounds: (1) implausibly compressed tail (p95/p50=1.5x, Agriculture is crop farming not food processing, see food-cold-chain note), (2) food manufacturing (NAICS 311-312) maps to IRIS Manufacturing not IRIS Agriculture. The food-recall loss literature is dominated by food-safety event studies (e.g., Tyson, Blue Bell) that are physical contamination events, not cyber-tampering events, and publish aggregate recall-cost estimates rather than cyber-loss percentiles. No TIER-2 or TIER-1 anchor found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "agri-equipment-physical-tamper",
+    "sector": "food_agriculture",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published cyber-loss source provides per-org loss magnitude statistics for physical tampering with agricultural equipment by hacktivists (e.g., precision-agriculture GPS spoofing, autonomous-tractor disruption). This archetype is at the intersection of physical and cyber and is an emerging threat class with no established insurance corpus or empirical loss distribution. The Agriculture IRIS row (p50=$2M, p95=$3M, Figure A3 p.35) is disqualified: (1) the p95/p50 ratio of only 1.5x implies σ≈0.247 — effectively a near-point-mass distribution inconsistent with any credible cyber-loss uncertainty range; this extreme σ-compression is a strong indicator of a sparse-sample artifact (Agriculture is among the least-incident sectors in the IRIS corpus), making the p95 estimate unreliable; (2) physical-equipment tampering is structurally distinct from the data-breach loss events in the IRIS corpus. No TIER-1, TIER-2, or even TIER-3 dollar-anchored source for hacktivist physical-tamper agricultural equipment losses found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "agri-coop-bec-fraud",
+    "sector": "food_agriculture",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for BEC fraud targeting agricultural cooperatives as a sector-specific distribution. IC3 2024 reports aggregate BEC losses of $2.77B across 21,442 complaints (pp.9-10), equating to a mean of ~$129K per complaint — but IC3 publishes aggregate totals, not per-org medians or percentiles, and the mixed enterprise/consumer complaint base means the mean is noise-diluted (per iris-vs-ic3-reconciliation.md). IC3 does not publish agriculture-sector-specific BEC figures. The Agriculture IRIS row is disqualified as a loss anchor (Agriculture is crop-farming NAICS, not agricultural-cooperative NAICS; compressed tail artifact). No TIER-2 agriculture-sector BEC loss distribution found. FBI PSAs on BEC against agricultural cooperatives (grain-trading season timing attacks) confirm the threat pattern but contain no per-org loss distributions. Honest gap: insufficient data for a lognormal anchor.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "crop-science-ip-exfiltration",
+    "sector": "food_agriculture",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No published vendor, insurer, or regulatory source provides per-org loss magnitude statistics for crop-science IP exfiltration (theft of proprietary seed genetics, pesticide formulas, or precision-agriculture algorithms by competitor actors) as a discrete threat category with financial percentiles. IP-theft loss estimation is methodologically contested: IP value is portfolio-level, not per-incident, and no cyber-insurance corpus separates IP-exfiltration loss from broader data-breach loss. The IRIS Agriculture row (p50=$2M, p95=$3M, Figure A3 p.35) is disqualified for crop-science entities: crop-science companies (e.g., Bayer CropScience, Corteva, Syngenta) are NAICS 325311-325320 (Chemical, Agricultural Chemicals) or NAICS 5417 (R&D), not NAICS 01-02 Agriculture; the IRIS Agriculture sector represents farm operators, not agri-tech companies. FBI and CISA have documented Chinese state-actor targeting of US crop-science IP (e.g., Monsanto/Bayer trade-secret cases) but publish no per-org loss distributions meeting TIER-2 criteria. Honest gap: no suitable anchor found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "cloud-account-takeover",
+    "sector": "technology_saas",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific IT-breach percentile source not found. IRIS 'information' (NAICS 51) is the honest sector-family baseline for technology_saas. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "api-key-leak-devops",
+    "sector": "technology_saas",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific source not found. API-key-leak incidents (data_disclosure / credentials) sit within the IRIS information-sector corpus. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "solarwinds-class-supply-chain",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides a per-organisation loss percentile pair for SolarWinds-class software supply chain compromise in the technology sector. The IronNet 2021 Cybersecurity Impact Report (commissioned via Sapio, n=473 security decision-makers, U.S./U.K./Singapore) reports '11% of annual revenue' and ~$12M average impact for SolarWinds-affected organisations. This is (a) a cross-sector mean across technology/financial/public-service/utilities respondents, not a percentile pair; (b) available only via a press release (Business Wire 2021-06-28), not a paginated primary report with a figure/table/page locator; and (c) survey self-reported, not actuarial. Protocol §1 bars aggregate means as percentile anchors. IBM CODB 2024 reports a supply-chain-compromise mean of $4.46M but this is (a) a cross-sector mean not an information-sector percentile, and (b) a mean not a median/p50. The IRIS information-sector generic pair could serve as a sector-baseline fallback but supply-chain incidents at SolarWinds class typically target large enterprise customers with significantly elevated tails vs. the sector median; applying the sector-generic pair without a supply-chain-specific multiplier would understate the p95 meaningfully. Honest gap — no TIER-1/2 source found. TIER-3 context: IronNet 2021 Cybersecurity Impact Report, Sapio research, press release 2021-06-28 at https://www.ironnet.com/news/new-research-finds-the-solarwinds-cyber-attack-cost-affected-companies-in-key-sectors-11-of-total-annual-revenue-on-average",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "session-hijack-post-mfa-bypass",
+    "sector": "technology_saas",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific source not found. Session-hijack post-MFA-bypass is an account-access pattern within the information-sector incident corpus. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "s3-misconfiguration-data-exposure",
+    "sector": "technology_saas",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific source not found. Cloud-misconfiguration data-exposure incidents are represented within the IRIS information-sector corpus. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "package-registry-supply-chain",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for package-registry supply-chain compromise (malicious package injection into npm/PyPI/etc.) as a discrete threat category in the technology sector. This is an emerging archetype: the Cyentia IRIS corpus covers 2008-2024 but publicly-disclosed cost figures for package-registry poisoning events (as distinct from broader supply-chain incidents) do not appear in any vendor-report or insurer-publication with percentile statistics as of 2026-06-10. The broader software supply-chain-compromise mean ($4.46M, IBM CODB 2024) is (a) a cross-sector mean not a technology-sector percentile pair, and (b) captures SolarWinds-class events not package-registry-specific events. The IRIS information-sector generic pair is a possible fallback but would not capture the unique amplification dynamic of package-registry poisoning (one poisoned package → many downstream victims; per-originating-org loss profile differs structurally from a direct-breach). Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "mfa-fatigue-prompt-bombing",
+    "sector": "technology_saas",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific source not found. MFA-fatigue is an initial-access technique; resulting incidents are captured within the IRIS information-sector corpus (social-engineering / account-access class). No technology-sector-specific percentile study for MFA-fatigue outcomes found. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "generative-ai-prompt-injection",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles specifically for generative AI / LLM prompt injection incidents as a discrete cyber event class. This archetype is too recent for the IRIS 2008-2024 corpus to have a representative loss distribution. IBM CODB 2024 notes shadow-AI breaches carry a $670,000 added cost per incident, but this is an additive cost adjustment on a cross-sector mean, not a technology-sector percentile pair for a prompt-injection event. OWASP LLM Top 10 and Sonnylabs 2025 threat-landscape reports discuss prompt injection prevalence and technique but publish no per-organisation loss statistics. Applying the IRIS information-sector generic pair would overclaim representativeness for an incident class that does not appear in the IRIS historical corpus. Honest gap — classification emerges from corpus only once material realised losses are reported at scale.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "telecom-ddos-core-network",
+    "sector": "telecom",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for DDoS attacks on telecom core networks as a discrete event class. Telecom maps to IRIS 'information' (NAICS 51) — no separate telecom row exists in IRIS 2025. The IRIS information-sector pair (p50=$718K, p95=$217M from IRIS 2025 Figure A3 p.35, public PDF) is the sector-family baseline, but this archetype has a distinctly different loss profile: DDoS-on-core-network loss is dominated by per-minute revenue disruption and SLA penalties, not data-breach notification costs, so the information-sector distribution is not representative without an archetype-specific multiplier that has no cited anchor. Web research found secondary-source claims of '$270K average per DDoS attack' (Flowtriq blog) and '$11,000/minute telecom downtime' (attributed to unnamed research) — both are secondary aggregations with no identifiable primary report. Protocol §1 PRIMARY-SOURCE RULE: secondary-in-locator = verification failure. No reachable primary with percentile statistics found for telecom-DDoS core-network events.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "telecom-sim-swap-fraud",
+    "sector": "telecom",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation (carrier-side) loss percentiles for SIM-swap fraud as a carrier-liability event. FBI IC3 2024 Annual Report records 982 SIM-swap complaints with $25,983,946 total losses in 2024 — the derived per-complaint average is ~$26,460. However: (a) IC3 publishes aggregate complaint totals, not per-organisation loss distributions or percentiles — protocol §1 explicitly bars IC3 aggregate totals as percentile anchors; (b) the victim is the end-subscriber, not the carrier — per-subscriber loss is structurally distinct from per-carrier business loss; (c) the carrier's liability (FCC enforcement, remediation costs, customer compensation) has no published percentile study. FCC settled with T-Mobile for $31.5M (2024, covering 2021-2023 breaches) — a single enforcement action, not a representative per-org distribution. The IRIS information-sector pair is the telecom sector-family baseline but is not representative for a fraud-liability event class. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "telecom-subscriber-data-breach",
+    "sector": "telecom",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 718000,
+    "p95": 217000000,
+    "note": "sector-generic IRIS information-sector pair (p50/p95); archetype-specific source not found. Subscriber data breach (data_disclosure / cybercriminals) is a breach-class event captured within the IRIS information-sector corpus. T-Mobile 2021 settlement ($350M class action + $150M security investment) and FCC $31.5M settlement are single large-carrier incidents — TIER-3 context only, not a percentile anchor. re-anchored from gated member-vault trend figure to the public IRIS 2025 sector table; sector mapping: technology_saas+telecom → IRIS 'Information' (NAICS 51) — sector-generic pair",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, 'Losses observed per sector' table (above Figure A3 caption)",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "telecom-bgp-route-hijack",
+    "sector": "telecom",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for BGP route-hijacking incidents. BGP hijacking has documented real-world cases (Cloudflare DNS disruption June 2024, Pakistan Telecom 2008, etc.) but no insurer, regulator, or research body has published a per-org loss distribution for this event class. The IRIS corpus does not enumerate BGP-hijack as a distinct event type with reported financial losses. The loss profile is highly asymmetric: nation-state BGP hijacking (this archetype's actor) may involve traffic interception without direct financial disclosure, or diplomatic/legal costs with no actuarial dataset. No TIER-1/2 source found. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "competitor-trade-secret-recruit",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles specifically for trade-secret theft via employee recruitment in the technology sector. Ponemon/Securonix 2024 Insider Threat Report gives aggregate annual-cost-per-organisation figures ($17.4M/year, all insider incidents) — this is an annual aggregate across all insider event types, not a per-incident percentile pair for trade-secret-via-recruitment. IBM CODB 2024 gives $715K per malicious-insider incident as a mean — cross-sector mean, not a technology-specific percentile pair. Individual disclosed cases (Google/Waymo vs Uber: $245M settlement; Levandowski criminal case) are single incidents — TIER-3 context only. No TIER-1/2 source found for this specific threat combination. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "datacenter-physical-breach",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for physical data-centre breaches in the technology sector as a discrete event class. IBM CODB, Verizon DBIR, IRIS 2025, and NetDiligence Cyber Claims Study do not publish a physical-intrusion-specific loss distribution for the technology sector. Physical breaches of data centres are rare, rarely disclosed with financial detail, and not enumerated as a separate statistical category in any major actuarial or insurer publication. The IRIS information-sector generic pair covers cyber incidents; physical-facility breaches have a different cost profile (asset theft, equipment replacement, service disruption) that is not captured by that distribution. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "saas-revenue-outage-sabotage",
+    "sector": "technology_saas",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for insider-sabotage-driven SaaS revenue outages as a discrete event class. This archetype (insider_malicious / business_process_revenue) has a loss profile dominated by SLA breaches, customer churn, and direct revenue loss from service unavailability — structurally distinct from data-breach notification costs that dominate the IRIS information-sector distribution. IBM CODB 2024 malicious-insider mean ($715K per incident) is (a) cross-sector, (b) a mean not percentile pair, and (c) not specific to SaaS revenue-outage events. No insurer or research body publishes a SaaS-insider-sabotage loss distribution. Applying the IRIS information-sector pair would overclaim representativeness for a revenue-disruption event class. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "telecom-field-cabinet-tamper",
+    "sector": "telecom",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No vendor or paginated source provides per-organisation loss percentiles for physical tampering of telecom field cabinets (street-side distribution points, fibre distribution hubs, DSLAMs). This is a physical-access / eavesdropping threat class with no published actuarial dataset. FCC and CISA publish advisories on physical infrastructure threats but provide no financial loss distributions for field-cabinet-level incidents. The loss profile (intercept capability, regulatory exposure, repair costs) is structurally different from data-breach events covered by the IRIS information-sector distribution. No TIER-1/2 source found. Honest gap.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "unauthorized-plc-modification",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair; no PLC-modification-specific loss source found. Chemical sub-sector multiplier (2.5×) could be applied at C-iii for process-industry variants but is not asserted here.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "safety-system-bypass",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair; no SIS-bypass-specific cyber loss source exists in public literature. Chemical/process-plant sub-sector multiplier (2.5×) applicable at C-iii for process-industry variants.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "bec-fraud-financial",
+    "sector": "financial_services",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No qualifying two-leg anchor exists for BEC-specific loss in financial services. Verizon DBIR 2024 (p. 9) reports a cross-sector BEC median transaction of ~$50,000 (citing FBI IC3 dataset), providing a usable p50 leg, but publishes no second percentile (p95 or mean) for BEC specifically. Without two legs, Policy A (quantile_pair) and Policy B (median_mean) both fail. The IRIS 2025 Figure A3 financial pair (p50=$1M / p95=$194M) reflects ALL financial-sector incidents and would materially overclaim for BEC whose typical per-event range is $50K–$500K. NetDiligence BEC 2023 Spotlight (Table 3, p. 17) reports Financial Services SME average BEC claim of $147K (N=151), but this is a mean not a median and lacks a published paired percentile. The DBIR $50K median is recorded here as TIER-3 calibration context only.",
+    "calibration_context": {
+      "dbir_2024_bec_median_cross_sector_usd": 50000,
+      "netdiligence_bec_2023_financial_sme_average_usd": 147000
+    },
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "ransomware-on-virtualization-stack",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair. Ransomware is the top cause of loss in manufacturing (Verizon DBIR 2024, p. 67: ransomware in 35% of manufacturing breaches). IRIS 2025 Figure A3 provides the only paginated per-sector loss distribution for manufacturing.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "insider-data-theft-financial",
+    "sector": "financial_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 194000000,
+    "note": "sector-generic IRIS financial pair; no insider-data-theft-specific financial sector loss source found at TIER-1 or TIER-2. DBIR 2024 (p. 62) confirms Internal actors account for 31% of financial sector breaches; IBM CODB 2024 reports malicious insider mean $4.99M cross-sector (a mean, not a percentile, and cross-sector — disqualified as a leg). IRIS A3 financial pair is the best available sector-specific anchor.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Financial row: Geometric mean $951K, Median $1M, 95th percentile $194M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "insider-ip-theft-manufacturing",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair; no IP-theft-specific loss source for manufacturing at TIER-1 or TIER-2. DBIR 2024 (p. 67) confirms espionage motive in 3% of manufacturing breaches. IRIS 2025 LOSS_BY_EVENT_TYPE_TREND (fair_cam/data/iris_2025.py) shows accidental_disclosure/insider_misuse combined p50=$6,900 in 2024 — a significant decline from prior years — but this is all-sector combined and reflects small-incident bias. The sector-specific IRIS A3 manufacturing pair is more appropriate for the manufacturing context.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ddos-extortion-financial",
+    "sector": "financial_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 194000000,
+    "note": "sector-generic IRIS financial pair. No DDoS-extortion-specific loss source for financial services found at TIER-1 or TIER-2. IC3 2024 does not break out DDoS extortion losses (Extortion: $143M aggregate across all sectors, complaint count 86,415 — not per-org). Coveware Q3 2024 median ransom $200K is for encryption ransomware, not DDoS extortion. IRIS A3 financial pair is the best available sector-specific anchor.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Financial row: Geometric mean $951K, Median $1M, 95th percentile $194M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ddos-financial-seasonal-peak",
+    "sector": "financial_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 194000000,
+    "note": "sector-generic IRIS financial pair; same source rationale as ddos-extortion-financial. Seasonal peak context (holiday/tax-season targeting of payment processors) does not change the loss-magnitude anchor as no seasonal-DDoS-specific financial loss statistics appear in the vendored corpus.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Financial row: Geometric mean $951K, Median $1M, 95th percentile $194M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ransomware-on-control-layer",
+    "sector": "manufacturing",
+    "note": "OT ransomware on control layer (ICS/SCADA) in process-industry manufacturing attracts the chemical manufacturing sub-sector 2.5× magnitude lift. Effective anchored values: p50=$2.5M, p95=$105M. Baseline is IRIS 2025 Figure A3 manufacturing sector (p50=$1M, p95=$42M). Multiplier sourced from sub_sector_chemical_manufacturing catalogue note anchored to Norsk Hydro 2019 ($70M disclosed) and JBS Foods 2021 ($11M ransom) postmortems. No cross-sector tail borrowing: baseline and multiplied values remain within NAICS-2 manufacturing family.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Norsk Hydro 2019 Q1 Annual Report",
+        "locator": "Norsk Hydro ASA Q1 2019 Report — LockerGoga ransomware impact disclosed as approximately NOK 450M (~$70M USD at 2019 rates)",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.hydro.com/globalassets/investorrelations/reports-and-presentations/2019/q1-2019/q1-2019-report-en.pdf"
+      },
+      {
+        "source": "JBS USA Holdings 2021 Disclosure",
+        "locator": "JBS USA Holdings publicly disclosed $11M ransom payment to REvil ransomware group following May 2021 attack on beef processing operations",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.wsj.com/articles/jbs-paid-11-million-in-response-to-ransomware-attack-11623368957"
+      }
+    ],
+    "verified": false,
+    "demoted_from_anchor_type": "multiplier_over_baseline",
+    "demoted_from_loss_tier": "vendor",
+    "demoted_multiplier_over_baseline": 2.5,
+    "demoted_baseline_sector": "manufacturing",
+    "demoted_baseline_p50": 1000000,
+    "demoted_baseline_p95": 42000000,
+    "anchor_type": "none",
+    "loss_tier": "anecdotal",
+    "no_source_reason": "citation failed verification: (1) Norsk Hydro locator states \"NOK 450M (~$70M USD at 2019 rates)\" attributed to the Q1 2019 Report, but the primary source (Norsk Hydro Q1 2019 Report, fetched directly) states \"NOK 300-350 million in Q1\" — NOK 450M does not appear in that document; additionally the secondary_url (hydro.com/globalassets/.../q1-2019/q1-2019-report-en.pdf) returns HTTP 404 (dead link, not the working URL). (2) JBS citation locator is narrative description only with no primary source identifier (no CISA advisory number, no JBS press release permalink); secondary_url is a WSJ news article (secondary source); per B-METH-7 the row is TIER-3/none when the primary is not identifiable in the locator field. The 2.5× multiplier value itself is confirmed in the sub-sector calibration doc (sub_sector_chemical_manufacturing.md), but both anchor citations fail the primary-source locator requirement — the row cannot be verified."
+  },
+  {
+    "archetype": "field-instrument-spoofing",
+    "sector": "manufacturing",
+    "note": "OT integrity attack (field instrument spoofing) in process manufacturing. The chemical manufacturing 2.5× sub-sector multiplier applies given the OT/process-plant context. Effective anchored values: p50=$2.5M, p95=$105M. No dedicated instrument-spoofing loss data exists; Stuxnet (2010) is historically referenced but no audited dollar-loss figure is published for it — not usable as an anchor. TRITON/TRISIS (2017 Petro Rabigh) operational impact was not publicly disclosed. 2.5× multiplier over IRIS manufacturing baseline is the most defensible available anchor for this OT-process-industry threat profile.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Norsk Hydro 2019 Q1 Annual Report",
+        "locator": "Norsk Hydro ASA Q1 2019 Report — LockerGoga ransomware impact disclosed as approximately NOK 450M (~$70M USD at 2019 rates)",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.hydro.com/globalassets/investorrelations/reports-and-presentations/2019/q1-2019/q1-2019-report-en.pdf"
+      },
+      {
+        "source": "JBS USA Holdings 2021 Disclosure",
+        "locator": "JBS USA Holdings publicly disclosed $11M ransom payment to REvil ransomware group following May 2021 attack on beef processing operations",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.wsj.com/articles/jbs-paid-11-million-in-response-to-ransomware-attack-11623368957"
+      }
+    ],
+    "verified": false,
+    "demoted_from_anchor_type": "multiplier_over_baseline",
+    "demoted_from_loss_tier": "vendor",
+    "demoted_multiplier_over_baseline": 2.5,
+    "demoted_baseline_sector": "manufacturing",
+    "demoted_baseline_p50": 1000000,
+    "demoted_baseline_p95": 42000000,
+    "anchor_type": "none",
+    "loss_tier": "anecdotal",
+    "no_source_reason": "citation failed verification: (1) Norsk Hydro locator states \"NOK 450M (~$70M USD at 2019 rates)\" attributed to the Q1 2019 Report, but the primary source (Norsk Hydro Q1 2019 Report, fetched directly) states \"NOK 300-350 million in Q1\" — NOK 450M does not appear in that document; additionally the secondary_url (hydro.com/globalassets/.../q1-2019/q1-2019-report-en.pdf) returns HTTP 404 (dead link, not the working URL). (2) JBS citation locator is narrative description only with no primary source identifier (no CISA advisory number, no JBS press release permalink); secondary_url is a WSJ news article (secondary source); per B-METH-7 the row is TIER-3/none when the primary is not identifiable in the locator field. The 2.5× multiplier value itself is confirmed in the sub-sector calibration doc (sub_sector_chemical_manufacturing.md), but both anchor citations fail the primary-source locator requirement — the row cannot be verified."
+  },
+  {
+    "archetype": "chemical-process-safety-attack",
+    "sector": "manufacturing",
+    "note": "Explicitly chemical/process-industry archetype. The sub_sector_chemical_manufacturing 2.5× multiplier applies directly. Effective anchored values: p50=$2.5M, p95=$105M. The TRITON/TRISIS attack on a Saudi Arabian petrochemical plant (2017) and similar safety-system attacks have no publicly disclosed dollar-loss figures — cannot serve as standalone anchors. Loss profile is dominated by regulatory response, plant shutdown, and potential liability — substantially above the manufacturing IT-incident baseline.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "baseline_p50+baseline_p95"
+      },
+      {
+        "source": "Norsk Hydro 2019 Q1 Annual Report",
+        "locator": "Norsk Hydro ASA Q1 2019 Report — LockerGoga ransomware impact disclosed as approximately NOK 450M (~$70M USD at 2019 rates)",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.hydro.com/globalassets/investorrelations/reports-and-presentations/2019/q1-2019/q1-2019-report-en.pdf"
+      },
+      {
+        "source": "JBS USA Holdings 2021 Disclosure",
+        "locator": "JBS USA Holdings publicly disclosed $11M ransom payment to REvil ransomware group following May 2021 attack on beef processing operations",
+        "accessed": "2026-06-10",
+        "supports": "multiplier",
+        "secondary_url": "https://www.wsj.com/articles/jbs-paid-11-million-in-response-to-ransomware-attack-11623368957"
+      }
+    ],
+    "verified": false,
+    "demoted_from_anchor_type": "multiplier_over_baseline",
+    "demoted_from_loss_tier": "vendor",
+    "demoted_multiplier_over_baseline": 2.5,
+    "demoted_baseline_sector": "manufacturing",
+    "demoted_baseline_p50": 1000000,
+    "demoted_baseline_p95": 42000000,
+    "anchor_type": "none",
+    "loss_tier": "anecdotal",
+    "no_source_reason": "citation failed verification: (1) Norsk Hydro locator states \"NOK 450M (~$70M USD at 2019 rates)\" attributed to the Q1 2019 Report, but the primary source (Norsk Hydro Q1 2019 Report, fetched directly) states \"NOK 300-350 million in Q1\" — NOK 450M does not appear in that document; additionally the secondary_url (hydro.com/globalassets/.../q1-2019/q1-2019-report-en.pdf) returns HTTP 404 (dead link, not the working URL). (2) JBS citation locator is narrative description only with no primary source identifier (no CISA advisory number, no JBS press release permalink); secondary_url is a WSJ news article (secondary source); per B-METH-7 the row is TIER-3/none when the primary is not identifiable in the locator field. The 2.5× multiplier value itself is confirmed in the sub-sector calibration doc (sub_sector_chemical_manufacturing.md), but both anchor citations fail the primary-source locator requirement — the row cannot be verified."
+  },
+  {
+    "archetype": "web-app-exploitation",
+    "sector": "financial_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 194000000,
+    "note": "sector-generic IRIS financial pair. Web application exploitation (NAICS 52 = Financial/Insurance) leads to data exposure and credential theft. DBIR 2024 (p. 62) confirms System Intrusion (which encompasses web app exploitation) is the top pattern in Financial and Insurance in 2024. No web-app-exploitation-specific financial sector loss source exists at TIER-1 or TIER-2 that is distinct from the sector baseline.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Financial row: Geometric mean $951K, Median $1M, 95th percentile $194M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "third-party-processor-breach",
+    "sector": "financial_services",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 194000000,
+    "note": "sector-generic IRIS financial pair. DBIR 2024 (p. 63) specifically notes that 8% of financial sector incidents in the dataset were part of the MOVEit breach — a supply-chain/third-party processor event — demonstrating the relevance of this threat pattern. No third-party-breach-specific financial sector loss distribution is available at TIER-1 or TIER-2 beyond the sector baseline.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Financial row: Geometric mean $951K, Median $1M, 95th percentile $194M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "ip-theft-by-competitor",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair. Competitor-conducted IP theft from manufacturing organizations. No TIER-1 or TIER-2 source publishes a per-org loss distribution specifically for competitor-actor IP theft in manufacturing. DBIR 2024 (p. 67) notes espionage motive in 3% of manufacturing breaches but provides no financial impact data. The IC3 category 'IPR/Copyright and Counterfeit' ($8.7M total, 1,583 complaints in IC3 2024) is aggregate and not a per-org distribution. IRIS A3 manufacturing sector pair is the best available anchor.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "branch-atm-physical-tamper",
+    "sector": "financial_services",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No TIER-1 or TIER-2 paginated or named-vendor-report source publishes per-organization loss percentiles for branch ATM physical tampering (jackpotting / black-box attacks / skimming hardware). ATM jackpotting incidents are documented via FBI Secret Service and FS-ISAC advisories but these carry no audited per-org loss figures. The ATMIA, ABA Bank Crime Statistics, and USSS ATM Crime publications are either gated (HTTP 403), redirect-only, or do not publish per-incident distributions. The IRIS 2025 Figure A3 financial sector pair ($1M / $194M) reflects all cyber incidents and would materially overclaim for a physical-tampering archetype where losses are bounded by cash-per-ATM cassette (typically $20K–$200K per cassette, $100K–$500K per jackpotting event per industry reports). IC3 2024 'Credit Card/Check Fraud' ($199M / 12,876 complaints = ~$15K average) conflates many fraud types and is an aggregate average, not a per-org distribution. This is a genuine data gap for a financially bounded, physically-constrained loss event.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "financial-transaction-tampering",
+    "sector": "financial_services",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No TIER-1 or TIER-2 source publishes per-org loss percentiles specifically for insider financial transaction tampering (unauthorized data/value modification of financial records by malicious insider). IBM CODB 2024 reports a malicious insider mean of $4.99M cross-sector (a mean, not a percentile pair, and cross-sector — disqualified as a leg under both methodology rules). DBIR 2024 (p. 62) notes Internal actors at 31% of financial sector breaches but no financial impact data is published for insider tampering specifically. The IRIS A3 financial pair ($1M / $194M) reflects all incidents including ransomware tails — it would overclaim for a targeted insider-tampering event that may not involve systemic data exposure. Financial transaction tampering produces direct fraud losses (bounded by transaction sizes) and regulatory/remediation costs — a profile not captured by the sector-generic distribution. No within-archetype source found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "manufacturing-billing-fraud",
+    "sector": "manufacturing",
+    "loss_tier": "paginated",
+    "anchor_type": "quantile_pair",
+    "p50": 1000000,
+    "p95": 42000000,
+    "note": "sector-generic IRIS manufacturing pair. Insider billing fraud (accounts payable manipulation, fictitious vendor schemes) in manufacturing has no archetype-specific loss distribution in the vendored corpus. NetDiligence 2023 Main Report (Figure 44, p. 41) shows manufacturing SME average claims of $205K (5yr) — a mean not a median, and covers all claim types. The IRIS A3 manufacturing pair is the single qualifying sector-specific paginated anchor. Actual billing fraud losses are typically lower than ransomware-driven sector-average tails, so this anchor may overstate the p95 — noted for C-iii calibration.",
+    "citations": [
+      {
+        "source": "Cyentia IRIS 2025",
+        "locator": "p. 35, \"Losses observed per sector\" table (above Figure A3 caption) — Manufacturing row: Geometric mean $1M, Median $1M, 95th percentile $42M",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      },
+      {
+        "source": "Cyentia IRIS 2025 (PDF)",
+        "locator": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+        "accessed": "2026-06-10",
+        "supports": "p50+p95"
+      }
+    ],
+    "verified": true
+  },
+  {
+    "archetype": "manufacturing-facility-sabotage",
+    "sector": "manufacturing",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No TIER-1 or TIER-2 source publishes per-org loss percentiles for physical/cyber-physical facility sabotage by a malicious insider in manufacturing. The threat type (physical_tampering / insider_malicious / facilities) is structurally distinct from IT breach events: harm is physical (equipment destruction, production shutdown, safety incidents) not primarily data loss or ransomware. IRIS 2025 and all major cyber insurance claims studies (NetDiligence, Verizon DBIR) focus on information security incidents and do not capture cyber-physical sabotage events as a distinct loss category with empirical statistics. Sabotage events (Stuxnet excepted) are typically not disclosed publicly with audited financial figures. IC3 does not classify insider physical sabotage as a cybercrime type. No within-archetype or within-NAICS-family source found.",
+    "citations": [],
+    "verified": false
+  },
+  {
+    "archetype": "financial-call-center-social-eng",
+    "sector": "financial_services",
+    "loss_tier": "anecdotal",
+    "anchor_type": "none",
+    "no_source_reason": "No TIER-1 or TIER-2 source publishes per-org loss percentiles specifically for call-center social engineering attacks on financial institutions (vishing, pretexting calls targeting customer service agents to authorize fraudulent transfers). DBIR 2024 (p. 62) confirms Social Engineering is in the top 3 patterns for Financial and Insurance in 2024, with Phishing and Pretexting listed as leading action varieties, but publishes no financial impact data by pattern for this sector. IC3 2024 'Government Impersonation' ($405M / 17,367 complaints = ~$23K average) and 'Confidence/Romance' categories are not financial-institution-specific. The IRIS A3 financial pair ($1M / $194M) covers all incidents and would significantly overclaim for a single vishing/pretexting event targeting a call center (per-event losses typically $10K–$500K from authorized transfer manipulation). No within-archetype source at TIER-2 or above found.",
+    "citations": [],
+    "verified": false
+  }
+]

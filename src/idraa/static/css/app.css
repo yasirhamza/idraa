@@ -1,0 +1,308 @@
+/* === Design tokens (light defaults) ===========================
+   Spec: docs/superpowers/specs/2026-05-22-ui-polish-and-responsive-design.md §1.
+   Dark overrides arrive in F2 inside [data-theme="dark"] {} blocks. */
+:root {
+  --color-surface-0:      #FAFAF9;
+  --color-surface-1:      #FFFFFF;
+  --color-surface-2:      #F4F4F5;
+  --color-border-subtle:  #E4E4E7;
+  --color-border-strong:  #D4D4D8;
+  --color-ink-1:          #18181B;
+  --color-ink-2:          #52525B;
+  --color-ink-3:          #A1A1AA;
+  --color-brand:          #0F4C81;
+  --color-status-critical:#B91C1C;
+  --color-status-warning: #B45309;
+  --color-status-success: #15803D;
+  --color-status-info:    #1D4ED8;
+  --color-numeric-pos:    #15803D;
+  --color-numeric-neg:    #B91C1C;
+
+  /* Chart series palette (spec 2026-07-03 run-detail-redesign §Tokens & charts).
+     Validated pair — see services/chart_palette.py for the validation record. */
+  --chart-inherent:      #C2410C;
+  --chart-residual:      #1E6BB0;
+  /* Appetite marker (epic #547 P1) — SVG-only, see chart_palette.py CHART_APPETITE. */
+  --chart-appetite:      #B07A10;
+  /* Risk-reduction / value-of-controls bar color (epic #547 P2) — SVG-only, see chart_palette.py CHART_REDUCTION. */
+  --chart-reduction:     #15803D;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --page-header-height: 4rem;
+}
+
+/* Dark palette — applied when data-theme="dark" on <html>. */
+[data-theme="dark"] {
+  --color-surface-0:      #0A0A0B;
+  --color-surface-1:      #18181B;
+  --color-surface-2:      #27272A;
+  --color-border-subtle:  #27272A;
+  --color-border-strong:  #3F3F46;
+  --color-ink-1:          #FAFAFA;
+  --color-ink-2:          #A1A1AA;
+  --color-ink-3:          #71717A;
+  --color-brand:          #3B82F6;
+  --color-status-critical:#EF4444;
+  --color-status-warning: #F59E0B;
+  --color-status-success: #22C55E;
+  --color-status-info:    #3B82F6;
+  --color-numeric-pos:    #22C55E;
+  --color-numeric-neg:    #EF4444;
+
+  --chart-inherent:      #EA580C;
+  --chart-residual:      #3B82F6;
+  --chart-appetite:      #D99A2B;
+  /* Risk-reduction / value-of-controls bar color; SVG-only. */
+  --chart-reduction:     #22C55E;
+}
+
+/* === Token-backed utility classes (2026-05-23) ====================================
+   Tailwind Play CDN's JIT does NOT reliably generate utilities for custom
+   `extend.colors.*` entries defined as `var(--…)` string values. Inspected on
+   prod: `.bg-brand` and `.bg-surface-0` were referenced in DOM but no CSS
+   rule existed → silent no-op → invisible page-header, KPI cards bleeding
+   through, table headers indistinguishable from body, etc.
+
+   We define these as plain CSS rules below so they exist regardless of
+   Tailwind's behaviour. Names match Tailwind's `extend.colors.*` so existing
+   class strings keep working. !important is used on a few that compete with
+   DaisyUI defaults; not used on text/border. */
+
+.bg-surface-0 { background-color: var(--color-surface-0); }
+.bg-surface-1 { background-color: var(--color-surface-1); }
+.bg-surface-2 { background-color: var(--color-surface-2); }
+.bg-brand     { background-color: var(--color-brand); }
+
+.text-ink-1   { color: var(--color-ink-1); }
+.text-ink-2   { color: var(--color-ink-2); }
+.text-ink-3   { color: var(--color-ink-3); }
+.text-brand   { color: var(--color-brand); }
+.text-status-critical { color: var(--color-status-critical); }
+.text-status-warning  { color: var(--color-status-warning); }
+.text-status-success  { color: var(--color-status-success); }
+.text-status-info     { color: var(--color-status-info); }
+.text-numeric-pos     { color: var(--color-numeric-pos); }
+.text-numeric-neg     { color: var(--color-numeric-neg); }
+
+.border-border-subtle { border-color: var(--color-border-subtle); }
+.border-border-strong { border-color: var(--color-border-strong); }
+.border-status-critical { border-color: var(--color-status-critical); }
+.border-brand           { border-color: var(--color-brand); }
+
+/* Even-row zebra striping for data_grid */
+tr.even\:bg-surface-2:nth-child(even) { background-color: var(--color-surface-2); }
+
+/* Hover row background for data_table */
+tr.hover\:bg-surface-2:hover { background-color: var(--color-surface-2); }
+
+/* === Form-element defaults (2026-05-23) ===========================================
+   Without these rules, native <input>/<textarea>/<select> elements use the browser's
+   user-agent stylesheet defaults (white background in most browsers), which fights
+   dark mode — text inputs renders as opaque white boxes regardless of our class
+   strings. User-agent rules have higher specificity than single utility classes.
+   These rules also intentionally use bg-surface-2 (NOT surface-1) so that form
+   inputs visually separate from card backgrounds (surface-1) and page background
+   (surface-0) — gives the eye a clear "this is a field" affordance. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+textarea,
+select {
+  background-color: var(--color-surface-2);
+  color: var(--color-ink-1);
+  border-color: var(--color-border-strong);
+  /* `color-scheme` tells the browser's date pickers, scrollbars, and
+     autofill UI to match the current theme. Without it, autofilled
+     inputs in dark mode end up with white-yellow backgrounds. */
+  color-scheme: light dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-3);
+  opacity: 1; /* Firefox sets a default opacity */
+}
+
+input:focus-visible:not([type="checkbox"]):not([type="radio"]),
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* === Existing project rules — preserved. === */
+
+/* DaisyUI 4.12.x select-sm renders the currently-selected option text with a line-height
+   tall enough to clip the top of glyphs inside the h-8 (2 rem) box — descenders + uppercase
+   strokes get cut off. Live UAT 2026-05-20 fix; preserve. */
+.select.select-sm {
+  line-height: 1.25rem;
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+}
+
+/* Alpine x-cloak companion — hides element until Alpine has evaluated the cloaking directive.
+   Prevents brief flash of the sub-function combobox listbox + helper text on initial load. */
+[x-cloak] { display: none !important; }
+
+/* Sidebar-collapsed offset (plan-gate SC-1). Overrides md:ml-60 when sidebar is icon-only. */
+html[data-sidebar-collapsed="true"] #main {
+  margin-left: 0;
+}
+@media (min-width: 768px) {
+  html[data-sidebar-collapsed="true"] #main { margin-left: 4rem; }
+  html[data-sidebar-collapsed="false"] #main { margin-left: 15rem; }
+}
+
+/* data_table 2 px progress bar shown during HTMX request (spec §4). */
+.data-table-container .data-table-progress { opacity: 0; }
+.data-table-container.htmx-request .data-table-progress,
+.data-table-container:has(.htmx-request) .data-table-progress { opacity: 1; }
+
+/* #454 item 7 / sweep2 item 2 (deferred Polish-3): horizontal-scroll
+   right-edge fade affordance for wide tables on narrow viewports.
+
+   Superseded technique: the original Lea Verou/CSS-Tricks approach painted
+   the fade as `background` on the SAME element that scrolls. That put the
+   fade BELOW opaque row/header backgrounds in paint order (children always
+   paint over a parent's own background) — data_grid's zebra rows
+   (even:bg-surface-2) and sticky header/tfoot cells (bg-surface-2) occluded
+   it almost everywhere except the thin gaps between them, so the affordance
+   read as "patchy" on the aggregate matrix.
+
+   Current technique: `.scroll-x` now marks a `position:relative` OUTER
+   wrapper placed AROUND the scrolling `overflow-auto` / `overflow-x-auto`
+   element (not on that element itself). Its `::after` is an absolutely
+   positioned, pointer-events:none gradient painted as a genuinely separate
+   layer ON TOP of the table content — including opaque zebra/sticky
+   backgrounds — via z-index, so it can never be occluded the way the old
+   background-composited version was. z-index 40 clears the highest z-index
+   used by data_grid's sticky cells (corner cell / tfoot label = z-30).
+
+   Trade-off: this is a static right-edge fade (no left-edge fade, and it no
+   longer self-hides when the table happens to fit the viewport) — the old
+   background-attachment self-hide trick only works when the fade IS the
+   scrolling element's own background. Accepted per Polish-3 scope (pure
+   CSS/HTML, no JS). ONE mechanism only: every `.scroll-x` caller must wrap
+   the scrolling element in an outer `.scroll-x` container (see
+   macros/data_grid.html and runs/detail.html) — do not resurrect the old
+   background-gradient rule alongside this one. surface-1 = the card
+   background the tables sit on (theme-aware light/dark). */
+.scroll-x {
+  position: relative;
+}
+.scroll-x::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  background: linear-gradient(to left, var(--color-surface-1), rgba(0, 0, 0, 0));
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* #454 item 2 / sweep2 item 1: keep focused/scrolled-into-view form fields
+   clear of the translucent sticky Cancel/Save action bar. Originally scoped
+   to `.scenario-form` only; generalized via `:has()` so every form with a
+   `.sticky-action-bar` opts in automatically without a per-form marker
+   class (grep-audit for "sticky bottom-0" found the same pattern in
+   organization/form.html, controls/form.html, controls/import.html,
+   overlays/edit.html, setup/wizard.html, users/edit.html, users/invite.html,
+   analyses/new.html, auth/login.html). */
+.scenario-form :is(input, select, textarea),
+form:has(.sticky-action-bar) :is(input, select, textarea) {
+  scroll-margin-bottom: 6rem;
+}
+
+/* === Run-detail redesign (2026-07-03 spec) ==================================
+   Brand-navy primary actions — enumerated DaisyUI overrides, deliberately NOT
+   a blanket --p theme override (that would recolor unaudited components).
+   Audit before extending: grep templates for `-primary` classes. */
+.btn-primary {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #fff;
+}
+.btn-primary:hover {
+  background-color: color-mix(in srgb, var(--color-brand) 85%, black);
+  border-color: color-mix(in srgb, var(--color-brand) 85%, black);
+}
+.toggle-primary:checked {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+/* Used by the exceedance-chart LEC/EPC toggle added in redesign P1 Task 5.
+   !important per the section note at the top of this file (a few rules compete
+   with DaisyUI defaults): DaisyUI's own
+   `.tabs-boxed .tab-active` rule has equal specificity and loads after this
+   sheet, so without !important the active tab renders DaisyUI-default purple
+   instead of brand navy (caught in the T8 visual smoke). */
+.tabs-boxed .tab-active {
+  background-color: var(--color-brand) !important;
+  color: #fff !important;
+}
+
+/* Caveat footnote chip (spec §Numbered caveat system). */
+.cv {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 9999px;
+  margin-left: 3px;
+  background: var(--color-surface-2);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-border-subtle);
+  text-decoration: none;
+  vertical-align: super;
+}
+a.cv:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+/* Per-scenario "where the risk lives" CSS dumbbell (replaces the retired
+   chart-vendor scatter — modebar overlap + right-edge label clipping on prod). */
+.dumbbell-track { position: relative; height: 22px; }
+.dumbbell-bar   { position: absolute; top: 9px; height: 4px; border-radius: 2px; background: var(--color-border-strong); }
+.dumbbell-dot   { position: absolute; top: 4px; width: 14px; height: 14px; border-radius: 9999px; border: 2px solid var(--color-surface-1);
+  transform: translateX(-50%);  /* center the dot on its data point (review: else the 100% dot spills past the track) */
+}
+
+/* Badges never wrap ("too close to call" renders struck-through when it does). */
+.badge {
+  white-space: nowrap;
+}
+
+/* First-party SVG chart geometry (epic #547 P1 — replaces the retired chart
+   vendor for the dual LEC/EPC cards). Text classes used by macros/chart.html's _lec_figure
+   / _epc_figure svg markup; --chart-appetite is the tolerance-marker color
+   (SVG-only, see services/chart_palette.py CHART_APPETITE). */
+.chart-tick { font-size: 12px; fill: var(--color-ink-3); }
+.chart-axis-title { font-size: 12.5px; fill: var(--color-ink-2); }
+.chart-svg { display: block; width: 100%; height: auto; }
+/* `display:block` (author class) would otherwise override the UA
+   `[hidden]{display:none}`, un-hiding the inactive linear/log LEC variant the
+   JS toggle hides via the `hidden` attribute. Restore hiding at higher
+   specificity. */
+.chart-svg[hidden] { display: none; }
+.chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 6px; font-size: 12px; color: var(--color-ink-2); }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend-line { width: 16px; border-top: 2px solid; display: inline-block; }
+.chart-legend-line--inherent { border-color: var(--chart-inherent); }
+.chart-legend-line--residual { border-color: var(--chart-residual); }
+.chart-legend-line--dashed { border-top-style: dashed; }
+.chart-legend-dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--chart-appetite); display: inline-block; }
+.chart-annotation { font-size: 11px; fill: var(--color-ink-2); }
+.chart-tooltip { position: absolute; pointer-events: none; z-index: 20;
+  background: var(--color-ink-1); color: var(--color-surface-0);
+  font-size: 12.5px; line-height: 1.5; padding: 7px 10px; border-radius: 7px;
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Bar-chart hover-tooltip wrapper (epic #547 P2 — control_effectiveness_bar /
+   risk_comparison_bar). charts.js sets position:relative inline on hydration
+   (same as the LEC/EPC <figure>); this class only documents the contract for
+   the pre-hydration/no-JS state (native <title> tooltip needs no CSS). */
+.chart-bars-wrap { display: block; }

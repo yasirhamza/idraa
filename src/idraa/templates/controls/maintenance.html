@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "macros/_control.html" import control_domains %}
+{% from "macros/unit_aware_inputs.html" import unit_display %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/status_pill.html" import status_pill %}
+{% from "macros/empty_state.html" import empty_state %}
+{% block title %}Controls Maintenance{% endblock %}
+{% block content %}
+
+{{ page_header(
+    title="Controls Maintenance",
+    breadcrumb=[("Home", "/"), ("Controls", "/controls"), ("Maintenance", none)],
+    actions=[
+      {"label": "← Back to Controls", "href": "/controls", "style": "ghost"},
+    ]
+) }}
+
+<div class="max-w-4xl mx-auto">
+
+  <div class="bg-surface-1 border border-status-warning/40 rounded-card p-4 mb-6">
+    <p class="text-body text-ink-1 font-semibold">
+      {{ zero_cost_count }} control(s) need annual cost set; {{ unconfirmed_count }} assignment(s) need confirmation.
+    </p>
+    <p class="text-meta text-ink-2 mt-1">
+      Imported controls land with placeholder values: a $0 annual cost
+      and uniform default capability/coverage/reliability for each FAIR-CAM
+      sub-function. Set the annual cost on each placeholder, then confirm
+      each assignment to record yourself as the measurement source
+      (audit-grade provenance).
+    </p>
+    <p class="text-meta text-ink-2 mt-1">
+      Unconfirmed assignments are <em>included</em> in risk calculations with
+      their current values. Confirming an assignment records the reviewing
+      analyst as the measurement source.
+    </p>
+  </div>
+
+  {% set domain_labels = {
+      "loss_event":          "Loss Event Controls (LEC)",
+      "variance_management": "Variance Management Controls (VMC)",
+      "decision_support":    "Decision Support Controls (DSC)"
+  } %}
+
+  {% if zero_cost_controls %}
+  <section class="mb-8">
+    <h2 class="text-h3 text-ink-1 mb-2">
+      Controls with $0 annual cost
+      <span class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-surface-2 text-micro text-ink-2 ml-2">{{ zero_cost_count }}</span>
+    </h2>
+    <p class="text-meta text-ink-2 mb-3">
+      Imported controls start with a $0 placeholder. Set the annual cost so
+      ROI/NPV calculations reflect real spending.
+    </p>
+
+    {% set zero_cost_rows = [] %}
+    {% for c in zero_cost_controls %}
+      {% set _ = zero_cost_rows.append({
+        "id":     c.id | string,
+        "name":   c.name,
+        "domain": control_domains(c),
+        "status": c.status.value,
+        "_actions": [{"label": "Edit", "href": "/controls/" ~ c.id ~ "/edit"}],
+      }) %}
+    {% endfor %}
+    {{ data_table(
+        rows=zero_cost_rows,
+        columns=[
+          {"key": "name",   "label": "Name",   "priority": "primary"},
+          {"key": "domain", "label": "Domain"},
+          {"key": "status", "label": "Status",  "kind": "status_pill", "pill_kind": "control"},
+          {"key": "_actions","label": "",       "kind": "action_menu"},
+        ],
+        row_href_template="/controls/{id}",
+        compact=true
+    ) }}
+  </section>
+  {% endif %}
+
+  {% for domain_key in ["loss_event", "variance_management", "decision_support"] %}
+    {% set assignments = groups.get(domain_key, []) %}
+    <section class="mb-8">
+      <h2 class="text-h3 text-ink-1 mb-2">
+        {{ domain_labels[domain_key] }}
+        <span class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-surface-2 text-micro text-ink-2 ml-2">{{ assignments | length }}</span>
+      </h2>
+
+      {% if assignments %}
+        <div class="overflow-x-auto border border-border-subtle rounded-none">
+          <table class="w-full text-body">
+            <thead class="bg-surface-2 text-ink-2">
+              {# Sticky tr REMOVED 2026-05-23 — same bug as the data_table macro:
+                 position:sticky on <tr> overlay-ed the first data row across browsers. #}
+              <tr>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Control</th>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Sub-function</th>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Unit</th>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Capability</th>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Coverage</th>
+                <th class="px-3 py-2 text-meta text-left border-b border-border-strong">Reliability</th>
+                <th class="px-3 py-2 text-meta border-b border-border-strong"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in assignments %}
+                <tr id="assignment-row-{{ a.id }}"
+                    class="h-11 border-b border-border-subtle last:border-b-0 hover:bg-surface-2">
+                  <td class="px-3 py-2">
+                    <a class="hover:text-brand" href="/controls/{{ a.control_id }}">
+                      {{ a.control.name if a.control else a.control_id }}
+                    </a>
+                  </td>
+                  <td class="px-3 py-2">
+                    <code class="text-xs font-mono text-ink-2">{{ a.sub_function.value }}</code>
+                  </td>
+                  <td class="px-3 py-2">
+                    {% set unit = sub_function_units[a.sub_function] %}
+                    <span class="inline-flex items-center px-2 h-5 rounded-full bg-surface-2 text-micro text-ink-2">{{ unit.value }}</span>
+                  </td>
+                  <td class="px-3 py-2">
+                    {% if a.capability_value is not none %}
+                      {{ unit_display(a) }}
+                    {% else %}
+                      <span class="text-status-warning text-micro font-semibold">
+                        — (re-entry needed)
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td class="px-3 py-2 font-mono tabular-nums">{{ "%.3f" | format(a.coverage) }}</td>
+                  <td class="px-3 py-2 font-mono tabular-nums">{{ "%.3f" | format(a.reliability) }}</td>
+                  <td class="px-3 py-2">
+                    <button
+                      hx-post="/controls/{{ a.control_id }}/assignments/{{ a.id }}/confirm"
+                      hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                      hx-target="#assignment-row-{{ a.id }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Confirm that the effectiveness values for {{ a.sub_function.value }} are correct?"
+                      class="btn btn-success btn-xs">
+                      Confirm
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        {{ empty_state("✓", "All " ~ domain_labels[domain_key] ~ " confirmed",
+                       "No unconfirmed assignments in this domain.") }}
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  {% if total_count == 0 %}
+    {{ empty_state("✓", "All controls up to date",
+                   "All controls priced and all assignments confirmed. The maintenance badge will disappear from the navigation bar on your next page load.",
+                   cta={"label": "Back to Controls", "href": "/controls", "style": "outline"}) }}
+  {% endif %}
+
+</div>
+{% endblock %}

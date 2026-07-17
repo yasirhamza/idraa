@@ -1,0 +1,165 @@
+{
+  "_note": "Epic D-iii-b (#497): full-mapping ATT&CK rows for the 8 new attested vertical entries. SEPARATE from data/seed_attack_full_mappings.json so the historical fail-loud attack-seed migrations (c51975647c57 exemplar, 617f5ca862c3 full) that own that file are not disturbed. Read ONLY by the Task-3 rev2 migration (a5b6c7d8e9f0).",
+  "mappings": [
+    {
+      "entry_slug": "physician-practice-clearinghouse-revenue-disruption",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry describes a national medical-claims clearinghouse the physician practice depends on being 'taken offline by a ransomware attack on the clearinghouse' -- the upstream provider's own systems (not the practice's) were encrypted, severing eligibility/claims/remittance flow. Change Healthcare's 2024-02-21 ALPHV/BlackCat ransomware attack on its own infrastructure is the archetype this entry names; the downstream-dependency framing (loss lands on the practice, encryption happens at the third-party clearinghouse) is documented in the canonical_fair_gap, not this mapping.",
+      "provenance": "cited",
+      "citations": [
+        "Change Healthcare (UnitedHealth/Optum) ransomware outage, 2024-02-21 (ALPHV/BlackCat); AMA physician-impact survey Apr 2024 -- ama-assn.org/about/leadership/hard-lessons-learned-change-healthcare-breach (accessed 2026-07-06)"
+      ]
+    },
+    {
+      "entry_slug": "law-enforcement-records-extortion-breach",
+      "domain": "enterprise",
+      "technique_id": "T1567",
+      "rationale": "Entry describes an external cybercriminal group that, 'after encryption or exfiltration,' extorts a law-enforcement agency 'by threatening to leak the stolen data' -- the exfiltration-over-web-service step of the double-extortion pattern. The DC Metropolitan Police Department's Babuk data-leak (Apr-May 2021) and Oakland's Play ransomware police-records leak (Feb-Apr 2023) both published stolen records to public leak sites as extortion leverage.",
+      "provenance": "cited",
+      "citations": [
+        "DC Metropolitan Police Dept / Babuk ransomware data-leak, Apr-May 2021 (washingtonpost.com 2021-05-13); City of Oakland / Play ransomware police-records leak, Feb-Apr 2023 (oaklandside.org 2023-04-05)"
+      ]
+    },
+    {
+      "entry_slug": "law-enforcement-records-extortion-breach",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry names 'encryption or exfiltration' as the extortion lever -- the Babuk (DC MPD) and Play (Oakland) incidents both involved ransomware encryption alongside the records theft, the double-extortion pattern this entry's canonical_fair_gap distinguishes from the productivity-dominant municipal-ransomware baseline.",
+      "provenance": "cited",
+      "citations": [
+        "DC Metropolitan Police Dept / Babuk ransomware data-leak, Apr-May 2021 (washingtonpost.com 2021-05-13); City of Oakland / Play ransomware police-records leak, Feb-Apr 2023 (oaklandside.org 2023-04-05)"
+      ]
+    },
+    {
+      "entry_slug": "casino-ransomware-operational-disruption",
+      "domain": "enterprise",
+      "technique_id": "T1566",
+      "rationale": "Entry describes the extortion group gaining 'initial access to an integrated resort-casino through help-desk social engineering (voice phishing / MFA reset)' -- Scattered Spider's documented MGM Resorts intrusion vector was a phone call to the corporate help desk impersonating an employee to obtain an MFA reset, the phishing/vishing initial-access step.",
+      "provenance": "cited",
+      "citations": [
+        "MGM Resorts ransomware (Scattered Spider), Sep 2023 -- MGM Q3-2023 SEC 8-K disclosed ~$100M Adjusted Property EBITDAR impact; Caesars Entertainment ransom (~$15M), Aug-Sep 2023 (SEC 8-K Oct 2023)"
+      ]
+    },
+    {
+      "entry_slug": "casino-ransomware-operational-disruption",
+      "domain": "enterprise",
+      "technique_id": "T1078",
+      "rationale": "The help-desk vishing/MFA-reset step entry describes ends with the attacker holding valid credentials for the impersonated employee -- Scattered Spider's MGM intrusion used the help-desk-obtained credential/MFA-reset to operate as a valid account inside the environment before deploying ransomware against gaming and hotel systems.",
+      "provenance": "cited",
+      "citations": [
+        "MGM Resorts ransomware (Scattered Spider), Sep 2023 -- MGM Q3-2023 SEC 8-K disclosed ~$100M Adjusted Property EBITDAR impact; Caesars Entertainment ransom (~$15M), Aug-Sep 2023 (SEC 8-K Oct 2023)"
+      ]
+    },
+    {
+      "entry_slug": "casino-ransomware-operational-disruption",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry states the attacker 'deploys ransomware that disables guest-facing and gaming systems' -- the MGM Resorts Sep-2023 ransomware deployment shut down slot machines, digital room keys, and payment systems for days, and Caesars separately paid an extortion ransom (~$15M) after a comparable encryption event, both per the entry's cited SEC 8-K disclosures.",
+      "provenance": "cited",
+      "citations": [
+        "MGM Resorts ransomware (Scattered Spider), Sep 2023 -- MGM Q3-2023 SEC 8-K disclosed ~$100M Adjusted Property EBITDAR impact; Caesars Entertainment ransom (~$15M), Aug-Sep 2023 (SEC 8-K Oct 2023)"
+      ]
+    },
+    {
+      "entry_slug": "telecom-lawful-intercept-nationstate-compromise",
+      "domain": "enterprise",
+      "technique_id": "T1133",
+      "rationale": "Entry describes a nation-state actor gaining 'persistent, credentialed access to a telecommunications carrier's core and lawful-intercept (CALEA) infrastructure -- backbone and provider-edge routers' -- the Salt Typhoon campaign's documented entry point was carrier-edge and core network infrastructure reached via external remote access paths, per the joint FBI/CISA advisories.",
+      "provenance": "cited",
+      "citations": [
+        "Salt Typhoon PRC state-sponsored telecom compromise -- FBI/CISA Joint Statement 2024-11-13; CISA/NSA/FBI Advisory AA25-239A 2025-08-27 (fbi.gov, cisa.gov)"
+      ]
+    },
+    {
+      "entry_slug": "telecom-lawful-intercept-nationstate-compromise",
+      "domain": "enterprise",
+      "technique_id": "T1114",
+      "rationale": "Entry states the objective is to 'exfiltrate call content/metadata' from the case-management and lawful-intercept systems -- Salt Typhoon is publicly attributed to accessing call-detail-record and communications-content systems tied to lawful-intercept infrastructure, the collection-of-communications-data behavior this technique covers.",
+      "provenance": "cited",
+      "citations": [
+        "Salt Typhoon PRC state-sponsored telecom compromise -- FBI/CISA Joint Statement 2024-11-13; CISA/NSA/FBI Advisory AA25-239A 2025-08-27 (fbi.gov, cisa.gov)"
+      ]
+    },
+    {
+      "entry_slug": "law-firm-privileged-data-ransomware-extortion",
+      "domain": "enterprise",
+      "technique_id": "T1566",
+      "rationale": "Entry's attack_vector is phishing: 'a cybercriminal group compromises a law firm' as the initial-access step before deploying ransomware. IC3's 2025 Annual Report (p.16) names Legal Services as the largest non-critical-sector share (18%) of ransomware complaints, and both named incidents (Grubman Shire Meiselas & Sacks / REvil 2020; DLA Piper / NotPetya 2017) trace to a phishing-adjacent or malicious-attachment initial foothold.",
+      "provenance": "cited",
+      "citations": [
+        "IC3 2025 Annual Report p.16 (Legal Services 18% of non-critical ransomware complaints); Grubman Shire Meiselas & Sacks / REvil, May 2020 (infosecurity-magazine.com); DLA Piper / NotPetya, Jun 2017 (SC Media 2019 retrospective)"
+      ]
+    },
+    {
+      "entry_slug": "law-firm-privileged-data-ransomware-extortion",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry describes the group deploying 'ransomware with double-extortion' -- DLA Piper's 2017 NotPetya event encrypted firm systems firm-wide, and Grubman Shire Meiselas & Sacks' 2020 REvil incident combined encryption with the data-theft/extortion step this entry models.",
+      "provenance": "cited",
+      "citations": [
+        "IC3 2025 Annual Report p.16 (Legal Services 18% of non-critical ransomware complaints); Grubman Shire Meiselas & Sacks / REvil, May 2020 (infosecurity-magazine.com); DLA Piper / NotPetya, Jun 2017 (SC Media 2019 retrospective)"
+      ]
+    },
+    {
+      "entry_slug": "law-firm-privileged-data-ransomware-extortion",
+      "domain": "enterprise",
+      "technique_id": "T1567",
+      "rationale": "Entry states the group 'exfiltrat[es] privileged client material before encryption' -- the Grubman Shire Meiselas & Sacks / REvil 2020 incident is the named double-extortion exemplar: attorney-client privileged files were exfiltrated and threatened for public release, the exfiltration-over-web-service step ahead of the encryption event.",
+      "provenance": "cited",
+      "citations": [
+        "IC3 2025 Annual Report p.16 (Legal Services 18% of non-critical ransomware complaints); Grubman Shire Meiselas & Sacks / REvil, May 2020 (infosecurity-magazine.com); DLA Piper / NotPetya, Jun 2017 (SC Media 2019 retrospective)"
+      ]
+    },
+    {
+      "entry_slug": "k12-edtech-vendor-breach",
+      "domain": "enterprise",
+      "technique_id": "T1078",
+      "rationale": "The PowerSchool Dec-2024 breach -- the archetype this entry names -- was carried out via 'a compromised support-portal credential': the attacker used a valid maintenance-account credential to reach the vendor's customer data platform, rather than exploiting a software vulnerability.",
+      "provenance": "cited",
+      "citations": [
+        "PowerSchool K-12 SIS vendor breach, Dec 2024 (compromised support-portal credential; tens of millions of student/teacher records; vendor extortion paid; downstream district re-extortion 2025; criminal prosecution). Figures reported as a range across outlets."
+      ]
+    },
+    {
+      "entry_slug": "k12-edtech-vendor-breach",
+      "domain": "enterprise",
+      "technique_id": "T1213",
+      "rationale": "Entry states the group 'exfiltrates student and staff PII across the vendor's customer base' via the SIS platform -- the PowerSchool incident's compromised support credential was used to pull bulk student/teacher records directly out of the hosted information repository (the SIS database), the behavior this technique covers.",
+      "provenance": "cited",
+      "citations": [
+        "PowerSchool K-12 SIS vendor breach, Dec 2024 (compromised support-portal credential; tens of millions of student/teacher records; vendor extortion paid; downstream district re-extortion 2025; criminal prosecution). Figures reported as a range across outlets."
+      ]
+    },
+    {
+      "entry_slug": "higher-ed-insider-ddos",
+      "domain": "enterprise",
+      "technique_id": "T1498",
+      "rationale": "Entry describes an enrolled affiliate directing 'an external botnet to launch volumetric distributed denial-of-service attacks against a university's own network.' Paras Jha's Mirai-precursor botnet DDoS campaign against Rutgers University's central authentication and registration systems (Nov 2014-Sep 2016) is the documented exemplar, per the DOJ USAO-NJ guilty plea and $8.6M restitution order.",
+      "provenance": "cited",
+      "citations": [
+        "Paras Jha botnet DDoS campaign against Rutgers University central authentication/registration, Nov 2014-Sep 2016; DOJ USAO-NJ guilty plea, $8.6M restitution (CyberScoop 2018-10-26 reporting the DOJ announcement)"
+      ]
+    },
+    {
+      "entry_slug": "judiciary-court-system-ransomware",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Entry describes ransomware 'against a court system's own independently-administered case-management and e-filing infrastructure.' The Kansas Judicial Branch's Oct-2023 statewide ransomware attack caused a 5+ week outage of case-management systems, and the Los Angeles County Superior Court's Jul-2024 ransomware event forced a full 5-day closure -- both encryption-driven disruptions of judiciary IT.",
+      "provenance": "cited",
+      "citations": [
+        "Kansas Judicial Branch statewide ransomware, Oct 2023 (5+ week outage, confirmed case-record theft; bleepingcomputer.com); Los Angeles County Superior Court ransomware, Jul 2024 (5-day full closure; cnn.com 2024-07-22)"
+      ]
+    },
+    {
+      "entry_slug": "judiciary-court-system-ransomware",
+      "domain": "enterprise",
+      "technique_id": "T1567",
+      "rationale": "Entry names 'sealed/confidential-record exposure' as a loss channel distinct from downtime -- the Kansas Judicial Branch incident is reported with 'confirmed case-record theft' alongside the outage, the double-extortion exfiltration step this technique covers, consistent with the juvenile/DV/sealed-case fines exposure the entry's loss_form_profile models.",
+      "provenance": "cited",
+      "citations": [
+        "Kansas Judicial Branch statewide ransomware, Oct 2023 (5+ week outage, confirmed case-record theft; bleepingcomputer.com); Los Angeles County Superior Court ransomware, Jul 2024 (5-day full closure; cnn.com 2024-07-22)"
+      ]
+    }
+  ]
+}

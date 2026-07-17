@@ -1,0 +1,161 @@
+{
+  "columns": {
+    "applicable_industries": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "applicable_org_sizes": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "cis_safeguards": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "compliance_mappings": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "control_type": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(14)"
+    },
+    "created_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "description": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "TEXT"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "iso_27001_controls": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "name": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(255)"
+    },
+    "nist_csf_subcategories": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "reference_annual_cost": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "NUMERIC(18, 2)"
+    },
+    "row_version": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "INTEGER"
+    },
+    "slug": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(128)"
+    },
+    "source_citations": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "status": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(10)"
+    },
+    "tags": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "JSON"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "version": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "INTEGER"
+    }
+  },
+  "indexes": [
+    "ix_control_library_entry_control_type",
+    "ix_control_library_entry_status"
+  ],
+  "table_name": "control_library_entries"
+}

@@ -1,0 +1,238 @@
+{#
+  data_grid(matrix, row_label_header, density?, show_totals?, sort_url?, sort_by?, sort_dir?,
+            row_action_menu?, column_subscript?, empty?, currency?) — Spec §5.
+
+  Plan-gate fixes baked in:
+    M-2:  Cells are `list[{control_id, value}]` (NOT list[float|None]). Iterate `cell.value`
+          (Jinja's dot-access falls back to dict subscript via Environment.getattr).
+    M-3:  Optional `column_subscript` (e.g. "(Shapley $)") rendered under each column header.
+    M-4:  Cell tooltip framing — Shapley marginal contribution; cells sum to the
+          scenario / control total. NO row-sum number reported in the tooltip.
+    SC-3: Sortable rows via HTMX, density="dense" variant (h-8 / w-24), header `?`-popover,
+          row-label `⋯` action menu (via the row_action_menu callable prop).
+
+  matrix.controls: iterable of {control_id, control_name, control_type?, total_reduction: float|None}
+                   total_reduction None → column is absent-only; renders '—' in header/tfoot.
+  matrix.rows:     iterable of {scenario_name, scenario_id, cells: list[{control_id, value: float|None}]}
+
+  Sticky first column + sticky header row + sticky corner cell + sticky bottom totals row.
+  Zebra rows ON (data_grid is the inverse of data_table on this rule).
+
+  Cell money formatting uses the `money` filter (registered in app.py from
+  idraa.formatting.safe_money_format) so format is consistent with chart bar labels.
+  Pass currency={code, symbol} from the view-model; defaults to USD identity.
+
+  Plan-gate Arch-15: cell.value / cell.control_id rely on Jinja's dict-subscript fallback
+  (Environment.getattr tries getattr THEN getitem). Pin in regression test
+  `test_data_grid_cells_use_dict_shape_regression`. Do not switch to a sandboxed env
+  without re-verifying.
+
+  Plan-gate SC-15: bg-inherit on the sticky row-label cell is deliberate — it picks up
+  the parent <tr>'s even:bg-surface-2 zebra. Do NOT unify with the totals row's explicit
+  bg-surface-2 (that one has no parent zebra).
+#}
+{% from "macros/empty_state.html" import empty_state %}
+
+{% macro data_grid(matrix, row_label_header='Item',
+                   density='default',
+                   show_totals=True, empty=none,
+                   sort_url=none, sort_by=none, sort_dir='desc',
+                   row_action_menu=none,
+                   column_subscript=none,
+                   currency=none,
+                   filterable=False,
+                   drilldown=False) -%}
+  {%- set _code = (currency.code if currency and currency.code else "USD") -%}
+  {#- Row/col sizing is content-driven (2026-05-23 user feedback). Previously hard-pinned
+      via density="dense" → h-8/w-24, default → h-9/w-28; that fought long control names
+      and produced uneven heights anyway. Browser autofit handles both compact and tall
+      matrices without manual tuning. -#}
+  {%- if not matrix or not matrix.controls %}
+    {%- if empty %}{{ empty_state(empty.icon|default('◇'), empty.title, empty.body, empty.cta|default(none)) }}{%- endif %}
+  {%- else %}
+    {# #454 item 7 / sweep2 item 2: scroll-x is now an OUTER wrapper (see
+       app.css) carrying a right-edge fade overlay painted above the table's
+       opaque zebra/sticky backgrounds — not a background on the scrolling
+       element itself. Overflow is still driven by overflow-auto on the
+       inner element. #}
+    <div class="scroll-x"{% if filterable or drilldown %}
+         {# #99/#100: imperative filter (hidden-attr walk, debounced — NO per-cell
+            reactive bindings; scale rule) + single docked drill-down strip fed
+            from the clicked cell's data-* (no per-cell popover DOM). #}
+         x-data='{
+           sq: "", cq: "", sel: null,
+           applyFilter() {
+             const q = this.sq.trim().toLowerCase(), c = this.cq.trim().toLowerCase();
+             this.$root.querySelectorAll("tbody tr[data-name]").forEach(tr => {
+               tr.hidden = q !== "" && !tr.dataset.name.includes(q);
+             });
+             this.$root.querySelectorAll("[data-cname]").forEach(el => {
+               el.hidden = c !== "" && !el.dataset.cname.includes(c);
+             });
+           }
+         }'{% endif %}>
+      {%- if filterable %}
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <input type="search" placeholder="Filter scenarios…" x-model="sq"
+               @input.debounce.200ms="applyFilter()"
+               class="input input-bordered input-sm w-56" aria-label="Filter scenario rows">
+        <input type="search" placeholder="Filter controls…" x-model="cq"
+               @input.debounce.200ms="applyFilter()"
+               class="input input-bordered input-sm w-56" aria-label="Filter control columns">
+        <button type="button" class="btn btn-ghost btn-sm" x-show="sq || cq" x-cloak
+                @click="sq=''; cq=''; applyFilter()">Clear</button>
+        <span class="text-micro text-ink-3" x-show="sq || cq" x-cloak>Totals reflect all
+          scenarios — filtering changes the view, not the numbers.</span>
+      </div>
+      {%- endif %}
+      {%- if drilldown %}
+      <div x-show="sel" x-cloak
+           class="mb-2 p-3 bg-surface-1 border border-border-strong rounded-card text-body">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <p class="text-ink-1 font-medium"><span x-text="sel?.ctrl"></span>
+              <span class="text-ink-3">·</span> <span class="text-ink-2" x-text="sel?.scen"></span></p>
+            <p class="text-meta text-ink-2 mt-1">Shapley contribution: <span class="font-mono" x-text="sel?.val"></span></p>
+            <p class="text-meta text-ink-2 mt-1">FAIR-factor multipliers —
+              TEF <span class="font-mono" x-text="sel?.tef"></span> ·
+              Vuln <span class="font-mono" x-text="sel?.vuln"></span> ·
+              PL <span class="font-mono" x-text="sel?.pl"></span> ·
+              SL <span class="font-mono" x-text="sel?.sl"></span></p>
+            <p class="text-micro text-ink-3 mt-1">Multipliers are the control's standalone
+              per-node effect (1.00 = no effect on that node); the $ figure is its
+              composed fair share of this scenario's reduction.</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs" @click="sel=null" aria-label="Close cell details">✕</button>
+        </div>
+      </div>
+      {%- endif %}
+      <div class="border border-border-strong rounded-none overflow-auto max-h-[70vh]">
+      <table class="w-full text-body border-collapse">
+        <thead>
+          <tr>
+            {#- Corner cell: sticky-both, z-30. Explicit width — without it the
+                sticky column expands to fit longest scenario name and overflows
+                visually into the data columns (reported 2026-05-23). -#}
+            <th class="sticky top-0 left-0 z-30 bg-surface-2 text-meta text-ink-2 px-3 py-2 text-left border-b border-r border-border-strong"
+                style="min-width: 16rem; max-width: 22rem; width: 18rem;">
+              {{ row_label_header }}
+            </th>
+            {%- for c in matrix.controls %}
+              <th data-cname="{{ c.control_name|lower }}"
+                  class="sticky top-0 z-20 bg-surface-2 text-meta text-ink-2 px-3 py-2 text-right border-b border-r border-border-strong truncate"
+                  title="{{ c.control_name }} — total {% if c.total_reduction is not none %}${{ '{:,.0f}'.format(c.total_reduction) }}{% else %}—{% endif %}">
+                <div class="flex items-center justify-end gap-1">
+                  {%- if sort_url %}
+                    {%- set new_dir = 'asc' if (sort_by == c.control_id|string and sort_dir == 'desc') else 'desc' -%}
+                    <button type="button"
+                            hx-get="{{ sort_url }}?sort={{ c.control_id }}&dir={{ new_dir }}"
+                            {#- D5 (#266): `closest` walks ancestors only; the `.data-grid-table`
+                                class lives on the sibling <tbody>, so the old `closest .data-grid-table`
+                                resolved to nothing. The <table> is a genuine ancestor of this thead
+                                button AND contains the rows — target it instead. (Swap-fragment contract
+                                is out of scope: no live caller passes sort_url to data_grid yet.) -#}
+                            hx-target="closest table"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center gap-1 hover:text-ink-1 truncate"
+                            title="Sort by {{ c.control_name }}">
+                      <span class="truncate">{{ c.control_name }}</span>
+                      {%- if sort_by == c.control_id|string %}
+                        <span aria-hidden="true">{% if sort_dir == 'asc' %}↑{% else %}↓{% endif %}</span>
+                      {%- endif %}
+                    </button>
+                  {%- else %}
+                    <span class="truncate">{{ c.control_name }}</span>
+                  {%- endif %}
+                  {# SC-3 header ?-popover (Alpine inline x-data per UI rendering conventions). #}
+                  <span x-data="{open: false}" @click.outside="open=false" class="relative">
+                    <button type="button" @click="open = !open"
+                            class="text-ink-3 hover:text-ink-1 text-micro"
+                            aria-label="Show control details">?</button>
+                    <div x-show="open" x-cloak
+                         class="absolute right-0 z-40 mt-1 w-56 p-2 bg-surface-1 border border-border-strong rounded-card shadow-sm text-left">
+                      <p class="text-body text-ink-1 font-medium">{{ c.control_name }}</p>
+                      {%- if c.control_type %}<p class="text-meta text-ink-2 mt-1">Type: {{ c.control_type }}</p>{%- endif %}
+                      <p class="text-meta text-ink-2 mt-1">Total {% if c.total_reduction is not none %}${{ '{:,.0f}'.format(c.total_reduction) }}{% else %}—{% endif %} across run</p>
+                    </div>
+                  </span>
+                </div>
+                {%- if column_subscript %}<div class="text-micro text-ink-3 font-normal">{{ column_subscript }}</div>{%- endif %}
+              </th>
+            {%- endfor %}
+          </tr>
+        </thead>
+        <tbody class="data-grid-table">
+          {%- for row in matrix.rows %}
+          <tr class="even:bg-surface-2 align-top" data-name="{{ row.scenario_name|lower }}">
+            {#- Plan-gate SC-15: bg-inherit on the sticky row-label cell picks up
+                the parent <tr>'s even:bg-surface-2 zebra stripes.
+                Explicit width MUST match the corner cell above so the sticky
+                column doesn't expand with long scenario names. Long names wrap
+                via break-words; `truncate` was wrong here because it required
+                a stable container width which the sticky-without-width didn't
+                provide → caused visual overflow into data columns (2026-05-23). -#}
+            <td class="sticky left-0 z-10 bg-inherit text-body text-ink-1 px-3 py-2 border-b border-r border-border-subtle break-words align-top"
+                style="min-width: 16rem; max-width: 22rem; width: 18rem;">
+              <div class="flex items-start justify-between gap-1">
+                {%- if row.scenario_id %}
+                  <a href="/scenarios/{{ row.scenario_id }}" class="hover:text-brand block break-words" title="{{ row.scenario_name }}">{{ row.scenario_name }}</a>
+                {%- else %}
+                  <span class="block break-words" title="{{ row.scenario_name }}">{{ row.scenario_name }}</span>
+                {%- endif %}
+                {# SC-3 row-label ⋯ action menu hook (row_action_menu callable prop). #}
+                {%- if row_action_menu and row.scenario_id %}
+                  {%- from "macros/action_menu.html" import action_menu %}
+                  {{ action_menu(row_action_menu(row.scenario_id, row.scenario_name), align='end') }}
+                {%- endif %}
+              </div>
+            </td>
+            {%- for cell in row.cells %}
+              {%- set v = cell.value -%}
+              {%- set _matched_controls = matrix.controls | selectattr('control_id', 'equalto', cell.control_id) | list -%}
+              {%- set _ctrl_name = (_matched_controls | first).control_name if _matched_controls else '' -%}
+            {#- Mean+typical side-by-side (2026-07-04): cell.value_typical is populated
+                on EVERY run carrying a shapley_value (legacy runs included — it reads
+                the same key the legacy primary falls back to), so it is NOT None-safe
+                as a basis gate on its own; require matrix.basis=="mean" explicitly so
+                legacy runs never show a duplicate "typical" tooltip of the same number.
+                Surfaced as a title= tooltip addendum only — no visible sub-line — per
+                the design-for-scale rule (hundreds-of-scenarios matrices can't afford a
+                second line per cell). -#}
+            {%- set _f = cell.factors if drilldown and (cell.factors is defined) else none -%}
+            {%- set _clickable = drilldown and v is not none -%}
+            <td data-cname="{{ _ctrl_name|lower }}"
+                {%- if _clickable %} data-ctrl="{{ _ctrl_name }}" data-scen="{{ row.scenario_name }}"
+                data-val="{{ v | money(_code) if v is not none else '—' }}"
+                data-tef="{{ '×%.4f'|format(_f.tef) if _f and _f.tef is not none else '—' }}"
+                data-vuln="{{ '×%.4f'|format(_f.vuln) if _f and _f.vuln is not none else '—' }}"
+                data-pl="{{ '×%.4f'|format(_f.pl) if _f and _f.pl is not none else '—' }}"
+                data-sl="{{ '×%.4f'|format(_f.sl) if _f and _f.sl is not none else '—' }}"
+                @click="sel = { ctrl: $el.dataset.ctrl, scen: $el.dataset.scen, val: $el.dataset.val, tef: $el.dataset.tef, vuln: $el.dataset.vuln, pl: $el.dataset.pl, sl: $el.dataset.sl }"
+                {%- endif %}
+                class="text-right font-mono tabular-nums px-3 py-2 border-b border-r border-border-subtle{% if v is none or v == 0 %} text-ink-3{% endif %}{% if _clickable %} cursor-pointer hover:bg-surface-2{% endif %}"
+                title="{{ _ctrl_name }} · {{ row.scenario_name }} · {{ v | money(_code) if v is not none else '—' }} (Shapley contribution — cells sum to the scenario / control totals){% if matrix.basis == 'mean' and cell.value_typical is not none %} · typical {{ cell.value_typical | money(_code) }}{% endif %}">
+              {{ v | money(_code) if v is not none else '—' }}
+            </td>
+            {%- endfor %}
+          </tr>
+          {%- endfor %}
+        </tbody>
+        {%- if show_totals %}
+        <tfoot>
+          <tr>
+            <td class="sticky bottom-0 left-0 z-30 bg-surface-2 text-meta text-ink-1 px-3 py-2 border-t border-r border-border-strong font-semibold"
+                style="min-width: 16rem; max-width: 22rem; width: 18rem;">Total per control</td>
+            {%- for c in matrix.controls %}
+            <td data-cname="{{ c.control_name|lower }}"
+                class="sticky bottom-0 z-20 bg-surface-2 text-right font-mono tabular-nums font-semibold px-3 py-2 border-t border-r border-border-strong">
+              {{ c.total_reduction | money(_code) if c.total_reduction is not none else '—' }}
+            </td>
+            {%- endfor %}
+          </tr>
+        </tfoot>
+        {%- endif %}
+      </table>
+      </div>
+    </div>
+  {%- endif %}
+{%- endmacro %}

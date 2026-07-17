@@ -1,0 +1,32 @@
+{#- Trust chips — why you can believe the verdict (spec Summary view).
+    Confirmation counts are computed from run.controls_snapshot the same way
+    detail.html's per-control badges do today (v2/v3 assignments only). -#}
+{% import "runs/components/caveats.html" as cvm %}
+
+{% macro trust_chips(dr, run, caveats) -%}
+{%- set ns = namespace(n_conf=0, n_total=0, max_sv=1) -%}
+{%- for c in run.controls_snapshot or [] -%}
+  {%- set _sv = c.get('snapshot_version', 1) -%}
+  {%- if _sv > ns.max_sv %}{% set ns.max_sv = _sv %}{% endif -%}
+  {%- if _sv in (2, 3) and c.assignments -%}
+    {%- set ns.n_conf = ns.n_conf + (c.assignments | selectattr('confirmed_by_user_at') | list | length) -%}
+    {%- set ns.n_total = ns.n_total + (c.assignments | list | length) -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- set _wr = dr.weight_robustness -%}
+<div class="flex flex-wrap gap-2 mt-5 pt-4 border-t border-border-subtle" id="trust-chips">
+  <span class="badge badge-ghost badge-sm">{{ "{:,}".format(dr.n_simulations) }} sims × {{ dr.n_scenarios }} scenarios</span>
+  {% if run.controls_snapshot %}<span class="badge badge-ghost badge-sm">snapshot v{{ ns.max_sv }}</span>{% endif %}
+  {% if ns.n_total > 0 %}
+    <span class="badge badge-sm {{ 'badge-success badge-outline' if ns.n_conf == ns.n_total else 'badge-ghost' }}"
+          title="{{ ns.n_conf }} of {{ ns.n_total }} control assignment(s) confirmed by a user">
+      {{ ns.n_conf }} of {{ ns.n_total }} assignments confirmed</span>
+  {% endif %}
+  <a class="badge badge-ghost badge-sm font-mono" href="#run-inputs-hash" title="{{ run.inputs_hash }}">inputs {{ run.inputs_hash[:4] }}…{{ run.inputs_hash[-4:] }}</a>
+  {#- links to the reproducibility <details id="run-inputs-hash"> footer (T7f) -#}
+  {% if _wr and _wr.indistinguishable_pairs %}
+    <span class="badge badge-warning badge-outline badge-sm">
+      {{ _wr.indistinguishable_pairs | length }} control pair(s) too close to call{{ cvm.cv("weight-provenance", caveats.numbers) }}</span>
+  {% endif %}
+</div>
+{%- endmacro %}

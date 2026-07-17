@@ -1,0 +1,126 @@
+<h2 class="text-h3 text-ink-1 mb-3">Overview</h2>
+<p class="text-body text-ink-2 mb-3">
+  Idraa lets you move scenarios in bulk via <strong>import</strong> and
+  <strong>export</strong> in two formats: <strong>CSV</strong> and
+  <strong>JSON</strong>. Export produces a file you can archive, share, or
+  re-import into another workspace; import is the reverse &mdash; a
+  two-step upload-then-confirm flow that validates each row before writing
+  anything. The pair is designed for a clean <strong>round-trip</strong>:
+  a file exported from Idraa can be re-imported without data loss.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Role requirement:</strong> export is available to any authenticated
+  user (Analyst, Reviewer, or Admin). Import is restricted to
+  <strong>Admin</strong> users only &mdash; the upload form and both
+  template downloads are 403-blocked for Analyst and Reviewer roles.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Exporting scenarios</h2>
+<p class="text-body text-ink-2 mb-3">
+  Any authenticated user can export from the Scenarios list page
+  (<a class="text-brand hover:underline" href="/scenarios">/scenarios</a>).
+  Use the <strong>Export</strong> dropdown at the top of the list to choose
+  between <strong>CSV</strong> and <strong>JSON</strong>. The download honours
+  whatever <code>?status=</code> filter is active, so you can export only
+  active scenarios, archived scenarios, or the full set.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  You can also export a single scenario from its detail page using the same
+  dropdown. The resulting file is named
+  <code>scenario-&lt;id&gt;.csv</code> or <code>scenario-&lt;id&gt;.json</code>.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Both formats carry the same fields: scenario name, description, threat actor
+  type, asset class, all FAIR input parameters (TEF, Vulnerability, Primary
+  Loss, Secondary Loss ranges), status, and creation timestamps. Every export
+  is recorded in the audit log.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Importing scenarios (Admin only)</h2>
+<p class="text-body text-ink-2 mb-3">
+  Navigate to
+  <a class="text-brand hover:underline" href="/scenarios/import">/scenarios/import</a>.
+  The page provides download links for a blank <strong>CSV template</strong>
+  (<code>scenarios_template.csv</code>) and a <strong>JSON sample</strong>
+  (<code>scenarios_sample.json</code>) so you can see the expected column
+  layout and field names before authoring your file.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">Step 1 &mdash; Upload and preview</h3>
+<p class="text-body text-ink-2 mb-3">
+  Choose your CSV or JSON file and click <strong>Upload</strong>. Idraa
+  validates every row without writing anything to the database. The preview
+  page shows:
+</p>
+<ul class="list-disc list-inside text-body text-ink-2 mb-3 space-y-1">
+  <li>Rows that passed validation and are ready to import.</li>
+  <li>Rows that are duplicates of existing scenarios (skipped automatically).</li>
+  <li>Rows with validation errors, with a per-row error message.</li>
+</ul>
+<p class="text-body text-ink-2 mb-6">
+  If the file is unparseable (wrong format, truncated, or exceeds the 5&thinsp;MB
+  size limit) the upload returns an error immediately and nothing is stored.
+  The preview is held server-side under a short-lived token (10 minutes); if the
+  token expires before you confirm, you will see an &ldquo;expired preview&rdquo;
+  message and must re-upload.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">Step 2 &mdash; Confirm</h3>
+<p class="text-body text-ink-2 mb-3">
+  Review the preview and click <strong>Confirm import</strong>. Only the
+  rows that passed validation are written. Duplicate rows are silently skipped;
+  error rows are also skipped and listed in the result summary. A successful
+  import with no errors redirects you to the Scenarios list; a partial import
+  (some rows valid, some invalid) shows a result page so you can see what was
+  created and what was rejected.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Each imported scenario is owned by the importing Admin&rsquo;s organisation
+  and is recorded in the audit log.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Round-trip fidelity</h2>
+<p class="text-body text-ink-2 mb-3">
+  A file exported from Idraa is designed to re-import cleanly without data
+  loss or field drift. The export format matches the import parser&rsquo;s
+  expected column names and value encodings, so the round-trip &mdash;
+  export &rarr; (optionally edit) &rarr; re-import &mdash; is lossless for
+  all fields carried in the format. Scenarios re-imported this way are treated
+  as new records; they do not overwrite the originals, which lets you use
+  export-then-import as a duplication mechanism.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  If you edit the file between export and import, only rows that pass
+  validation will be written. Common editing mistakes &mdash; invalid
+  enum values, missing required fields, or numbers outside the allowed range
+  &mdash; surface as per-row errors in the preview step before anything
+  is committed.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Format notes</h2>
+<p class="text-body text-ink-2 mb-3">
+  <strong>CSV</strong> &mdash; each row is one scenario; the header row names
+  the columns. Download the template to get the exact column order. Numeric
+  FAIR parameters (e.g. TEF low / high, loss low / high) use decimal notation.
+  String enumerations (threat actor type, asset class) must match the values
+  shown in the template.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>JSON</strong> &mdash; a JSON array of scenario objects; field names
+  match the CSV column names. The sample file provides one worked example per
+  common threat actor type. JSON is preferable when field values may contain
+  commas or newlines (e.g. long descriptions).
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">See also</h2>
+<ul class="list-disc list-inside text-body text-ink-2 mb-3 space-y-1">
+  <li>
+    <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>
+    &mdash; for the field-by-field walkthrough of what each FAIR parameter means.
+  </li>
+  <li>
+    <a class="text-brand hover:underline" href="/help/libraries">Libraries</a>
+    &mdash; for importing scenario library bundles (a separate Admin-only flow
+    at <code>/library/import</code>).
+  </li>
+</ul>

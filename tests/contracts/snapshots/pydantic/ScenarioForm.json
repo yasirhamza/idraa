@@ -1,0 +1,85 @@
+{
+  "fields": {
+    "asset_class": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "attack_vector": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "description": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "effect": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "library_entry_id": {
+      "has_default": true,
+      "optional": true,
+      "type": "uuid.UUID | None"
+    },
+    "name": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "primary_loss": {
+      "has_default": false,
+      "optional": false,
+      "type": "dict[str, Any]"
+    },
+    "scenario_type": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'ScenarioType'>"
+    },
+    "secondary_loss": {
+      "has_default": true,
+      "optional": true,
+      "type": "dict[str, Any] | None"
+    },
+    "source": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'ScenarioSource'>"
+    },
+    "status": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'EntityStatus'>"
+    },
+    "threat_actor_type": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "threat_category": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "threat_event_frequency": {
+      "has_default": false,
+      "optional": false,
+      "type": "dict[str, Any]"
+    },
+    "version": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "vulnerability": {
+      "has_default": false,
+      "optional": false,
+      "type": "dict[str, Any]"
+    }
+  },
+  "schema_name": "ScenarioForm"
+}

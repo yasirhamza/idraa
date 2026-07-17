@@ -1,0 +1,75 @@
+{% extends "scenarios/wizard/_shell.html" %}
+{% block step_body %}
+<div class="review">
+  {% if state.library_entry_id %}
+    <div class="alert alert-info mb-4">
+      Started from library: <strong>{{ library_entry_name }}</strong>
+      v{{ state.library_entry_version or 1 }}
+      {% if state.override_id %}(with org override v{{ state.override_version }}){% endif %}
+    </div>
+  {% endif %}
+
+  <section class="mb-4">
+    <h3>Basic info <a href="/scenarios/new/wizard/step/2?tx={{ state.tx_id }}" class="text-xs link">edit</a></h3>
+    <dl>
+      <dt>Name:</dt><dd>{{ state.name }}</dd>
+      <dt>Description:</dt><dd>{{ state.description or '—' }}</dd>
+      <dt>Threat category:</dt><dd>{{ state.threat_category }}</dd>
+      <dt>Threat actor:</dt><dd>{{ state.threat_actor_type or '—' }}</dd>
+      <dt>Asset class:</dt><dd>{{ state.asset_class or '—' }}</dd>
+      <dt>Attack vector:</dt><dd>{{ state.attack_vector or '—' }}</dd>
+    </dl>
+  </section>
+
+  <section class="mb-4">
+    {# F7 (2026-05-28 step-3 split): the evaluator-style wizard persists FAIR
+       estimates into state.sme_estimates — the old PERT-dist fields stay empty
+       until finalize, so render the entered SME rows here (Source + low–high).
+       Source labels are user-provided sme_name values: rely on Jinja autoescape
+       ({{ }}, NOT |safe) so they're XSS-safe. Edit links split into
+       Likelihood (step 3) / Impact (step 4). #}
+    <h3>Likelihood
+      <a href="/scenarios/new/wizard/step/3?tx={{ state.tx_id }}" class="text-xs link">edit</a>
+      · Impact
+      <a href="/scenarios/new/wizard/step/4?tx={{ state.tx_id }}" class="text-xs link">edit</a>
+    </h3>
+    {% for fs in review_fair_rows %}
+      <p class="font-medium mt-2">{{ fs.label }}:</p>
+      {% if fs.rows %}
+        <ul class="text-sm">
+          {% for row in fs.rows %}
+            <li>{{ row.source }}:
+              {%- if fs.fmt == "rate" %} {{ row.low | format_rate_input }} – {{ row.high | format_rate_input }}
+              {%- elif fs.fmt == "probability" %} {{ row.low | format_probability_input }} – {{ row.high | format_probability_input }}
+              {%- else %} {{ row.low | format_money_input }} – {{ row.high | format_money_input }}{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}<p class="text-sm muted">—</p>{% endif %}
+    {% endfor %}
+  </section>
+
+  <section class="mb-4">
+    <h3>Mitigating controls <a href="/scenarios/new/wizard/step/5?tx={{ state.tx_id }}" class="text-xs link">edit</a></h3>
+    {% if state.mitigating_control_ids %}
+      <ul>
+        {% for cid in state.mitigating_control_ids %}
+          {# UAT 2026-05-21: render the control name, falling back to the
+             UUID only when the row was deleted between pick + review. #}
+          <li>{{ control_name_by_id.get(cid|string, cid) }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}<p>No controls selected.</p>{% endif %}
+  </section>
+
+  <form method="post" action="/scenarios/new/wizard/finalize?tx={{ state.tx_id }}">
+    {{ csrf_field() }}
+    {# Plan-gate S-N1: the optimistic-lock CAS token. finalize_wizard reads
+       this for advance_step(expected_version_token=...); a flash-rejected
+       finalize re-renders the FRESH token so the operator's retry isn't a
+       guaranteed stale-409 loop. #}
+    <input type="hidden" name="version_token" value="{{ state.version_token }}">
+    <button type="submit" class="btn btn-primary btn-lg">Save scenario</button>
+  </form>
+</div>
+{% endblock %}

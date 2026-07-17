@@ -1,0 +1,343 @@
+{# src/idraa/templates/controls/form.html  (F16 re-skin)
+   Single-page form for both /controls/new and /controls/{id}/edit.
+
+   Mode is inferred from `control` context var:
+     - control is None → /new (POST /controls/new)
+     - control is not None → /edit (POST /controls/{id}/edit)
+
+   Validation errors render inline next to the relevant field via form_field.
+   Cross-field errors and assignment-level errors surface in form_error_summary.
+
+   HTMX notes (unchanged from pre-F16):
+   - hx-select="#control-form" picks out only the form fragment on 422 re-renders.
+   - hx-disinherit="hx-select" prevents the "+ Add assignment" and combobox
+     row-swap descendants from inheriting the form's hx-select (which would
+     yield an empty swap because the partial response has no #control-form).
+#}
+{% extends "base.html" %}
+
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}{% if control %}Edit Control{% else %}New Control{% endif %}{% endblock %}
+
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{{ page_header(
+  title=("Edit Control" if control else "New Control"),
+  breadcrumb=breadcrumb_for(request),
+  actions=[],
+) }}
+<div class="-mt-2 mb-2 text-meta text-ink-2">
+  Need help with sub-functions? {{ help_trigger('control-sub-functions', label='Sub-function help') }}
+</div>
+
+{# Mobile tranche 2b: the control authoring form is no longer device-gated.
+   It reflows to a single column on phones — the assignment rows use
+   grid-cols-1 md:grid-cols-6 so each sub-function / capability / coverage /
+   reliability field stacks full-width on small screens. Server-side
+   require_role remains the real authorization gate. #}
+
+  {# Normalise errors to a flat dict[str, str] for form_field and form_error_summary.
+     The route passes errors as dict[str, str | list[str]] with an optional _global
+     key for model-level validators. We produce:
+       errors_dict  — flat field-level errors (str per field, for form_field error= arg)
+       global_errors — list[str] for the _global banner (separate alert above summary)
+     This normalisation lives in the template (not the route) per the F16 scope rule:
+     "leave normalisation to F22 sweep; tolerate existing shape via best-effort guards." #}
+  {%- set errors_dict = {} -%}
+  {%- set global_errors = [] -%}
+  {%- if errors is mapping -%}
+    {%- for k, v in errors.items() -%}
+      {%- if k == '_global' -%}
+        {%- if v is string -%}
+          {%- set _ = global_errors.append(v) -%}
+        {%- else -%}
+          {%- for msg in v -%}{%- set _ = global_errors.append(msg) -%}{%- endfor -%}
+        {%- endif -%}
+      {%- else -%}
+        {%- if v is string -%}
+          {%- set _ = errors_dict.update({k: v}) -%}
+        {%- elif v -%}
+          {%- set _ = errors_dict.update({k: v|first}) -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif -%}
+
+  {# Build (value, label) option tuples for select fields from StrEnum lists. #}
+  {%- set type_options = [] -%}
+  {%- for t in type_choices -%}{%- set _ = type_options.append((t.value, t.value|title)) -%}{%- endfor -%}
+
+  {%- set status_options = [] -%}
+  {%- for s in status_choices -%}{%- set _ = status_options.append((s.value, s.value|title)) -%}{%- endfor -%}
+
+  {# Single humanization point (plan-gate Arch-S1): option text is the enum's
+     canonical .label, never value|replace|title. #}
+  {%- set stage_options = [] -%}
+  {%- for s in stage_choices -%}{%- set _ = stage_options.append((s.value, s.label)) -%}{%- endfor -%}
+
+  {# Resolve current values — prefer form_data (post-error re-render) over control ORM. #}
+  {%- set cur_name = form_data.name if form_data and form_data.name else (control.name if control else '') -%}
+  {%- set cur_description = form_data.description if form_data and form_data.description else (control.description if control else '') -%}
+  {%- set cur_type = form_data.type if form_data and form_data.type else (control.type.value if control and control.type else '') -%}
+  {%- set cur_status = form_data.status if form_data and form_data.status else (control.status.value if control and control.status else 'active') -%}
+  {%- set cur_stage = form_data.implementation_stage if form_data and form_data.implementation_stage else (control.implementation_stage.value if control and control.implementation_stage else 'active') -%}
+  {%- set cur_annual_cost = form_data.annual_cost if form_data and form_data.annual_cost is not none else (control.annual_cost if control else 0) -%}
+
+  <form
+    id="control-form"
+    {% if control %}
+      hx-post="/controls/{{ control.id }}/edit"
+    {% else %}
+      hx-post="/controls/new"
+    {% endif %}
+    hx-target="#control-form"
+    hx-swap="outerHTML"
+    {# Extract just #control-form from the response body. The validation-
+       error 422 path returns a FULL page (TemplateResponse renders the
+       base layout). Without hx-select, HTMX would inject the whole
+       nested page into #control-form. With hx-select, HTMX picks out
+       just the form fragment — error banners included. #}
+    hx-select="#control-form"
+    {# UAT 2026-05-21: HTMX 1.9 inherits hx-select to descendants by
+       default, which silently broke the "+ Add assignment" button and
+       the sub-function combobox row-swap (both fire hx-get against
+       /controls/_assignment_row, which returns just the row partial
+       with no #control-form wrapper — hx-select then matches nothing
+       and the swap inserts an empty string). hx-disinherit keeps the
+       form's own hx-select for its POST while preventing descendants
+       from picking it up. #}
+    hx-disinherit="hx-select"
+    method="post"
+    class="space-y-6">
+
+    {{ csrf_field() }}
+
+    {# Global / model-level errors (e.g. uniqueness violations across assignments). #}
+    {% if global_errors %}
+      <div class="alert alert-error" role="alert">
+        {% for msg in global_errors %}<div>{{ msg }}</div>{% endfor %}
+      </div>
+    {% endif %}
+
+    {# form_error_summary: field-level errors banner at top of form so users
+       can see all problems at a glance. Catches nested assignment errors that
+       only have top-level keys (assignments.N.capability_value, etc.) which
+       were previously surfaced via a manual catch-all block. #}
+    {{ form_error_summary(errors_dict) }}
+
+    {# ------------------------------------------------------------------ #}
+    {#  Identity fieldset                                                  #}
+    {# ------------------------------------------------------------------ #}
+    <fieldset class="space-y-4">
+      <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Identity</legend>
+
+      {{ form_field(name="name", label="Name", input_type="text",
+                    value=cur_name,
+                    required=True,
+                    error=errors_dict.get("name"),
+                    help="Short human-readable identifier (max 255 characters).") }}
+
+      {{ form_field(name="description", label="Description", input_type="textarea",
+                    value=cur_description,
+                    rows=3,
+                    error=errors_dict.get("description"),
+                    help="Optional longer description of this control.") }}
+    </fieldset>
+
+    {# ------------------------------------------------------------------ #}
+    {#  Scope fieldset                                                     #}
+    {# ------------------------------------------------------------------ #}
+    <fieldset class="space-y-4">
+      <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Scope</legend>
+
+      {{ form_field(name="type", label="Type", input_type="select",
+                    value=cur_type,
+                    options=type_options,
+                    required=True,
+                    error=errors_dict.get("type")) }}
+
+      {{ form_field(name="status", label="Status", input_type="select",
+                    value=cur_status,
+                    options=status_options,
+                    error=errors_dict.get("status")) }}
+
+      {{ form_field(name="implementation_stage", label="Implementation stage", input_type="select",
+                    value=cur_stage,
+                    options=stage_options,
+                    error=errors_dict.get("implementation_stage"),
+                    help="How far along this control is in real deployment. ONLY 'Active' controls reduce modeled risk; others are tracked but excluded from analyses.") }}
+    </fieldset>
+
+    {# ------------------------------------------------------------------ #}
+    {#  Cost fieldset                                                      #}
+    {# ------------------------------------------------------------------ #}
+    <fieldset class="space-y-4">
+      <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Cost</legend>
+      <p class="text-meta text-ink-2">
+        Single all-in OPEX estimate of the recurring annual cost of this control
+        (licensing + ops + staff time). Skip CapEx / amortisation here.
+      </p>
+
+      {{ form_field(name="annual_cost", label="Annual cost (USD)", input_type="money",
+                    value=cur_annual_cost,
+                    error=errors_dict.get("annual_cost"),
+                    help="Recurring annual cost in USD.") }}
+
+      {# #144 — NIST CSF 1.1 subcategory tags + crosswalk-grounded FAIR-CAM
+         suggestions. CSV input (ControlForm.split_csv parses it); the suggest
+         panel is informational — it grounds which function assignments the
+         P2a crosswalk supports for these tags (validate-not-derive). #}
+      {%- set cur_nist = form_data.nist_csf_functions if form_data and form_data.nist_csf_functions is not none else (control.nist_csf_functions if control else []) -%}
+      <div class="space-y-1 max-w-md">
+        <label for="nist_csf_functions" class="text-meta text-ink-2">NIST CSF subcategories</label>
+        <input id="nist_csf_functions" name="nist_csf_functions" type="text"
+               value="{{ cur_nist | join(', ') if cur_nist is not string else cur_nist }}"
+               placeholder="e.g. PR.AC-7, DE.CM-1"
+               class="input input-bordered input-sm w-full"
+               hx-get="/controls/nist-suggest"
+               hx-trigger="keyup changed delay:400ms"
+               hx-target="#nist-suggest-panel">
+        <p class="text-micro text-ink-3">Comma-separated NIST CSF 1.1 subcategory codes
+          this control implements. Used to suggest FAIR-CAM function assignments
+          via the FAIR-Institute crosswalk.</p>
+        <div id="nist-suggest-panel"></div>
+      </div>
+    </fieldset>
+
+    {# ------------------------------------------------------------------ #}
+    {#  Assignments fieldset                                               #}
+    {# ------------------------------------------------------------------ #}
+    <fieldset>
+      <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Assignments {{ help_trigger('control-sub-functions') }}</legend>
+      <p class="text-meta text-ink-2 mb-2">
+        Each assignment maps a FAIR-CAM sub-function to a capability + coverage + reliability
+        triple. At least one is required.
+      </p>
+      <p class="text-meta text-ink-2 mb-3">
+        Domain is derived automatically from the sub-functions you assign below.
+      </p>
+
+      {% if errors_dict.get("assignments") %}
+        <div class="alert alert-error mb-3" role="alert">{{ errors_dict.get("assignments") }}</div>
+      {% endif %}
+
+      <div id="assignments" x-data>
+        {% if existing_assignments %}
+          {% for a in existing_assignments %}
+            {# `assignment` and `index` are the variable names the included
+               template reads — without this `with` wrapper, the loop variable
+               `a` and `loop.index0` aren't visible inside the include and the
+               form re-renders with empty value attributes + malformed
+               `name="assignments[][...]"` field names. (Bug #29.) #}
+            {% with index=loop.index0, assignment=a %}
+              {% include "controls/_assignment_row.html" with context %}
+            {% endwith %}
+          {% endfor %}
+        {% else %}
+          {# Initial blank row #}
+          {% with index=0, assignment=None %}
+            {% include "controls/_assignment_row.html" with context %}
+          {% endwith %}
+        {% endif %}
+      </div>
+
+      {# Index must be computed from the live DOM, not server-baked: a static
+         `?index={{ next_assignment_index }}` would make every click fetch the
+         SAME index and produce duplicate `name="assignments[N][...]"` field
+         names that collapse on the server (Starlette FormData dedups by key,
+         last value wins → silent row loss). We compute max(data-row-index)+1
+         over the current rows so the new row's index is unique even after
+         middle-row removals. (issue #123) #}
+      <button
+        type="button"
+        hx-get="/controls/_assignment_row"
+        hx-vals='js:{index: (function(){var r=document.querySelectorAll("#assignments .assignment-row");var m=-1;r.forEach(function(e){var i=parseInt(e.getAttribute("data-row-index")||"0",10);if(Number.isFinite(i)&&i>m)m=i;});return m+1;})()}'
+        hx-target="#assignments"
+        hx-swap="beforeend"
+        class="btn btn-outline btn-sm mt-2">
+        + Add assignment
+      </button>
+    </fieldset>
+
+    {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+    <div class="pb-24" aria-hidden="true"></div>
+
+    {# ------------------------------------------------------------------ #}
+    {#  Sticky action bar (spec §6)                                        #}
+    {# ------------------------------------------------------------------ #}
+    <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+      <a href="/controls" class="btn btn-ghost btn-sm">Cancel</a>
+      <button type="submit" class="btn btn-primary btn-sm">
+        {% if control %}Save changes{% else %}Create control{% endif %}
+      </button>
+    </div>
+  </form>
+
+{# NOTE: the sub-function combobox no longer reads a page-global
+   `window.SUB_FUNCTION_GROUPS` — every assignment row inlines `groups` into
+   its Alpine `x-data` (see controls/_assignment_row.html), which eliminates
+   the HTMX-1.9 MutationObserver race the global was working around. The
+   trailing setter script was therefore dead and has been removed (#395). #}
+
+{# Surface HTML5 required-field validation visibly. Default browser
+   behaviour is a native popover near the offending input — small +
+   easy to miss if the input is off-screen, which led to live UAT
+   reports of "save not working" with no visible error (2026-05-19).
+   We listen for `invalid` events (capture phase, since they don't
+   bubble), highlight the field red, scroll it into view, and inject
+   a single top-of-form banner so the user immediately sees what's
+   wrong. Server-side errors (the form_error_summary above) still
+   cover anything HTML5 doesn't catch. #}
+<script>
+(function () {
+  var form = document.getElementById('control-form');
+  if (!form) return;
+  var bannerId = '__html5_required_banner';
+  function ensureBanner() {
+    var existing = document.getElementById(bannerId);
+    if (existing) return existing;
+    var banner = document.createElement('div');
+    banner.id = bannerId;
+    banner.className = 'alert alert-error mb-3';
+    banner.textContent = 'Please fill the required fields highlighted in red below.';
+    form.insertBefore(banner, form.firstChild.nextSibling);
+    return banner;
+  }
+  var firstInvalid = null;
+  form.addEventListener('invalid', function (e) {
+    e.target.classList.add('input-error', 'select-error');
+    if (!firstInvalid) firstInvalid = e.target;
+    ensureBanner();
+  }, true);
+  form.addEventListener('submit', function () {
+    firstInvalid = null;
+    var b = document.getElementById(bannerId);
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  });
+  // Scroll the first invalid into view AFTER the browser has finished
+  // processing all `invalid` events (deferred via setTimeout 0).
+  form.addEventListener('invalid', function () {
+    setTimeout(function () {
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        try { firstInvalid.focus({ preventScroll: true }); } catch (_) {}
+      }
+    }, 0);
+  }, true);
+  // Clear the red highlight as the user starts typing again.
+  form.addEventListener('input', function (e) {
+    e.target.classList.remove('input-error', 'select-error');
+  });
+  form.addEventListener('change', function (e) {
+    e.target.classList.remove('input-error', 'select-error');
+  });
+})();
+</script>
+
+{% endblock %}

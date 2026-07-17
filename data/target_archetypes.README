@@ -1,0 +1,58 @@
+data/target_archetypes.json — DEV/CURATION PLANNING ARTIFACT (Epic C-ii-a, #335)
+================================================================================
+
+WHAT THIS IS
+------------
+A curated list of ~80 (archetype, sector, threat_type, asset_class, threat_actor,
+is_ot) target rows that the C-iii curation will author full library entries for.
+It is the INPUT to the C-ii-b research sweep and the C-iii curation pass.
+
+WHAT THIS IS NOT
+----------------
+This is NOT app-runtime seed data. The application does NOT load this file at
+runtime. The canonical runtime seed library lives in:
+  - data/seed_library_entries.json           (31 entries)
+  - data/seed_library_entries_extension.json (13 entries)
+This planning artifact is consumed only by Epic C-ii-b / C-iii tooling and humans
+during curation (Arch-N2). Do not wire it into the seeding path.
+
+ROW SCHEMA
+----------
+Each row is a JSON object:
+  archetype      slug-style identifier for the target archetype
+  sector         one of the 13 §3 core sectors (free string, NOT an enum):
+                 manufacturing, energy_utilities, healthcare, financial_services,
+                 retail_ecommerce, technology_saas, government_public, education,
+                 professional_services, transportation_logistics, telecom,
+                 hospitality, food_agriculture
+  threat_type    a idraa.models.enums.ThreatCategory value
+  asset_class    a idraa.models.enums.AssetClass value
+  threat_actor   a idraa.models.enums.ThreatActorType value
+  is_ot          bool — true if the row is OT-flavoured (OT threat type or
+                 ot_systems/safety_systems asset class)
+  keep_or_new    "keep" = sourced from an existing seed entry (carry existing_slug);
+                 "new"  = a gap-filler the curation must author from scratch
+  existing_slug  the seed slug for keep rows; null for new rows
+
+PROVENANCE OF THE 44 "keep" ROWS
+--------------------------------
+The 44 keep rows mirror the existing seed entries. Their sector is the existing
+entry's calibration_anchor.industry mapped to the nearest §3 core sector
+(utilities/mining -> energy_utilities, information -> technology_saas,
+professional/real_estate -> professional_services, public -> government_public,
+financial -> financial_services, retail -> retail_ecommerce, transportation ->
+transportation_logistics; healthcare/manufacturing/education map directly).
+
+BALANCE GUARANTEE
+-----------------
+tests/unit/test_target_archetypes.py encodes the §3 coverage matrix and is the
+real guard on this file. Every edit must keep it green:
+  - 70-90 rows total
+  - each of the 13 core sectors >=2 rows spanning >=2 threat types
+  - each non-OT fill threat type (data_tampering, physical_tampering,
+    denial_of_service, social_engineering, insider_misuse) >=2 rows
+  - >=1 row each for asset classes people / facilities / business_process_revenue
+    / business_process_cost / cash_or_equivalent
+  - >=1 competitors threat-actor row
+  - OT share <=30% of total
+  - threat_type / asset_class / threat_actor are valid enum values

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Library overrides{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <h1 class="text-2xl font-bold mb-4">Library overrides for your organization</h1>
+  {# Flash rendered by base.html → layouts/_flash.html (single source). #}
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>Entry</th>
+          <th>Version</th>
+          <th>Reason</th>
+          <th>Updated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in overrides %}
+        <tr>
+          <td><a href="/library/entries/{{ o.library_entry_id }}" class="link">{{ o.library_entry_id }}</a></td>
+          <td class="font-mono">v{{ o.version }}</td>
+          <td class="text-sm">{{ o.reason[:80] }}{% if o.reason|length > 80 %}...{% endif %}</td>
+          <td class="text-sm">{{ o.updated_at | format_date }}</td>
+          <td><a href="/library/overrides/{{ o.id }}/edit" class="btn btn-xs btn-ghost">edit</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not overrides %}
+  <p class="text-center text-base-content/60 mt-4">No overrides yet. <a href="/library/entries" class="link">Browse library</a> to create one.</p>
+  {% endif %}
+</div>
+{% endblock %}

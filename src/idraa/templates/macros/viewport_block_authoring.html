@@ -1,0 +1,23 @@
+{#
+  viewport_block_authoring(reason) — Spec §2. Render on every authoring route.
+  Pairs with `only_on_md` caller block which wraps the real form so it is hidden md:block.
+
+  Plan-gate Sec-4: this is a UX cue, NOT a security boundary. A user can bypass
+  the `hidden md:block` CSS via devtools or POST directly. Server-side authorization
+  (require_login, require_role) remains the actual gate.
+#}
+{% macro viewport_block_authoring(reason='This page requires a tablet or desktop.') -%}
+<div class="md:hidden">
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 text-center">
+    <span class="block text-4xl text-ink-3 mb-3" aria-hidden="true">▢</span>
+    <h2 class="text-h2 text-ink-1 mb-2">Switch device</h2>
+    <p class="text-body text-ink-2 max-w-md mx-auto">{{ reason }}</p>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro only_on_md() -%}
+<div class="hidden md:block">
+  {{ caller() }}
+</div>
+{%- endmacro %}

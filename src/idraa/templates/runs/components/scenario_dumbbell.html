@@ -1,0 +1,76 @@
+{#- Per-scenario "where the risk lives" section: a CSS dumbbell (design-mock
+    match — the prior chart-vendor scatter clipped labels + let the modebar
+    overlap the data; see PR replacing per_scenario_dumbbell). Rows come pre-sorted
+    desc by base_ale from dr.per_scenario_ale_rows. -#}
+
+{% macro scenario_dumbbell(dr) -%}
+{%- set _code = dr.currency.code if dr.currency else "USD" -%}
+{%- set rows = dr.per_scenario_ale_rows -%}
+{%- set has_base = rows | selectattr("base_ale", "ne", none) | list | length > 0 -%}
+{#- Jinja scoping: {% set %} inside {% for %} does not leak out — use a
+    namespace() accumulator to find the track's 100% reference (max base_ale).
+    Residual-only fallback (every base_ale is None): scale off residual_ale
+    instead so the lone dot still lands somewhere meaningful on the track. -#}
+{%- set mns = namespace(max=0) -%}
+{%- for r in rows -%}
+  {%- if has_base -%}
+    {%- if r.base_ale is not none and r.base_ale > mns.max -%}
+      {%- set mns.max = r.base_ale -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- if r.residual_ale is not none and r.residual_ale > mns.max -%}
+      {%- set mns.max = r.residual_ale -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+<section class="mt-8" id="scenario-dumbbell">
+  <h2 class="text-h3 text-ink-1 mb-1">Where the risk lives</h2>
+  <p class="text-micro text-ink-3 mb-3">Mean annualized loss per scenario, without → with controls. Sorted by inherent risk.</p>
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    <div class="flex items-center gap-4 mb-3 text-micro text-ink-3">
+      {% if has_base %}
+      <span class="inline-flex items-center gap-1">
+        <span class="inline-block rounded-full" style="width:10px;height:10px;background:var(--chart-inherent);"></span>
+        Without controls
+      </span>
+      {% endif %}
+      <span class="inline-flex items-center gap-1">
+        <span class="inline-block rounded-full" style="width:10px;height:10px;background:var(--chart-residual);"></span>
+        With controls
+      </span>
+    </div>
+    <div class="flex flex-col gap-2">
+      {% for row in rows %}
+        {%- set base_pct = (row.base_ale / mns.max * 100) if (mns.max and row.base_ale is not none) else none -%}
+        {%- set residual_pct = (row.residual_ale / mns.max * 100) if (mns.max and row.residual_ale is not none) else none -%}
+        {%- set bar_left = [base_pct, residual_pct] | min if (base_pct is not none and residual_pct is not none) else none -%}
+        {%- set bar_width = (base_pct - residual_pct) | abs if (base_pct is not none and residual_pct is not none) else 0 -%}
+      {#- Responsive: the fixed 230px+150px column pair needs >=404px and
+          overflowed a 390px phone by ~55px (e2e mobile gate). Below sm the row
+          stacks: name + amounts on line 1, full-width track on line 2. -#}
+      <div class="grid items-center gap-x-3 gap-y-1 grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[230px_minmax(0,1fr)_150px]">
+        <span class="order-1 text-body text-ink-1 truncate" title="{{ row.scenario_name }}">{{ row.scenario_name }}</span>
+        <div class="dumbbell-track order-3 col-span-2 sm:order-2 sm:col-span-1">
+          {% if bar_left is not none %}
+          <div class="dumbbell-bar" style="left:{{ bar_left }}%; width:{{ bar_width }}%"></div>
+          {% endif %}
+          {% if base_pct is not none %}
+          <div class="dumbbell-dot" style="left:{{ base_pct }}%; background:var(--chart-inherent);"></div>
+          {% endif %}
+          {% if residual_pct is not none %}
+          <div class="dumbbell-dot" style="left:{{ residual_pct }}%; background:var(--chart-residual);"></div>
+          {% endif %}
+        </div>
+        <span class="order-2 sm:order-3 text-micro font-mono text-ink-2 text-right">
+          {%- if row.base_ale is not none -%}
+            {{ row.base_ale | money(_code) }} → {{ row.residual_ale | money(_code) }}
+          {%- else -%}
+            {{ row.residual_ale | money(_code) }}
+          {%- endif -%}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{%- endmacro %}

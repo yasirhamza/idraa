@@ -1,0 +1,91 @@
+{
+  "columns": {
+    "fieldset": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(4)"
+    },
+    "high": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "low": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "FLOAT"
+    },
+    "organization_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "recorded_at": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "recorded_by": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "scenario_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "sme_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": true,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "sme_name": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "VARCHAR(200)"
+    }
+  },
+  "indexes": [
+    "ix_scenario_sme_estimates_organization_id",
+    "ix_scenario_sme_estimates_scenario_id",
+    "ix_scenario_sme_estimates_sme_id",
+    "ix_sse_scenario_fieldset"
+  ],
+  "table_name": "scenario_sme_estimates"
+}

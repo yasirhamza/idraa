@@ -1,0 +1,60 @@
+data/loss_form_envelopes.json — DEV/CURATION ARTIFACT (Epic D-ii-b, post-Amendment-A1, #497)
+================================================================================
+
+WHAT THIS IS
+------------
+The per-sector loss ENVELOPE table — `E_sector ~ LN(mean, sigma)` — for the
+form-shares-of-the-envelope model (design Amendment A1). Each row is one core
+sector's total-incident loss distribution, fit from Epic C's adversarially-
+verified IRIS 2025 Figure A3 (p50, p95) reads. D-iii scales an entry's envelope
+by that archetype's `Σ(form-shares)`:
+  primary_loss   = E_sector × Σ(active PRIMARY-form shares)
+  secondary_loss = E_sector × Σ(active SECONDARY-form shares)
+This is the ONLY citation-grounded loss magnitude in Epic D (per-form magnitudes
+are unsourceable — see Amendment A1). `mean` is log-space μ; `sigma` is σ.
+
+WHAT THIS IS NOT
+----------------
+NOT app-runtime seed data (no glob loader; the seeding path reads only named seed
+files). Consumed by D-iii recalibration + humans during curation.
+
+ROW SCHEMA
+----------
+  sector          one of the 13 core sectors
+  p50, p95        the IRIS Figure A3 per-sector median / 95th (USD)
+  mean, sigma     the lognormal fit: fair_cam.quantile_pooling.lognormal_from_quantiles(
+                  p50, p95, q_low=0.50, q_high=0.95), rounded to 1e-10. `mean` = log-space μ.
+  citations       IRIS Figure A3 p.35 (Epic C-verified); notes for baseline/fallback rows
+  is_fallback     true iff the sector has no usable IRIS row and borrows a NAICS-family parent
+  fallback_of     (fallback rows) the source sector borrowed from
+  fallback_reason (fallback rows) why the sector's own IRIS row is unusable
+
+SECTOR NOTES
+------------
+- **energy_utilities** uses the IRIS BASELINE (p50=$146K, p95=$3M). Sub-sector
+  multipliers (oil_and_gas, pipeline, etc., up to ~3.0×) are archetype-level
+  within-family refinements applied in D-iii, NOT the sector envelope. (No cross-
+  sector borrowing: the multiplier is over energy's own NAICS parent.)
+- **telecom** maps to the IRIS "Information" sector — same read as technology_saas.
+- **technology_saas / telecom** carry σ≈3.472 (p95/p50≈302×), above Epic C's stated
+  "healthy 1.5–3.0" comparison band. This is a FAITHFUL reproduction of the genuine
+  IRIS Information-sector heavy tail (718K→217M), not a fit or curation error.
+- **food_agriculture** is a documented FALLBACK to **manufacturing**: the IRIS
+  "Agriculture" row (p50=$2M, p95=$3M) is a near-point-mass sparse-sample artifact
+  (σ≈0.247; p95/p50=1.5× vs 10–200× for real sectors) AND the wrong NAICS family
+  (food processing = NAICS 311-312, within manufacturing). Epic C-disqualified.
+
+METHOD / PROVENANCE
+-------------------
+The (p50, p95) reads are Epic C's adversarially-verified IRIS Figure A3 values
+(data/loss_anchor_tables.json). The lognormal fit uses D-i/Epic-B verified
+machinery. tests/unit/test_loss_form_envelopes.py re-derives every (mean, sigma)
+from its (p50, p95) so the stored params can never drift from the fit:
+  uv run pytest tests/unit/test_loss_form_envelopes.py -v
+
+WHY per-form magnitudes are NOT here
+------------------------------------
+Amendment A1 (design doc) established that per-form, per-sector loss MAGNITUDE
+distributions do not exist in public primary data, and synthetic decompositions
+are methodologically unsound. Loss differentiation is achieved by analyst-judged
+form-SHARES of this cited envelope (D-iii), not by per-form magnitude anchors.

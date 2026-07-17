@@ -1,0 +1,52 @@
+{# FAIR-CAM sub-functions — issue #395. Static taxonomy visualization; no JS. #}
+<h2 class="text-h3 text-ink-1 mb-2">FAIR-CAM sub-functions</h2>
+<p class="text-body text-ink-2 mb-4">
+  Every control is described by one or more <strong>sub-functions</strong> — the
+  specific FAIR-CAM mechanism by which it changes risk. Sub-functions group into
+  three families. The picker on the control form is organized the same way.
+</p>
+
+<div class="space-y-4">
+  <section>
+    <h3 class="text-h4 text-ink-1">LEC — Loss Event Control</h3>
+    <p class="text-meta text-ink-2 mb-1">Prevents, detects, or responds to threat events.</p>
+    <ul class="list-disc list-inside text-meta text-ink-2 space-y-0.5">
+      <li><strong>Prevent:</strong> Avoidance, Deterrence, Resistance</li>
+      <li><strong>Detect:</strong> Visibility, Monitoring, Recognition</li>
+      <li><strong>Respond:</strong> Event termination, Resilience, Loss reduction</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3 class="text-h4 text-ink-1">VMC — Variance Management Control</h3>
+    <p class="text-meta text-ink-2 mb-1">Reduces how often, and how far, controls drift from their intended state.</p>
+    <ul class="list-disc list-inside text-meta text-ink-2 space-y-0.5">
+      <li><strong>Prevent:</strong> Reduce change frequency, Reduce variance probability</li>
+      <li><strong>Identify:</strong> Threat intelligence, Control monitoring</li>
+      <li><strong>Correct:</strong> Treatment selection, Implementation</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3 class="text-h4 text-ink-1">DSC — Decision Support Control</h3>
+    <p class="text-meta text-ink-2 mb-1">Improves the quality and timeliness of risk decisions (governance, awareness, reporting).</p>
+    <ul class="list-disc list-inside text-meta text-ink-2 space-y-0.5">
+      <li><strong>Prevent:</strong> Defined expectations, Communication, Ensure capability, Incentives, and
+        <em>Situational awareness</em> — which subdivides into data (asset, threat, controls), analysis, and reporting</li>
+      <li><strong>Identify:</strong> Misalignment detection</li>
+    </ul>
+    <p class="text-micro text-ink-2 mt-1">
+      FAIR-CAM §5.3 also defines a virtual <em>Correct misalignment</em> function. It has no
+      controls of its own (it is fulfilled by the LEC/VMC correction functions), so it is
+      <strong>not</strong> a pickable sub-function.
+    </p>
+  </section>
+</div>
+
+<p class="text-meta text-ink-2 mt-4">
+  Each assignment also carries a <strong>capability</strong>, <strong>coverage</strong>,
+  and <strong>reliability</strong> value. See the
+  <a class="link" href="/help/methodology-primer">methodology primer</a> and
+  <a class="link" href="/help/controls-overlays">Controls &amp; overlays</a> for how
+  these reduce modeled risk.
+</p>

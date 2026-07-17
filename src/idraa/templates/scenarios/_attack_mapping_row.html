@@ -1,0 +1,139 @@
+{# src/idraa/templates/scenarios/_attack_mapping_row.html  (issue #475)
+   Single repeating ATT&CK technique mapping row. Rendered:
+     - initially via scenarios/form.html (one per existing mapping)
+     - on "+ Add technique" via GET /scenarios/_attack_mapping_row?index=N
+
+   Field contract: attack_mappings[N][technique_id] = catalog technique UUID.
+   Reuses the generic subFunctionCombobox Alpine component. Groups come from
+   the per-page JSON data island (#attack-technique-groups, rendered once by
+   form.html — Arch-I5: never duplicate the ~280-technique catalog into every
+   row). Reading the island via getElementById at Alpine init is PR #205-safe:
+   that race concerned script EXECUTION order; the island ships with the page,
+   not the swap, and this is a plain DOM read. Never read from a window global.
+   Unlike the controls row there is NO hx-get on the hidden select: picking a
+   technique does not re-render the row.
+#}
+<div class="attack-mapping-row card bg-base-200 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
+  <div class="flex items-start gap-3">
+    <div class="grow">
+      <div class="flex items-center justify-between mb-1">
+        <label for="atk-input-{{ index }}" class="text-meta text-ink-2">ATT&amp;CK technique</label>
+        {% if row_source == "library" %}
+          <span class="badge badge-ghost badge-xs" title="Inherited from the scenario's library entry">library</span>
+        {% endif %}
+      </div>
+      <div
+        x-data='subFunctionCombobox({
+          initialValue: {{ initial_value | tojson }},
+          index: {{ index }},
+          groups: JSON.parse(document.getElementById("attack-technique-groups").textContent)
+        })'
+        @click.outside="close()"
+        @keydown.escape.window="open && close({ refocus: true })"
+        class="relative"
+      >
+        <button
+          type="button"
+          x-ref="button"
+          id="atk-input-{{ index }}"
+          @click="toggle()"
+          @keydown="onButtonKeydown($event)"
+          role="combobox"
+          aria-haspopup="listbox"
+          :aria-expanded="open ? 'true' : 'false'"
+          :aria-controls="`atk-listbox-${index}`"
+          class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong flex items-center justify-between gap-2 text-left focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+        >
+          <span class="truncate"
+                :class="buttonLabel ? 'text-ink-1' : 'text-ink-2'"
+                x-text="buttonLabel || 'Select a technique…'"></span>
+          <svg class="w-4 h-4 opacity-60 shrink-0 transition-transform"
+               :class="open && 'rotate-180'"
+               viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        <select
+          x-ref="hiddenSelect"
+          name="attack_mappings[{{ index }}][technique_id]"
+          class="sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          required
+        >
+          <option value=""></option>
+          {# Flat deduped option list (one per technique, incl. flagged
+             deprecated survivors) — NOT the per-tactic-duplicated groups. #}
+          {% for opt in attack_technique_options %}
+            <option value="{{ opt.value }}" {% if opt.value == initial_value %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+
+        <div
+          x-show="open"
+          x-cloak
+          x-transition.opacity
+          class="absolute z-30 mt-1 w-full rounded-lg border border-base-300 bg-base-100 shadow-lg overflow-hidden"
+        >
+          <div class="p-2 border-b border-base-200">
+            <input
+              type="text"
+              x-ref="search"
+              x-model="query"
+              @input="onSearchInput()"
+              @keydown="onSearchKeydown($event)"
+              :aria-controls="`atk-listbox-${index}`"
+              aria-label="Filter techniques"
+              autocomplete="off"
+              placeholder="Type to filter (e.g. phishing, process, valid accounts)…"
+              class="h-9 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </div>
+          <ul
+            x-ref="listbox"
+            :id="`atk-listbox-${index}`"
+            role="listbox"
+            aria-label="ATT&CK techniques by tactic"
+            class="max-h-72 overflow-y-auto"
+          >
+            <template x-for="group in filteredGroups" :key="group.domain">
+              <li role="presentation">
+                <div
+                  role="presentation"
+                  class="sticky top-0 bg-base-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
+                  x-text="group.label"
+                ></div>
+                <template x-for="opt in group.options" :key="opt.value">
+                  <div
+                    role="option"
+                    :id="`atk-opt-${index}-${opt.value}`"
+                    :data-value="opt.value"
+                    :aria-selected="opt.value === selectedValue ? 'true' : 'false'"
+                    :class="opt.value === highlightedValue ? 'bg-primary text-primary-content' : 'hover:bg-base-200'"
+                    @mousedown.prevent="commit(opt.value)"
+                    @mouseenter="highlightedValue = opt.value"
+                    class="cursor-pointer px-3 py-2"
+                  >
+                    <div class="font-medium text-sm" x-text="opt.label"></div>
+                    <div class="text-xs opacity-70 line-clamp-2" x-text="opt.description"></div>
+                  </div>
+                </template>
+              </li>
+            </template>
+            <li x-show="!hasMatches" class="px-3 py-2 text-sm opacity-60">
+              No matches. Try "phishing", "process", "denial"…
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="btn btn-sm btn-error btn-outline mt-6 shrink-0"
+      @click="$el.closest('.attack-mapping-row').remove()">
+      × Remove
+    </button>
+  </div>
+</div>

@@ -1,0 +1,159 @@
+<h2 class="text-h3 text-ink-1 mb-3">The executive PDF report</h2>
+<p class="text-body text-ink-2 mb-3">
+  Every completed analysis run includes a downloadable <strong>PDF report</strong>
+  designed for a board, CFO, or risk committee audience. To generate one, open the
+  run detail page at
+  <a class="text-brand hover:underline" href="/analyses">/analyses</a>, then click
+  <strong>Download PDF</strong>.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  The PDF is rendered server-side from the stored simulation results — no browser
+  plugin is required and the output is byte-stable for any given run.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">What the PDF contains</h3>
+<div class="overflow-x-auto mb-6">
+  <table class="table table-sm w-full">
+    <thead>
+      <tr class="text-meta text-ink-3 text-left">
+        <th>Section</th><th>What you will find</th>
+      </tr>
+    </thead>
+    <tbody class="text-body text-ink-2">
+      <tr>
+        <td><strong>Cover page</strong></td>
+        <td>Organisation name, run name, classification label, and generation timestamp.</td>
+      </tr>
+      <tr>
+        <td><strong>Table of contents</strong></td>
+        <td>Hyperlinked page index for navigation in any PDF viewer.</td>
+      </tr>
+      <tr>
+        <td><strong>Risk picture</strong></td>
+        <td>
+          Headline Annualized Loss Expectancy (ALE) with confidence interval,
+          plus a risk-comparison bar showing residual vs.&nbsp;inherent exposure.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Loss distributions</strong></td>
+        <td>
+          Loss Exceedance Curve (LEC) and Exceedance Probability Curve (EPC),
+          both with-controls and without-controls overlays so the dollar value
+          of your control portfolio is visible at every tail level.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Per-scenario breakdown</strong></td>
+        <td>
+          Horizontal bar chart and table listing each included scenario&rsquo;s
+          ALE, residual ALE, and Value at Risk (VaR).
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Control inventory</strong></td>
+        <td>
+          FAIR-CAM-grouped list of every active control, including tier badge,
+          scenarios it covers, and its modelled effectiveness.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Control attribution</strong></td>
+        <td>
+          Shapley-value breakdown crediting each control with its fair share of
+          the total risk reduction (see below).
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Back page</strong></td>
+        <td>Run UUID, app version, and generation metadata for audit traceability.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="text-h3 text-ink-1 mb-3">Reading control attribution (Shapley values)</h2>
+<p class="text-body text-ink-2 mb-3">
+  When multiple controls cover the same scenario, their risk-reduction contributions
+  overlap: removing any one control changes the result by less than its standalone
+  benefit would suggest. Simple subtraction double-counts that overlap;
+  <strong>attribution</strong> solves it by allocating credit fairly.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Idraa uses <strong>Shapley values</strong> from cooperative game theory
+  (Shapley, 1953; Castro et al., 2009) to split the total risk reduction across
+  controls. Each control&rsquo;s Shapley value is its <em>average marginal
+  contribution</em> over every possible order in which controls could have been
+  added to the portfolio. This satisfies four axioms: <strong>efficiency</strong>
+  (credits sum exactly to the total reduction &mdash; no rounding gap),
+  <strong>symmetry</strong> (controls with identical impact share credit equally),
+  <strong>null player</strong> (a control that adds nothing receives zero),
+  and <strong>linearity</strong> (attribution composes across independent
+  scenarios).
+</p>
+<div class="bg-base-200 border border-border-subtle rounded-lg p-4 mb-6">
+  <p class="text-meta font-semibold text-ink-1 mb-1">Methodology note</p>
+  <p class="text-body text-ink-2">
+    Control attribution via Shapley values is a <strong>v3 view-model /
+    portfolio reporting derivation — not FAIR-grounded</strong>. Cooperative
+    game theory is not a node in the Open FAIR Standard (which defines risk
+    through <em>Loss Event Frequency</em>, <em>Loss Magnitude</em>, and their
+    FAIR-CAM sub-functions). Shapley attribution lives in Idraa&rsquo;s
+    view-model service layer, not in the FAIR engine, so that the
+    FAIR&nbsp;math layer stays uncontaminated by aggregation policy choices.
+    References: Shapley, L.&thinsp;S. (1953). &ldquo;A Value for
+    n-Person Games.&rdquo; <em>Contributions to the Theory of Games</em>,
+    Vol.&thinsp;II; Castro, J., G&oacute;mez, D., &amp; Tejada, J. (2009).
+    &ldquo;Polynomial calculation of the Shapley value based on sampling.&rdquo;
+    <em>Computers &amp; Operations Research</em>, 36(5).
+  </p>
+</div>
+
+<h3 class="text-h4 text-ink-1 mb-2">How to read the attribution table</h3>
+<p class="text-body text-ink-2 mb-3">
+  The attribution table lists each control, its Shapley value in dollars, and its
+  share of the total modelled risk reduction as a percentage. The percentages sum
+  to&nbsp;100&nbsp;% (the efficiency axiom guarantees this). A control that appears
+  in many overlapping scenarios may have a smaller percentage than its standalone
+  simulation would suggest &mdash; that is the correct answer, not a calculation
+  error. Controls with very little overlap retain most of their standalone credit.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Use the attribution table to prioritise renewal and investment decisions:
+  controls with the highest Shapley share deliver the most unique, non-redundant
+  risk reduction across your scenario portfolio. Controls near zero may be
+  redundant with higher-ranked peers and are candidates for rationalisation.
+</p>
+
+<h3 class="text-h4 text-ink-1 mb-2">Computation limits</h3>
+<p class="text-body text-ink-2 mb-6">
+  For portfolios with up to&nbsp;12 controls, Idraa computes Shapley values
+  exactly via full subset enumeration (2<sup>12</sup>&nbsp;=&nbsp;4,096 evaluations).
+  For larger portfolios it uses the permutation-sampling estimator from Castro
+  et&thinsp;al.&nbsp;(2009), with a sample count derived from the Maleki&nbsp;(2013)
+  finite-sample bound at relative error &epsilon;&nbsp;=&nbsp;2&nbsp;% and
+  confidence&nbsp;1&nbsp;&minus;&nbsp;&delta;&nbsp;=&nbsp;95&nbsp;%. Both paths
+  are exactly efficient: the per-control credits always sum to the true total
+  risk reduction.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Downloading and sharing the PDF</h2>
+<p class="text-body text-ink-2 mb-3">
+  The <strong>Download PDF</strong> button is available to all authenticated users
+  (Analyst, Reviewer, Admin). Every download is recorded in the audit log against
+  the user who triggered it.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Because the PDF is rendered from the stored run snapshot, re-downloading the
+  same run at a later date produces an identical file &mdash; useful when you
+  need to confirm that the report shared with the board matches the current
+  system record.
+</p>
+
+<p class="text-body text-ink-2">
+  See also:
+  <a class="text-brand hover:underline" href="/help/run-and-read-analyses">Running and reading analyses</a>
+  for how to interpret the underlying loss distribution outputs, and
+  <a class="text-brand hover:underline" href="/help/controls-overlays">Controls &amp; overlays</a>
+  for how control effectiveness is modelled before attribution is applied.
+</p>

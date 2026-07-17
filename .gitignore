@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tailwind-bin/
+
+# Environments
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Project
+*.db
+*.db.*
+*.sqlite
+*.sqlite3
+logs/
+uploads/
+exports/
+
+# Licensed / copyrighted third-party material — NEVER commit (policy 2026-07-14).
+# These are non-redistributable (FAIR Institute CC-BY-NC-ND, licensed reports,
+# datasets); keep local-only, each team member fetches their own copy. The prior
+# patterns missed the docs/reference/ variants that got committed — both actual
+# tracked paths are pinned below. Belt-and-suspenders enforcement = the licensed-
+# pattern denylist gate (#555 PR1).
+docs/reference/Cyenthia Reports/
+docs/reference/Data Breach Dataset.csv
+docs/reference/FAIR Institute -- Cyber Risk Scenario Taxonomy (February 2025).pdf
+docs/reference/fair-scenario-taxonomy.pdf
+docs/CIS 8.0 to FAIR-CAM Mapping V1.0.xlsx
+docs/FAIR Controls Analytics Model (FAIR-CAM) Standard V1.0 (January 2025).pdf
+docs/NIST CSF 1.1 to FAIR-CAM 1.0 Mapping_Final.xlsx
+docs/reference/NIST CSF 1.1 to FAIR-CAM 1.0 Mapping_Final.xlsx
+
+# Competitive landscape research drafts — local-only working notes;
+# not committed because they're personal scratch, not project artifacts.
+docs/reference/competitive-oss-crq-2026-05-13.md
+docs/reference/competitive-safe-crq-2026-05-11.md
+
+# Tooling / per-dev
+.claude/
+.superpowers/
+.fuse_hidden*
+*.db-journal
+*.db-shm
+*.db-wal
+
+# UAT-time artifacts (screenshots, generated PDFs, browser captures, ad-hoc
+# helper scripts) — local-only by convention. Operators collect these mid-
+# UAT to share with reviewers; they're not source of truth.
+tests/screenshots/
+tests/*.webarchive
+tests/idraa-executive-*.pdf
+scripts/_uat_screenshot.py
+
+# npm byproducts — package.json is a declaration-only manifest for the
+# vendored front-end libs (see its description); there is no Node toolchain.
+# If anyone ignores that and runs `npm install`, don't let these get committed.
+node_modules/
+package-lock.json

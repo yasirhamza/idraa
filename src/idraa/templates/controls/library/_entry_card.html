@@ -1,0 +1,95 @@
+{% if entries %}
+  {% for entry in entries %}
+    {% set assignments = (assignments_by_entry or {}).get((entry.id, entry.version)) or [] %}
+    {% set already_adopted = (adopted_entry_ids is defined) and (entry.id | string in adopted_entry_ids) %}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-lg">
+          {{ entry.name }}
+          {% if already_adopted %}
+            {# whitespace-nowrap: short status label must stay on one line — a
+               stock fixed-height DaisyUI badge clips/overlaps if "Already
+               adopted" wraps next to a long card title. The card-title flex
+               drops the whole pill to its own line when space is tight. #}
+            <span class="badge badge-sm badge-success badge-outline whitespace-nowrap"
+                  title="Your organization has already adopted this entry. Adopting again creates another copy.">
+              Already adopted
+            </span>
+          {% endif %}
+        </h3>
+
+        <div class="badges flex flex-wrap gap-1 my-2">
+          {# control_type is non-nullable on the model #}
+          <span class="badge badge-sm badge-outline">
+            {{ entry.control_type.value | replace("_", " ") | title }}
+          </span>
+          {% for tag in (entry.nist_csf_subcategories or []) %}
+            <span class="badge badge-sm badge-secondary badge-outline">NIST {{ tag }}</span>
+          {% endfor %}
+          {% for tag in (entry.cis_safeguards or []) %}
+            <span class="badge badge-sm badge-secondary badge-outline">CIS {{ tag }}</span>
+          {% endfor %}
+          {% for tag in (entry.iso_27001_controls or []) %}
+            <span class="badge badge-sm badge-secondary badge-outline">ISO {{ tag }}</span>
+          {% endfor %}
+        </div>
+
+        <p class="text-sm text-base-content/70">
+          {% if entry.description | length > 120 %}
+            {{ entry.description[:120] }}…
+          {% else %}
+            {{ entry.description }}
+          {% endif %}
+        </p>
+
+        {% if assignments %}
+          {# M-LOW-1: the per-badge capability percent is a REFERENCE default, not
+             calibrated data. Surface a visible qualifier so a user doesn't mistake
+             the placeholder 0.7/0.8/0.8 for measured effectiveness (spec §4.1
+             "reference — adjust for your org"). #}
+          <p class="text-xs text-base-content/50 mt-2 mb-1">
+            FAIR-CAM reference defaults — adjust after adopting.
+          </p>
+          <div class="badges flex flex-wrap gap-1">
+            {% for a in assignments %}
+              {# h-auto/py/leading-tight: capability labels are long ("Dsc Prev
+                 Defined Expectations · ref. 70%") and wrap on a narrow card.
+                 A stock DaisyUI badge is fixed-height, so wrapped text
+                 overflows and overlaps the next pill — let the pill grow to fit
+                 its content instead. #}
+              <span class="badge badge-sm badge-accent badge-outline h-auto py-0.5 leading-tight whitespace-normal text-left"
+                    title="Reference (default) effectiveness — adjust for your org. Coverage {{ '%.0f' | format((a.coverage_default or 0) * 100) }}% · reliability {{ '%.0f' | format((a.reliability_default or 0) * 100) }}%">
+                {{ a.sub_function.value | replace("_", " ") | title }}
+                {% if a.capability_default is not none %}
+                  · ref. {{ '%.0f' | format(a.capability_default * 100) }}%
+                {% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if entry.reference_annual_cost is not none %}
+          <p class="text-xs text-base-content/60 mt-2">
+            Reference annual cost: ${{ '{:,.0f}'.format(entry.reference_annual_cost) }}
+          </p>
+        {% endif %}
+
+        {% if current_user and current_user.role.value in ['admin', 'analyst'] %}
+          <div class="card-actions justify-end mt-2">
+            <form method="post" action="/controls/library/{{ entry.id }}/adopt">
+              {{ csrf_field() }}
+              <button type="submit" class="btn btn-xs btn-primary">
+                Add to my controls →
+              </button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state col-span-3 text-center py-12">
+    <p class="text-base-content/60 mb-3">No entries match these filters.</p>
+    <a href="/controls/library" class="btn btn-link">Clear filters</a>
+  </div>
+{% endif %}

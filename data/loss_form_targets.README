@@ -1,0 +1,83 @@
+data/loss_form_targets.json — DEV/CURATION PLANNING ARTIFACT (Epic D-ii-a, #497)
+================================================================================
+
+WHAT THIS IS
+------------
+The (sector x form) work-list for the D-ii-b adversarial loss-magnitude sweep,
+plus the extended archetype list (all 85 existing seed entries + the gap-report
+new sub-sector verticals). Two arrays: `cells` (78 = 13 core sectors x 6 forms)
+and `archetypes`. Consumed by D-ii-b (fills the magnitudes) and D-iii (composes
+per-archetype loss_form_profiles). Companion to data/loss_form_source_corpus.json.
+
+WHAT THIS IS NOT
+----------------
+NOT app-runtime seed data. The application does NOT load this file (no glob
+loader; the seeding path reads only named seed files). Canonical runtime seed
+library: data/seed_library_entries.json (31) + data/seed_library_entries_extension.json (54).
+
+CELL SCHEMA
+-----------
+  sector             one of the 13 core sectors
+  form               one of the 6 FAIR loss forms
+  candidate_sources  corpus source names catalogued for THIS (form) that cover
+                     THIS sector (validated against loss_form_source_corpus.json,
+                     joined on (source, form) + sector membership)
+  disposition        has_source            — candidate_sources non-empty
+                     needs_fresh_research   — no repo source AND a target archetype
+                                              in this sector plausibly fires this
+                                              form -> a D-ii-b sweep target
+                     defer_to_diii_profile  — no repo source AND no archetype
+                                              clearly fires this form here -> NOT a
+                                              sweep target; D-iii decides at profile
+                                              time. Prevents force-fitting a form
+                                              onto a sector where it doesn't apply.
+  priority           high (response/productivity, always) | medium | low
+  note               one-line rationale
+
+Demand-scoping (meth M3): all 78 cells always exist (explicit coverage), but only
+`needs_fresh_research` cells are D-ii-b research targets. response + productivity
+are load-bearing for every cyber loss (high, has_source from CODB/IRIS). The other
+four forms have no repo source at D-ii-a; their disposition is demand-scoped by
+which sectors plausibly fire them (fines: regulated-data sectors; replacement:
+OT/physical-asset sectors; competitive_advantage: IP-heavy sectors; reputation:
+consumer/brand-facing sectors).
+
+ARCHETYPE SCHEMA
+----------------
+  slug               archetype identifier (seed slug for keep; a provisional
+                     "<sub_sector>-scenario-target" for new, replaced by D-ii-b)
+  sector             core sector
+  sub_sector         applicable_sub_sectors[0] (keep) or the gap-report sub-sector (new)
+  keep_or_new        keep = an existing seed entry; new = a gap-report target
+  existing_slug      seed slug for keep rows (back-ref validated); null for new
+  attestation        specific repo evidence pointer for a new archetype, OR null
+                     with needs_fresh_research:true. Sector-level thinness alone is
+                     NOT archetype attestation (meth NTH). The four gap-report
+                     mis-cited citations are FORBIDDEN here (meth M2).
+  needs_fresh_research  true when the archetype is not yet attested from repo
+                        evidence -> D-ii-b must attest (and finalize the slug)
+                        before D-iii-b authors it.
+
+PROVENANCE
+----------
+85 keep rows mirror the seed entries (calibration_anchor.industry mapped to the
+nearest core sector; utilities->energy_utilities, information->technology_saas,
+public->government_public, finance/finance_and_insurance->financial_services,
+retail/retail_trade->retail_ecommerce, transportation*->transportation_logistics,
+professional*->professional_services, agriculture->food_agriculture; healthcare/
+manufacturing/education/hospitality direct). 22 new rows are the gap-report
+single-entry sub-sectors (healthcare/public/education/hospitality/professional/
+telecom) — all needs_fresh_research:true at D-ii-a (honest: repo evidence attests
+the sector, not the new distinct sub-sector archetype's threat activity).
+
+CLOSURE GATE (armed, skipped until D-ii-b)
+------------------------------------------
+tests/unit/test_loss_form_targets.py::test_no_needs_fresh_research_remaining is
+@skipif(LOSS_FORM_RESEARCH_COMPLETE != "1"). D-ii-b flips it green when it has
+anchored every needs_fresh_research cell + attested every flagged archetype:
+  LOSS_FORM_RESEARCH_COMPLETE=1 uv run pytest tests/unit/test_loss_form_targets.py -v
+Row-level contracts (always green):
+  uv run pytest tests/unit/test_loss_form_targets.py -v
+
+D-ii-b fills magnitudes + fresh attestation into data/loss_form_anchor_tables.json;
+D-iii composes per-archetype loss_form_profiles from them.

@@ -1,0 +1,57 @@
+{% extends "scenarios/wizard/_shell.html" %}
+{% block step_body %}
+{# Recommendations live OUTSIDE the main wizard form: each "Add to my controls"
+   is its own POST to the adopt route. HTML forbids nested <form>s — if these sat
+   inside the step-5 form the browser would collapse them and the adopt button
+   would submit the wizard form (advancing to the review/final page) instead of
+   adopting. (UAT 2026-06-03.) #}
+{% if recommendations %}
+<div class="recommended-controls mb-4 border border-border-subtle rounded p-3">
+  <p class="text-sm font-medium mb-2">Recommended for this scenario</p>
+  <ul class="space-y-2">
+    {% for rec in recommendations %}
+    <li class="flex items-center justify-between gap-2">
+      <span>{{ rec.catalog_entry.name }}</span>
+      {% if rec.adopted %}
+        <span class="text-xs text-success">Adopted — pre-selected below</span>
+      {% else %}
+        <form method="post" action="/controls/library/{{ rec.catalog_entry.id }}/adopt" class="inline">
+          {{ csrf_field() }}
+          <input type="hidden" name="from_wizard_tx" value="{{ tx }}">
+          <button type="submit" class="btn btn-xs btn-primary">Add to my controls</button>
+        </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+<form method="post" action="/scenarios/new/wizard/step/5?tx={{ state.tx_id }}">
+  {{ csrf_field() }}
+  <p class="text-sm muted mb-4">Pick mitigating controls for this scenario. Skip if no controls apply.</p>
+  {% if org_controls %}
+  <div class="controls-list space-y-2" x-data="{ q: '' }">
+    <input type="text" x-model.debounce.150ms="q"
+           placeholder="Search controls…"
+           class="input input-bordered input-sm w-full mb-2">
+    {% for control in org_controls %}
+      <label class="flex items-start gap-2"
+             data-name="{{ control.name | e | lower }}"
+             x-show="!q || $el.dataset.name.includes(q.toLowerCase())">
+        <input type="checkbox" name="control_ids" value="{{ control.id }}"
+               {% if control.id|string in state.mitigating_control_ids or control.id|string in (precheck_control_ids or []) %}checked{% endif %}>
+        <div>
+          <div>{{ control.name }}</div>
+          <div class="text-xs muted">{{ (control.description or '')[:120] }}</div>
+        </div>
+      </label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm muted">No controls have been loaded for your organisation yet. You can finish the wizard now and add controls later from the Controls page.</p>
+  {% endif %}
+  <div class="flex justify-end mt-4">
+    <button type="submit" class="btn btn-primary">Next →</button>
+  </div>
+</form>
+{% endblock %}

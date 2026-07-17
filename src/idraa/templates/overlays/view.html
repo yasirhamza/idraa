@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "macros/rbac.html" import admin_only %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/kpi_card.html" import kpi_card %}
+{% from "macros/status_pill.html" import status_pill %}
+{% block title %}Overlay — {{ overlay.tag }}{% endblock %}
+{% block content %}
+
+{% call admin_only(current_user) %}
+  {%- set _admin_actions = [{"label": "Edit", "href": "/overlays/" ~ overlay.id ~ "/edit", "style": "primary", "requires_md": true}] -%}
+{% endcall %}
+
+{{ page_header(
+    title=overlay.display_name,
+    breadcrumb=[("Home", "/"), ("Overlays", "/overlays"), (overlay.display_name, none)],
+    actions=[{"label": "Edit", "href": "/overlays/" ~ overlay.id ~ "/edit", "style": "primary", "requires_md": true}] if current_user.role == "admin" else []
+) }}
+
+<div class="max-w-4xl mx-auto">
+
+  {% if errors %}
+  <div class="alert alert-error mb-4">
+    <ul class="list-disc list-inside">
+      {% for err in errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# Top facts: tag, version, status #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+      {{ form_field(name="tag", label="Tag", mode="display",
+                    value=overlay.tag) }}
+      {{ form_field(name="version", label="Version", mode="display",
+                    value="v" ~ overlay.version) }}
+      <div class="space-y-1 max-w-md">
+        <p class="text-meta text-ink-2">Status</p>
+        <p class="text-body text-ink-1">
+          {% if overlay.is_active %}
+            {{ status_pill("active", kind="control") }}
+          {% else %}
+            {{ status_pill("inactive", kind="control") }}
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  {# Multiplier KPI cards #}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+    {{ kpi_card(
+        label="Frequency multiplier (LEF)",
+        value=overlay.frequency_multiplier,
+        format="ratio",
+        footer="Applied to loss event frequency"
+    ) }}
+    {{ kpi_card(
+        label="Magnitude multiplier (LM)",
+        value=overlay.magnitude_multiplier,
+        format="ratio",
+        footer="Applied to loss magnitude"
+    ) }}
+  </div>
+
+  {# Methodology #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Methodology</h2>
+    <p class="text-body text-ink-1 whitespace-pre-wrap">{{ overlay.methodology }}</p>
+  </div>
+
+  {# Sources #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Sources</h2>
+    {% if overlay.sources %}
+    <ul class="list-disc list-inside space-y-1">
+      {% for src in overlay.sources %}
+      <li class="font-mono text-body text-ink-1">{{ src }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-body text-ink-2">No sources recorded.</p>
+    {% endif %}
+  </div>
+
+  {% if overlay.is_active %}
+  {% call admin_only(current_user) %}
+  <div class="bg-surface-1 border border-border-subtle border-status-critical/30 rounded-card p-6">
+    <h2 class="text-h3 text-status-critical mb-2">Deactivate overlay</h2>
+    <p class="text-body text-ink-2 mb-3">
+      Deactivation is reversible (reactivation is not yet exposed in the UI).
+      A reason is required and will be recorded in the audit log.
+    </p>
+    <form method="post" action="/overlays/{{ overlay.id }}/deactivate" class="space-y-2"
+          onsubmit="return confirm('Deactivate {{ overlay.tag }}?');">
+      {{ csrf_field() }}
+      <label class="form-control">
+        <span class="text-meta text-ink-2">Reason</span>
+        <input type="text" name="reason" class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 max-w-md"
+               required minlength="1" maxlength="500"
+               placeholder="e.g. Superseded by industry-specific overlay">
+      </label>
+      <button type="submit" class="btn btn-error btn-sm mt-2">
+        Deactivate
+      </button>
+    </form>
+  </div>
+  {% endcall %}
+  {% endif %}
+
+</div>
+{% endblock %}

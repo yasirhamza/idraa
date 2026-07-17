@@ -1,0 +1,40 @@
+{
+  "fields": {
+    "display_name": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "frequency_multiplier": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "magnitude_multiplier": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "methodology": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "methodology_change_reason": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "sources": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "tag": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "OverlayForm"
+}

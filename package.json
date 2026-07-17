@@ -1,0 +1,14 @@
+{
+  "name": "idraa-vendored-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Declaration-only manifest for Idraa's self-hosted, byte-vendored front-end assets. This is NOT a Node project: there is no build step, no node_modules, and no scripts. It exists solely so GitHub's dependency graph / Dependabot track these libraries for CVEs — the app self-hosts them as committed bytes under src/idraa/static/vendor/ (and the Tailwind standalone binary). Versions here are ENFORCED against the actual vendored bytes by tests/unit/test_vendored_version_manifest.py, and re-vendored in one step with `python -m idraa.tasks vendor-sync`. A Dependabot bump edits this file only — closing the alert does NOT remove the vulnerable code, since the app serves the committed bytes; real remediation is `vendor-sync` + redeploy. Do not run `npm install`.",
+  "dependencies": {
+    "htmx.org": "1.9.12",
+    "alpinejs": "3.14.1",
+    "daisyui": "4.12.10"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

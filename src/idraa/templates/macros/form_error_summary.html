@@ -1,0 +1,22 @@
+{#
+  form_error_summary(errors) — top-of-form alert summarising all field errors. Spec §6.
+  errors: dict[name, message]. When empty, renders nothing.
+
+  Field-name anchors (`href="#<field_name>"`) let users click an error to jump to
+  the offending field. Long forms (controls/new has 30+ fields) benefit most.
+#}
+{% macro form_error_summary(errors) -%}
+{% if errors %}
+<div role="alert"
+     class="bg-surface-1 border-l-4 border-status-critical text-ink-1 p-4 mb-4 rounded-card">
+  <p class="text-h3 text-status-critical mb-2">Please fix the following:</p>
+  <ul class="list-disc pl-5 space-y-1">
+    {% for field_name, message in errors.items() %}
+    <li class="text-body">
+      <a href="#{{ field_name }}" class="underline text-status-critical">{{ message }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{%- endmacro %}

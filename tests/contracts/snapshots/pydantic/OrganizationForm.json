@@ -1,0 +1,125 @@
+{
+  "fields": {
+    "annual_revenue": {
+      "has_default": true,
+      "optional": true,
+      "type": "decimal.Decimal | None"
+    },
+    "annual_security_budget": {
+      "has_default": true,
+      "optional": true,
+      "type": "decimal.Decimal | None"
+    },
+    "cloud_usage": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "compliance_requirements": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "cyber_insurance_deductible": {
+      "has_default": true,
+      "optional": true,
+      "type": "decimal.Decimal | None"
+    },
+    "cyber_insurance_limit": {
+      "has_default": true,
+      "optional": true,
+      "type": "decimal.Decimal | None"
+    },
+    "digital_maturity": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "employee_count": {
+      "has_default": true,
+      "optional": true,
+      "type": "int | None"
+    },
+    "geographic_regions": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "has_cyber_insurance": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'bool'>"
+    },
+    "headquarters_location": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "industry_sub_sector": {
+      "has_default": true,
+      "optional": true,
+      "type": "idraa.models.enums.IndustrySubSector | None"
+    },
+    "industry_type": {
+      "has_default": false,
+      "optional": false,
+      "type": "<enum 'IndustryType'>"
+    },
+    "loss_tolerance_amount": {
+      "has_default": true,
+      "optional": true,
+      "type": "decimal.Decimal | None"
+    },
+    "loss_tolerance_probability": {
+      "has_default": true,
+      "optional": true,
+      "type": "float | None"
+    },
+    "naics_code": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "name": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "organization_size": {
+      "has_default": false,
+      "optional": false,
+      "type": "<enum 'OrganizationSize'>"
+    },
+    "preferred_currency": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "preferred_language": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "regulatory_environment": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "risk_appetite": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'RiskAppetite'>"
+    },
+    "security_maturity": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'SecurityMaturity'>"
+    },
+    "technology_stack": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    }
+  },
+  "schema_name": "OrganizationForm"
+}

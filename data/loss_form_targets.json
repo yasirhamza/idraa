@@ -1,0 +1,1738 @@
+{
+  "cells": [
+    {
+      "sector": "manufacturing",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "manufacturing",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "manufacturing",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "manufacturing",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "manufacturing",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "manufacturing",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired; repo penalty pointer NERC-CIP $1.4M/day per violation (sub_sector_electric_utility.md); D-ii-b research target"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "energy_utilities",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "healthcare",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "healthcare",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "healthcare",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "healthcare",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "healthcare",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "healthcare",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "financial_services",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "financial_services",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "financial_services",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "financial_services",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "financial_services",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "financial_services",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "retail_ecommerce",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "technology_saas",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "government_public",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "government_public",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "government_public",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "government_public",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "government_public",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "government_public",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "education",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "education",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "education",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "education",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "education",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "education",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "professional_services",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "professional_services",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "professional_services",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "professional_services",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired; MOVEit-class mass-breach fines + sensitive client PII (law/accounting); no repo penalty pointer -> D-ii-b research target"
+    },
+    {
+      "sector": "professional_services",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "professional_services",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired; repo penalty pointer TSA SD-Pipeline/surface civil penalties (sub_sector_pipeline.md); D-ii-b research target"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "transportation_logistics",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "telecom",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "telecom",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "telecom",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "telecom",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "telecom",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "telecom",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "hospitality",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025",
+        "Cyentia IRIS 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended) + IRIS sector total"
+    },
+    {
+      "sector": "hospitality",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "hospitality",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "hospitality",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "hospitality",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "hospitality",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "low",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "productivity",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB lost-business (blended); no IRIS row for food_agriculture"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "response",
+      "candidate_sources": [
+        "IBM Cost of a Data Breach 2025"
+      ],
+      "disposition": "has_source",
+      "priority": "high",
+      "note": "CODB response cost centers (global; per-sector via D-ii-b)"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "replacement",
+      "candidate_sources": [],
+      "disposition": "needs_fresh_research",
+      "priority": "medium",
+      "note": "plausibly fired here; D-ii-b research target"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "fines",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "competitive_advantage",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    },
+    {
+      "sector": "food_agriculture",
+      "form": "reputation",
+      "candidate_sources": [],
+      "disposition": "defer_to_diii_profile",
+      "priority": "low",
+      "note": "no sector archetype clearly fires this form; D-iii decides"
+    }
+  ],
+  "archetypes": [
+    {
+      "slug": "ransomware-on-ehr",
+      "sector": "healthcare",
+      "sub_sector": "healthcare",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-on-ehr",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ransomware-on-historian",
+      "sector": "energy_utilities",
+      "sub_sector": "oil_and_gas",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-on-historian",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "unauthorized-plc-modification",
+      "sector": "manufacturing",
+      "sub_sector": "chemical_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "unauthorized-plc-modification",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "safety-system-bypass",
+      "sector": "manufacturing",
+      "sub_sector": "oil_and_gas",
+      "keep_or_new": "keep",
+      "existing_slug": "safety-system-bypass",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "denial-of-control",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "denial-of-control",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hmi-credential-compromise",
+      "sector": "energy_utilities",
+      "sub_sector": "water_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "hmi-credential-compromise",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "it-ot-bridge-compromise",
+      "sector": "energy_utilities",
+      "sub_sector": "oil_and_gas",
+      "keep_or_new": "keep",
+      "existing_slug": "it-ot-bridge-compromise",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "nation-state-ics-supply-chain",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "nation-state-ics-supply-chain",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hacktivist-ot-disruption",
+      "sector": "energy_utilities",
+      "sub_sector": "water_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "hacktivist-ot-disruption",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "bec-fraud-financial",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "bec-fraud-financial",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ransomware-on-virtualization-stack",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-on-virtualization-stack",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "insider-data-theft-financial",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "insider-data-theft-financial",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "insider-ip-theft-manufacturing",
+      "sector": "manufacturing",
+      "sub_sector": "chemical_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "insider-ip-theft-manufacturing",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "cloud-account-takeover",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "cloud-account-takeover",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "api-key-leak-devops",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "api-key-leak-devops",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ddos-extortion-financial",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "ddos-extortion-financial",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "solarwinds-class-supply-chain",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "solarwinds-class-supply-chain",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "moveit-class-zero-day-mft",
+      "sector": "professional_services",
+      "sub_sector": "professional_services",
+      "keep_or_new": "keep",
+      "existing_slug": "moveit-class-zero-day-mft",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "session-hijack-post-mfa-bypass",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "session-hijack-post-mfa-bypass",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "watering-hole-industry-targeted",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "watering-hole-industry-targeted",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "s3-misconfiguration-data-exposure",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "s3-misconfiguration-data-exposure",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "package-registry-supply-chain",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "package-registry-supply-chain",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ddos-financial-seasonal-peak",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "ddos-financial-seasonal-peak",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "phishing-ad-compromise-ransomware",
+      "sector": "education",
+      "sub_sector": "education",
+      "keep_or_new": "keep",
+      "existing_slug": "phishing-ad-compromise-ransomware",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ransomware-on-fileshare",
+      "sector": "professional_services",
+      "sub_sector": "professional_services",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-on-fileshare",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "credential-stuffing-consumer-portal",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "credential-stuffing-consumer-portal",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "mfa-fatigue-prompt-bombing",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "mfa-fatigue-prompt-bombing",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ransomware-healthcare-small-practice",
+      "sector": "healthcare",
+      "sub_sector": "healthcare",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-healthcare-small-practice",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ot-network-scanning-reconnaissance",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "ot-network-scanning-reconnaissance",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "data-breach-notification-regulatory-tail",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "data-breach-notification-regulatory-tail",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "generative-ai-prompt-injection",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "generative-ai-prompt-injection",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ransomware-on-control-layer",
+      "sector": "manufacturing",
+      "sub_sector": "oil_and_gas",
+      "keep_or_new": "keep",
+      "existing_slug": "ransomware-on-control-layer",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "process-view-manipulation",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "process-view-manipulation",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "field-instrument-spoofing",
+      "sector": "manufacturing",
+      "sub_sector": "chemical_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "field-instrument-spoofing",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "oem-remote-maintenance-abuse",
+      "sector": "energy_utilities",
+      "sub_sector": "water_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "oem-remote-maintenance-abuse",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "grid-protective-relay-manipulation",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "grid-protective-relay-manipulation",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "pipeline-scada-integrity",
+      "sector": "energy_utilities",
+      "sub_sector": "pipeline",
+      "keep_or_new": "keep",
+      "existing_slug": "pipeline-scada-integrity",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "chemical-process-safety-attack",
+      "sector": "manufacturing",
+      "sub_sector": "chemical_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "chemical-process-safety-attack",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "accidental-insider-exposure",
+      "sector": "healthcare",
+      "sub_sector": "healthcare",
+      "keep_or_new": "keep",
+      "existing_slug": "accidental-insider-exposure",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "web-app-exploitation",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "web-app-exploitation",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "third-party-processor-breach",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "third-party-processor-breach",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "retail-pos-card-skimming",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "retail-pos-card-skimming",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "public-sector-targeted-intrusion",
+      "sector": "government_public",
+      "sub_sector": "government_public",
+      "keep_or_new": "keep",
+      "existing_slug": "public-sector-targeted-intrusion",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "logistics-disruption",
+      "sector": "transportation_logistics",
+      "sub_sector": "transportation_logistics",
+      "keep_or_new": "keep",
+      "existing_slug": "logistics-disruption",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "telecom-subscriber-data-breach",
+      "sector": "technology_saas",
+      "sub_sector": "wireless_carrier",
+      "keep_or_new": "keep",
+      "existing_slug": "telecom-subscriber-data-breach",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hospitality-pos-card-skimming",
+      "sector": "hospitality",
+      "sub_sector": "hotel_lodging",
+      "keep_or_new": "keep",
+      "existing_slug": "hospitality-pos-card-skimming",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hospitality-loyalty-account-takeover",
+      "sector": "hospitality",
+      "sub_sector": "hotel_lodging",
+      "keep_or_new": "keep",
+      "existing_slug": "hospitality-loyalty-account-takeover",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hospitality-guest-data-insider",
+      "sector": "hospitality",
+      "sub_sector": "hotel_lodging",
+      "keep_or_new": "keep",
+      "existing_slug": "hospitality-guest-data-insider",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "education-student-records-insider",
+      "sector": "education",
+      "sub_sector": "higher_education",
+      "keep_or_new": "keep",
+      "existing_slug": "education-student-records-insider",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "gov-citizen-portal-ddos",
+      "sector": "government_public",
+      "sub_sector": "federal_government",
+      "keep_or_new": "keep",
+      "existing_slug": "gov-citizen-portal-ddos",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "gov-records-tampering",
+      "sector": "government_public",
+      "sub_sector": "federal_government",
+      "keep_or_new": "keep",
+      "existing_slug": "gov-records-tampering",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "gov-employee-insider-leak",
+      "sector": "government_public",
+      "sub_sector": "federal_government",
+      "keep_or_new": "keep",
+      "existing_slug": "gov-employee-insider-leak",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ip-theft-by-competitor",
+      "sector": "manufacturing",
+      "sub_sector": "process_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "ip-theft-by-competitor",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "manufacturing-billing-fraud",
+      "sector": "manufacturing",
+      "sub_sector": "process_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "manufacturing-billing-fraud",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "healthcare-staff-credential-phish",
+      "sector": "healthcare",
+      "sub_sector": "hospital",
+      "keep_or_new": "keep",
+      "existing_slug": "healthcare-staff-credential-phish",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "professional-payroll-bec",
+      "sector": "professional_services",
+      "sub_sector": "law_firm",
+      "keep_or_new": "keep",
+      "existing_slug": "professional-payroll-bec",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "energy-billing-system-tamper",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "energy-billing-system-tamper",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "telecom-ddos-core-network",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "telecom-ddos-core-network",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "telecom-sim-swap-fraud",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "telecom-sim-swap-fraud",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "telecom-bgp-route-hijack",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "telecom-bgp-route-hijack",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "telecom-field-cabinet-tamper",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "telecom-field-cabinet-tamper",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "food-cold-chain-ransomware",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "food-cold-chain-ransomware",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "food-recall-data-tampering",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "food-recall-data-tampering",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "agri-equipment-physical-tamper",
+      "sector": "food_agriculture",
+      "sub_sector": "food_agriculture",
+      "keep_or_new": "keep",
+      "existing_slug": "agri-equipment-physical-tamper",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "agri-coop-bec-fraud",
+      "sector": "food_agriculture",
+      "sub_sector": "food_agriculture",
+      "keep_or_new": "keep",
+      "existing_slug": "agri-coop-bec-fraud",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "crop-science-ip-exfiltration",
+      "sector": "food_agriculture",
+      "sub_sector": "food_agriculture",
+      "keep_or_new": "keep",
+      "existing_slug": "crop-science-ip-exfiltration",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "hospitality-booking-ddos-peak-season",
+      "sector": "hospitality",
+      "sub_sector": "hospitality",
+      "keep_or_new": "keep",
+      "existing_slug": "hospitality-booking-ddos-peak-season",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "education-research-ip-exfiltration",
+      "sector": "education",
+      "sub_sector": "education",
+      "keep_or_new": "keep",
+      "existing_slug": "education-research-ip-exfiltration",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "logistics-tms-data-tampering",
+      "sector": "transportation_logistics",
+      "sub_sector": "transportation_logistics",
+      "keep_or_new": "keep",
+      "existing_slug": "logistics-tms-data-tampering",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "logistics-warehouse-physical-intrusion",
+      "sector": "transportation_logistics",
+      "sub_sector": "transportation_logistics",
+      "keep_or_new": "keep",
+      "existing_slug": "logistics-warehouse-physical-intrusion",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "competitor-trade-secret-recruit",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "competitor-trade-secret-recruit",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "datacenter-physical-breach",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "datacenter-physical-breach",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "branch-atm-physical-tamper",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "branch-atm-physical-tamper",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "financial-transaction-tampering",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "financial-transaction-tampering",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "healthcare-record-alteration",
+      "sector": "healthcare",
+      "sub_sector": "healthcare",
+      "keep_or_new": "keep",
+      "existing_slug": "healthcare-record-alteration",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "retail-ecommerce-checkout-ddos",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "retail-ecommerce-checkout-ddos",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "saas-revenue-outage-sabotage",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "saas-revenue-outage-sabotage",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "professional-office-physical-theft",
+      "sector": "professional_services",
+      "sub_sector": "professional_services",
+      "keep_or_new": "keep",
+      "existing_slug": "professional-office-physical-theft",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "retail-store-employee-fraud",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "retail-store-employee-fraud",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "manufacturing-facility-sabotage",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "manufacturing-facility-sabotage",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "financial-call-center-social-eng",
+      "sector": "financial_services",
+      "sub_sector": "financial_services",
+      "keep_or_new": "keep",
+      "existing_slug": "financial-call-center-social-eng",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "education-campus-facility-tamper",
+      "sector": "education",
+      "sub_sector": "education",
+      "keep_or_new": "keep",
+      "existing_slug": "education-campus-facility-tamper",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "tolling-plant-ransomware-customer-liability",
+      "sector": "manufacturing",
+      "sub_sector": "chemical_manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "tolling-plant-ransomware-customer-liability",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+      "sector": "energy_utilities",
+      "sub_sector": "pipeline",
+      "keep_or_new": "keep",
+      "existing_slug": "pipeline-nomination-scada-curtailment-shipper-penalty",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "energy-settlement-platform-tampering-offtaker-liability",
+      "sector": "energy_utilities",
+      "sub_sector": "electric_utility",
+      "keep_or_new": "keep",
+      "existing_slug": "energy-settlement-platform-tampering-offtaker-liability",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "health_system-scenario-target",
+      "sector": "healthcare",
+      "sub_sector": "health_system",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "physician-practice-clearinghouse-revenue-disruption",
+      "sector": "healthcare",
+      "sub_sector": "physician_practice",
+      "keep_or_new": "new",
+      "existing_slug": "physician-practice-clearinghouse-revenue-disruption",
+      "attestation": "Change Healthcare (UnitedHealth/Optum) ransomware outage, 2024-02-21 (ALPHV/BlackCat); AMA physician-impact survey Apr 2024 - ama-assn.org/about/leadership/hard-lessons-learned-change-healthcare-breach",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "health_plan-scenario-target",
+      "sector": "healthcare",
+      "sub_sector": "health_plan",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "judiciary-court-system-ransomware",
+      "sector": "government_public",
+      "sub_sector": "judiciary",
+      "keep_or_new": "new",
+      "existing_slug": "judiciary-court-system-ransomware",
+      "attestation": "Kansas Judicial Branch statewide ransomware, Oct 2023 (5+ week outage, confirmed case-record theft; bleepingcomputer.com); Los Angeles County Superior Court ransomware, Jul 2024 (5-day full closure; cnn.com 2024-07-22)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "intelligence_community-scenario-target",
+      "sector": "government_public",
+      "sub_sector": "intelligence_community",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "law-enforcement-records-extortion-breach",
+      "sector": "government_public",
+      "sub_sector": "law_enforcement",
+      "keep_or_new": "new",
+      "existing_slug": "law-enforcement-records-extortion-breach",
+      "attestation": "DC Metropolitan Police Dept / Babuk ransomware data-leak, Apr-May 2021 (washingtonpost.com 2021-05-13); City of Oakland / Play ransomware police-records leak, Feb-Apr 2023 (oaklandside.org 2023-04-05)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "higher-ed-insider-ddos",
+      "sector": "education",
+      "sub_sector": "higher_education",
+      "keep_or_new": "new",
+      "existing_slug": "higher-ed-insider-ddos",
+      "attestation": "Paras Jha botnet DDoS campaign against Rutgers University central authentication/registration, Nov 2014-Sep 2016; DOJ USAO-NJ guilty plea, $8.6M restitution (CyberScoop 2018-10-26 reporting the DOJ announcement)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "k12-edtech-vendor-breach",
+      "sector": "education",
+      "sub_sector": "k12",
+      "keep_or_new": "new",
+      "existing_slug": "k12-edtech-vendor-breach",
+      "attestation": "PowerSchool K-12 SIS vendor breach, Dec 2024 (compromised support-portal credential; tens of millions of student/teacher records; vendor extortion paid; downstream district re-extortion 2025; criminal prosecution). Figures reported as a range across outlets.",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "community_college-scenario-target",
+      "sector": "education",
+      "sub_sector": "community_college",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "airline-scenario-target",
+      "sector": "hospitality",
+      "sub_sector": "airline",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "car_rental-scenario-target",
+      "sector": "hospitality",
+      "sub_sector": "car_rental",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "resort-scenario-target",
+      "sector": "hospitality",
+      "sub_sector": "resort",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "casino-ransomware-operational-disruption",
+      "sector": "hospitality",
+      "sub_sector": "casino",
+      "keep_or_new": "new",
+      "existing_slug": "casino-ransomware-operational-disruption",
+      "attestation": "MGM Resorts ransomware (Scattered Spider), Sep 2023 - MGM Q3-2023 SEC 8-K disclosed ~$100M Adjusted Property EBITDAR impact; Caesars Entertainment ransom, Aug-Sep 2023 (SEC 8-K Oct 2023)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "restaurant-scenario-target",
+      "sector": "hospitality",
+      "sub_sector": "restaurant",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "entertainment_venue-scenario-target",
+      "sector": "hospitality",
+      "sub_sector": "entertainment_venue",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "law-firm-privileged-data-ransomware-extortion",
+      "sector": "professional_services",
+      "sub_sector": "law_firm",
+      "keep_or_new": "new",
+      "existing_slug": "law-firm-privileged-data-ransomware-extortion",
+      "attestation": "IC3 2025 Annual Report p.16 (Legal Services 18% of non-critical ransomware complaints); Grubman Shire Meiselas and Sacks / REvil, May 2020 (infosecurity-magazine.com); DLA Piper / NotPetya, Jun 2017 (SC Media 2019 retrospective)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "accounting-scenario-target",
+      "sector": "professional_services",
+      "sub_sector": "accounting",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "consulting-scenario-target",
+      "sector": "professional_services",
+      "sub_sector": "consulting",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "engineering_services-scenario-target",
+      "sector": "professional_services",
+      "sub_sector": "engineering_services",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "telecom-lawful-intercept-nationstate-compromise",
+      "sector": "telecom",
+      "sub_sector": "wireless_carrier",
+      "keep_or_new": "new",
+      "existing_slug": "telecom-lawful-intercept-nationstate-compromise",
+      "attestation": "Salt Typhoon PRC state-sponsored telecom compromise - FBI/CISA Joint Statement 2024-11-13; CISA/NSA/FBI Advisory AA25-239A 2025-08-27 (fbi.gov, cisa.gov)",
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "broadband_provider-scenario-target",
+      "sector": "telecom",
+      "sub_sector": "broadband_provider",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "mvno-scenario-target",
+      "sector": "telecom",
+      "sub_sector": "mvno",
+      "keep_or_new": "new",
+      "existing_slug": null,
+      "attestation": null,
+      "needs_fresh_research": true
+    },
+    {
+      "slug": "edge-ransomware-perimeter-gateway",
+      "sector": "professional_services",
+      "sub_sector": "professional_services",
+      "keep_or_new": "keep",
+      "existing_slug": "edge-ransomware-perimeter-gateway",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "edge-espionage-nationstate",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "edge-espionage-nationstate",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "edge-device-orb-foothold",
+      "sector": "technology_saas",
+      "sub_sector": "technology_saas",
+      "keep_or_new": "keep",
+      "existing_slug": "edge-device-orb-foothold",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "transient-cyber-asset-ot-intrusion",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "transient-cyber-asset-ot-intrusion",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "browser-zeroday-driveby",
+      "sector": "retail_ecommerce",
+      "sub_sector": "retail_ecommerce",
+      "keep_or_new": "keep",
+      "existing_slug": "browser-zeroday-driveby",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "email-client-zeroclick-espionage",
+      "sector": "government_public",
+      "sub_sector": "government_public",
+      "keep_or_new": "keep",
+      "existing_slug": "email-client-zeroclick-espionage",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "removable-media-airgap-ot",
+      "sector": "manufacturing",
+      "sub_sector": "manufacturing",
+      "keep_or_new": "keep",
+      "existing_slug": "removable-media-airgap-ot",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "ot-wireless-field-network-compromise",
+      "sector": "transportation_logistics",
+      "sub_sector": "transportation_logistics",
+      "keep_or_new": "keep",
+      "existing_slug": "ot-wireless-field-network-compromise",
+      "attestation": null,
+      "needs_fresh_research": false
+    },
+    {
+      "slug": "destructive-wiper-nationstate",
+      "sector": "transportation_logistics",
+      "sub_sector": "transportation_logistics",
+      "keep_or_new": "keep",
+      "existing_slug": "destructive-wiper-nationstate",
+      "attestation": null,
+      "needs_fresh_research": false
+    }
+  ]
+}

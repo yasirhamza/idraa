@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% from "macros/chart.html" import dual_lec_curve, dual_epc_curve %}
+{% from "macros/rbac.html" import analyst_or_admin %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/kpi_card.html" import kpi_card %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+
+{# #488 dashboard density: the mockups were max-w-6xl centered pages with
+   generous band spacing; inside the sidebar shell the same content stretched
+   to the full max-w-screen-2xl content area and sat on a tighter space-y-6
+   rhythm, reading denser than the mockup. Cap + center the dashboard column
+   and widen the band rhythm — dashboard-scoped (the shell and other pages
+   are unchanged; assess them separately per the issue). #}
+<div class="mx-auto max-w-6xl">
+
+{{ page_header(
+    title="Dashboard — " ~ data.org.name,
+    breadcrumb=[("Home", "/")]
+) }}
+
+<div class="space-y-8">
+
+  {# Quick-start card — brand-new org (zero scenarios). Replaces the
+     dead-end "Run analysis" CTAs with the actual first steps. #}
+  {% if data.scenario_count == 0 %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-1">Get started</h2>
+    <p class="text-body text-ink-2 mb-4">
+      Three steps to your first quantified risk picture:
+    </p>
+    <ol class="list-decimal list-inside space-y-2 text-body text-ink-2 mb-5">
+      <li><span class="text-ink-1 font-medium">Create a scenario</span> —
+        fastest from the curated library (ransomware, OT/ICS, phishing, …
+        with pre-calibrated FAIR distributions), or from scratch via the
+        guided wizard.</li>
+      <li><span class="text-ink-1 font-medium">Run an analysis</span> —
+        Monte Carlo simulation of annualized loss, with and without your
+        controls.</li>
+      <li><span class="text-ink-1 font-medium">Read the results</span> —
+        loss exceedance curves, VaR ladder, and per-control attribution.</li>
+    </ol>
+    {% call analyst_or_admin(current_user) %}
+    <div class="flex flex-wrap gap-2">
+      <a class="btn btn-primary btn-sm" href="/library">Browse scenario library</a>
+      <a class="btn btn-outline btn-sm" href="/scenarios/new/wizard">New scenario (wizard)</a>
+      <a class="btn btn-ghost btn-sm" href="/scenarios/import">Import CSV</a>
+    </div>
+    {% endcall %}
+  </div>
+  {% endif %}
+
+  {# Band 1 — Risk posture (Task 4, #476-#480 dashboard redesign): appetite
+     verdict hero + control-value support card. Replaces the old
+     Control-Value / Residual-ALE / scenario-count / run-count KPI tiles. #}
+  {% include "dashboard/_posture.html" %}
+
+  {# Scenario / run counts still surfaced, now as a lightweight two-up strip
+     rather than full KPI tiles (the dollar figures moved into the posture
+     band above). #}
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    {{ kpi_card(
+        label="Scenarios with runs",
+        value=data.total_scenarios_with_runs,
+        format="count"
+    ) }}
+    {{ kpi_card(
+        label="Recent runs",
+        value=data.recent_runs | length,
+        format="count"
+    ) }}
+  </div>
+
+  {# Issue #413 / Task 5 (#419): control-value provenance disclaimer + robustness range.
+     The Control Value tile renders a dollar figure that rests on fair_cam's
+     implementation-calibrated composition weights — surface the canonical provenance
+     disclaimer and, when available, the banded weight-robustness range.
+     Only shown when a Control Value figure exists. #}
+  {% if data.control_value %}
+    {%- if data.weight_robustness and data.weight_robustness.headline_range_str and data.weight_robustness.headline_range_str != "—" %}
+    {#- Mean+typical side-by-side (2026-07-04): data.weight_robustness IS the
+        agg_view weight_robustness blob (services/dashboard.py), so basis-switch
+        the same way as verdict_strip/control_ledger — on a mean-basis run this
+        range is on the same average basis as the Control Value tile above, not
+        a separate "typical-case" claim. Legacy (typical-basis) tiles keep
+        today's copy byte-identical. -#}
+    {%- if data.weight_robustness.basis == "mean" %}
+    <div class="text-xs text-ink-3 mt-1 p-2 bg-base-200 rounded">
+      Value range (same average basis as the tile above): <span class="font-mono">{{ data.weight_robustness.headline_range_str }}</span>
+      <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+    </div>
+    {%- else %}
+    <div class="text-xs text-ink-3 mt-1 p-2 bg-base-200 rounded">
+      Typical-case value range: <span class="font-mono">{{ data.weight_robustness.headline_range_str }}</span>
+      &mdash; sits below the average headline because a few rare, very large losses pull the average up.
+      <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+    </div>
+    {%- endif %}
+    {%- endif %}
+    {# M4: gate the too-close-to-call sentence on weight_robustness presence. #}
+    <p class="text-micro text-ink-3 mt-1">{% if data.weight_robustness %}{{ control_weight_provenance_disclaimer }}{% else %}{{ control_weight_provenance_disclaimer_base }}{% endif %}</p>
+  {% endif %}
+
+  {# Card — Dual-LEC + Dual-EPC charts #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-3">Loss distributions</h2>
+    {% if data.dual_lec %}
+      <p class="text-meta text-ink-2 mb-2">
+        <a class="link" href="/runs/{{ data.latest_aggregate.id }}">
+          {{ data.latest_aggregate_label }}
+        </a>
+      </p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          {{ dual_lec_curve(data.dual_lec, tolerance=data.loss_tolerance, currency=data.currency) }}
+        </div>
+        <div>
+          {{ dual_epc_curve(data.dual_epc, tolerance=data.loss_tolerance, currency=data.currency) }}
+        </div>
+      </div>
+    {% else %}
+      <p class="text-body text-ink-2">
+        Run an analysis across 2+ scenarios to see the portfolio loss distributions.
+      </p>
+      {% call analyst_or_admin(current_user) %}
+        <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run aggregate analysis</a>
+      {% endcall %}
+    {% endif %}
+  </div>
+
+  {# Band 3 — Coverage & budget (Task 5, #476-#480 dashboard redesign):
+     control-budget utilization, FAIR-CAM/framework control coverage, and
+     scenario-library coverage. #}
+  {% include "dashboard/_coverage_budget.html" %}
+
+  {# Band 4 — Recent activity (Task 6, #476-#480 dashboard redesign):
+     top-scenario dumbbells + recent-runs table. Replaces the old
+     per_scenario_ale_bar chart-vendor bar chart card and the standalone
+     recent-runs data_table card. #}
+  {% include "dashboard/_recent_activity.html" %}
+
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{#- Single chart card with LEC/EPC toggle (spec Summary view).
+    Both figures are server-rendered SVG; Alpine x-show toggles visibility.
+    SVG needs no resize-on-reveal (unlike the retired chart-vendor cards), so pane
+    state is plain Alpine data. Inline x-data per PR #205 (no window.*
+    dependency). -#}
+{% import "macros/chart.html" as chart %}
+{% from "macros/kpi_card.html" import kpi_card %}
+
+{% macro exceedance_toggle(dr, caveats) -%}
+<section class="mt-8" id="exceedance">
+  <div x-data="{ pane: 'lec' }">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div>
+        <h2 class="text-h3 text-ink-1 mb-1">How likely is a loss bigger than X?</h2>
+        <p class="text-micro text-ink-3">Annual probability that total loss exceeds each amount.</p>
+      </div>
+      <div class="tabs tabs-boxed bg-surface-2">
+        <a class="tab tab-sm" :class="pane === 'lec' && 'tab-active'" @click="pane = 'lec'" role="button">Loss exceedance</a>
+        <a class="tab tab-sm" :class="pane === 'epc' && 'tab-active'" @click="pane = 'epc'" role="button">Probability curve</a>
+      </div>
+    </div>
+    {%- set strip = dr.appetite_strip -%}
+    {% if strip %}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4"
+         data-testid="appetite-strip" data-verdict-without="{{ strip.verdict_without }}" data-verdict-with="{{ strip.verdict_with }}">
+      {#- Footer keys on the VERDICT, never times_over truthiness: at
+          loss_tolerance_probability == 0.0 (schema-reachable, ge=0.0) the
+          verdict is "exceeds" but times_over is None (division guard) — the
+          "N× over" multiplier is an optional suffix, not the decision. -#}
+      {{ kpi_card(
+           label="P(loss > " ~ (strip.tol_amount | money(dr.currency.code)) ~ ") — without controls",
+           value=strip.p_without, format="percent",
+           status=("bad" if strip.verdict_without == "exceeds" else "ok"),
+           footer=(("Exceeds appetite" ~ ((" · " ~ ((strip.times_over | round(1)) if strip.times_over < 2 else (strip.times_over | int)) ~ "× over") if strip.times_over else "")) if strip.verdict_without == "exceeds" else "Within appetite")) }}
+      {{ kpi_card(
+           label="P(loss > " ~ (strip.tol_amount | money(dr.currency.code)) ~ ") — with controls",
+           value=strip.p_with, format="percent",
+           status=("near" if strip.near_threshold else ("bad" if strip.verdict_with == "exceeds" else "ok")),
+           footer=("Near threshold" if strip.near_threshold else ("Within appetite" if strip.verdict_with == "within" else "Exceeds appetite"))) }}
+      {{ kpi_card(
+           label="Loss at " ~ (strip.tol_probability * 100) | round(1) ~ "% exceedance",
+           value=strip.loss_at_tol_prob or 0, format="money", currency=(dr.currency.symbol if dr.currency else "$"),
+           status=("near" if strip.near_threshold else ("ok" if strip.verdict_with == "within" else "bad")),
+           footer=(((strip.headroom | abs | money(dr.currency.code)) ~ (" headroom" if strip.headroom and strip.headroom > 0 else " over appetite")) if strip.headroom is not none else none)) }}
+    </div>
+    {% endif %}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+      <div id="lec-pane" x-show="pane === 'lec'">
+        {{ chart.dual_lec_curve(dr.dual_lec, tolerance=dr.loss_tolerance, currency=dr.currency) }}
+      </div>
+      <div id="epc-pane" x-show="pane === 'epc'" x-cloak>
+        {{ chart.dual_epc_curve(dr.dual_epc, tolerance=dr.loss_tolerance, currency=dr.currency) }}
+      </div>
+    </div>
+  </div>
+</section>
+{%- endmacro %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/run_badges.html" import run_status_badge %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+
+{{ page_header(
+  title="Reports",
+  breadcrumb=breadcrumb_for(request),
+  meta=org.name,
+  actions=[
+    {"label": "Export CSV", "href": "/reports/export.csv", "style": "brand", "icon": "⇩", "download": True},
+  ],
+) }}
+{{ help_trigger('reports') }}
+
+{% set columns = [
+  {"key": "name",        "label": "Name",    "priority": "primary"},
+  {"key": "status_value","label": "Status",  "kind": "status_pill", "pill_kind": "run"},
+  {"key": "created",     "label": "Created", "priority": "secondary"},
+  {"key": "_actions",    "label": "",        "kind": "action_menu"},
+] %}
+
+{% set rows = [] %}
+{% for run in runs %}
+{%- set download_action = [] -%}
+{%- if run.status.value == "completed" -%}
+  {%- set _ = download_action.append({"label": "Download PDF", "href": "/reports/run/" ~ run.id, "download": True}) -%}
+  {%- set _ = download_action.append({"label": "Verification workbook (.xlsx)", "href": "/reports/run/" ~ run.id ~ "/verification.xlsx", "download": True}) -%}
+{%- endif -%}
+{%- set _ = rows.append({
+  "id":           run.id | string,
+  "name":         run.name or "(unnamed run)",
+  "status_value": run.status.value,
+  "created":      run.created_at | format_datetime,
+  "_actions":     download_action,
+}) -%}
+{% endfor %}
+
+{# RBAC-gated CTA: analyst/admin can trigger new runs; reviewer/viewer cannot. #}
+{%- set _can_run = current_user.role.value in ("admin", "analyst") -%}
+{%- set _empty_cta = [{"label": "Run aggregate analysis", "href": "/analyses/new", "style": "primary"}] if _can_run else [] -%}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  sort_url="/reports",
+  empty={
+    "icon": "📄",
+    "title": "No completed runs yet",
+    "body": "Run an analysis to generate a PDF report.",
+    "cta": _empty_cta,
+  },
+) }}
+
+{% endblock %}

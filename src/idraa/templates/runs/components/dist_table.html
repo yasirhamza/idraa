@@ -1,0 +1,59 @@
+{#- Distribution-stats ladder with web display labels (spec §Label map).
+    Renders ALL rows the builder emits (builder owns the has_tail honesty gate
+    — suppress-not-relabel, #353). Canonical row.label is mapped through
+    tail_ladder_display_labels; unknown labels pass through unchanged. -#}
+{% import "runs/components/caveats.html" as cvm %}
+
+{% macro dist_table(dr, caveats) -%}
+{%- set _code = dr.currency.code if dr.currency else "USD" -%}
+{%- set _tail_canonical = ["VaR 90%", "VaR 95%", "VaR 99%", "VaR 99.9%", "ES 95%", "ES 99%", "ES 99.9%"] -%}
+<section class="mt-8" id="dist-table">
+  <h2 class="text-h3 text-ink-1 mb-1">Loss distribution</h2>
+  <p class="text-micro text-ink-3 mb-3">
+    Annualized loss, with vs without controls.
+    ({{ dr.n_scenarios }} scenarios; {{ dr.n_simulations }} simulations each){{ cvm.cv("dist-note", caveats.numbers) }}
+  </p>
+  <div class="bg-surface-1 border border-border-subtle rounded-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr class="bg-surface-2">
+            <th class="text-meta uppercase">Statistic</th>
+            <th class="text-right text-meta uppercase">Without controls</th>
+            <th class="text-right text-meta uppercase">With controls</th>
+            <th class="text-right text-meta uppercase" title="base minus residual; positive = risk reduced">Δ reduction</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono">
+          {% for row in dr.dist_stats.rows %}
+          <tr class="hover:bg-surface-2">
+            <td class="font-sans">{{ tail_ladder_display_labels.get(row.label, row.label) }}
+              {%- if row.label in ("Mean", "Median") %}{{ cvm.cv("mean-vs-typical", caveats.numbers) }}
+              {%- elif row.label in _tail_canonical %}{{ cvm.cv("independence", caveats.numbers) }}{{ cvm.cv("mc-interval", caveats.numbers) }}{% endif %}</td>
+            <td class="text-right">{{ row.base | money(_code, compact=False) }}
+              {%- if row.base_ci_insufficient %}
+              <br><span class="text-micro text-ink-3">(95% MC interval: insufficient tail samples at this N)</span>
+              {%- elif row.base_se is not none %}
+              <br><span class="text-micro text-ink-3">(95% MC interval &plusmn; {{ row.base_ci_half | money(_code, compact=False) }})</span>
+              {%- endif %}
+            </td>
+            <td class="text-right">{{ row.residual | money(_code, compact=False) }}
+              {%- if row.residual_ci_insufficient %}
+              <br><span class="text-micro text-ink-3">(95% MC interval: insufficient tail samples at this N)</span>
+              {%- elif row.residual_se is not none %}
+              <br><span class="text-micro text-ink-3">(95% MC interval &plusmn; {{ row.residual_ci_half | money(_code, compact=False) }})</span>
+              {%- endif %}
+            </td>
+            {% set d_str, d_css = row.delta | format_delta(format="money", precision=0, code=_code) %}
+            <td class="text-right text-{{ d_css }}">{{ d_str }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if not dr.dist_stats.has_tail %}
+    <p class="text-micro text-ink-3 mt-1">VaR 90/99.9 and ES metrics not available for this run (computed for runs executed after the tail-metrics release). Re-run the analysis to populate.</p>
+  {% endif %}
+</section>
+{%- endmacro %}

@@ -1,0 +1,36 @@
+{#- Caveat chips + consolidated panel (spec §Numbered caveat system).
+
+    Usage in a view template:
+      {% import "runs/components/caveats.html" as caveats %}
+      {% set cvs = active_run_caveats(has_cost=..., has_ranges=..., ...) %}
+      ... {{ caveats.cv("independence", cvs.numbers) }} ...
+      {{ caveats.caveat_panel(cvs) }}
+
+    cv() renders nothing when the key was gated out — a chip must never point
+    at a missing panel entry. -#}
+
+{% macro cv(key, numbers) -%}
+  {%- if key in numbers -%}
+    <a class="cv" href="#cv-{{ key }}" aria-label="Caveat {{ numbers[key] }}">{{ numbers[key] }}</a>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro caveat_panel(caveats) -%}
+  {% if caveats.entries %}
+  <section class="mt-10 bg-surface-2 border border-border-subtle rounded-card p-5" id="caveats">
+    <h2 class="text-h3 text-ink-1 mb-3">How to read these numbers</h2>
+    <ol class="space-y-2 text-body text-ink-2 list-none">
+      {% for e in caveats.entries %}
+      <li id="cv-{{ e.key }}">
+        <span class="cv">{{ e.number }}</span>
+        <strong>{{ e.title }}</strong>
+        {{ e.body }}{# escaped plain text — registry bodies are never markup; do not add |safe #}
+        {% if e.key == "weight-provenance" %}
+          <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+{%- endmacro %}

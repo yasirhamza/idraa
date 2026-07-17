@@ -1,0 +1,50 @@
+{
+  "fields": {
+    "capability_value": {
+      "has_default": false,
+      "optional": true,
+      "type": "float | None"
+    },
+    "confirmed_by_user_at": {
+      "has_default": true,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "coverage": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "derived_from_assignment_id": {
+      "has_default": true,
+      "optional": true,
+      "type": "uuid.UUID | None"
+    },
+    "measured_at": {
+      "has_default": true,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "measured_by": {
+      "has_default": true,
+      "optional": true,
+      "type": "uuid.UUID | None"
+    },
+    "reliability": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'float'>"
+    },
+    "sub_function": {
+      "has_default": false,
+      "optional": false,
+      "type": "<enum 'FairCamSubFunction'>"
+    },
+    "unit_type": {
+      "has_default": false,
+      "optional": false,
+      "type": "<enum 'UnitType'>"
+    }
+  },
+  "schema_name": "ControlFunctionAssignmentSnapshotDTO"
+}

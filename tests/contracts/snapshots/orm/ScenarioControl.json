@@ -1,0 +1,22 @@
+{
+  "columns": {
+    "control_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "scenario_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    }
+  },
+  "indexes": [],
+  "table_name": "scenario_controls"
+}

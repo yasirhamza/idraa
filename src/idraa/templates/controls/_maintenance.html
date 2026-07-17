@@ -1,0 +1,6 @@
+{% from "macros/empty_state.html" import empty_state %}
+<div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+  {{ empty_state("⛨", "Controls Maintenance In Progress",
+      "The control wizard is being upgraded. Existing controls remain available in read-only mode. New control creation and editing will return soon.",
+      cta={"label": "Back to Controls", "href": "/controls", "style": "outline"}) }}
+</div>

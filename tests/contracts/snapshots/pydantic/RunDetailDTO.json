@@ -1,0 +1,70 @@
+{
+  "fields": {
+    "completed_at": {
+      "has_default": false,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "controls_snapshot": {
+      "has_default": false,
+      "optional": true,
+      "type": "list[Annotated[Union[Annotated[idraa.schemas.run_snapshot.ControlSnapshotV1, Tag(tag=1)], Annotated[idraa.schemas.run_snapshot.ControlSnapshotV2, Tag(tag=2)], Annotated[idraa.schemas.run_snapshot.ControlSnapshotV3, Tag(tag=3)]], Discriminator(discriminator=<function _snapshot_version_discriminator>, custom_error_type=None, custom_error_message=None, custom_error_context=None)]]"
+    },
+    "created_at": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'datetime.datetime'>"
+    },
+    "created_by": {
+      "has_default": false,
+      "optional": true,
+      "type": "uuid.UUID | None"
+    },
+    "error_message": {
+      "has_default": false,
+      "optional": true,
+      "type": "str | None"
+    },
+    "id": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'uuid.UUID'>"
+    },
+    "inputs_hash": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "mc_iterations": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'int'>"
+    },
+    "run_type": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "scenario_id": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'uuid.UUID'>"
+    },
+    "simulation_results": {
+      "has_default": false,
+      "optional": true,
+      "type": "dict[str, object] | None"
+    },
+    "started_at": {
+      "has_default": false,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "status": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "RunDetailDTO"
+}

@@ -1,0 +1,29 @@
+{#
+  empty_state(icon, title, body, cta?) — pretty empty state. Spec §3/§4.
+  cta = {label, href, style?, download?} or list of those for multi-CTA.
+  style: "primary" | "outline" (default) | "ghost"
+  download=True → file-download link: emits `hx-boost="false"` + `download`
+    so the browser downloads the attachment instead of HTMX (global
+    <body hx-boost="true">) swapping the bytes into the DOM as text.
+#}
+{% macro empty_state(icon, title, body, cta=none) -%}
+<div class="flex flex-col items-center text-center py-12 px-4 bg-surface-1 border border-border-subtle rounded-card">
+  <span class="text-4xl text-ink-3 mb-3" aria-hidden="true">{{ icon|default('◇') }}</span>
+  <h3 class="text-h3 text-ink-1 mb-1">{{ title }}</h3>
+  <p class="text-body text-ink-2 max-w-md mb-5">{{ body }}</p>
+  {%- if cta %}
+    {%- if cta is mapping %}
+      {%- set cta_list = [cta] -%}
+    {%- else %}
+      {%- set cta_list = cta -%}
+    {%- endif %}
+    <div class="flex flex-wrap gap-2 justify-center">
+      {%- for a in cta_list %}
+        {%- set _style = a.style|default('outline') -%}
+        {%- set _btn_cls = {'primary': 'btn-primary', 'outline': 'btn-outline', 'ghost': 'btn-ghost'}.get(_style, 'btn-outline') -%}
+      <a href="{{ a.href }}"{% if a.download %} hx-boost="false" download{% endif %} class="btn btn-sm {{ _btn_cls }}">{{ a.label }}</a>
+      {%- endfor %}
+    </div>
+  {%- endif %}
+</div>
+{%- endmacro %}

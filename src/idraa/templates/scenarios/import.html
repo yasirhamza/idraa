@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "macros/help_trigger.html" import help_trigger %}
+{% block title %}Scenario import{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/scenarios">Scenarios</a> / Import
+  </p>
+  <h1 class="text-2xl font-bold mb-2">Import scenarios {{ help_trigger('import-export') }}</h1>
+  <p class="text-base-content/70 mb-6">
+    Upload a CSV or JSON file of scenarios. Nothing is written until you review
+    the preview and confirm. Duplicate scenarios (an active scenario with the
+    same name already exists) are skipped.
+  </p>
+
+  <div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+      <h2 class="card-title text-base">Templates</h2>
+      <p class="text-sm text-base-content/70 mb-2">
+        Download a starting point — the CSV template and JSON sample each
+        contain one fully-populated example row.
+      </p>
+      <div class="flex gap-2 flex-wrap">
+        <a href="/scenarios/import/template.csv" class="btn btn-sm btn-outline">
+          Download CSV template
+        </a>
+        <a href="/scenarios/import/sample.json" class="btn btn-sm btn-outline">
+          Download JSON sample
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+      <h2 class="card-title text-base">Field guidance</h2>
+      <p class="text-sm text-base-content/70 mb-2">
+        The CSV template carries no comment lines, so the field rules are here:
+      </p>
+      <ul class="text-sm text-base-content/70 list-disc ml-5 space-y-1">
+        <li><code class="font-mono">name</code> — required, unique among active scenarios.</li>
+        <li>
+          <code class="font-mono">scenario_type</code>,
+          <code class="font-mono">threat_category</code>,
+          <code class="font-mono">threat_actor_type</code>,
+          <code class="font-mono">asset_class</code>,
+          <code class="font-mono">status</code> — must be valid enum values
+          (e.g. <code class="font-mono">custom</code>,
+          <code class="font-mono">ransomware</code>,
+          <code class="font-mono">cybercriminals</code>,
+          <code class="font-mono">systems</code>,
+          <code class="font-mono">active</code>).
+        </li>
+        <li>
+          <code class="font-mono">distribution</code> — the distribution shared by
+          the FAIR factors (e.g. <code class="font-mono">PERT</code>).
+        </li>
+        <li>
+          <code class="font-mono">tef_*</code>,
+          <code class="font-mono">vuln_*</code>,
+          <code class="font-mono">pl_*</code>,
+          <code class="font-mono">sl_*</code> — low / mode / high triplets for
+          Threat Event Frequency, Vulnerability, Primary Loss, and Secondary
+          Loss. Each provided triplet must satisfy
+          <code class="font-mono">low ≤ mode ≤ high</code>. Leave a triplet blank
+          to omit that factor (Secondary Loss is optional).
+        </li>
+        <li>
+          JSON uploads use nested objects (<code class="font-mono">threat_event_frequency</code>,
+          <code class="font-mono">vulnerability</code>,
+          <code class="font-mono">primary_loss</code>,
+          <code class="font-mono">secondary_loss</code>) — see the JSON sample.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">Upload</h2>
+      <form method="post" action="/scenarios/import" enctype="multipart/form-data"
+            class="flex flex-col gap-4">
+        {{ csrf_field() }}
+        <input type="file" name="file" accept=".csv,.json,text/csv,application/json"
+               required class="file-input file-input-bordered w-full" />
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary">Upload &amp; preview</button>
+          <a href="/scenarios" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

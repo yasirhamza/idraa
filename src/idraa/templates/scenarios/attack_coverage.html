@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+
+{% block title %}ATT&CK coverage{% endblock %}
+
+{% block content %}
+{{ page_header(title="MITRE ATT&CK coverage", breadcrumb=breadcrumb_for(request), actions=[]) }}
+
+{# Meth-I2: say "modeled", never "covered"/"gap" — in the ATT&CK community
+   those read as detection-coverage / unmitigated-exposure claims, which this
+   page does not make. #}
+<p class="text-body text-ink-2 mb-4">
+  Which ATT&amp;CK techniques your <strong>active scenarios</strong> model.
+  A technique counts as modeled when at least one active scenario is tagged
+  with it. This is a reporting view over scenario tags — not a FAIR metric,
+  and not a statement about detections or mitigations.
+</p>
+
+{% if vm.unmapped_pinned_scenario_count > 0 %}
+  <div class="alert alert-info mb-4" role="status">
+    <span class="text-sm">
+      {{ vm.unmapped_pinned_scenario_count }} library-based
+      scenario{{ '' if vm.unmapped_pinned_scenario_count == 1 else 's' }}
+      {{ 'has' if vm.unmapped_pinned_scenario_count == 1 else 'have' }} no
+      ATT&amp;CK technique mappings —
+      {{ 'it is' if vm.unmapped_pinned_scenario_count == 1 else 'they are' }}
+      pinned to a library entry awaiting the MITRE ATLAS domain (issue #482).
+      Their risk is modeled; it just isn't reflected in these coverage numbers.
+    </span>
+  </div>
+{% endif %}
+
+{% if not vm.domains %}
+  <div class="card bg-base-200 p-6">
+    <p class="text-body text-ink-2">The ATT&amp;CK technique catalog is empty —
+    run database migrations to seed it.</p>
+  </div>
+{% endif %}
+
+{% for domain in vm.domains %}
+  <section class="mb-8">
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-h3 text-ink-1">{{ domain.label }}</h2>
+      <span class="text-meta text-ink-2">
+        {{ domain.overall.covered_count }} of {{ domain.overall.reference_count }}
+        techniques modeled
+        {% if domain.overall.reference_count > 0 %}({{ (domain.overall.ratio * 100) | round(0) | int }}%){% endif %}
+      </span>
+    </div>
+    <div class="space-y-2">
+      {% for tactic in domain.tactics %}
+        <details class="card bg-base-200 p-0 overflow-hidden">
+          <summary class="cursor-pointer px-4 py-2 flex items-center justify-between gap-2">
+            <span class="text-body text-ink-1 font-medium">{{ tactic.name }}</span>
+            <span class="text-meta text-ink-2 shrink-0">
+              {{ tactic.result.covered_count }}/{{ tactic.result.reference_count }}
+            </span>
+          </summary>
+          <ul class="px-4 pb-3 divide-y divide-border-subtle">
+            {% for tech in tactic.techniques %}
+              <li class="py-1.5 flex items-start justify-between gap-3">
+                <span class="text-sm {{ 'text-ink-1' if tech.covered else 'text-ink-3' }}">
+                  <span class="font-mono">{{ tech.technique_id }}</span> · {{ tech.name }}
+                </span>
+                {% if tech.covered %}
+                  <span class="text-micro text-ink-2 text-right">
+                    {{ tech.scenario_names | join(", ") }}{% if tech.scenario_overflow_count %} +{{ tech.scenario_overflow_count }} more{% endif %}
+                  </span>
+                {% else %}
+                  <span class="badge badge-ghost badge-xs shrink-0">not modeled</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}
+
+{% if vm.domains %}
+  {# Meth-N1: pre-empt "the math is wrong" — per-tactic chips sum to more
+     than the domain total because multi-tactic techniques repeat. #}
+  <p class="text-micro text-ink-3 mt-2">
+    Techniques spanning multiple tactics are listed under each tactic;
+    domain totals count each technique once.
+  </p>
+{% endif %}
+{% endblock %}

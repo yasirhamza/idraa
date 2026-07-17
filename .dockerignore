@@ -1,0 +1,34 @@
+.git
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+*.pyc
+node_modules
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+tests/e2e
+notebooks
+*.db
+*.sqlite
+docs
+# Re-include reference data the runtime reads (controls_importer.py looks
+# up docs/reference/fair-cam-controls-library.csv for the "Load FAIR-CAM
+# library" feature on /controls/import). Without these negations the file
+# is stripped from the Docker image and the route reports the file as
+# missing.
+!docs/reference
+!docs/reference/fair-cam-controls-library.csv
+.github
+.vscode
+.idea
+
+# #491: local Tailwind-binary cache — the image build downloads its own
+# (sha256-pinned, Linux) binary into a BuildKit cache mount; never ship or
+# upload the host's cached binaries in the build context.
+.tailwind-bin

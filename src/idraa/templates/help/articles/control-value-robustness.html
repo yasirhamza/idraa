@@ -1,0 +1,106 @@
+<h2 class="text-h3 text-ink-1 mb-3">Why control value is shown as a range</h2>
+<p class="text-body text-ink-2 mb-3">
+  When Idraa reports how much a control is worth, it shows a
+  <strong>range</strong> (for example, <span class="font-mono">$80k&ndash;$190k</span>)
+  rather than a single number. The range is honest about something most risk tools
+  hide: the model has to assume <em>how strongly</em> each control acts on risk, and
+  those assumptions aren&rsquo;t precisely known. Instead of pretending to a single
+  exact figure, Idraa varies those assumptions across a plausible spread and
+  reports the range of answers you get.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Treat these figures as <strong>modeled estimates for comparison and
+  decision-making</strong> &mdash; not as measured or guaranteed loss savings. They
+  are most useful for ranking controls against each other and sizing investments,
+  not as a promise of exact dollars returned.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">&ldquo;Too close to call&rdquo;</h2>
+<p class="text-body text-ink-2 mb-6">
+  Sometimes two controls have value ranges that overlap so much the model
+  <strong>can&rsquo;t reliably say which one matters more</strong>. Idraa marks
+  these pairs <strong>too close to call</strong>. It is not saying the controls are
+  worthless &mdash; only that, given the uncertainty in the assumptions, their
+  ranking relative to each other isn&rsquo;t trustworthy. Don&rsquo;t base a
+  &ldquo;this control beats that one&rdquo; decision on a too-close-to-call pair.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Why the typical case sits below the average</h2>
+<p class="text-body text-ink-2 mb-3">
+  You&rsquo;ll see two related figures: an <strong>average</strong> (headline) and a
+  <strong>typical-case</strong> range. The typical-case figure is usually
+  <em>lower</em> than the average, and that&rsquo;s expected, not a bug.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Cyber losses are <strong>skewed</strong>: most years are modest, but a few rare,
+  very large losses pull the <em>average</em> upward. The
+  <strong>typical case</strong> (the middle outcome &mdash; the median, or the most
+  likely value for some factors) isn&rsquo;t dragged up by those rare disasters, so
+  it sits below the average. A
+  <strong>wider gap</strong> between the two means a more skewed, more
+  disaster-driven loss profile.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  For the underlying distributions and the exact mean-versus-median relationship
+  (for a lognormal loss, the average is the median times
+  <span class="font-mono">exp(&sigma;&sup2;/2)</span>), see the
+  <a class="text-brand hover:underline" href="/help/methodology-primer">FAIR methodology primer</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Average and typical, shown side by side</h2>
+<p class="text-body text-ink-2 mb-3">
+  On runs computed after the mean+typical side-by-side release, the value range, the
+  &ldquo;fair share&rdquo; attribution, and the &ldquo;if removed&rdquo; figure are all
+  computed on the same <strong>average (mean)</strong> basis as the headline residual-loss
+  and control-value figures &mdash; so they are directly comparable to those headline
+  numbers, and to each other. A smaller, muted <strong>typical</strong> figure is shown
+  alongside each one: it is the central-case counterpart from the section above (the
+  &ldquo;usual year&rdquo; view), included to show how skewed the loss profile is &mdash;
+  not a second measurement of the same quantity.
+</p>
+<ul class="list-disc list-inside text-body text-ink-2 mb-6 space-y-1">
+  <li><strong>Average</strong> (primary, unmuted) &mdash; on the same basis as the headline
+    residual ALE and control-value figures above; this is the number to use for decisions
+    and for comparing against the headline.</li>
+  <li><strong>Typical</strong> (muted, paired alongside the average) &mdash; the
+    central-case counterpart; a wider gap from the average means a more skewed,
+    more disaster-driven loss profile.</li>
+  <li><strong>Fair share</strong> &mdash; each control&rsquo;s allocated portion of the
+    combined modeled risk reduction (a Shapley value); fair shares sum to the total
+    reduction &mdash; this is an <em>allocation</em>, not a drop-cost.</li>
+  <li><strong>If removed</strong> &mdash; the drop-cost counterfactual: how much modeled
+    annual loss would increase if that one control alone were removed from the current
+    portfolio. It deliberately diverges from fair share for redundant or gating controls
+    &mdash; see the run page&rsquo;s &ldquo;if removed&rdquo; note for why.</li>
+</ul>
+<p class="text-body text-ink-2 mb-6">
+  Older runs (computed before this release) show only the typical-case range as the
+  primary figure, exactly as described in the section above &mdash; there is no paired
+  average figure on those runs.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">&ldquo;Ranking-stability check skipped&rdquo;</h2>
+<p class="text-body text-ink-2 mb-6">
+  Testing whether the control ranking holds up under the assumption-spread takes
+  extra simulation work. On very large runs Idraa may not have enough simulation
+  budget to do it, and will say the
+  <strong>ranking-stability check was skipped</strong> (with the number of draws it
+  managed). The value ranges are still shown; only the &ldquo;is the ranking
+  stable?&rdquo; verdict is withheld so it doesn&rsquo;t report a conclusion drawn
+  from too little data.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Where this shows up</h2>
+<p class="text-body text-ink-2 mb-3">
+  The same ranges, &ldquo;too close to call&rdquo; flags, and average-versus-typical
+  framing appear on the run results, the dashboard control-value tile, the executive
+  <a class="text-brand hover:underline" href="/help/reports">PDF report</a>, and the
+  downloadable Excel verification workbook &mdash; so the story is consistent
+  wherever you read it.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  For how controls reduce modeled risk in the first place, see
+  <a class="text-brand hover:underline" href="/help/controls-overlays">Controls &amp; overlays</a>
+  and the
+  <a class="text-brand hover:underline" href="/help/methodology-primer">methodology primer</a>.
+</p>

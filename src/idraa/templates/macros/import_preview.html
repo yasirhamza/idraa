@@ -1,0 +1,78 @@
+{# import_preview.html — Mobile tranche 2e.
+
+   Card-stacking table macro for the two-step import preview pages
+   (scenarios / overlays / library bundle). Each preview page shows a parsed-row
+   table that ends in an action badge, plus an optional validation-errors table.
+   This macro renders BOTH a desktop <table> (hidden md:block) AND a mobile card
+   stack (md:hidden), so the dense rows reflow to readable cards on phones
+   instead of forcing horizontal scroll (the old overflow-x-auto behaviour).
+
+   Args:
+     rows:    list[dict] — each a parsed preview row or validation-error row.
+     columns: list[dict], in display order:
+                label: str            — header cell + mobile <dt> label
+                key:   str            — dict key on the row
+                mono:  bool optional  — font-mono (numbers / codes); default off
+                align: 'right' optional — right-align the desktop cell; default left
+     action_key: str optional — the column key whose value is an import action
+                (create / add / update / skip / error). That cell renders as a
+                DaisyUI badge, and on mobile it is pulled to the card's top-right
+                as the row's visual anchor. Omit for tables with no action column
+                (e.g. the validation-errors table).
+
+   Row contract: rows are plain dicts. Jinja subscript returns Undefined for a
+   missing key, so `row[c.key]|default('')` is safe for optional columns. The
+   Jinja env uses the default (non-strict) Undefined, so a column dict may omit
+   `mono`/`align` and they read as falsy. #}
+
+{% macro _action_badge(action) -%}
+  {%- set _styles = {
+        'create': 'badge-success',
+        'add': 'badge-success',
+        'update': 'badge-info',
+        'skip': 'badge-ghost',
+        'error': 'badge-error',
+      } -%}
+  <span class="badge badge-sm {{ _styles.get(action|string, '') }}">{{ action }}</span>
+{%- endmacro %}
+
+{% macro preview_table(rows, columns, action_key=none) -%}
+  {# ── Desktop: real table, hidden on phones ── #}
+  <div class="hidden md:block overflow-x-auto">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          {% for c in columns %}<th class="{% if c.align == 'right' %}text-right{% endif %}">{{ c.label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% for c in columns %}
+          <td class="{% if c.mono %}font-mono {% endif %}{% if c.align == 'right' %}text-right{% endif %}">
+            {%- if action_key and c.key == action_key -%}{{ _action_badge(row[c.key]) }}
+            {%- else -%}{{ row[c.key]|default('') }}{%- endif -%}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {# ── Mobile: one card per row, action badge as the anchor ── #}
+  <div class="md:hidden space-y-3">
+    {% for row in rows %}
+    <article class="bg-surface-1 border border-border-subtle rounded-card p-3">
+      {% if action_key %}
+      <div class="flex justify-end mb-1">{{ _action_badge(row[action_key]) }}</div>
+      {% endif %}
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {% for c in columns if c.key != action_key %}
+        <dt class="text-meta text-ink-2">{{ c.label }}</dt>
+        <dd class="text-body text-ink-1 {% if c.mono %}font-mono tabular-nums{% endif %}">{{ row[c.key]|default('') }}</dd>
+        {% endfor %}
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+{%- endmacro %}

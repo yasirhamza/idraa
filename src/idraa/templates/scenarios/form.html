@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% from "macros/_control.html" import control_domains %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+
+{% block title %}{% if scenario %}Edit scenario — {{ scenario.name }}{% else %}New scenario{% endif %}{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{% if scenario %}
+  {{ page_header(title="Edit scenario — " ~ scenario.name,
+                 breadcrumb=breadcrumb_for(request),
+                 actions=[{"label": "← View calibration", "href": "/scenarios/" ~ scenario.id, "style": "ghost"}]) }}
+{% else %}
+  {{ page_header(title="New scenario",
+                 breadcrumb=breadcrumb_for(request),
+                 actions=[]) }}
+{% endif %}
+
+{# Mobile tranche 2b: the scenario authoring form is no longer device-gated.
+   The form reflows to a single column on phones (the FAIR-distribution PERT
+   grid stacks via grid-cols-1 sm:grid-cols-3 below) so it is usable on small
+   screens. Server-side require_role remains the real authorization gate. #}
+
+{# Audit-F2: legacy-framing banner on the edit page — text only, no confirm
+   button (SC-N2: the analyst here is already in the fix-it flow; the confirm
+   affordance lives on the detail page). Saving a changed vulnerability
+   triple flips the stamp automatically (ScenarioService.update). #}
+{% if scenario and scenario.vuln_framing == 'legacy_residual' %}
+  <div class="alert alert-warning mb-4" role="alert">
+    <span class="text-sm">
+      <strong>Vulnerability needs review:</strong> it was estimated under the
+      old wording (&ldquo;through your <strong>current controls</strong>&rdquo;).
+      Re-enter it as your <strong>inherent</strong> estimate &mdash; the chance
+      an attempt succeeds <em>before</em> your controls (usually
+      <em>higher</em> than the current value). Your controls are modelled
+      separately; a net-of-controls estimate gets double-counted.
+    </span>
+  </div>
+{% endif %}
+
+{%- set errors_dict = {} -%}
+{%- if errors -%}
+  {#- Convert list[str] errors into a dict keyed by positional index or parse loc-prefixed messages -#}
+  {%- for err in errors -%}
+    {%- if ': ' in err -%}
+      {%- set parts = err.split(': ', 1) -%}
+      {%- set _ = errors_dict.update({parts[0]: parts[1]}) -%}
+    {%- else -%}
+      {%- set _ = errors_dict.update({"_form": err}) -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
+
+<form method="{{ form_method }}" action="{{ form_action }}"
+      class="scenario-form space-y-6">
+  {{ csrf_field() }}
+  {% if scenario %}
+  {# Optimistic-lock hidden field — populated by E6 edit handler. #}
+  <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+  {# Preserve fields the edit form does not render as inputs. Without
+     these mirrors, ScenarioForm falls through to its Pydantic defaults
+     (status=ACTIVE, version="1.0", scenario_type=CUSTOM,
+     source=EXPERT_JUDGMENT) and the update silently clobbers any
+     non-default state (E6.a fix). #}
+  <input type="hidden" name="scenario_type" value="{{ scenario.scenario_type.value }}">
+  <input type="hidden" name="status" value="{{ scenario.status.value }}">
+  <input type="hidden" name="version" value="{{ scenario.version }}">
+  <input type="hidden" name="source" value="{{ scenario.source.value }}">
+  {% endif %}
+
+  {{ form_error_summary(errors_dict) }}
+
+  {# ── Identity ─────────────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Identity</legend>
+
+    {{ form_field(name="name", label="Name", value=form.name,
+                  required=True, error=errors_dict.get('name')) }}
+
+    {{ form_field(name="description", label="Description", input_type="textarea",
+                  value=form.description, rows=3, error=errors_dict.get('description')) }}
+  </fieldset>
+
+  {# ── Threat taxonomy ──────────────────────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Threat taxonomy</legend>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="threat_category" class="text-meta text-ink-2">Threat category</label>
+        <span class="text-micro text-ink-3">REQUIRED</span>
+      </div>
+      <select id="threat_category" name="threat_category" required
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get('threat_category') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="">— choose —</option>
+        {% for value, label in threat_category_choices %}
+        <option value="{{ value }}" {% if form.threat_category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {% if errors_dict.get('threat_category') %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_dict['threat_category'] }}</p>
+      {% endif %}
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="threat_actor_type" class="text-meta text-ink-2">Threat actor type</label>
+      </div>
+      <select id="threat_actor_type" name="threat_actor_type"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="">— select —</option>
+        {% for value, label in threat_actor_type_choices %}
+        <option value="{{ value }}" {% if form.threat_actor_type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="attack_vector" class="text-meta text-ink-2">Attack vector</label>
+      </div>
+      <select id="attack_vector" name="attack_vector"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="">— select —</option>
+        {% for value, label in attack_vector_choices %}
+        <option value="{{ value }}" {% if form.attack_vector == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="asset_class" class="text-meta text-ink-2">Asset class</label>
+      </div>
+      <select id="asset_class" name="asset_class"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="">— select —</option>
+        {% for value, label in asset_class_choices %}
+        <option value="{{ value }}" {% if form.asset_class == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="effect" class="text-meta text-ink-2">Effect (CIA)</label>
+      </div>
+      <select id="effect" name="effect"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="">— select —</option>
+        {% for value, label in effect_choices %}
+        <option value="{{ value }}" {% if form.effect == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-meta text-ink-3 mt-1">Availability effects self-detect — recovery controls (DBR/IR/BCDR) score even without a detection partner.</p>
+    </div>
+  </fieldset>
+
+  {# ── ATT&CK techniques (issue #475) ─────────── #}
+  <fieldset class="space-y-2">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">MITRE ATT&amp;CK techniques</legend>
+    <p class="text-micro text-ink-2">
+      Optional. Tag the technique(s) this scenario models — feeds ATT&amp;CK
+      coverage reporting. Library-cloned scenarios inherit curated mappings.
+    </p>
+    {# Arch-I5: the grouped catalog ships ONCE per page as an inert JSON data
+       island; every mapping row's combobox reads it by id at Alpine init.
+       Inert script type — never executed, so no PR #205 execution-order race. #}
+    <script type="application/json" id="attack-technique-groups">{{ attack_technique_groups_json | tojson }}</script>
+    <div id="attack-mappings" x-data>
+      {% for row in attack_mapping_rows %}
+        {% with index = row.index, initial_value = row.technique_uuid, row_source = row.source %}
+          {% include "scenarios/_attack_mapping_row.html" %}
+        {% endwith %}
+      {% endfor %}
+    </div>
+    {# Arch2-I2: on the EDIT form, pass scenario_id so a fresh row's hidden
+       select includes this scenario's deprecated survivors. #}
+    <button
+      type="button"
+      hx-get="/scenarios/_attack_mapping_row"
+      hx-vals='js:{index: (function(){var r=document.querySelectorAll("#attack-mappings .attack-mapping-row");var m=-1;r.forEach(function(e){var i=parseInt(e.getAttribute("data-row-index")||"0",10);if(Number.isFinite(i)&&i>m)m=i;});return m+1;})(){% if scenario %}, scenario_id: {{ scenario.id | string | tojson }}{% endif %}}'
+      hx-target="#attack-mappings"
+      hx-swap="beforeend"
+      class="btn btn-outline btn-sm mt-2">
+      + Add technique
+    </button>
+  </fieldset>
+
+  {# ── Calibration anchors (read-only) ──────── #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Calibration anchors</legend>
+    <p class="text-micro text-ink-2">
+      Sourced live from the <a href="/organization" class="underline">Organization</a> profile (issue #88).
+      ScenarioService derives these from the org at save time.
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+      {# #454 item 3: humanize the industry / revenue-tier slugs for display. #}
+      {{ form_field(name="_industry", label="Industry", value=(org_industry | humanize_slug) or "—", mode="display") }}
+      {{ form_field(name="_revenue_tier", label="Revenue tier", value=(org_revenue_tier | humanize_slug) or "—", mode="display") }}
+    </div>
+  </fieldset>
+
+  {# ── Entry currency (multi-currency P2) ─────────────────────── #}
+  <fieldset class="space-y-2">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Entry currency</legend>
+    {% if is_edit %}
+      <p class="text-meta text-ink-1">Loss amounts entered in
+        <span class="font-mono">{{ scenario.entry_currency }}</span>
+        {% if scenario.entry_rate %}(pinned rate {{ scenario.entry_rate }} per USD){% endif %}.
+        Entry currency is fixed after creation; values below are shown and edited in USD.</p>
+    {% else %}
+      <div class="max-w-xs">
+        <label for="entry_currency" class="text-meta text-ink-2">Currency for loss-magnitude entry</label>
+        <select id="entry_currency" name="entry_currency"
+                class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+          {% for code in selectable_currencies %}
+          <option value="{{ code }}" {% if (form.entry_currency if form else 'USD') == code %}selected{% endif %}>{{ code }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    <p class="text-micro text-ink-2 mt-1">Loss magnitude is entered in the selected currency and stored as USD-equivalent. <strong>Control costs and revenue remain in USD</strong>, so ROI/NPV mix a converted loss with USD costs. Only currencies with a configured FX rate appear.</p>
+  </fieldset>
+
+  {# ── FAIR distributions ───────────────────── #}
+  {# The PERT grid is a dense 3-column layout that doesn't fit cleanly into
+     form_field's max-w-md single-column constraint — kept as raw inputs
+     with focus:ring-brand applied manually for spec compliance.
+     Mobile tranche 2b: the grid is grid-cols-1 on phones (each low/mode/high
+     input stacks full-width so labels like "Primary loss mode" + the REQUIRED
+     chip never collide) and grid-cols-3 from the sm breakpoint up, restoring
+     the one-metric-per-row desktop layout.
+
+     Epic B (#326): TEF / Primary loss / Secondary loss each gain a per-node
+     PERT|lognormal <select name="{prefix}_dist">. An Alpine `dist` flag
+     (inlined into x-data per CLAUDE.md PR #205 — form.html is a full-page
+     render, no HTMX-swap re-init hazard) toggles the visible inputs: PERT
+     shows low/mode/high; lognormal shows low/high only (low=p5, high=p95) and
+     hides `mode` via x-if so it never submits. Vulnerability is a probability
+     ∈ [0, 1] (FAIR Standard) and stays PERT-only with no selector. #}
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">FAIR distributions</legend>
+
+    {# ``fmt`` selects which of the three Jinja filters formats the prefill:
+       "money" for PL/SL (2dp), "rate" for TEF (4dp), "probability" for Vuln
+       (4dp). All three suppress scientific notation and emit ""
+       for None — fixes the PR #247 UAT bug where raw floats like
+       1.5e-06 / 69999999.98617376 rendered as truncated sci notation /
+       absurd precision in the edit form. #}
+    {%- macro pert_input(name, label, req=True, fmt="money") -%}
+    {%- set raw = form[name] if form[name] is defined else none -%}
+    {%- if fmt == "rate" -%}
+      {%- set display_value = raw | format_rate_input -%}
+    {%- elif fmt == "probability" -%}
+      {%- set display_value = raw | format_probability_input -%}
+    {%- else -%}
+      {%- set display_value = raw | format_money_input -%}
+    {%- endif -%}
+    <div>
+      <div class="flex items-center justify-between">
+        <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}</label>
+        {% if req %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
+      </div>
+      <input id="{{ name }}" name="{{ name }}"
+             type="number" step="any"
+             value="{{ display_value }}"
+             {% if req %}required aria-required="true"{% endif %}
+             class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get(name) %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      {% if errors_dict.get(name) %}
+        <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_dict[name] }}</p>
+      {% endif %}
+    </div>
+    {%- endmacro -%}
+
+    {# Per-node PERT|lognormal selector (#326). Same token classes as the
+       threat-taxonomy selects above so it reads as part of the form's
+       design system, NOT raw DaisyUI. ``selected_dist`` is the round-tripped
+       form value (form_defaults / dist_to_form supply "pert" by default). #}
+    {%- macro dist_select(prefix, selected_dist) -%}
+    <div class="max-w-xs">
+      <div class="flex items-center justify-between">
+        <label for="{{ prefix }}_dist" class="text-meta text-ink-2">Distribution</label>
+      </div>
+      <select id="{{ prefix }}_dist" name="{{ prefix }}_dist" x-model="dist"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        <option value="pert" {% if selected_dist != "lognormal" %}selected{% endif %}>PERT (low / mode / high)</option>
+        <option value="lognormal" {% if selected_dist == "lognormal" %}selected{% endif %}>Lognormal (5th / 95th pct)</option>
+      </select>
+    </div>
+    {%- endmacro -%}
+
+    {# Each node below shares ONE low + ONE high input across both modes (so the
+       field is never duplicated in the POST body), and gates only `mode` behind
+       x-if so it is absent from the DOM — and therefore unsubmitted — under
+       lognormal. The "low / high" labels carry both readings: under PERT they
+       are the triangular endpoints; under lognormal they are the 5th / 95th
+       percentiles the closed form converts to native {mean, sigma}. #}
+
+    {# TEF — frequency. #}
+    <div x-data="{ dist: '{{ form.tef_dist or "pert" }}' }" class="space-y-3">
+      {{ dist_select("tef", form.tef_dist) }}
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {{ pert_input("tef_low", "TEF low (5th pct)", fmt="rate") }}
+        <template x-if="dist === 'pert'">{{ pert_input("tef_mode", "TEF mode", fmt="rate") }}</template>
+        {{ pert_input("tef_high", "TEF high (95th pct)", fmt="rate") }}
+      </div>
+    </div>
+
+    {# Vulnerability — probability ∈ [0, 1], PERT-only (no selector).
+       methodology/vuln-inherent-framing: this is the asset's INHERENT
+       (control-naive) susceptibility; modelled controls reduce it separately,
+       so it must not be netted-out for current controls (double-count). #}
+    <p class="text-meta text-ink-2 mb-1">
+      Vulnerability is the asset's <strong>inherent</strong> susceptibility
+      (before your controls). Your modelled controls reduce it separately.
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {{ pert_input("vuln_low", "Vuln low", fmt="probability") }}
+      {{ pert_input("vuln_mode", "Vuln mode", fmt="probability") }}
+      {{ pert_input("vuln_high", "Vuln high", fmt="probability") }}
+    </div>
+
+    {# Primary loss — dollar magnitude. #}
+    <div x-data="{ dist: '{{ form.pl_dist or "pert" }}' }" class="space-y-3">
+      {{ dist_select("pl", form.pl_dist) }}
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {{ pert_input("pl_low", "Primary loss low (5th pct)", fmt="money") }}
+        <template x-if="dist === 'pert'">{{ pert_input("pl_mode", "Primary loss mode", fmt="money") }}</template>
+        {{ pert_input("pl_high", "Primary loss high (95th pct)", fmt="money") }}
+      </div>
+    </div>
+
+    {# Secondary loss — optional. #}
+    <div x-data="{ dist: '{{ form.sl_dist or "pert" }}' }" class="space-y-3">
+      {{ dist_select("sl", form.sl_dist) }}
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {{ pert_input("sl_low", "Secondary loss low (5th pct)", req=False, fmt="money") }}
+        <template x-if="dist === 'pert'">{{ pert_input("sl_mode", "Secondary loss mode", req=False, fmt="money") }}</template>
+        {{ pert_input("sl_high", "Secondary loss high (95th pct)", req=False, fmt="money") }}
+      </div>
+    </div>
+    <p class="text-micro text-ink-2">
+      Secondary loss is optional — leave its fields blank to omit.
+    </p>
+  </fieldset>
+
+  {# ── Mitigating controls ──────────────────── #}
+  <fieldset class="space-y-4" x-data="{ q: '' }">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Mitigating controls</legend>
+    {% if available_controls %}
+      {%- set sel = form.mitigating_control_ids
+                      if form.mitigating_control_ids is defined
+                      else [] -%}
+      <div class="max-w-md">
+        <div class="flex items-center justify-between">
+          <label for="_ctrl_search" class="text-meta text-ink-2">Search controls</label>
+        </div>
+        <input id="_ctrl_search" type="text" x-model.debounce.150ms="q"
+               placeholder="Search controls…"
+               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+      </div>
+      <ul class="space-y-1 max-w-md">
+        {% for control in available_controls %}
+          <li data-name="{{ control.name | e | lower }}"
+              x-show="!q || $el.dataset.name.includes(q.toLowerCase())">
+            <label class="flex items-start gap-3 p-2 rounded-card border border-border-subtle cursor-pointer hover:bg-surface-2">
+              <input type="checkbox"
+                     name="mitigating_control_ids"
+                     value="{{ control.id }}"
+                     {% if (control.id | string) in sel %}checked{% endif %}
+                     class="checkbox checkbox-sm mt-1">
+              <span>
+                <span class="text-body text-ink-1 font-medium">{{ control.name | e }}</span>
+                <span class="text-meta text-ink-2 block">
+                  domain {{ control_domains(control) }}
+                </span>
+              </span>
+            </label>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-meta text-ink-2">
+        No controls in this org. <a href="/controls/new" class="underline">Add a control</a>.
+      </p>
+    {% endif %}
+
+    {# ── Inactive-but-linked controls (issue #217) ──
+       Controls linked to this scenario that are no longer ACTIVE
+       (DRAFT / DEPRECATED) have no checkbox above. Show them here as
+       checked + disabled so the operator sees the link still exists.
+       A disabled checkbox does NOT submit — which is correct: the link
+       is preserved server-side by the eligible-set reconciliation, so it
+       must NOT also be submitted (would double-count). #}
+    {% set inactive_linked = inactive_linked_controls | default([]) %}
+    {% if inactive_linked %}
+      <div class="max-w-md mt-4">
+        <p class="text-meta text-ink-2 mb-2">
+          Linked controls that are no longer active. These stay linked to the
+          scenario; reactivate the control to make it editable here.
+        </p>
+        <ul class="space-y-1">
+          {% for control in inactive_linked %}
+            <li>
+              <label class="flex items-start gap-3 p-2 rounded-card border border-border-subtle opacity-70 cursor-not-allowed">
+                <input type="checkbox" checked disabled
+                       class="checkbox checkbox-sm mt-1">
+                <span>
+                  <span class="text-body text-ink-1 font-medium">{{ control.name | e }}</span>
+                  <span class="text-meta text-ink-2 block">
+                    domain {{ control_domains(control) }}
+                    {% if control.implementation_stage.value != 'active' %}
+                    · <span class="text-micro text-warning">(not active: {{ control.implementation_stage.label }})</span>
+                    {% else %}
+                    · <span class="font-medium">(inactive: {{ control.status.value | upper }})</span>
+                    {% endif %}
+                  </span>
+                </span>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </fieldset>
+
+  {# #454 item 2: bottom clearance so the last fields clear the translucent
+     sticky action bar when scrolled to the viewport edge. Paired with the
+     `.scenario-form :is(input,select,textarea){scroll-margin-bottom}` rule in
+     app.css for focus/scroll-into-view. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <a href="/scenarios{% if scenario %}/{{ scenario.id }}{% endif %}" class="btn btn-outline btn-sm">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-sm">
+      {% if scenario %}Save changes{% else %}Create scenario{% endif %}
+    </button>
+  </div>
+</form>
+
+{% endblock %}

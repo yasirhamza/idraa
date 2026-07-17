@@ -1,0 +1,160 @@
+"""Password hashing + signed-cookie session helpers."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from itsdangerous import BadData, URLSafeSerializer
+from passlib.context import CryptContext
+from passlib.exc import UnknownHashError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import Response
+
+from idraa.config import get_settings
+from idraa.models.session import AuthSession
+from idraa.models.user import User
+
+_pwd_ctx = CryptContext(schemes=["argon2"], deprecated="auto")
+
+SESSION_COOKIE = "idraa_session"
+SESSION_TTL = timedelta(days=14)
+
+
+def hash_password(plain: str) -> str:
+    return _pwd_ctx.hash(plain)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return _pwd_ctx.verify(plain, hashed)
+    except UnknownHashError:
+        return False
+
+
+# Pre-computed at import time so wrong-username paths still pay the Argon2 cost.
+# Not a real secret — it's hashed once at import, never used as a credential.
+_DUMMY_PW_HASH = hash_password("unused-enumeration-blocker")
+
+
+def verify_user_password(user: User | None, plain: str) -> bool:
+    """Timing-safe password check.
+
+    Always runs exactly one Argon2 verify so that "user does not exist" and
+    "wrong password" take the same wall-clock time. Return False for a
+    missing, inactive, or wrong-password user.
+    """
+    if user is None or not user.is_active:
+        verify_password(plain, _DUMMY_PW_HASH)
+        return False
+    return verify_password(plain, user.password_hash)
+
+
+# Salt convention: every signed-payload type MUST use a distinct salt. Reusing
+# "rf-session" for a password-reset or email-confirm signer would mean a leaked
+# reset link is a valid session cookie. New types get their own salt:
+# "rf-reset", "rf-email-confirm", "rf-csv-export", etc.
+def _serializer() -> URLSafeSerializer:
+    return URLSafeSerializer(get_settings().session_secret, salt="rf-session")
+
+
+def sign_session_id(session_id: uuid.UUID) -> str:
+    return _serializer().dumps(str(session_id))
+
+
+def unsign_session_id(signed: str) -> uuid.UUID | None:
+    try:
+        raw: str = _serializer().loads(signed)
+    except BadData:
+        return None
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        return None
+
+
+async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -> AuthSession:
+    now = datetime.now(UTC)
+    # Invariant: load_active_session assumes expires_at is UTC-aware (see auth.py
+    # tz-reattach comment). Guard the only current write path so naive datetimes
+    # can never land in the column.
+    assert now.tzinfo is UTC, "create_session must persist UTC-aware datetimes"  # noqa: S101
+    sess = AuthSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + SESSION_TTL,
+        ip_address=ip,
+    )
+    db.add(sess)
+    return sess
+
+
+def set_session_cookie(response: Response, session_id: uuid.UUID) -> None:
+    """Attach a signed idraa_session cookie to the outgoing response.
+
+    Mirrors CSRFMiddleware's precedent: Secure is gated on environment=="prod"
+    because dev/test use http:// where a Secure cookie would be silently dropped.
+    samesite="lax" permits login-via-external-link (OAuth, email-confirm flows)
+    to carry the cookie; httponly=True blocks JS from reading it; path="/" so
+    the cookie applies to every path including the ones that will carry
+    authenticated API calls in later phases.
+    """
+    settings = get_settings()
+    response.set_cookie(
+        SESSION_COOKIE,
+        sign_session_id(session_id),
+        httponly=True,
+        samesite="lax",
+        secure=(settings.environment == "prod"),
+        max_age=int(SESSION_TTL.total_seconds()),
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    """Expire the idraa_session cookie on the outgoing response.
+
+    Mirrors set_session_cookie's attribute set: Starlette's delete_cookie
+    echoes `path` and nothing else by default; browsers may treat a mismatch
+    on other attributes (SameSite, Secure) as a non-matching cookie and
+    leave the original in place. Future subdomain / cross-origin
+    deployments make this stricter — encode every attribute once here.
+    """
+    settings = get_settings()
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        samesite="lax",
+        secure=(settings.environment == "prod"),
+        httponly=True,
+    )
+
+
+async def load_active_session(db: AsyncSession, session_id: uuid.UUID) -> AuthSession | None:
+    sess = await db.get(AuthSession, session_id)
+    if sess is None:
+        return None
+    # SQLite's aiosqlite driver strips tzinfo on DateTime(timezone=True) columns
+    # when a row is first read by a session that did NOT originate it (cross-engine
+    # / cross-connection read). Our write path always stores UTC-aware datetimes
+    # via create_session, so a naive value here is known to be UTC — re-attach
+    # tzinfo before comparing rather than crashing on
+    # "can't compare offset-naive and offset-aware datetimes". Postgres is
+    # unaffected (its timestamptz column carries UTC through the driver).
+    expires_at = sess.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= datetime.now(UTC):
+        return None
+    return sess
+
+
+async def load_user_by_email(db: AsyncSession, email: str) -> User | None:
+    # Normalize email: lowercase + strip whitespace. Trailing spaces from form
+    # input would otherwise false-mismatch the (organization_id, email) unique
+    # constraint at insert time and the equality lookup here.
+    result = await db.execute(select(User).where(User.email == email.lower().strip()))
+    return result.scalars().first()

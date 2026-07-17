@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Library import{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/library">Scenario library</a> / Import
+  </p>
+  <h1 class="text-2xl font-bold mb-2">Import library entries</h1>
+  <p class="text-base-content/70 mb-6">
+    Upload a JSON bundle of scenario-library entries. Nothing is written until
+    you review the preview and confirm. Imported entries are added to the
+    <strong>global</strong> catalog that every workspace sees. Entries whose
+    slug already exists in the library are skipped.
+  </p>
+
+  <div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+      <h2 class="card-title text-base">Template</h2>
+      <p class="text-sm text-base-content/70 mb-2">
+        Download a starting point — the JSON template contains one
+        fully-populated example entry that round-trips through this importer.
+      </p>
+      <div class="flex gap-2 flex-wrap">
+        <a href="/library/import/template.json" class="btn btn-sm btn-outline">
+          Download JSON template
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+      <h2 class="card-title text-base">Field guidance</h2>
+      <ul class="text-sm text-base-content/70 list-disc ml-5 space-y-1">
+        <li>
+          The file must be a JSON <em>array</em> of entry objects — identical in
+          shape to the seed library bundle (see the template).
+        </li>
+        <li>
+          <code class="font-mono">slug</code> — required, unique across the whole
+          library. A duplicate slug is skipped, not overwritten.
+        </li>
+        <li>
+          <code class="font-mono">status</code> — must be
+          <code class="font-mono">published</code>; imports go live immediately.
+        </li>
+        <li>
+          <code class="font-mono">threat_event_type</code>,
+          <code class="font-mono">threat_actor_type</code>,
+          <code class="font-mono">asset_class</code> — must be valid enum values.
+        </li>
+        <li>
+          <code class="font-mono">threat_event_frequency</code>,
+          <code class="font-mono">vulnerability</code>,
+          <code class="font-mono">primary_loss</code>,
+          <code class="font-mono">secondary_loss</code> — PERT objects with
+          finite <code class="font-mono">low ≤ mode ≤ high</code> (Secondary Loss
+          is optional).
+        </li>
+        <li>
+          <code class="font-mono">description</code> and
+          <code class="font-mono">canonical_fair_gap</code> — required, 20+
+          characters each.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">Upload</h2>
+      <form method="post" action="/library/import" enctype="multipart/form-data"
+            class="flex flex-col gap-4">
+        {{ csrf_field() }}
+        <input type="file" name="file" accept=".json,application/json"
+               required class="file-input file-input-bordered w-full" />
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary">Upload &amp; preview</button>
+          <a href="/library" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

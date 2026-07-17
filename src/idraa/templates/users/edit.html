@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+
+{% block title %}Edit user{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{{ page_header(title="Edit " ~ user.email,
+               breadcrumb=breadcrumb_for(request),
+               actions=[]) }}
+
+{%- set errors_dict = {"_form": error} if error else {} -%}
+
+<form method="post" action="/users/{{ user.id }}/edit"
+      class="space-y-6">
+  {{ csrf_field() }}
+
+  {{ form_error_summary(errors_dict) }}
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Account settings</legend>
+
+    {# Role — enum select #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="role" class="text-meta text-ink-2">Role</label>
+      </div>
+      <select id="role" name="role"
+              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+        {% for r in roles %}
+        <option value="{{ r.value }}" {% if user.role == r %}selected{% endif %}>{{ r.value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Active toggle #}
+    <div class="max-w-md">
+      <div class="flex items-center justify-between">
+        <label for="is_active" class="text-meta text-ink-2">Active</label>
+      </div>
+      <label class="inline-flex items-center gap-2 mt-1">
+        <input id="is_active" name="is_active" type="checkbox"
+               class="toggle toggle-primary"
+               {% if user.is_active %}checked{% endif %}>
+        <span class="text-body text-ink-1">{% if user.is_active %}On{% else %}Off{% endif %}</span>
+      </label>
+    </div>
+  </fieldset>
+
+  {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <a href="/users" class="btn btn-outline btn-sm">Cancel</a>
+    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,10 @@
+{
+  "fields": {
+    "reason": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "OverlayDeactivateForm"
+}

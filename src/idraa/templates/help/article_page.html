@@ -1,0 +1,12 @@
+{# src/idraa/templates/help/article_page.html — full-page article (direct nav / JS-off / mobile). #}
+{% extends "base.html" %}
+{% from "macros/breadcrumb.html" import breadcrumb %}
+{% block title %}{{ article.title }} — Help{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+  {{ breadcrumb([('Help', '/help'), (article.title, None)]) }}
+  <div class="mt-6">
+    {% include "help/_article.html" %}
+  </div>
+</div>
+{% endblock %}

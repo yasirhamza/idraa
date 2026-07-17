@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Library entry deleted{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/library">Scenario library</a> / Deleted
+  </p>
+  <h1 class="text-2xl font-bold mb-4">Imported entry deleted</h1>
+
+  <div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+      <p class="text-body">
+        The imported entry
+        <span class="font-mono">{{ result.slug }}</span>
+        was removed ({{ result.versions_deleted }} version{{ "" if result.versions_deleted == 1 else "s" }}).
+      </p>
+
+      {% if result.pinned_scenario_count > 0 %}
+      <div class="alert alert-warning mt-3">
+        <span>
+          {{ result.pinned_scenario_count }}
+          scenario{{ "" if result.pinned_scenario_count == 1 else "s" }}
+          {{ "was" if result.pinned_scenario_count == 1 else "were" }}
+          cloned from this entry. They keep working unchanged — their FAIR
+          inputs were copied at clone time — but this entry can no longer be
+          re-cloned and its source detail can no longer be viewed.
+        </span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <a href="/library" class="btn btn-primary">Back to library</a>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{
+  "fields": {
+    "control_ids": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[uuid.UUID]"
+    },
+    "mc_iterations": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'int'>"
+    }
+  },
+  "schema_name": "RunTriggerForm"
+}

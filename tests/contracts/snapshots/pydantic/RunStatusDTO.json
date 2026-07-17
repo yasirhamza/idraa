@@ -1,0 +1,35 @@
+{
+  "fields": {
+    "completed_at": {
+      "has_default": false,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "error_message": {
+      "has_default": false,
+      "optional": true,
+      "type": "str | None"
+    },
+    "id": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'uuid.UUID'>"
+    },
+    "mc_iterations": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'int'>"
+    },
+    "started_at": {
+      "has_default": false,
+      "optional": true,
+      "type": "datetime.datetime | None"
+    },
+    "status": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "RunStatusDTO"
+}

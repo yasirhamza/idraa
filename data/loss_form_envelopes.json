@@ -1,0 +1,147 @@
+[
+  {
+    "sector": "manufacturing",
+    "p50": 1000000,
+    "p95": 42000000,
+    "mean": 13.815510558,
+    "sigma": 2.2723417799,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "energy_utilities",
+    "p50": 146000,
+    "p95": 3000000,
+    "mean": 11.8913619007,
+    "sigma": 1.8377081683,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector); sector BASELINE (sub-sector multipliers e.g. oil_and_gas/pipeline are archetype-level within-family refinements, not the sector envelope)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "healthcare",
+    "p50": 557000,
+    "p95": 14000000,
+    "mean": 13.2303205189,
+    "sigma": 1.9602032156,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "financial_services",
+    "p50": 1000000,
+    "p95": 194000000,
+    "mean": 13.815510558,
+    "sigma": 3.2026303573,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "retail_ecommerce",
+    "p50": 746000,
+    "p95": 45000000,
+    "mean": 13.5224808792,
+    "sigma": 2.4924358626,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "technology_saas",
+    "p50": 718000,
+    "p95": 217000000,
+    "mean": 13.484224848,
+    "sigma": 3.4721527617,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "government_public",
+    "p50": 214000,
+    "p95": 18000000,
+    "mean": 12.273731294,
+    "sigma": 2.6945564938,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "education",
+    "p50": 249000,
+    "p95": 6000000,
+    "mean": 12.4252081754,
+    "sigma": 1.9345562423,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "professional_services",
+    "p50": 736000,
+    "p95": 17000000,
+    "mean": 13.5089853977,
+    "sigma": 1.9088254741,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "transportation_logistics",
+    "p50": 490000,
+    "p95": 23000000,
+    "mean": 13.1021606701,
+    "sigma": 2.3399310679,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "telecom",
+    "p50": 718000,
+    "p95": 217000000,
+    "mean": 13.484224848,
+    "sigma": 3.4721527617,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector); telecom maps to the IRIS 'Information' sector (same read as technology_saas)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "hospitality",
+    "p50": 600000,
+    "p95": 62000000,
+    "mean": 13.3046849342,
+    "sigma": 2.8196794735,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector)"
+    ],
+    "is_fallback": false
+  },
+  {
+    "sector": "food_agriculture",
+    "p50": 1000000,
+    "p95": 42000000,
+    "mean": 13.815510558,
+    "sigma": 2.2723417799,
+    "citations": [
+      "IRIS 2025 Figure A3, p. 35 (Appendix \u2014 Loss magnitude summary statistics by sector) (via manufacturing fallback)"
+    ],
+    "is_fallback": true,
+    "fallback_of": "manufacturing",
+    "fallback_reason": "IRIS Agriculture row (p50=$2M,p95=$3M) is a near-point-mass artifact (sigma~0.247, p95/p50=1.5x vs 10-200x for real sectors) AND wrong NAICS family; food processing is NAICS 311-312 (within manufacturing). Epic C-disqualified."
+  }
+]

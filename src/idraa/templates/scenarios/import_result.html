@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Scenario import — result{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/scenarios">Scenarios</a> / Import result
+  </p>
+  <h1 class="text-2xl font-bold mb-4">Scenario import — result</h1>
+
+  <div class="stats stats-vertical md:stats-horizontal shadow bg-base-100 mb-6 w-full">
+    <div class="stat">
+      <div class="stat-title">Imported</div>
+      <div class="stat-value text-success">{{ imported }}</div>
+      <div class="stat-desc">scenarios created</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Skipped</div>
+      <div class="stat-value">{{ skipped }}</div>
+      <div class="stat-desc">duplicate / no-change rows</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Errors</div>
+      <div class="stat-value {% if errors %}text-error{% endif %}">{{ errors|length }}</div>
+      <div class="stat-desc">rows rejected</div>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card bg-base-100 shadow mb-6 border border-error/30">
+    <div class="card-body">
+      <h2 class="card-title text-error">Row errors</h2>
+      <p class="text-sm text-base-content/70">
+        These rows were not applied. Fix them in the source file and re-upload to retry.
+      </p>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>Line</th><th>Column</th><th>Reason</th></tr></thead>
+          <tbody>
+            {% for e in errors %}
+            <tr>
+              <td class="font-mono">{{ e.line }}</td>
+              <td class="font-mono">{{ e.column }}</td>
+              <td>{{ e.reason }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="flex gap-2">
+    <a href="/scenarios" class="btn btn-primary">Back to scenarios</a>
+    <a href="/scenarios/import" class="btn btn-ghost">Import more</a>
+  </div>
+</div>
+{% endblock %}

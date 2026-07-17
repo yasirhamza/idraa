@@ -1,0 +1,172 @@
+{% from "macros/chart.html" import
+     headline_ale_with_ci_band,
+     risk_comparison_bar,
+     control_effectiveness_bar,
+     loss_exceedance_curve,
+     exceedance_probability_curve
+%}
+
+<section class="run-results">
+  {% if display_results %}
+    {%- set _currency = display_results.currency if display_results.currency is defined else {"code": "USD", "symbol": "$"} -%}
+    {%- set _code = _currency.code -%}
+
+    {%- if display_results.currency_provenance %}
+      <p class="text-caption text-ink-2 mb-4 italic">
+        {{ display_results.currency_provenance }}
+      </p>
+    {%- endif %}
+
+    {{ headline_ale_with_ci_band(display_results.headline_ale, currency=_currency) }}
+
+    {{ risk_comparison_bar(display_results.risk_comparison, currency=_currency) }}
+
+    {# Task 5 (#419): weight-robustness range for SINGLE runs (Meth-B2/Meth-B4/Meth-I3).
+       SINGLE path: ranges only — rank stability not computed (Meth-B6). #}
+    {%- set _wr_single = display_results.weight_robustness -%}
+    {%- if _wr_single and _wr_single.headline_range_str and _wr_single.headline_range_str != "—" %}
+    {# #454 item 5: the orphaned floating "(average)" line is removed; the
+       "average" label is folded into the explainer box heading below so the
+       bars-above reference resolves without a dangling caption.
+
+       Mean+typical side-by-side (2026-07-04): mean-basis runs' range IS on the
+       same average basis as the bars above (no separate "typical-case" claim
+       to make here) — basis-switch the heading + explainer copy. Legacy
+       (typical-basis) runs keep today's copy byte-identical. #}
+    <div class="text-sm mt-1 p-3 bg-base-200 rounded-lg border border-base-300">
+      {%- if _wr_single.basis == "mean" %}
+      <p class="font-medium text-ink-2 mb-1">Value range (same average basis as the bars above):</p>
+      <p class="font-mono text-ink-1">{{ _wr_single.headline_range_str }}</p>
+      <p class="text-xs text-ink-3 mt-1">
+        This range is on the same <strong>average</strong> basis as the bars above, so it is
+        directly comparable to them.
+        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+      </p>
+      {%- else %}
+      <p class="font-medium text-ink-2 mb-1">Typical-case value range (the bars above show the average):</p>
+      <p class="font-mono text-ink-1">{{ _wr_single.headline_range_str }}</p>
+      <p class="text-xs text-ink-3 mt-1">
+        This range uses a <strong>typical-case</strong> loss, which sits below the
+        <strong>average</strong> figure above because a few rare, very large losses pull the
+        average up.
+        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+      </p>
+      {%- endif %}
+      {# #421-3: SINGLE runs never compute rank-stability pairs, so the full
+         disclaimer's "too close to call" sentence is unearned here — use the base
+         variant (same branch detail.html + reports/pdf already take). #}
+      <p class="text-xs text-ink-3 mt-2">{{ control_weight_provenance_disclaimer_base }}{% if _wr_single.basis == "mean" %} {{ mean_basis_pairing_note }}{% endif %}</p>
+    </div>
+    {%- elif _wr_single and _wr_single.state in ("insufficient_budget", "not_assessed") %}
+    <p class="text-xs text-ink-3 mt-1">
+      Ranking-stability check skipped &mdash; too few simulation draws
+      (K={{ _wr_single.draws_used if _wr_single.draws_used is not none else "n/a" }}).
+      <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+    </p>
+    {%- endif %}
+
+    <h3 class="mt-6 text-lg font-bold">Risk distribution</h3>
+    {# overflow-x-auto: 4-column money table exceeds a phone-width card; scroll
+       instead of clipping the Δ column. Matches the table-overflow convention. #}
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr><th></th><th>Base risk</th><th>Residual risk</th><th title="base minus residual; positive = risk reduced">Δ (reduction)</th></tr>
+        </thead>
+        <tbody>
+          {% for row in display_results.dist_stats.rows %}
+          <tr><td>{{ row.label }}</td>
+              <td>{{ row.base | money(_code, compact=False) }}
+                {%- if row.base_ci_insufficient %}
+                <br><span class="text-micro text-ink-3">(95% MC interval: insufficient tail samples at this N)</span>
+                {%- elif row.base_se is not none %}
+                <br><span class="text-micro text-ink-3">(95% MC interval &plusmn; {{ row.base_ci_half | money(_code, compact=False) }})</span>
+                {%- endif %}
+              </td>
+              <td>{{ row.residual | money(_code, compact=False) }}
+                {%- if row.residual_ci_insufficient %}
+                <br><span class="text-micro text-ink-3">(95% MC interval: insufficient tail samples at this N)</span>
+                {%- elif row.residual_se is not none %}
+                <br><span class="text-micro text-ink-3">(95% MC interval &plusmn; {{ row.residual_ci_half | money(_code, compact=False) }})</span>
+                {%- endif %}
+              </td>
+              {% set d_str, d_css = row.delta | format_delta(format="money", precision=0, code=_code) %}
+              <td class="text-{{ d_css }}">{{ d_str }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not display_results.dist_stats.has_tail %}
+      <p class="text-caption text-ink-3 mt-1">VaR 90/99.9 and ES metrics not available for this run (computed for runs executed after the tail-metrics release). Re-run the analysis to populate.</p>
+    {% endif %}
+    <p class="text-caption text-ink-3 mt-2">{{ display_results.dist_stats_note }}</p>
+    {%- if display_results.dist_stats.has_tail %}
+    {# #508: single-run parity with the aggregate view's "mc-interval" caveat —
+       the aggregate panel gets it via the caveat framework; this panel renders
+       its ES interval inline, so the explanation lives inline too. #}
+    <p class="text-caption text-ink-3 mt-1">Where shown, the &ldquo;95% MC interval&rdquo; beside an ES is Monte Carlo sampling error &mdash; how much the estimate would move if the simulation were re-run with a different random seed (a convergence measure), not uncertainty in the loss itself. It narrows as the iteration count rises.</p>
+    {%- endif %}
+
+    <h3 class="mt-6 text-lg font-bold">Loss distributions</h3>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div>
+        {{ loss_exceedance_curve(display_results.loss_exceedance_curve, tolerance=display_results.loss_tolerance, currency=_currency) }}
+      </div>
+      <div>
+        {{ exceedance_probability_curve(display_results.exceedance_probability_curve, tolerance=display_results.loss_tolerance, currency=_currency) }}
+      </div>
+    </div>
+
+    {{ control_effectiveness_bar(display_results.control_effectiveness_rows) }}
+
+    {# Task 5 (#419): per-control value RANGES for SINGLE runs. Ranges-only basis
+       (Meth-B6): the SINGLE ensemble computes dollar ranges but NOT rank stability,
+       so the badge reads "not assessed". Name lookup from control_effectiveness_rows. #}
+    {%- if _wr_single and _wr_single.per_control %}
+      {%- set _names = {} -%}
+      {%- for _r in (display_results.control_effectiveness_rows or []) -%}
+        {%- set _ = _names.update({_r.control_id: _r.name}) -%}
+      {%- endfor %}
+      <h4 class="mt-6 text-base font-bold">Estimated value per control (range)</h4>
+      <div class="overflow-x-auto mt-2">
+        <table class="table table-sm">
+          <thead><tr><th>Control</th><th>Value range</th><th>If removed</th><th>Ranking</th></tr></thead>
+          <tbody>
+            {% for _cid, _cell in _wr_single.per_control.items() %}
+              {%- if _cell.range_str and _cell.range_str != "—" %}
+              <tr>
+                <td>{{ _names.get(_cid, "(unknown)") }}</td>
+                <td class="font-mono">
+                  {{- _cell.range_str -}}
+                  {%- if _cell.typical_value is not none %}<br><span class="text-xs text-ink-3 font-sans">typical {{ _cell.typical_value | money(_code) }}</span>{%- endif %}
+                  {%- if _cell.zero_reason %}<br><span class="text-xs text-ink-3 italic font-sans">{{ _cell.zero_reason }}</span>{%- endif %}
+                </td>
+                <td class="font-mono">
+                  {{- _cell.if_removed | money(_code) -}}
+                  {%- if _cell.if_removed_typical is not none %}<br><span class="text-xs text-ink-3 font-sans">typical {{ _cell.if_removed_typical | money(_code) }}</span>{%- endif %}
+                </td>
+                <td><span class="badge badge-ghost badge-sm" title="Rank stability is assessed on multi-scenario runs">{{ _cell.badge }}</span></td>
+              </tr>
+              {%- elif _cell.zero_reason %}
+              <tr>
+                <td>{{ _names.get(_cid, "(unknown)") }}</td>
+                <td class="text-xs text-ink-3 italic">{{ _cell.zero_reason }}</td>
+                <td class="font-mono">
+                  {{- _cell.if_removed | money(_code) -}}
+                  {%- if _cell.if_removed_typical is not none %}<br><span class="text-xs text-ink-3 font-sans">typical {{ _cell.if_removed_typical | money(_code) }}</span>{%- endif %}
+                </td>
+                <td><span class="badge badge-ghost badge-sm" title="Rank stability is assessed on multi-scenario runs">{{ _cell.badge }}</span></td>
+              </tr>
+              {%- endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-ink-3 mt-2">
+        {{ control_weight_provenance_disclaimer_with_if_removed }}
+        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        {%- if _wr_single.basis == "mean" %} {{ mean_basis_pairing_note }}{%- endif %}
+      </p>
+    {%- endif %}
+  {% endif %}
+</section>

@@ -1,0 +1,135 @@
+{#- Risk posture band (Task 4, #476-#480 dashboard redesign).
+
+    Params (from the enclosing dashboard/index.html context):
+      data          = DashboardData (services/dashboard.py)
+      current_user  = authed User
+
+    Consumes ``data.posture`` (Task 3, services/dashboard.py / dashboard_view_model.py):
+      {"verdict": "within"|"exceeds"|None, "residual_ale": float,
+       "range_lo": float|None, "range_hi": float|None, "pct_revenue": float|None,
+       "tol_amount": float|None, "tol_prob": float|None,
+       "control_value": {"dollars": float, "percent": float}|None,
+       "control_reduction_pct": float|None, "roi": float|None}
+
+    ``data.posture`` itself is None when there is no aggregate run yet (mirrors
+    the old KPI tiles' "no aggregate run yet" cold state). ``posture.verdict``
+    is None when there IS an aggregate run but no org risk-tolerance is
+    configured — that state renders the hero WITHOUT a verdict badge plus a
+    "Set a risk appetite" link, per the plan-gate fallback requirement. -#}
+{% from "macros/rbac.html" import analyst_or_admin, admin_only %}
+
+{%- set _p = data.posture -%}
+{%- set _code = data.currency.code if data.currency else "USD" -%}
+
+{% if _p is none %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <p class="text-meta text-ink-2 uppercase">Risk posture</p>
+    <p class="text-number-lg text-ink-3 font-mono tabular-nums mt-1">&mdash;</p>
+    <p class="text-micro text-ink-3 mt-2">No aggregate run yet.</p>
+    {% call analyst_or_admin(current_user) %}
+      <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run aggregate analysis</a>
+    {% endcall %}
+  </div>
+{% else %}
+  <div class="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-3">
+
+    {# Hero verdict card #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5 md:p-6
+                {%- if _p.near_threshold %} border-l-4 border-l-[var(--color-status-warning)]
+                {%- elif _p.verdict == 'within' %} border-l-4 border-l-[var(--color-status-success)]
+                {%- elif _p.verdict == 'exceeds' %} border-l-4 border-l-[var(--color-status-critical)]{% endif %}">
+      <div class="flex items-center gap-3 flex-wrap" data-testid="posture-verdict"
+           data-verdict="{{ 'exceeds' if _p.verdict == 'exceeds' else 'within' }}">
+        <span class="text-meta text-ink-3 uppercase">Risk posture</span>
+        {% if _p.near_threshold %}
+          <span class="inline-flex items-center gap-1.5 text-body font-semibold text-status-warning">
+            <span aria-hidden="true">&#9679;</span> Near appetite threshold
+          </span>
+        {% elif _p.verdict == 'within' %}
+          <span class="inline-flex items-center gap-1.5 text-body font-semibold text-status-success">
+            <span aria-hidden="true">&#9679;</span> Within appetite
+          </span>
+        {% elif _p.verdict == 'exceeds' %}
+          <span class="inline-flex items-center gap-1.5 text-body font-semibold text-status-critical">
+            <span aria-hidden="true">&#9679;</span> Exceeds appetite
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-wrap gap-8 items-end mt-3">
+        <div>
+          <div class="text-meta text-ink-3 uppercase">Residual annualized loss</div>
+          <div class="text-number-lg font-mono tabular-nums">{{ _p.residual_ale | money(_code) }}</div>
+          {% if _p.pct_revenue is not none %}
+            <div class="text-body text-ink-2 mt-1">{{ "%.2f" | format(_p.pct_revenue) }}% of annual revenue</div>
+          {% else %}
+            <div class="text-micro text-ink-3 mt-1">
+              Set annual revenue
+              {% call admin_only(current_user) %}
+                in <a class="link" href="/organization">Organization profile</a>
+              {% endcall %}
+              to see % of revenue.
+            </div>
+          {% endif %}
+        </div>
+        {% if _p.range_lo is not none and _p.range_hi is not none %}
+          <div>
+            <div class="text-meta text-ink-3 uppercase">
+              Modeled range
+              <span class="cv" title="Central 95% of modeled residual-loss simulations">i</span>
+            </div>
+            <div class="text-number-md font-mono tabular-nums text-ink-2">
+              {{ _p.range_lo | money(_code) }}&ndash;{{ _p.range_hi | money(_code) }}
+            </div>
+            <div class="text-micro text-ink-3">central 95%</div>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if _p.verdict is not none and _p.tol_amount is not none and _p.tol_prob is not none %}
+        <p class="text-body text-ink-2 border-t border-border-subtle pt-3 mt-4">
+          With controls, the chance of a loss &ge;
+          <strong class="text-ink-1 font-mono">{{ _p.tol_amount | money(_code) }}</strong>
+          {% if _p.near_threshold %}
+            sits right at your <strong class="text-ink-1 font-mono">{{ "%.0f" | format(_p.tol_prob * 100) }}%</strong>
+            appetite &mdash; close enough that small changes in the modeling could flip the verdict.
+          {% elif _p.verdict == 'within' %}
+            stays under your <strong class="text-ink-1 font-mono">{{ "%.0f" | format(_p.tol_prob * 100) }}%</strong> appetite.
+          {% else %}
+            <strong class="text-status-critical">exceeds</strong> your
+            <strong class="text-ink-1 font-mono">{{ "%.0f" | format(_p.tol_prob * 100) }}%</strong> appetite.
+          {% endif %}
+        </p>
+      {% elif _p.verdict is none %}
+        <p class="text-body text-ink-2 border-t border-border-subtle pt-3 mt-4">
+          No risk appetite configured &mdash;
+          <a class="text-brand hover:underline" href="/organization">Set a risk appetite &rarr;</a>
+        </p>
+      {% endif %}
+    </div>
+
+    {# Control-value support card #}
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-5 md:p-6 flex flex-col justify-center gap-3">
+      {% if _p.control_value %}
+        <div>
+          <div class="text-meta text-ink-3 uppercase">
+            Control value / year <span class="normal-case text-ink-3">(mean)</span>
+          </div>
+          <div class="text-number-md font-mono tabular-nums">{{ _p.control_value.dollars | money(_code) }}</div>
+          <div class="text-body mt-1">
+            {% if _p.control_reduction_pct is not none and _p.control_reduction_pct > 0 %}
+              <span class="text-numeric-pos">&#9660; {{ "%.0f" | format(_p.control_reduction_pct) }}% reduction</span>
+            {% endif %}
+            {% if _p.roi is not none %}
+              {% if _p.control_reduction_pct is not none and _p.control_reduction_pct > 0 %} &middot; {% endif %}
+              {{ "%.1f" | format(_p.roi) }}&times; return
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <p class="text-body text-ink-2">No controls modeled yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+{% endif %}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% from "macros/viewport_block_authoring.html" import viewport_block_authoring, only_on_md %}
+{% block title %}{% if override %}Edit library override{% else %}New library override{% endif %}{% endblock %}
+{% block content %}
+
+{{ viewport_block_authoring() }}
+
+{% call only_on_md() %}
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-2xl font-bold mb-4">
+    {% if override %}Edit library override{% else %}New library override{% endif %}
+  </h1>
+
+  {# Flash rendered by base.html → layouts/_flash.html (single source). #}
+
+  <form method="post"
+        action="{% if override %}/library/overrides/{{ override.id }}{% else %}/library/overrides{% endif %}"
+        class="card bg-base-100 shadow p-6 grid grid-cols-1 gap-4">
+    {{ csrf_field() }}
+
+    {% if override %}
+    {# Optimistic-lock: hidden field carries the version this form was rendered against. #}
+    <input type="hidden" name="expected_version" value="{{ override.version }}">
+    {% else %}
+    <input type="hidden" name="entry_id" value="{{ entry.id if entry else entry_id }}">
+    {% endif %}
+
+    {# PR #247 UAT bug fix: format prefills via the per-class input
+       filters — rates 4dp (TEF), probabilities 4dp (Vuln), money 2dp
+       (PL/SL), all suppress scientific notation and emit empty string
+       for None so the input renders blank. #}
+
+    {# Threat Event Frequency (TEF) #}
+    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+      <legend class="text-lg font-semibold mb-3">Threat event frequency (optional override)</legend>
+      <div class="grid grid-cols-3 gap-2">
+        <label class="form-control">
+          <span class="label-text">Low</span>
+          <input type="number" name="tef_low" step="any"
+                 value="{{ override.threat_event_frequency.low | format_rate_input if override and override.threat_event_frequency else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">Mode</span>
+          <input type="number" name="tef_mode" step="any"
+                 value="{{ override.threat_event_frequency.mode | format_rate_input if override and override.threat_event_frequency else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">High</span>
+          <input type="number" name="tef_high" step="any"
+                 value="{{ override.threat_event_frequency.high | format_rate_input if override and override.threat_event_frequency else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+      </div>
+    </fieldset>
+
+    {# Vulnerability #}
+    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+      <legend class="text-lg font-semibold mb-3">Vulnerability (optional override)</legend>
+      <div class="grid grid-cols-3 gap-2">
+        <label class="form-control">
+          <span class="label-text">Low</span>
+          <input type="number" name="vuln_low" step="any"
+                 value="{{ override.vulnerability.low | format_probability_input if override and override.vulnerability else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">Mode</span>
+          <input type="number" name="vuln_mode" step="any"
+                 value="{{ override.vulnerability.mode | format_probability_input if override and override.vulnerability else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">High</span>
+          <input type="number" name="vuln_high" step="any"
+                 value="{{ override.vulnerability.high | format_probability_input if override and override.vulnerability else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+      </div>
+    </fieldset>
+
+    {# Primary Loss #}
+    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+      <legend class="text-lg font-semibold mb-3">Primary loss (optional override)</legend>
+      <div class="grid grid-cols-3 gap-2">
+        <label class="form-control">
+          <span class="label-text">Low</span>
+          <input type="number" name="pl_low" step="any"
+                 value="{{ override.primary_loss.low | format_money_input if override and override.primary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">Mode</span>
+          <input type="number" name="pl_mode" step="any"
+                 value="{{ override.primary_loss.mode | format_money_input if override and override.primary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">High</span>
+          <input type="number" name="pl_high" step="any"
+                 value="{{ override.primary_loss.high | format_money_input if override and override.primary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+      </div>
+    </fieldset>
+
+    {# Secondary Loss #}
+    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+      <legend class="text-lg font-semibold mb-3">Secondary loss (optional override)</legend>
+      <div class="grid grid-cols-3 gap-2">
+        <label class="form-control">
+          <span class="label-text">Low</span>
+          <input type="number" name="sl_low" step="any"
+                 value="{{ override.secondary_loss.low | format_money_input if override and override.secondary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">Mode</span>
+          <input type="number" name="sl_mode" step="any"
+                 value="{{ override.secondary_loss.mode | format_money_input if override and override.secondary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+        <label class="form-control">
+          <span class="label-text">High</span>
+          <input type="number" name="sl_high" step="any"
+                 value="{{ override.secondary_loss.high | format_money_input if override and override.secondary_loss else '' }}"
+                 class="input input-bordered font-mono">
+        </label>
+      </div>
+    </fieldset>
+
+    <label class="form-control">
+      <span class="label-text">Reason <span class="text-error">*</span></span>
+      <textarea name="reason" class="textarea textarea-bordered" rows="3" required>{% if override %}{{ override.reason }}{% endif %}</textarea>
+    </label>
+
+    {% if override %}
+    <label class="form-control">
+      <span class="label-text">Methodology change reason</span>
+      <textarea name="methodology_change_reason" class="textarea textarea-bordered" rows="2">{% if override.methodology_change_reason %}{{ override.methodology_change_reason }}{% endif %}</textarea>
+      <span class="label-text-alt text-base-content/60">
+        Required when distribution shape changes.
+      </span>
+    </label>
+    {% endif %}
+
+    <div class="flex justify-between mt-6">
+      <a href="/library/overrides" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        {% if override %}Save changes{% else %}Create override{% endif %}
+      </button>
+    </div>
+  </form>
+
+  {% if override %}
+  <form method="post" action="/library/overrides/{{ override.id }}/delete" class="mt-8"
+        onsubmit="return confirm('Tombstone this override? Pinned scenarios still resolve.');">
+    {{ csrf_field() }}
+    <button type="submit" class="btn btn-error">Delete override</button>
+  </form>
+  {% endif %}
+</div>
+{% endcall %}
+{% endblock %}

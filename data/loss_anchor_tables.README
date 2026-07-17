@@ -1,0 +1,98 @@
+data/loss_anchor_tables.json — DEV/CURATION RESEARCH ARTIFACT (Epic C-ii-b, #335)
+================================================================================
+
+WHAT THIS IS
+------------
+A curated set of per-archetype loss-magnitude anchor rows produced by the 13-sector
+C-ii-b research sweep. Each row provides a verified, honestly-tiered loss anchor
+(quantile_pair, median_mean, multiplier_over_baseline, or none) for one of the 82
+target archetypes defined in data/target_archetypes.json. The anchor rows are the
+INPUT to the C-iii curation pass, which authors full library entries including
+calibrated loss distributions.
+
+WHAT THIS IS NOT
+----------------
+This is NOT app-runtime seed data. The application does NOT load this file at
+runtime. The canonical runtime seed library lives in:
+  - data/seed_library_entries.json           (31 entries)
+  - data/seed_library_entries_extension.json (13 entries)
+This research artifact is consumed only by Epic C-ii-b / C-iii tooling and humans
+during curation (Arch-N1). Do not wire it into the seeding path.
+
+ROW SCHEMA
+----------
+Each row is a JSON object. Required fields on every row:
+
+  archetype          slug matching a row in data/target_archetypes.json
+  sector             one of the 13 §3 core sectors (same free string as archetypes)
+  loss_tier          "paginated" | "vendor" | "anecdotal"
+                       paginated  — peer-reviewed or regulatory publication with a
+                                    figure/table/page locator (TIER-1)
+                       vendor     — named vendor/insurer report, non-paginated but
+                                    with permalink + accessed-date (TIER-2)
+                       anecdotal  — no citeable anchor; anchor_type MUST be "none"
+                                    (TIER-3)
+  anchor_type        "quantile_pair" | "median_mean" | "multiplier_over_baseline"
+                     | "none"
+  citations          list of citation objects (see Citation schema below)
+  verified           bool — true only if all citations independently confirmed by
+                     the adversarial verify agent (C-ii-b protocol §2)
+
+Type-specific fields (present only on matching anchor_type):
+
+  quantile_pair      p50, p95 (USD; p95 > p50 > 0)
+  median_mean        median, mean (USD; mean > median > 0)
+  multiplier_over_baseline
+                     baseline_sector  — MUST be the row's own sector or its NAICS
+                                        family (sub-sector refinement only; cross-
+                                        sector borrowing is FORBIDDEN per B-METH-4)
+                     multiplier       — float in (0, 10]; catalogue typical range
+                                        1.7-3.0; >10 requires methodology sign-off
+                     >=2 citations, including one with supports: "multiplier"
+  none               no_source_reason — required explanation; loss_tier MUST be
+                                        "anecdotal"
+
+CITATION SCHEMA
+---------------
+Each element in the citations list:
+
+  source             short name of the publication or vendor (e.g. "IBM CODB 2024")
+  locator            PRIMARY source reference: figure/table/page for paginated;
+                     permalink URL for vendor/web sources. Secondaries go in
+                     secondary_url only — a secondary in locator = verification
+                     failure (B-METH-7)
+  accessed           ISO date (YYYY-MM-DD); required for web citations
+  supports           optional: "multiplier" (required on the multiplier-citation
+                     leg of multiplier_over_baseline rows)
+  secondary_url      optional: a secondary/blog URL for traceability only
+
+TIER HONESTY POLICY
+-------------------
+TIER-2/3 dominant is EXPECTED — most real-world archetypes lack paginated anchors.
+Honest demotion to TIER-3/none is preferred over an overstated TIER-2 figure.
+Do not claim TIER-1 without a paginated source with a figure/table/page locator.
+Do not claim TIER-2 without a named vendor report + permalink + accessed-date.
+Aggregate totals (IC3-style) and bare means are NOT percentile anchors.
+
+ADVERSARIAL VERIFY REQUIREMENT
+-------------------------------
+Every non-none row MUST have verified=true, meaning a second independent agent
+re-fetched every cited URL / vendored file and confirmed the cited number appears
+at the cited locator AND that the locator is a PRIMARY source. Rows that fail
+verification are demoted to anchor_type: "none" / loss_tier: "anecdotal" with a
+no_source_reason explaining the demotion.
+
+C-iii HANDOFF CONSTRAINT (Sec-I1)
+----------------------------------
+citation locator and secondary_url values may later be rendered as hyperlinks in
+C-iii. The consuming template MUST allowlist URL schemes (https:// only) before
+any href use — Jinja autoescape covers text nodes but NOT href attributes.
+
+BALANCE GUARANTEE
+-----------------
+tests/unit/test_loss_anchor_tables.py encodes the row-level contracts and is the
+real guard on this file. Every edit must keep it green:
+  uv run pytest tests/unit/test_loss_anchor_tables.py -v
+
+The completeness gate (all 82 archetypes covered) is armed separately with:
+  LOSS_ANCHORS_COMPLETE=1 uv run pytest tests/unit/test_loss_anchor_tables.py -v

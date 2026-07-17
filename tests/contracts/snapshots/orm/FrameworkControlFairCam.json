@@ -1,0 +1,40 @@
+{
+  "columns": {
+    "fair_cam_function": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(29)"
+    },
+    "framework_control_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": true,
+      "nullable": false,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": true,
+      "type": "CHAR(32)"
+    },
+    "is_extension": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "BOOLEAN"
+    }
+  },
+  "indexes": [
+    "ix_framework_control_faircam_framework_control_id"
+  ],
+  "table_name": "framework_control_faircam"
+}

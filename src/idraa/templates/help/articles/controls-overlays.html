@@ -1,0 +1,121 @@
+<h2 class="text-h3 text-ink-1 mb-3">What is a control?</h2>
+<p class="text-body text-ink-2 mb-3">
+  A <strong>control</strong> is any security measure, process, or technology that
+  your organisation has in place (or is considering). In Idraa each control has
+  a <strong>yearly cost</strong> and one or more <strong>FAIR-CAM sub-functions</strong>
+  that describe which part of the attack lifecycle the control addresses.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  FAIR-CAM groups sub-functions into three families (LEC / VMC / DSC). See
+  <a class="text-brand hover:underline" href="/help/control-sub-functions">FAIR-CAM sub-functions</a>
+  for the full taxonomy.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">How controls reduce modelled risk</h2>
+<p class="text-body text-ink-2 mb-3">
+  When you attach a control to a scenario and run an analysis, Idraa passes your
+  control assignments to the FAIR-CAM engine. The engine applies
+  <strong>multipliers to Threat Event Frequency (TEF) and/or Vulnerability</strong>
+  inside the Monte Carlo simulation — each iteration of the simulation draws from
+  distributions shaped by those multipliers.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  This means controls <strong>reduce modelled risk</strong> in the simulation
+  output, producing a lower residual loss distribution compared with the
+  uncontrolled (inherent) baseline.
+</p>
+<div class="bg-base-200 border border-border-subtle rounded-lg p-4 mb-6">
+  <p class="text-meta font-semibold text-ink-1 mb-1">Important: controls do not change the inherent Vulnerability input</p>
+  <p class="text-body text-ink-2">
+    The <strong>Vulnerability</strong> you author in the scenario wizard is your
+    estimate of the inherent probability that an attack attempt succeeds
+    <em>before counting your controls</em>. Attaching controls does not overwrite
+    that number — the engine applies a separate multiplier during the simulation
+    so that you always retain the inherent baseline for comparison. See
+    <a class="text-brand hover:underline" href="/help/methodology-primer">FAIR methodology primer</a>
+    for the full explanation of inherent vs. residual risk.
+  </p>
+</div>
+
+<h3 class="text-h4 text-ink-1 mb-2">Adding controls to a scenario</h3>
+<p class="text-body text-ink-2 mb-3">
+  From any scenario detail page, open the <strong>Controls</strong> tab. You can
+  attach controls you have already created in your controls library, or adopt
+  controls from the curated <strong>Control Library</strong>. Once attached, the
+  control appears in the scenario&rsquo;s assigned-controls list and is included in
+  every subsequent analysis run.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  To <strong>create or manage</strong> controls, go to
+  <a class="text-brand hover:underline" href="/controls">/controls</a>. Analysts and
+  Admins can create, edit, and deactivate controls; Reviewers have read-only access.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">What is an overlay?</h2>
+<p class="text-body text-ink-2 mb-3">
+  An <strong>overlay</strong> is a cross-cutting risk multiplier applied
+  organisation-wide rather than to a single scenario. Overlays carry two
+  multipliers — <strong>frequency multiplier</strong> and
+  <strong>magnitude multiplier</strong> — that scale the TEF and loss outcomes of
+  every scenario included in an analysis run.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Typical use-cases include:
+</p>
+<ul class="list-disc list-inside text-body text-ink-2 mb-6 space-y-1">
+  <li>A macro threat-environment adjustment (e.g., elevated nation-state activity this quarter).</li>
+  <li>An organisation-wide cyber-insurance effect on secondary loss magnitude.</li>
+  <li>A temporary uplift during a high-risk period such as a merger or system migration.</li>
+</ul>
+<p class="text-body text-ink-2 mb-3">
+  Overlays <em>compound multiplicatively</em> with controls: the simulation applies
+  all active control multipliers and all active overlay multipliers together in each
+  Monte Carlo iteration. Both are recorded in the run snapshot so the report always
+  reflects exactly which overlays were active at the time.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  To <strong>create or manage</strong> overlays, go to
+  <a class="text-brand hover:underline" href="/overlays">/overlays</a>. Only Admins
+  can create, edit, or deactivate overlays; other roles have read-only access.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Controls vs. overlays at a glance</h2>
+<div class="overflow-x-auto mb-6">
+  <table class="table table-sm w-full">
+    <thead>
+      <tr class="text-meta text-ink-3 text-left">
+        <th></th><th>Control</th><th>Overlay</th>
+      </tr>
+    </thead>
+    <tbody class="text-body text-ink-2">
+      <tr>
+        <td><strong>Scope</strong></td>
+        <td>Attached per-scenario</td>
+        <td>Applied across all scenarios in the run</td>
+      </tr>
+      <tr>
+        <td><strong>Models</strong></td>
+        <td>A specific security capability (TEF and/or Vuln multiplier)</td>
+        <td>An org-wide environmental factor (frequency + magnitude multiplier)</td>
+      </tr>
+      <tr>
+        <td><strong>Who manages</strong></td>
+        <td>Analyst or Admin</td>
+        <td>Admin only</td>
+      </tr>
+      <tr>
+        <td><strong>Changes inherent Vuln?</strong></td>
+        <td>No — separate simulation multiplier</td>
+        <td>No — separate simulation multiplier</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="text-body text-ink-2">
+  See also:
+  <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>
+  for how to author scenarios and attach controls in the wizard, and
+  <a class="text-brand hover:underline" href="/help/reports">Reports</a>
+  for how control effectiveness and attribution are surfaced in the PDF output.
+</p>

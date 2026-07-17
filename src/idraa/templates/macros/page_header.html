@@ -1,0 +1,73 @@
+{#
+  page_header(title, breadcrumb, actions, meta?) — sticky page header. Spec §2.
+  title:      str
+  breadcrumb: list[(label, href|None)] — fed to the breadcrumb macro
+  actions:    list[Action] — {label, href, style?, icon?, hx?, requires_md?}
+                style ∈ {primary, outline, ghost, brand} (default outline)
+                  `brand`  = filled brand-color button (max prominence; for
+                             discoverability-critical actions like CSV export).
+                             Uses Tailwind utilities only — does NOT depend on
+                             DaisyUI's `btn-*` classes loading from the CDN.
+                icon  = optional unicode glyph rendered before the label (e.g. "⇩").
+                requires_md=True → hidden on <md (review-only-on-phone)
+                download=True → file-download link: emits `hx-boost="false"`
+                  (opt out of the global <body hx-boost="true"> so the browser
+                  navigates and downloads the attachment instead of HTMX
+                  swapping the bytes into the DOM as text) plus the `download`
+                  attribute. Set this on any href pointing at an export/PDF/CSV.
+                hx: dict of HTMX attrs (e.g., {"get": "/url", "target": "#x"})
+  meta:       optional str — small subtitle / status line
+#}
+{% from "macros/breadcrumb.html" import breadcrumb as _breadcrumb %}
+
+{% macro page_header(title, breadcrumb=[], actions=[], meta=none) -%}
+{# Solid background (not `bg-surface-0/95`) — opacity-modifier syntax requires
+   the underlying CSS var to be an `<r> <g> <b>` triplet, but our tokens are
+   hex. Without that the `/95` silently fails, leaving the header transparent
+   and the `backdrop-blur` smearing content underneath. (Reported 2026-05-23.) #}
+{# pl-16 on <md reserves space for the fixed hamburger (☰, `fixed top-4 left-4`
+   in layouts/_sidebar.html) so the breadcrumb/title don't render under it.
+   md:px-6 restores symmetric padding once the hamburger is hidden (md:hidden). #}
+<header class="sticky top-0 z-30 bg-surface-0 border-b border-border-subtle -mx-4 md:-mx-6 pl-16 pr-4 md:px-6 py-3 mb-4"
+        style="--page-header-height: 4rem;">
+  {% if breadcrumb %}{{ _breadcrumb(breadcrumb) }}{% endif %}
+  <div class="flex flex-wrap items-center justify-between gap-3 mt-1">
+    <div>
+      <h1 class="text-display text-ink-1">{{ title }}</h1>
+      {% if meta %}<p class="text-meta text-ink-2 mt-0.5">{{ meta }}</p>{% endif %}
+    </div>
+    {% if actions %}
+    <div class="flex flex-wrap gap-2">
+      {% for a in actions %}
+      {%- set style = a.style|default('outline') -%}
+      {%- if style == 'brand' -%}
+        {#- Filled brand-color button. INLINE STYLE for background-color because
+            Tailwind Play CDN does not always generate the `.bg-brand` utility
+            even with `brand: 'var(--color-brand)'` in the config — silent miss
+            results in a transparent button (verified 2026-05-23 against live).
+            Tailwind utilities for layout/spacing still apply normally. -#}
+        {%- set cls = 'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white border border-transparent rounded hover:opacity-90 transition' -%}
+        <a href="{{ a.href }}"
+           class="{{ cls }}{% if a.requires_md %} hidden md:inline-flex{% endif %}"
+           style="background-color: var(--color-brand, #0F4C81);"
+           {%- if a.download %} hx-boost="false" download{% endif %}
+           {%- if a.hx %}{% for k, v in a.hx.items() %} hx-{{ k }}="{{ v }}"{% endfor %}{% endif %}>
+          {% if a.icon %}<span aria-hidden="true">{{ a.icon }}</span>{% endif %}
+          {{ a.label }}
+        </a>
+      {%- else -%}
+        {%- set cls = 'btn btn-sm ' + ({'primary':'btn-primary','outline':'btn-outline','ghost':'btn-ghost'})[style] -%}
+        <a href="{{ a.href }}"
+           class="{{ cls }}{% if a.requires_md %} hidden md:inline-flex{% endif %}"
+           {%- if a.download %} hx-boost="false" download{% endif %}
+           {%- if a.hx %}{% for k, v in a.hx.items() %} hx-{{ k }}="{{ v }}"{% endfor %}{% endif %}>
+          {% if a.icon %}<span aria-hidden="true">{{ a.icon }}</span>{% endif %}
+          {{ a.label }}
+        </a>
+      {%- endif -%}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</header>
+{%- endmacro %}

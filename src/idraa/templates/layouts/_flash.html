@@ -1,0 +1,12 @@
+{% if flash %}
+<div class="container mx-auto px-6 pt-4">
+  <div class="alert alert-{{ flash.level }}">
+    <span>{{ flash.message }}</span>
+    {% if flash.href %}
+      <a href="{{ flash.href }}" class="btn btn-sm btn-outline ml-2">
+        {{ flash.href_text }}
+      </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

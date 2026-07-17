@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Overlay import — preview expired{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/overlays">Overlays</a> / Import preview expired
+  </p>
+  <h1 class="text-2xl font-bold mb-4">Preview expired</h1>
+
+  <div class="alert alert-warning mb-6">
+    <div>
+      <h2 class="font-semibold">This import preview is no longer valid.</h2>
+      <p class="text-sm mt-1">
+        {% if message %}{{ message }}{% else %}The preview token has expired or already been used.{% endif %}
+      </p>
+      <p class="text-sm mt-2">
+        Preview tokens expire after 10 minutes and can only be confirmed once.
+        Please re-upload the CSV to start a fresh preview.
+      </p>
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <a href="/overlays" class="btn btn-primary">Back to overlays</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{# src/idraa/templates/help/index.html — registry-driven Help index.
+   `articles` is HELP_ARTICLES (already ordered so clusters are consecutive,
+   so groupby works without a pre-sort). #}
+{% extends "base.html" %}
+{% block title %}Help &amp; User Guide{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <header class="mb-8">
+    <h1 class="text-h2 text-ink-1">Idraa — Help</h1>
+    <p class="text-body text-ink-2 mt-2">
+      Guides for using Idraa, with the FAIR concepts behind the numbers.
+    </p>
+  </header>
+
+  {% for cluster, items in articles | groupby('cluster') %}
+  <section class="mb-8">
+    <h2 class="text-meta text-ink-3 mb-3 uppercase">{{ cluster }}</h2>
+    <ul class="grid sm:grid-cols-2 gap-3">
+      {% for a in items %}
+      <li>
+        <a href="/help/{{ a.slug }}"
+           class="block p-4 rounded-lg bg-surface-2 border border-border-subtle hover:border-brand">
+          <span class="text-body text-ink-1 font-medium">{{ a.title }}</span>
+          <span class="block text-meta text-ink-2 mt-1">{{ a.summary }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

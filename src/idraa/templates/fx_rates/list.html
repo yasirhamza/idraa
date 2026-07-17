@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros/data_table.html" import data_table %}
+{% block title %}FX rates{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto p-6 space-y-6">
+  <h1 class="text-h1 text-ink-1">FX rates</h1>
+
+  {% if request.query_params.get("saved") %}
+  <p class="text-status-success text-meta">Rate saved.</p>
+  {% endif %}
+
+  {%- set columns = [
+    {"key": "code",       "label": "Code",     "priority": "primary"},
+    {"key": "usd_rate",   "label": "USD rate",  "numeric": True},
+    {"key": "as_of_date", "label": "As of"},
+    {"key": "source",     "label": "Source"},
+  ] -%}
+
+  {%- set rows = [] -%}
+  {%- for r in rates -%}
+    {%- set _ = rows.append({
+      "code":       r.code,
+      "usd_rate":   r.usd_rate,
+      "as_of_date": r.as_of_date,
+      "source":     r.source,
+    }) -%}
+  {%- endfor -%}
+
+  {{ data_table(
+    rows=rows,
+    columns=columns,
+    empty={
+      "icon": "◇",
+      "title": "No rates configured",
+      "body": "Add one below to enable non-USD entry.",
+    },
+  ) }}
+
+  {% include "fx_rates/form.html" %}
+</section>
+{% endblock %}

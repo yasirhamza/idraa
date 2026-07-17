@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% from "macros/chart.html" import pert_distribution_chart %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/status_pill.html" import status_pill %}
+{% block title %}{{ entry.name }} — Library{% endblock %}
+{% block content %}
+
+{%- set _actions = [
+  {"label": "Use in wizard →", "href": "/scenarios/new/wizard?library_entry_id=" ~ entry.id, "style": "primary", "requires_md": true},
+] -%}
+{% if current_user.role == "admin" %}
+  {%- if override -%}
+    {%- set _actions = _actions + [{"label": "Edit org override (v" ~ override.version ~ ")", "href": "/library/overrides/" ~ override.id ~ "/edit", "style": "outline", "requires_md": true}] -%}
+  {%- else -%}
+    {%- set _actions = _actions + [{"label": "Create org override", "href": "/library/overrides/new?entry_id=" ~ entry.id, "style": "ghost", "requires_md": true}] -%}
+  {%- endif -%}
+{% endif %}
+
+{{ page_header(
+    title=entry.name,
+    breadcrumb=[("Home", "/"), ("Library", "/library"), (entry.name, none)],
+    actions=_actions
+) }}
+
+<div class="max-w-4xl mx-auto">
+
+  {# Top facts: display-mode form_field grid #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+      <div class="space-y-1 max-w-md">
+        <p class="text-meta text-ink-2">Status</p>
+        <p class="text-body text-ink-1">{{ status_pill(entry.status, kind="control") }}</p>
+      </div>
+      {{ form_field(name="version", label="Version", mode="display",
+                    value="v" ~ entry.version) }}
+      {{ form_field(name="threat_actor", label="Threat actor", mode="display",
+                    value=entry.threat_actor_type.value | replace("_", " ") | title) }}
+      {{ form_field(name="threat_category", label="Threat category", mode="display",
+                    value=entry.threat_event_type.value | replace("_", " ") | title) }}
+      {{ form_field(name="asset_class", label="Asset class", mode="display",
+                    value=entry.asset_class.value | replace("_", " ") | title) }}
+      {% if entry.attack_vector %}
+        {{ form_field(name="attack_vector", label="Attack vector", mode="display",
+                      value=entry.attack_vector) }}
+      {% endif %}
+      {% if entry.tags %}
+        {{ form_field(name="tags", label="Tags", mode="display",
+                      value=entry.tags | join(", ")) }}
+      {% endif %}
+    </div>
+  </div>
+
+  {# Canonical FAIR gap #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Canonical FAIR gap</h2>
+    <p class="text-body text-ink-1">{{ entry.canonical_fair_gap }}</p>
+  </div>
+
+  {# ATT&CK technique chips, provenance-badged (issue #475 P2, Task 6) #}
+  {% if attack_mappings %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">ATT&amp;CK techniques</h2>
+    <div class="flex flex-wrap gap-2">
+      {% for m in attack_mappings %}
+        <span class="badge badge-sm border border-border-subtle bg-surface-2 gap-1"
+              title="{% if m.provenance == 'cited' %}Cited &mdash; {{ m.citations | length }} primary citation(s){% else %}Expert estimate{% endif %}">
+          <span class="font-mono">{{ m.technique.technique_id }}</span>
+          <span>{{ m.technique.name }}</span>
+          {% if m.provenance == 'cited' %}<span class="text-status-success">&#10003; cited</span>{% endif %}
+        </span>
+      {% endfor %}
+    </div>
+    <p class="text-micro text-ink-3 mt-2">Curated mappings; the checkmark marks claims grounded in a primary source. Expert-estimate chips render without one &mdash; never as more certain than their label.</p>
+  </div>
+  {% endif %}
+
+  {# Narrative: description, example incidents, source citations #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Description</h2>
+    <p class="text-body text-ink-1 leading-relaxed">{{ entry.description }}</p>
+
+    {% if entry.example_incidents %}
+      <h3 class="text-h4 text-ink-1 mt-4 mb-1">Example incidents</h3>
+      <p class="text-body text-ink-1 leading-relaxed">{{ entry.example_incidents }}</p>
+    {% endif %}
+
+    {% if entry.source_citations %}
+      <h3 class="text-h4 text-ink-1 mt-4 mb-1">Source citations</h3>
+      <ul class="list-disc list-inside space-y-1">
+        {% for citation in entry.source_citations %}
+          <li class="text-body text-ink-1">{{ citation | linkify_https }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  {# Vendor-sourced loss confidence badge (Epic C-i §1/§5) #}
+  {% if entry.loss_tier == "vendor" %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card px-4 py-3 mb-4 flex items-center gap-2">
+    <span class="badge badge-sm badge-warning">Vendor-sourced</span>
+    <span class="text-meta text-ink-2">Vendor-sourced loss estimate — lower confidence than paginated industry reports.</span>
+  </div>
+  {% endif %}
+
+  {# FAIR distributions #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-3">FAIR distributions</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {{ pert_distribution_chart("tef-chart", entry.threat_event_frequency, "Threat event frequency", fmt="rate") }}
+      {{ pert_distribution_chart("vuln-chart", entry.vulnerability, "Vulnerability") }}
+      {{ pert_distribution_chart("pl-chart", entry.primary_loss, "Primary loss") }}
+      {% if entry.secondary_loss %}
+        {{ pert_distribution_chart("sl-chart", entry.secondary_loss, "Secondary loss") }}
+      {% endif %}
+    </div>
+  </div>
+
+  {# Recommended controls (P2c) #}
+  {% if recommendations %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-1">Recommended controls</h2>
+    <p class="text-meta text-ink-2 mb-3">Catalog controls that typically mitigate this scenario. Reference recommendations — adopt and tune for your org.</p>
+    <ul class="list-none space-y-2">
+      {% for rec in recommendations %}
+      <li class="flex items-center justify-between gap-3 border border-border-subtle rounded-card p-3">
+        <div>
+          <a class="text-body text-ink-1 font-medium hover:underline" href="/controls/library?q={{ rec.catalog_entry.slug }}">{{ rec.catalog_entry.name }}</a>
+          <span class="text-meta text-ink-2 ml-2">{{ rec.catalog_entry.control_type.value | replace("_", " ") | title }}</span>
+        </div>
+        {% if rec.adopted %}
+          <span class="text-meta text-success">Adopted ✓</span>
+        {% elif can_adopt %}
+          <form method="post" action="/controls/library/{{ rec.catalog_entry.id }}/adopt">
+            {{ csrf_field() }}
+            <button type="submit" class="btn btn-xs btn-primary">Add to my controls</button>
+          </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# P3 Task 6: provenance + admin delete (imported entries only).
+     Delete is ADMIN-only + CSRF-protected; seed entries are code-managed and
+     have no delete control. #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h3 class="text-h4 text-ink-1 mb-2">Provenance</h3>
+    {% if entry.source == "imported" %}
+      <p class="text-body text-ink-1 mb-3">
+        <span class="badge badge-sm badge-info">Imported</span>
+        Uploaded at runtime via bundle import.
+      </p>
+      {% if current_user.role == "admin" %}
+        <form method="post"
+              action="/library/entries/{{ entry.id }}/delete"
+              onsubmit="return confirm('Delete this imported entry? Scenarios already cloned from it keep working, but it can no longer be re-cloned.');">
+          {{ csrf_field() }}
+          <button type="submit" class="btn btn-sm btn-error btn-outline">
+            Delete imported entry
+          </button>
+        </form>
+      {% endif %}
+    {% else %}
+      <p class="text-body text-ink-1">
+        <span class="badge badge-sm badge-ghost">Built-in</span>
+        Shipped in code; managed via migrations.
+      </p>
+    {% endif %}
+  </div>
+
+  {# Version selector #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h3 class="text-h4 text-ink-1 mb-2">All versions</h3>
+    <ul class="list-none flex flex-wrap gap-2">
+      {% for v in versions %}
+        <li>
+          <a
+            class="btn btn-xs
+              {% if v.version == entry.version %}btn-primary{% else %}btn-ghost{% endif %}"
+            href="/library/entries/{{ entry.id }}?version={{ v.version }}">
+            v{{ v.version }}
+            <span class="ml-1 text-xs opacity-60">({{ v.status }})</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

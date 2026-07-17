@@ -1,0 +1,121 @@
+<div class="space-y-4">
+  <h2 class="text-base font-semibold">Filters</h2>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Threat actor</legend>
+    {% for opt in facets.threat_actor_type %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="threat_actor_type"
+          value="{{ opt.value }}"
+          {% if opt.value in (filters.threat_actor_types | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Threat category</legend>
+    {% for opt in facets.threat_category %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="threat_event_type"
+          value="{{ opt.value }}"
+          {% if opt.value in (filters.threat_event_types | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Asset class</legend>
+    {% for opt in facets.asset_class %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="asset_class"
+          value="{{ opt.value }}"
+          {% if opt.value in (filters.asset_classes | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Provenance</legend>
+    {# P3 Task 6: single-valued source filter (radio). 'all' clears the
+       narrowing (the route allowlists only seed/imported; any other value,
+       including the empty 'all' radio, falls through to None = both). #}
+    {% for src_value, src_label in [
+      ("", "All"),
+      ("seed", "Built-in"),
+      ("imported", "Imported"),
+    ] %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="radio radio-xs"
+          type="radio"
+          name="source"
+          value="{{ src_value }}"
+          {% if (filters.source or "") == src_value %}checked{% endif %}>
+        <span class="text-sm">{{ src_label }}</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  {% if facets.sub_sector %}
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Sub-sector</legend>
+    {# WS5a: sub-sector is a purely optional filter; default browse returns all
+       entries across all industries. Checkboxes start unchecked; selecting one
+       or more narrows results to those sub-sectors.
+       WS1: data-driven — only sub-sectors present in ≥1 published entry appear. #}
+    {% for opt in facets.sub_sector %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="sub_sector"
+          value="{{ opt.value }}"
+          {% if opt.value in (filters.applicable_sub_sectors | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+
+  {% if facets.industry %}
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Industry</legend>
+    {# WS1: data-driven industry filter — only industries present in ≥1 published entry appear.
+       Route already parses ?industry= into BrowseFilters.applicable_industries. #}
+    {% for opt in facets.industry %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="industry"
+          value="{{ opt.value }}"
+          {% if opt.value in (filters.applicable_industries | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+
+</div>

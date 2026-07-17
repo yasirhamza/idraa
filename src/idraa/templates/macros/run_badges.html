@@ -1,0 +1,15 @@
+{# omicron-1 F14 / F6: shared run-status badge.
+   Re-implemented via status_pill(kind="run") so colour mapping lives in
+   a single place.  Call-site signature is preserved: run_status_badge(status)
+   where status is a RunStatus enum instance. #}
+{% from "macros/status_pill.html" import status_pill %}
+
+{% macro run_status_badge(status, is_stale=false) -%}
+  {{ status_pill(status.value, "run") }}
+  {#- #438: a COMPLETED run whose control was re-synced after a library
+      re-curation is stale — results reflect the OLD curation. Shown beside
+      (not instead of) the status pill: the run genuinely completed. -#}
+  {%- if is_stale %} <span class="badge badge-warning badge-outline badge-sm"
+        title="A control this run used was re-synced to a newer library curation after this run completed — re-run to reflect the new values.">stale</span>
+  {%- endif %}
+{%- endmacro %}

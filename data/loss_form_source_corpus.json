@@ -1,0 +1,86 @@
+[
+  {
+    "form": "response",
+    "source": "IBM Cost of a Data Breach 2025",
+    "loss_tier": "paginated",
+    "locator": "page-6 'Key findings' + methodology page-57 (activity-based costing across 4 cost centers: detection & escalation, notification, post-breach response, lost business)",
+    "sectors_covered": ["manufacturing", "energy_utilities", "healthcare", "financial_services", "retail_ecommerce", "technology_saas", "government_public", "education", "professional_services", "transportation_logistics", "telecom", "hospitality", "food_agriculture"],
+    "carries": "breach RESPONSE cost as 3 of CODB's 4 cost centers (detection & escalation + notification + post-breach response). GLOBAL activity model, not per-sector; the per-sector response dollar split is a D-ii-b re-confirmation target.",
+    "blended_headline": false,
+    "single_form_slice": "response cost centers: detection & escalation + notification + post-breach response (NOT lost-business)",
+    "secondary_url": "https://www.ibm.com/reports/data-breach",
+    "accessed": "2026-07-02"
+  },
+  {
+    "form": "productivity",
+    "source": "IBM Cost of a Data Breach 2025",
+    "loss_tier": "paginated",
+    "locator": "methodology page-57 (lost-business cost center, one of the 4 activity-based cost centers) + page-41 (86% of orgs report operational disruption)",
+    "sectors_covered": ["manufacturing", "energy_utilities", "healthcare", "financial_services", "retail_ecommerce", "technology_saas", "government_public", "education", "professional_services", "transportation_logistics", "telecom", "hospitality", "food_agriculture"],
+    "carries": "CODB 'lost-business' cost center — business disruption + churn. GLOBAL; per-sector split is a D-ii-b target.",
+    "blended_headline": true,
+    "single_form_slice": "lost-business cost center (blends productivity/business-interruption + reputation churn; use for productivity only, reputation must come from a distinct source)",
+    "secondary_url": "https://www.ibm.com/reports/data-breach",
+    "accessed": "2026-07-02"
+  },
+  {
+    "form": "productivity",
+    "source": "Cyentia IRIS 2025",
+    "loss_tier": "paginated",
+    "locator": "Figure A3, p. 35 (Appendix — Loss magnitude summary statistics by sector; p50 + p95 per sector)",
+    "sectors_covered": ["manufacturing", "energy_utilities", "healthcare", "financial_services", "retail_ecommerce", "technology_saas", "government_public", "education", "professional_services", "transportation_logistics", "telecom", "hospitality"],
+    "carries": "per-sector TOTAL loss magnitude (p50+p95). Already the Epic C aggregate anchor; here it is the productivity/BI-dominant slice of the blended sector total.",
+    "blended_headline": true,
+    "single_form_slice": "sector-total loss (productivity/business-interruption-dominant); NOT additively reusable for a separate response pull — response must come from a distinct source",
+    "secondary_url": "https://www.cyentia.com/wp-content/uploads/2026/03/IRIS-2025.pdf",
+    "accessed": "2026-06-10"
+  },
+  {
+    "form": "fines",
+    "source": null,
+    "loss_tier": "none",
+    "locator": "",
+    "sectors_covered": [],
+    "carries": "no repo source for regulatory fines & judgments magnitude. IC3 2025 (ic3.gov, direct fraud/BEC loss) is a FRAUD-loss source, NOT regulatory fines, and IC3 explicitly excludes productivity/BI — it does not map to a single FAIR loss form and is not catalogued here. D-ii-b must research a regulatory-penalty source (e.g. HIPAA/GDPR/state-AG settlements) per sector.",
+    "blended_headline": false,
+    "single_form_slice": null,
+    "secondary_url": null,
+    "accessed": null
+  },
+  {
+    "form": "replacement",
+    "source": null,
+    "loss_tier": "none",
+    "locator": "",
+    "sectors_covered": [],
+    "carries": "no repo source for asset/equipment/data replacement magnitude. (IC3 2025 BEC/wire-fraud stolen-funds loss is a direct primary transfer loss, NOT asset replacement, and is not catalogued here.) D-ii-b must research (OT/ICS equipment-replacement studies for energy/manufacturing; data-reconstruction cost).",
+    "blended_headline": false,
+    "single_form_slice": null,
+    "secondary_url": null,
+    "accessed": null
+  },
+  {
+    "form": "competitive_advantage",
+    "source": null,
+    "loss_tier": "none",
+    "locator": "",
+    "sectors_covered": [],
+    "carries": "no clean repo source for IP / trade-secret loss magnitude (meth M2). The two existing IP-exfil seed entries cite the gap-report FORBIDDEN mis-cites (DOJ 15-1433, CISA AA22-186A) and must NOT be back-filled from. D-ii-b must research adjudicated trade-secret damages.",
+    "blended_headline": false,
+    "single_form_slice": null,
+    "secondary_url": null,
+    "accessed": null
+  },
+  {
+    "form": "reputation",
+    "source": null,
+    "loss_tier": "none",
+    "locator": "",
+    "sectors_covered": [],
+    "carries": "no standalone repo reputation-loss source. CODB 'lost-business' blends reputation into productivity (catalogued under productivity, not reusable here). D-ii-b must research a standalone churn/brand source per sector.",
+    "blended_headline": false,
+    "single_form_slice": null,
+    "secondary_url": null,
+    "accessed": null
+  }
+]

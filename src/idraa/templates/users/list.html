@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+
+{% block title %}Users{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Users",
+  breadcrumb=breadcrumb_for(request),
+  actions=[
+    {"label": "Export CSV", "href": "/users/export.csv", "style": "brand", "icon": "⇩", "download": True},
+    {"label": "Invite user", "href": "/users/invite", "style": "primary", "requires_md": True},
+  ],
+) }}
+
+{% set columns = [
+  {"key": "email",       "label": "Email",    "priority": "primary"},
+  {"key": "full_name",   "label": "Name",     "priority": "secondary"},
+  {"key": "role_value",  "label": "Role",     "priority": "secondary"},
+  {"key": "active_str",  "label": "Active",   "priority": "hidden_on_mobile"},
+  {"key": "_actions",    "label": "",         "kind": "action_menu"},
+] %}
+
+{% set rows = [] %}
+{% for u in users %}
+{# Per-row admin lifecycle affordances (#296):
+   - Edit (always)
+   - Activate / Deactivate toggle (one-click, confirm-gated)
+   - Delete: rendered ONLY when the user authored nothing (can_delete flag
+     from the view-model). Confirm-gated + carries the mandatory confirm
+     field the route requires. #}
+{%- set _actions = [{"label": "Edit", "href": "/users/" ~ u.id ~ "/edit"}] -%}
+{%- if u.is_active -%}
+  {%- set _ = _actions.append({
+    "label": "Deactivate",
+    "action": "/users/" ~ u.id ~ "/set-active",
+    "method": "post",
+    "hidden": {"active": "0"},
+  }) -%}
+{%- else -%}
+  {%- set _ = _actions.append({
+    "label": "Activate",
+    "action": "/users/" ~ u.id ~ "/set-active",
+    "method": "post",
+    "hidden": {"active": "1"},
+  }) -%}
+{%- endif -%}
+{%- if can_delete.get(u.id | string) -%}
+  {%- set _ = _actions.append({
+    "label": "Delete",
+    "action": "/users/" ~ u.id ~ "/delete",
+    "method": "post",
+    "danger": True,
+    "confirm": "Permanently delete " ~ u.email ~ "? This cannot be undone.",
+    "hidden": {"confirm": "1"},
+  }) -%}
+{%- endif -%}
+{%- set _ = rows.append({
+  "id":         u.id | string,
+  "email":      u.email,
+  "full_name":  u.full_name,
+  "role_value": u.role.value,
+  "active_str": "Yes" if u.is_active else "No",
+  "_actions":   _actions,
+}) -%}
+{% endfor %}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  sort_url="/users",
+  empty={
+    "icon": "👥",
+    "title": "No users",
+    "body": "Invite a user to get started.",
+    "cta": [
+      {"label": "Invite user", "href": "/users/invite", "style": "primary"},
+    ],
+  },
+) }}
+
+{% endblock %}

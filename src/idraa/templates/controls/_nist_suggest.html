@@ -1,0 +1,28 @@
+{# #144 — HTMX partial: crosswalk grounding for the entered NIST CSF codes.
+   Context: recognized (list[str]), unknown (list[str]),
+   suggested (list[str] sub-function slugs, sorted). Informational only —
+   assignments remain the analyst's call (validate-not-derive). #}
+{% if recognized or unknown %}
+<div class="mt-2 bg-surface-2 border border-border-subtle rounded-card p-3 text-body">
+  {% if suggested %}
+  <p class="text-meta text-ink-2 mb-1">Crosswalk-supported FAIR-CAM functions for
+    {{ recognized | join(", ") }}:</p>
+  <div class="flex flex-wrap gap-1">
+    {% for fn in suggested %}
+    <span class="badge badge-info badge-outline badge-sm font-mono">{{ fn }}</span>
+    {% endfor %}
+  </div>
+  <p class="text-micro text-ink-3 mt-2">Suggestions ground which function
+    assignments the FAIR-Institute NIST→FAIR-CAM crosswalk supports for these
+    tags — add matching assignments below if this control genuinely performs
+    those behaviors.</p>
+  {% elif recognized %}
+  <p class="text-meta text-ink-2">No crosswalk-mapped FAIR-CAM functions for
+    {{ recognized | join(", ") }}.</p>
+  {% endif %}
+  {% if unknown %}
+  <p class="text-micro text-status-warning mt-1">Not in the NIST CSF 1.1 crosswalk:
+    {{ unknown | join(", ") }} — check the code spelling (e.g. PR.AC-7).</p>
+  {% endif %}
+</div>
+{% endif %}

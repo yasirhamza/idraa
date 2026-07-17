@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+
+{% block title %}Sign in{% endblock %}
+{% block container_class %}max-w-md mx-auto{% endblock %}
+
+{% block content %}
+<div class="pt-8">
+  <h1 class="text-display text-ink-1 mb-6">Sign in</h1>
+
+  {# #200: this form is hx-boosted like every other (global <body>
+    hx-boost). A wrong-password 400 renders because base.html's global
+    htmx:beforeSwap handler (PR #199) forces swaps on 4xx — the
+    pre-#199 per-form hx-boost="false" workaround (live UAT 2026-05-20:
+    "login doesn't work, no feedback") is retired; do not re-add it.
+
+    Login is intentionally NOT wrapped in viewport_block_authoring —
+    users must be able to sign in from any device size.
+  #}
+  {{ form_error_summary({"_form": error} if error else {}) }}
+
+  <form method="post" action="/login" class="space-y-5">
+    {{ csrf_field() }}
+    {# next round-trips the post-login redirect target. Already sanitized
+       server-side (routes/auth.py:_safe_next) to a same-origin path before
+       it reaches the template, and re-sanitized on POST. #}
+    <input type="hidden" name="next" value="{{ next | default('/') }}">
+
+
+    {{ form_field(name="email", label="Email", input_type="email",
+                  value=form.email if form else "",
+                  required=True, autocomplete="email") }}
+
+    {{ form_field(name="password", label="Password", input_type="password",
+                  required=True, autocomplete="current-password") }}
+
+    {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+    <div class="pb-24" aria-hidden="true"></div>
+
+    <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+      <button type="submit" class="btn btn-primary btn-sm">Sign in</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

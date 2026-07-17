@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/rbac.html" import admin_only %}
+{% from "macros/help_trigger.html" import help_trigger %}
+
+{% block title %}Overlays{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Overlays",
+  breadcrumb=breadcrumb_for(request),
+  meta="Calibration multipliers applied on top of the base FAIR distribution.",
+  actions=[
+    {"label": "Export CSV", "href": "/overlays/export.csv", "style": "brand", "icon": "⇩", "download": True},
+    {"label": "CSV template", "href": "/overlays/template.csv", "style": "outline", "download": True},
+    {"label": "+ New overlay", "href": "/overlays/new", "style": "primary", "requires_md": True},
+  ],
+) }}
+{{ help_trigger('controls-overlays') }}
+
+{% set columns = [
+  {"key": "tag",          "label": "Tag",           "priority": "primary", "numeric": True},
+  {"key": "display_name", "label": "Display name",  "priority": "secondary"},
+  {"key": "freq_mult",    "label": "Frequency ×",   "numeric": True, "align": "right"},
+  {"key": "mag_mult",     "label": "Magnitude ×",   "numeric": True, "align": "right"},
+  {"key": "version_str",  "label": "Version",       "numeric": True, "align": "right", "priority": "hidden_on_mobile"},
+  {"key": "status_value", "label": "Status",        "kind": "status_pill", "pill_kind": "control"},
+  {"key": "_actions",     "label": "",              "kind": "action_menu"},
+] %}
+
+{% set rows = [] %}
+{% for o in overlays %}
+{%- set _ = rows.append({
+  "id":           o.id | string,
+  "tag":          o.tag,
+  "display_name": o.display_name,
+  "freq_mult":    o.frequency_multiplier | format_mult,
+  "mag_mult":     o.magnitude_multiplier | format_mult,
+  "version_str":  "v" ~ o.version,
+  "status_value": "active" if o.is_active else "inactive",
+  "_actions": [
+    {"label": "View", "href": "/overlays/" ~ o.id},
+    {"label": "Edit", "href": "/overlays/" ~ o.id ~ "/edit"},
+  ],
+}) -%}
+{% endfor %}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  sort_by=sort_by | default("tag"),
+  sort_dir=sort_dir | default("asc"),
+  sort_url="/overlays",
+  row_href_template="/overlays/{id}",
+  empty={
+    "icon": "⨂",
+    "title": "No overlays yet",
+    "body": "Create an overlay or import the starter CSV to calibrate multipliers.",
+    "cta": [
+      {"label": "+ New overlay",  "href": "/overlays/new",         "style": "primary"},
+      {"label": "CSV template",   "href": "/overlays/template.csv","style": "outline", "download": True},
+    ],
+  },
+) }}
+
+{% endblock %}

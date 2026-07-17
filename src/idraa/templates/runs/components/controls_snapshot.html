@@ -1,0 +1,114 @@
+{#- Condensed controls-applied snapshot (spec §controls_snapshot).
+    One row per control; per-assignment detail behind <details>. The expansion
+    body is the EXACT markup that lived in runs/detail.html pre-redesign
+    (v1 legacy flat triple; v2/v3 per-assignment table) — moved, not rewritten. -#}
+{% from "macros/unit_aware_inputs.html" import unit_display %}
+
+{% macro controls_snapshot(run, has_reinterpreted_v2_snapshot, controls_overridden=false) -%}
+<section class="mt-8" id="controls-snapshot">
+  <h2 class="text-h3 text-ink-1 mb-1">Controls applied at run time
+    {% if controls_overridden %}<span class="badge badge-warning ml-2">Overridden from scenario default</span>{% endif %}
+  </h2>
+  <p class="text-micro text-ink-3 mb-3">Frozen at execution; re-runs reproduce from this exact state.</p>
+  {% if has_reinterpreted_v2_snapshot %}
+    <div role="alert" class="alert alert-warning my-2">
+      <div>
+        <span class="font-semibold">Pre-#131 snapshot</span> &mdash;
+        <code class="text-xs">capability_value</code> re-interpreted under
+        post-#131 <code class="text-xs">SUB_FUNCTION_UNITS</code> mapping.
+        Historical run results may differ from original.
+      </div>
+    </div>
+  {% endif %}
+  {% if run.controls_snapshot %}
+    <div class="bg-surface-1 border border-border-subtle rounded-card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr class="bg-surface-2">
+              <th class="text-meta uppercase">Control</th>
+              <th class="text-meta uppercase">Domains</th>
+              <th class="text-right text-meta uppercase">Assignments</th>
+              <th class="text-right text-meta uppercase">Confirmed</th>
+              <th class="text-meta uppercase">Snapshot</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in run.controls_snapshot %}
+              {% set _sv = c.get('snapshot_version', 1) %}
+              {%- set _n_conf = (c.assignments | selectattr('confirmed_by_user_at') | list | length) if (_sv in (2, 3) and c.assignments) else 0 -%}
+              {%- set _n_total = (c.assignments | list | length) if (_sv in (2, 3) and c.assignments) else 0 -%}
+              <tr class="hover:bg-surface-2">
+                <td class="text-ink-1">
+                  <details class="control-snapshot v{{ _sv }}">
+                    <summary class="cursor-pointer select-none">{{ c.name | e }}</summary>
+                    <div class="mt-2">
+                      {# ===== EXPANSION BODY: moved verbatim from detail.html ===== #}
+                      {% if _sv == 2 or _sv == 3 %}
+                        {% if c.assignments %}
+                          <div class="scroll-x">
+                          <div class="overflow-x-auto">
+                            <table class="table table-xs">
+                              <thead>
+                                <tr><th>Sub-function</th><th>Capability</th><th>Coverage</th><th>Reliability</th><th>Confirmed</th></tr>
+                              </thead>
+                              <tbody>
+                                {% for a in c.assignments %}
+                                  <tr>
+                                    <td title="{{ a.sub_function }}">{{ a.sub_function | humanize_slug }}</td>
+                                    <td>
+                                      {% if a.capability_value is not none %}{{ unit_display(a) }}
+                                      {% else %}<span class="text-warning text-xs">— (re-entry needed)</span>{% endif %}
+                                    </td>
+                                    <td>{{ "%.3f" | format(a.coverage) }}</td>
+                                    <td>{{ "%.3f" | format(a.reliability) }}</td>
+                                    <td>
+                                      {% if a.get('confirmed_by_user_at') %}
+                                        <span class="text-status-success" aria-label="confirmed" title="Confirmed by a user">●</span>
+                                      {% else %}
+                                        <span class="text-ink-3" aria-label="unconfirmed" title="Not yet confirmed">○</span>
+                                      {% endif %}
+                                    </td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                          </div>
+                        {% else %}
+                          <p class="text-body text-ink-2">No assignments captured in snapshot.</p>
+                        {% endif %}
+                      {% else %}
+                        <div class="text-body text-ink-2">
+                          Strength: {{ "%.2f" | format(c.control_strength) }} &middot;
+                          Reliability: {{ "%.2f" | format(c.control_reliability) }} &middot;
+                          Coverage: {{ "%.2f" | format(c.control_coverage) }}
+                        </div>
+                      {% endif %}
+                    </div>
+                  </details>
+                </td>
+                <td class="text-ink-2">
+                  {% if c.get('domains') %}{{ c.domains | sort | map('humanize_slug') | join(', ') }}
+                  {% elif c.get('domain') is string %}{{ c.domain | humanize_slug }}
+                  {% else %}&mdash;{% endif %}
+                </td>
+                <td class="text-right font-mono">{{ _n_total if _n_total else "—" }}</td>
+                <td class="text-right">
+                  {% if _n_total > 0 %}
+                    <span class="badge badge-sm {{ 'badge-success badge-outline' if _n_conf == _n_total else 'badge-ghost' }}"
+                          title="{{ _n_conf }} of {{ _n_total }} control assignment(s) confirmed by a user">{{ _n_conf }} of {{ _n_total }}</span>
+                  {% else %}<span class="text-ink-3">—</span>{% endif %}
+                </td>
+                <td><span class="badge badge-outline badge-xs {{ 'opacity-60' if _sv == 1 }}">v{{ _sv }}{{ ' (legacy)' if _sv == 1 }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <p class="text-body text-ink-2">No controls applied to this run.</p>
+  {% endif %}
+</section>
+{%- endmacro %}

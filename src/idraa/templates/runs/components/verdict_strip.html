@@ -1,0 +1,110 @@
+{#- Verdict strip — the reviewer's answer, first (spec Summary view §Goals 1).
+    Params:
+      dr        = display_results (aggregate view-model dict)
+      cost      = converted_cost_summary (dict | object | None)
+      run       = run ORM row
+      caveats   = active_run_caveats() result (Task 3)
+    Import: {% import "runs/components/caveats.html" as cvm %} is done HERE so
+    callers only pass the caveats result. -#}
+{% import "runs/components/caveats.html" as cvm %}
+
+{% macro verdict_strip(dr, cost, run, caveats) -%}
+{%- set _code = dr.currency.code if dr.currency else "USD" -%}
+{%- set cvh = dr.control_value_headline -%}
+{%- set _wr = dr.weight_robustness -%}
+{%- set _wr_has_range = _wr and _wr.headline_range_str is defined and _wr.headline_range_str and _wr.headline_range_str != "—" -%}
+{%- set _cost_total = (cost.get('total_annual_cost') if cost is mapping else cost.total_annual_cost) if cost else none -%}
+{%- set _roi = (cost.get('aggregate_roi') if cost is mapping else cost.aggregate_roi) if cost else none -%}
+{%- set _net = (cost.get('net_benefit') if cost is mapping else cost.net_benefit) if cost else none -%}
+{%- set _n_controls = (cost.get('n_unique_controls') if cost is mapping else cost.n_unique_controls) if cost else none -%}
+<section class="bg-surface-1 border border-border-subtle rounded-card mt-5 p-6" id="verdict-strip">
+  {#- Fallback gating (plan-gate Meth-I5): the no-controls sentence keys on
+      ACTUAL control presence (snapshot emptiness), never on value truthiness —
+      a zero/negative modeled value is an output fact about applied controls,
+      not evidence none were applied. Negative control value is real (weak-AND
+      dilution; never clamped) and gets its own honest branch. -#}
+  {%- set _has_controls = run.controls_snapshot and (run.controls_snapshot | length > 0) -%}
+  <p class="text-body text-ink-2 max-w-3xl">
+    {% if not _has_controls %}
+      No mitigating controls were applied in this run — the figures below show inherent risk.
+    {% elif cvh and cvh.dollars is not none and cvh.dollars > 0 and _cost_total %}
+      The controls in this run reduce expected annual loss by
+      <strong class="text-ink-1">{{ cvh.dollars | money(_code) }}</strong> for
+      <strong class="text-ink-1">{{ _cost_total | money(_code) }}</strong> of annual control cost.
+    {% elif cvh and cvh.dollars is not none and cvh.dollars > 0 %}
+      The controls in this run reduce expected annual loss by
+      <strong class="text-ink-1">{{ cvh.dollars | money(_code) }}</strong> per year.
+    {% else %}
+      The controls in this run did not measurably reduce expected annual loss
+      in this model{{ " (modeled value " ~ (cvh.dollars | money(_code)) ~ ")" if cvh and cvh.dollars is not none and cvh.dollars < 0 else "" }}.
+    {% endif %}
+  </p>
+  {% if dr.currency_provenance %}
+    <p class="text-micro text-ink-3 italic mt-1">{{ dr.currency_provenance }}</p>
+  {% endif %}
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
+    <div class="border-l-2 border-border-strong pl-4">
+      <div class="text-meta text-ink-3 uppercase">Residual ALE <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
+      <div class="text-number-lg font-mono">{{ dr.headline_ale.value | money(_code) }}</div>
+      {#- Re-homed central-95% band (plan-gate Arch-I3): the old panel's
+          headline_ale_with_ci_band lo–hi figures survive as a micro line;
+          the mini band CHART is retired (dist table + curves carry spread). -#}
+      {% if dr.headline_ale.has_ci_band %}
+        <div class="text-micro text-ink-3">central 95% of modeled losses: {{ dr.headline_ale.lo | money(_code) }} – {{ dr.headline_ale.hi | money(_code) }}</div>
+      {% endif %}
+      {#- Sign-gated (plan-gate Task-4 review, #131-class honesty fix): this
+          line hard-codes a leading "−" and green text-numeric-pos, which only
+          reads truthfully as a REDUCTION when percent > 0. Control value can be
+          negative (weak-AND dilution — fair_cam control_aware.control_value_percent
+          is never clamped); a bare-truthiness gate rendered "−-15%" in green,
+          styling a risk INCREASE as a reduction. The verdict sentence above
+          already states the negative case honestly, so suppress the line when
+          percent <= 0. Formatting mirrors macros/chart.html:control_value_headline
+          ("%.0f", no embedded sign, direction from surrounding prose). -#}
+      {% if cvh and cvh.percent and cvh.percent > 0 %}
+        <div class="text-micro text-numeric-pos">−{{ "%.0f" | format(cvh.percent) }}% vs without controls</div>
+      {% endif %}
+    </div>
+    {% if cvh and cvh.dollars %}
+    <div class="border-l-2 pl-4" style="border-color:var(--chart-residual)">
+      <div class="text-meta text-ink-3 uppercase">Control value / yr <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
+      <div class="text-number-lg font-mono">{{ cvh.dollars | money(_code) }}</div>
+      {% if _wr_has_range %}
+        {#- Mean+typical side-by-side (2026-07-04): on a mean-basis run the range
+            IS on the same average basis as the headline dollar figure above — it
+            is no longer honest to call it "typical case". Legacy (typical-basis)
+            runs keep today's copy byte-identical. -#}
+        {#- A paired headline-level typical POINT figure (mirroring per-control
+            typical_value) is not cheaply available here — the executor persists
+            a typical-basis canonical value per CONTROL, not a portfolio-level
+            typical headline total, and summing per-control typical_value in
+            Jinja would be exactly the "never re-sum cells" anti-pattern the
+            control_ledger.html fair-share column avoids. Deferred; see the
+            per-control tables below for the paired typical figures. -#}
+        {% if _wr.basis == "mean" %}
+        <div class="text-micro text-ink-3">value range {{ _wr.headline_range_str }}{{ cvm.cv("weight-provenance", caveats.numbers) }}</div>
+        {% else %}
+        <div class="text-micro text-ink-3">typical case {{ _wr.headline_range_str }}{{ cvm.cv("weight-provenance", caveats.numbers) }}</div>
+        {% endif %}
+      {% elif _wr and _wr.state in ("insufficient_budget", "not_assessed") %}
+        <div class="text-micro text-ink-3">
+          Ranking-stability check skipped &mdash; too few simulation draws
+          (K={{ _wr.draws_used if _wr.draws_used is not none else "n/a" }}).
+          <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if _roi is not none %}
+    <div class="border-l-2 border-border-strong pl-4">
+      <div class="text-meta text-ink-3 uppercase">Return on control spend</div>
+      <div class="text-number-lg font-mono">{{ "%.1f" | format(_roi) }}×</div>
+      <div class="text-micro text-ink-3">
+        {% if _net is not none %}net benefit {{ _net | money(_code) }} / yr{% endif %}
+        {% if _n_controls is not none %} · {{ _n_controls }} unique control(s){{ cvm.cv("cost-dedup", caveats.numbers) }}{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{%- endmacro %}

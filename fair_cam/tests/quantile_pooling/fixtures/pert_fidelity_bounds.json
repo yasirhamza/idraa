@@ -1,0 +1,29 @@
+{
+  "per_sdlog": {
+    "0.25": {
+      "observed_max_deviation": 0.16441215968800776,
+      "mc_se_approx": 0.003162277660168379,
+      "bound_with_1_5x_safety": 0.24661823953201165
+    },
+    "0.5": {
+      "observed_max_deviation": 0.31800236919034025,
+      "mc_se_approx": 0.003162277660168379,
+      "bound_with_1_5x_safety": 0.4770035537855104
+    },
+    "1.0": {
+      "observed_max_deviation": 0.4998476464246716,
+      "mc_se_approx": 0.003162277660168379,
+      "bound_with_1_5x_safety": 0.7497714696370075
+    },
+    "1.5": {
+      "observed_max_deviation": 1.4735594379960941,
+      "mc_se_approx": 0.003162277660168379,
+      "bound_with_1_5x_safety": 2.210339156994141
+    },
+    "2.0": {
+      "observed_max_deviation": 7.526725122268696,
+      "mc_se_approx": 0.003162277660168379,
+      "bound_with_1_5x_safety": 11.290087683403044
+    }
+  }
+}

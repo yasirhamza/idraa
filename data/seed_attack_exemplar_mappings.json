@@ -1,0 +1,134 @@
+{
+  "_note": "Exemplar curated scenario-library -> ATT&CK technique mappings (issue #475 PR 1). PR 2 extends this to all entries. provenance='cited' claims carry a technique-evidencing primary citation - typically a NEW source (advisory / DFIR report / sector alert) added to this mapping's own citations field; an entry citation qualifies only if it itself evidences the technique. Loss-magnitude citations (IRIS loss tables) NEVER qualify, and the ATT&CK page is catalog attribution, not mapping grounding. Every source below was fetched and content-verified at authoring time (2026-07-04). Curation note: the ICSA-17-181-01 id embedded in denial-of-control's composite magnitude-calibration citation returns 404 on cisa.gov and is not the Industroyer advisory; the verified CISA primary documents for Industroyer/CrashOverride are ICS-ALERT-17-206-01 and TA17-163A, cited directly below. The ATT&CK v19 catalog has no T0855; its unauthorized-command-message behavior is covered by T1692 (Unauthorized Message).",
+  "mappings": [
+    {
+      "entry_slug": "ransomware-on-ehr",
+      "domain": "enterprise",
+      "technique_id": "T1566",
+      "rationale": "Entry's initial access is email phishing (attack_vector=email_phishing). The joint CISA/FBI BlackSuit (Royal) ransomware advisory - scoped to critical-infrastructure sectors including Healthcare and Public Health - documents phishing emails as the most common initial-access vector for this ransomware operation ('BlackSuit actors most commonly gain initial access to victim networks via phishing emails [T1566]').",
+      "provenance": "cited",
+      "citations": [
+        "CISA/FBI Joint Cybersecurity Advisory AA23-061A, #StopRansomware: BlackSuit (Royal) Ransomware (last revised 2024-08-27), https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-061a (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "ransomware-on-ehr",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Ransomware encryption of the EHR cluster is the entry's core loss event (threat_event_type=ransomware; double_extortion tag). The BlackSuit (Royal) advisory - scoped to sectors including Healthcare and Public Health - documents actors exfiltrating data and then 'deploying the ransomware and encrypting the systems', mapped in its own ATT&CK impact table to Data Encrypted for Impact [T1486].",
+      "provenance": "cited",
+      "citations": [
+        "CISA/FBI Joint Cybersecurity Advisory AA23-061A, #StopRansomware: BlackSuit (Royal) Ransomware (last revised 2024-08-27), https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-061a (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "ransomware-on-ehr",
+      "domain": "enterprise",
+      "technique_id": "T1657",
+      "rationale": "Double-extortion monetization (double_extortion tag): the actor demands payment both for decryption and for non-publication of exfiltrated PHI - extortion-based financial theft is the entry's attacker objective.",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "phishing-ad-compromise-ransomware",
+      "domain": "enterprise",
+      "technique_id": "T1566",
+      "rationale": "The kill chain's named first stage is phishing a user's domain credentials (attack_vector=phishing_credential_harvest_then_ad_lateral_movement; phishing tag).",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "phishing-ad-compromise-ransomware",
+      "domain": "enterprise",
+      "technique_id": "T1078",
+      "rationale": "Harvested domain credentials are reused to operate as a legitimate user and escalate to domain administrator (entry description: AD-misconfiguration escalation to domain admin). The Vice Society advisory - issued for the education sector this entry targets, during the entry's LAUSD-era campaign window - documents actors who 'obtain initial network access through compromised valid accounts' (its own ATT&CK table, T1078) and who were 'observed escalating privileges, then gaining access to domain administrator accounts'.",
+      "provenance": "cited",
+      "citations": [
+        "CISA/FBI/MS-ISAC Joint Cybersecurity Advisory AA22-249A, #StopRansomware: Vice Society (last revised 2022-09-08), https://www.cisa.gov/news-events/cybersecurity-advisories/aa22-249a (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "phishing-ad-compromise-ransomware",
+      "domain": "enterprise",
+      "technique_id": "T1486",
+      "rationale": "Domain-wide ransomware deployment is the entry's terminal stage (threat_event_type=ransomware). The Vice Society advisory for education-sector ransomware documents actors who 'have encrypted data on target systems or on large numbers of systems in a network' (its own ATT&CK impact table, T1486).",
+      "provenance": "cited",
+      "citations": [
+        "CISA/FBI/MS-ISAC Joint Cybersecurity Advisory AA22-249A, #StopRansomware: Vice Society (last revised 2022-09-08), https://www.cisa.gov/news-events/cybersecurity-advisories/aa22-249a (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "unauthorized-plc-modification",
+      "domain": "ics",
+      "technique_id": "T0889",
+      "rationale": "Modification of PLC ladder logic / function-block programs from a compromised engineering workstation is the entry's core threat event (triton_pattern tag). The CISA HatMan (TRITON/TRISIS) malware analysis report documents the malware 'modifying in-memory firmware to add additional programming' (p. 2) and downloading 'a combination of the injector and implant to the device as a new program for the controller to run' (p. 4) on Triconex safety controllers.",
+      "provenance": "cited",
+      "citations": [
+        "CISA (NCCIC) Malware Analysis Report MAR-17-352-01, HatMan - Safety System Targeted Malware (Update B), 2019-02-27, pp. 2, 4, https://www.cisa.gov/sites/default/files/documents/MAR-17-352-01%20HatMan%20-%20Safety%20System%20Targeted%20Malware%20%28Update%20B%29.pdf (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "unauthorized-plc-modification",
+      "domain": "ics",
+      "technique_id": "T0871",
+      "rationale": "TRITON-pattern program modification is delivered through the controller's engineering API: the HatMan report documents a PC-based component executing from a compromised computer on the safety network and driving the controller via 'a custom implementation of an internal TriStation (TS) protocol' (p. 4; protocol implementation detailed p. 7) - the API used for communication between control software and the Triconex hardware.",
+      "provenance": "cited",
+      "citations": [
+        "CISA (NCCIC) Malware Analysis Report MAR-17-352-01, HatMan - Safety System Targeted Malware (Update B), 2019-02-27, pp. 4, 7, https://www.cisa.gov/sites/default/files/documents/MAR-17-352-01%20HatMan%20-%20Safety%20System%20Targeted%20Malware%20%28Update%20B%29.pdf (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "unauthorized-plc-modification",
+      "domain": "ics",
+      "technique_id": "T0836",
+      "rationale": "The archetype covers controller tampering whose effect 'activates only under specific process states' while changes are masked from the HMI (entry description; process_safety tag) - parameter/setpoint modification on the controller is the sibling impair-process-control variant of program modification, exemplified by the entry's Stuxnet incident pattern (drive setpoint manipulation masked from operators).",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "unauthorized-plc-modification",
+      "domain": "enterprise",
+      "technique_id": "T1078",
+      "rationale": "The entry's access stage is compromise of an engineering workstation (attack_vector=engineering_workstation_compromise). In this intrusion pattern the OT stage is judged to ride legitimate remote-access paths and credentials across the IT/OT boundary - abuse of valid accounts is the assessed enterprise-side mechanism for reaching the engineering workstation.",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "denial-of-control",
+      "domain": "ics",
+      "technique_id": "T0813",
+      "rationale": "Loss of operator control over grid field devices is the entry's core threat event (industroyer tag; ot_availability). CISA's CRASHOVERRIDE/Industroyer alerts document malware payloads 'capable of directly controlling switches and circuit breakers' plus a module 'capable of causing a denial of service (DoS) to Siemens SIPROTEC devices' - denying operators control of breakers and protective relays during the attack.",
+      "provenance": "cited",
+      "citations": [
+        "CISA (NCCIC/ICS-CERT) Alert ICS-ALERT-17-206-01, CRASHOVERRIDE Malware (last revised 2017-07-25), https://www.cisa.gov/news-events/ics-alerts/ics-alert-17-206-01 (accessed 2026-07-04)",
+        "US-CERT/CISA Alert TA17-163A, CrashOverride Malware (last revised 2021-07-20), https://www.cisa.gov/news-events/alerts/2017/06/12/crashoverride-malware (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "denial-of-control",
+      "domain": "ics",
+      "technique_id": "T1692",
+      "rationale": "The entry's attack vector is ICS protocol exploitation (IEC 104 / IEC 61850 / DNP3) to send malicious commands between SCADA master and field devices. The US-CERT CrashOverride alert documents the malware as it 'issues valid commands directly to remote terminal units (RTUs) over ICS protocols' (IEC 101/104/61850), including rapid open-close breaker command sequences - unauthorized command messages instructing field devices how to operate.",
+      "provenance": "cited",
+      "citations": [
+        "US-CERT/CISA Alert TA17-163A, CrashOverride Malware (last revised 2021-07-20), https://www.cisa.gov/news-events/alerts/2017/06/12/crashoverride-malware (accessed 2026-07-04)"
+      ]
+    },
+    {
+      "entry_slug": "ddos-extortion-financial",
+      "domain": "enterprise",
+      "technique_id": "T1498",
+      "rationale": "Volumetric network DDoS against internet-facing banking, payment, and trading services is the entry's threat event (attack_vector=volumetric_ddos_with_ransom_demand; ddos tag - Mirai/Meris botnets, DNS amplification).",
+      "provenance": "expert-estimate",
+      "citations": []
+    },
+    {
+      "entry_slug": "ddos-extortion-financial",
+      "domain": "enterprise",
+      "technique_id": "T1657",
+      "rationale": "The ransom demand to cease the attack (extortion tag) is extortion-based financial theft: per the entry's loss model, attacker persistence is conditional on payment, making monetary extraction the attacker objective.",
+      "provenance": "expert-estimate",
+      "citations": []
+    }
+  ]
+}

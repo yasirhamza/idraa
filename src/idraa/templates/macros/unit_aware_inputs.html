@@ -1,0 +1,123 @@
+{# src/idraa/templates/macros/unit_aware_inputs.html  (F16 re-skin)
+   Issue #129 §1, §2 — unit-aware capability widgets and display formatters.
+
+   Dispatches on sub_function_units_map[assignment.sub_function]
+   (Jinja env global, wired in Step 4).
+
+   Macros:
+   - unit_input(assignment, index): renders capability input widget
+   - unit_display(assignment): renders capability value for display contexts
+   - unit_label_suffix(assignment): suffix appended to the field label so
+     unit context lives in the label, not crammed into the input row
+     (UAT 2026-05-21 — overlay-prefix + label-unit pattern per USWDS
+     input-prefix-suffix guidance and uxpatterns.dev currency-input
+     pattern: "labels should clearly indicate what type of data to
+     enter; visual prefix/suffix elements are hidden from screen
+     readers"; "avoid <input type=number> for currency — spinners +
+     locale-separator issues").
+
+   PROBABILITY and PERCENT_REDUCTION pass through with the current
+   "%.3f" format to avoid scope creep into display-format changes for
+   percentage semantics (deferred to a future UX-polish PR per design §1).
+
+   Plan-gate round-2 (Sec-2-I2) + round-3 (Sec-3-T6-I1): bracket lookup
+   used instead of .get(default). Default Jinja config silently returns
+   Undefined on missing key (does NOT raise UndefinedError) — the
+   contract test at tests/contracts/test_sub_function_units_map_exhaustive.py
+   (Step 4.5) is the real safety net for enum-vs-map drift.
+
+   Plan-gate round-2 Arch-N2: removed self-import + dead _unit_for
+   macro; unit lookup uses sub_function_units_map global directly.
+
+   F16: Input classes updated to form_field chrome pattern:
+   focus:ring-brand, rounded-input, bg-surface-1, border-border-strong.
+   Unit-aware dispatch logic (elapsed_time / currency / probability /
+   percent_reduction) is fully preserved.
+#}
+
+{% macro unit_display(assignment) %}
+  {%- set v = assignment.capability_value -%}
+  {%- if v is none -%}
+    —
+  {%- else -%}
+    {%- set unit = sub_function_units_map[assignment.sub_function] -%}
+    {%- if unit == "elapsed_time" -%}
+      {{ "%.1f" | format(v) }} days
+    {%- elif unit == "currency" -%}
+      ${{ "{:,.0f}".format(v) }} per event
+    {%- else -%}
+      {{ "%.3f" | format(v) }}
+    {%- endif -%}
+  {%- endif -%}
+{% endmacro %}
+
+{% macro unit_label_suffix(assignment) -%}
+  {#- Inline unit hint appended to the field label. Currency moves to the
+      label so the input row isn't squeezed by an inline "per event" span.
+      Leading space is intentional — the caller writes ``Capability{{ ... }}``
+      and we own the separator. -#}
+  {%- if assignment -%}
+    {%- set unit = sub_function_units_map[assignment.sub_function] -%}
+    {%- if unit == "currency" %} ($/event){% elif unit == "elapsed_time" %} (days){% endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro unit_input(assignment, index) %}
+  {%- set v = assignment.capability_value -%}
+  {%- set unit = sub_function_units_map[assignment.sub_function] -%}
+  {%- if unit == "elapsed_time" -%}
+    {#- days: numeric input with "days" badge. Input class uses form_field chrome.
+        ELAPSED_TIME capability_value is in DAYS — it feeds the engine's exp(-t/τ)
+        decay where τ is in days (fair_cam/calibration/elapsed_time_taus.py). The
+        CSV importer + import.html doc the same unit (issue #204); keep all three
+        in sync. -#}
+    <div class="join">
+      <input
+        name="assignments[{{ index }}][capability_value]"
+        type="number"
+        min="0"
+        step="0.5"
+        value="{{ v if v is not none else '' }}"
+        class="h-10 px-3 rounded-l-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums join-item w-full" />
+      <span class="btn btn-sm join-item no-animation pointer-events-none h-10">days</span>
+    </div>
+  {%- elif unit == "currency" -%}
+    {#- Overlay-prefix pattern (Tailwind UI / uxpatterns.dev currency-input):
+        full-width input with a $ glyph absolutely positioned inside the
+        left padding so it doesn't consume input width. "per event" is in
+        the label, not the input row, so values up to ~$10M display
+        without truncation in the 1/5-column Capability cell.
+
+        type="text" + inputmode="numeric" — per UXP / USWDS, avoid
+        type="number" for currency: spinner arrows clutter the input
+        (and consumed ~15px on the 26px-wide layout that motivated this
+        fix), browsers disagree on whether to accept comma separators,
+        and the spinner's step semantics don't fit dollar amounts.
+        inputmode="numeric" still triggers a numeric soft-keyboard on
+        mobile. Server-side Pydantic ge=0 + float coercion is the real
+        validation gate. -#}
+    <div class="relative">
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2 text-sm">$</span>
+      <input
+        name="assignments[{{ index }}][capability_value]"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        value="{{ '{:,.0f}'.format(v) if v is not none else '' }}"
+        placeholder="0"
+        class="h-10 w-full pl-7 pr-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 text-right tabular-nums font-mono" />
+    </div>
+  {%- else -%}
+    {# PROBABILITY / PERCENT_REDUCTION — bounded [0,1] #}
+    <input
+      name="assignments[{{ index }}][capability_value]"
+      type="number"
+      min="0"
+      max="1"
+      step="0.01"
+      value="{{ v if v is not none else '' }}"
+      class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums" />
+  {%- endif -%}
+{% endmacro %}

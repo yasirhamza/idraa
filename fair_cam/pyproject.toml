@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fair-cam"
+version = "0.1.0"
+description = "FAIR Controls Analytics Model — quantitative cyber-risk library"
+requires-python = ">=3.8"
+dependencies = [
+  "scipy>=1.10",
+  "numpy>=1.24",
+  "pandas>=2.0",
+]
+
+[tool.setuptools.packages.find]
+# Discover from the PARENT directory so that the `fair_cam` directory
+# itself (which contains the package __init__.py) is registered as the
+# top-level `fair_cam` package. Prior config `where = ["."]` searched
+# INSIDE fair_cam/ for sub-packages matching `fair_cam*`, found none
+# (the children are `models`, `controls`, etc.), and produced an empty
+# MAPPING in the editable install's finder — making
+# `python scripts/...` invocations fail with ModuleNotFoundError even
+# though `import fair_cam` worked from interactive Python (because
+# `-c` adds cwd to sys.path while a script invocation does not).
+where = [".."]
+include = ["fair_cam*"]
+exclude = ["fair_cam.tests*"]

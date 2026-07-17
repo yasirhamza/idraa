@@ -1,0 +1,90 @@
+<div class="space-y-4">
+  <h2 class="text-base font-semibold">Filters</h2>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Control type</legend>
+    {% for ct_value, ct_label in [
+      ("technical", "Technical"),
+      ("administrative", "Administrative"),
+      ("physical", "Physical"),
+    ] %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="control_type"
+          value="{{ ct_value }}"
+          {% if ct_value in (filters.control_types | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ ct_label }}</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">FAIR-CAM function</legend>
+    {# Curated subset of the most commonly-browsed FAIR-CAM sub-functions
+       (one or two per domain). The full 26-member enum is over-granular for a
+       sidebar; advanced filtering can deep-link with explicit sub_function params. #}
+    {% for sf_value, sf_label in [
+      ("lec_prev_resistance", "Resistance (LEC)"),
+      ("lec_prev_deterrence", "Deterrence (LEC)"),
+      ("lec_det_monitoring", "Monitoring (LEC)"),
+      ("lec_resp_event_termination", "Event termination (LEC)"),
+      ("lec_resp_resilience", "Resilience (LEC)"),
+      ("vmc_prev_reduce_variance_prob", "Reduce variance probability (VMC)"),
+      ("vmc_id_control_monitoring", "Control monitoring (VMC)"),
+      ("dsc_prev_defined_expectations", "Defined expectations (DSC)"),
+    ] %}
+      <label class="flex items-center gap-2 cursor-pointer mt-1">
+        <input
+          class="checkbox checkbox-xs"
+          type="checkbox"
+          name="sub_function"
+          value="{{ sf_value }}"
+          {% if sf_value in (filters.sub_functions | map(attribute='value') | list) %}
+            checked
+          {% endif %}>
+        <span class="text-sm">{{ sf_label }}</span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-base-300 rounded p-3">
+    <legend class="text-sm font-semibold px-1">Framework / industry</legend>
+    <label class="block text-xs text-base-content/70 mt-2 mb-1" for="filter-nist-csf">
+      NIST CSF subcategory
+    </label>
+    <input
+      id="filter-nist-csf"
+      class="input input-bordered input-sm w-full"
+      type="text"
+      name="nist_csf"
+      placeholder="e.g. PR.AA-01"
+      value="{{ (filters.nist_csf_subcategories or []) | join(', ') }}">
+
+    <label class="block text-xs text-base-content/70 mt-3 mb-1" for="filter-cis">
+      CIS safeguard
+    </label>
+    <input
+      id="filter-cis"
+      class="input input-bordered input-sm w-full"
+      type="text"
+      name="cis"
+      placeholder="e.g. 6.3"
+      value="{{ (filters.cis_safeguards or []) | join(', ') }}">
+
+    <label class="block text-xs text-base-content/70 mt-3 mb-1" for="filter-industry">
+      Industry
+    </label>
+    <input
+      id="filter-industry"
+      class="input input-bordered input-sm w-full"
+      type="text"
+      name="industry"
+      placeholder="e.g. financial_services"
+      value="{{ (filters.industries or []) | join(', ') }}">
+  </fieldset>
+
+</div>

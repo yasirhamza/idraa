@@ -1,0 +1,35 @@
+{# Tri-state theme segmented control. Used in the sidebar footer (F3).
+   Writes `idraa.theme` to localStorage and updates data-theme + data-theme-pref
+   attributes on <html>. The OS-change listener in base.html only fires when
+   preference is `auto`. #}
+<div class="join" role="group" aria-label="Theme preference">
+  {% for value, label, glyph in [
+    ('light', 'Light', '☼'),
+    ('dark',  'Dark',  '☽'),
+    ('auto',  'Auto',  '◐'),
+  ] %}
+  <button type="button"
+          class="join-item btn btn-xs btn-ghost"
+          data-theme-set="{{ value }}"
+          aria-label="Switch to {{ label }} theme"
+          title="{{ label }}">
+    <span aria-hidden="true">{{ glyph }}</span>
+    <span class="sr-only">{{ label }}</span>
+  </button>
+  {% endfor %}
+</div>
+<script>
+  // Idempotent click handler binding — safe to load on every page.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-theme-set]');
+    if (!btn) return;
+    var value = btn.getAttribute('data-theme-set');  // 'light'|'dark'|'auto'
+    try { localStorage.setItem('idraa.theme', value); } catch (_) {}
+    document.documentElement.setAttribute('data-theme-pref', value);
+    var resolved = value === 'auto'
+      ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : value;
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.dispatchEvent(new CustomEvent('idraa:theme-changed', { detail: { theme: resolved } }));
+  });
+</script>

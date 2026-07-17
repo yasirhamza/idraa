@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "macros/empty_state.html" import empty_state %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Controls Maintenance{% endblock %}
+{% block content %}
+{{ page_header(
+    title="Controls Maintenance",
+    breadcrumb=[("Home", "/"), ("Controls", "/controls"), ("Maintenance", none)]
+) }}
+<div class="max-w-2xl mx-auto">
+  {{ empty_state(
+      "⛨",
+      "Maintenance schedules unavailable",
+      "The maintenance service is currently unavailable. Existing controls remain accessible in read-only mode. Please try again shortly or contact your administrator.",
+      cta={"label": "Back to Controls", "href": "/controls", "style": "outline"}
+  ) }}
+</div>
+{% endblock %}

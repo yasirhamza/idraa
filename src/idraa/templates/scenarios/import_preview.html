@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "macros/import_preview.html" import preview_table %}
+{% block title %}Scenario import — preview{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <p class="text-sm text-base-content/60 mb-1">
+    <a class="link" href="/scenarios">Scenarios</a> / Import preview
+  </p>
+  <h1 class="text-2xl font-bold mb-2">Scenario import — preview</h1>
+  <p class="text-base-content/70 mb-4">
+    Review the parsed rows below. Nothing has been written yet — confirm to apply,
+    or cancel to abandon. The preview token expires after 10 minutes.
+  </p>
+
+  <p class="text-xs text-base-content/60 mb-4">
+    Preview token: <code class="font-mono">{{ token }}</code>
+  </p>
+
+  {% if errors %}
+  <div class="alert alert-warning mb-4">
+    <div>
+      <h2 class="font-semibold mb-2">Validation errors ({{ errors|length }})</h2>
+      {{ preview_table(errors, [
+           {"label": "Line", "key": "line", "mono": True},
+           {"label": "Column", "key": "column", "mono": True},
+           {"label": "Reason", "key": "reason"},
+         ]) }}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if preview %}
+  <div class="card bg-base-100 shadow mb-4">
+    <div class="card-body p-3 md:p-0">
+      {{ preview_table(preview, [
+           {"label": "Line", "key": "line", "mono": True},
+           {"label": "Name", "key": "name"},
+           {"label": "Action", "key": "action"},
+         ], action_key="action") }}
+    </div>
+  </div>
+  {% else %}
+  <div class="alert mb-4">
+    <span>No rows parsed from the upload.</span>
+  </div>
+  {% endif %}
+
+  {% set create_count = preview|selectattr('action', 'equalto', 'create')|list|length %}
+  <div class="flex justify-between items-center mt-6">
+    <a href="/scenarios/import" class="btn btn-ghost">Cancel</a>
+    <form method="post" action="/scenarios/import/confirm" class="inline">
+      {{ csrf_field() }}
+      <input type="hidden" name="token" value="{{ token }}">
+      <button type="submit" class="btn btn-primary"
+              {% if create_count == 0 %}disabled{% endif %}>
+        Confirm import ({{ create_count }} {% if create_count == 1 %}scenario{% else %}scenarios{% endif %})
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

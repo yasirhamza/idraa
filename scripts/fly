@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# scripts/fly — flyctl wrapper that loads FLY_API_TOKEN from macOS Keychain.
+#
+# Resolution order (first hit wins):
+#   1. $FLY_API_TOKEN already set in the environment (passthrough)
+#   2. macOS Keychain — generic password with service `riskflow-fly-token`
+#      (service name deliberately KEPT through the Idraa rename — it's a
+#      machine-local credential key; renaming it would orphan the operator's
+#      stored token. Same compat-keep logic as /data/riskflow.db.)
+#
+# Usage:
+#   scripts/fly deploy --remote-only --strategy immediate
+#   scripts/fly ssh console --app idraa
+#   ... any flyctl subcommand
+#
+# IMPORTANT: `deploy` ALWAYS deploys origin/main from an isolated checkout,
+# regardless of which worktree you run it from (see the deploy block below).
+# This prevents a stale feature-worktree from silently rolling prod back behind
+# main. To deploy something, merge it to main first.
+#
+# One-time setup:
+#   security add-generic-password -s riskflow-fly-token -a fly -w '<token>' -U
+#
+# Rotate the token whenever it has been exposed (chat transcript, accidental
+# commit, etc). Generate a new one at
+#   https://fly.io/user/personal_access_tokens
+# then re-run the `security add-generic-password ... -U` command above (-U
+# updates the existing entry in place). Also update the GH Actions secret
+# FLY_API_TOKEN so the uat-deploy workflow keeps working.
+
+set -euo pipefail
+
+if ! command -v flyctl >/dev/null 2>&1; then
+  echo "scripts/fly: flyctl not on PATH. Install: brew install flyctl" >&2
+  exit 127
+fi
+
+if [[ -z "${FLY_API_TOKEN:-}" ]]; then
+  if ! FLY_API_TOKEN="$(security find-generic-password -s riskflow-fly-token -w 2>/dev/null)"; then
+    cat >&2 <<EOF
+scripts/fly: FLY_API_TOKEN not in environment and not in Keychain.
+
+Store the token first with:
+  security add-generic-password -s riskflow-fly-token -a fly -w '<token>' -U
+
+Get a fresh token at https://fly.io/user/personal_access_tokens
+EOF
+    exit 1
+  fi
+  export FLY_API_TOKEN
+fi
+
+# ---------------------------------------------------------------------------
+# deploy ALWAYS ships origin/main, never the caller's worktree.
+#
+# `flyctl deploy` builds from the current working directory. With several
+# sessions each in their own git worktree at different commits, a deploy from
+# a stale/feature worktree would silently roll prod CODE back behind main even
+# though git history is fine (the 2026-06-15 incident). To make "whoever
+# deploys last" always deploy main's HEAD, we intercept `deploy`, fetch
+# origin/main, check it out into an isolated throwaway worktree, and run flyctl
+# from there. Non-deploy subcommands (ssh/status/logs/...) pass through from
+# the caller's cwd unchanged.
+# ---------------------------------------------------------------------------
+if [[ "${1:-}" == "deploy" ]]; then
+  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "scripts/fly: 'deploy' must run inside the git repo (it deploys origin/main)." >&2
+    exit 1
+  fi
+  echo "scripts/fly: fetching origin/main ..." >&2
+  if ! git fetch origin main --quiet; then
+    echo "scripts/fly: 'git fetch origin main' failed — refusing to deploy a possibly stale tree." >&2
+    exit 1
+  fi
+  main_sha="$(git rev-parse origin/main)"
+  main_subj="$(git log -1 --format='%s' "$main_sha")"
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rf-deploy.XXXXXX")"
+  wt="$tmpdir/main"
+  cleanup() {
+    git worktree remove --force "$wt" >/dev/null 2>&1 || true
+    git worktree prune >/dev/null 2>&1 || true
+    rm -rf "$tmpdir" 2>/dev/null || true
+  }
+  trap cleanup EXIT
+  if ! git worktree add --detach "$wt" "$main_sha" >/dev/null 2>&1; then
+    echo "scripts/fly: failed to create the deploy worktree at origin/main ($main_sha)." >&2
+    exit 1
+  fi
+  echo "scripts/fly: deploying origin/main @ ${main_sha:0:10} — ${main_subj}" >&2
+  echo "scripts/fly:   (isolated checkout; caller's worktree is ignored)" >&2
+  # Run flyctl from the clean main checkout. Not `exec`, so the EXIT trap fires
+  # and removes the throwaway worktree afterward.
+  ( cd "$wt" && flyctl "$@" )
+  rc=$?
+  exit "$rc"
+fi
+
+exec flyctl "$@"

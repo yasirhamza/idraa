@@ -1,0 +1,80 @@
+{
+  "fields": {
+    "annual_cost": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'decimal.Decimal'>"
+    },
+    "applicable_industries": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "applicable_org_sizes": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "assignments": {
+      "has_default": false,
+      "optional": false,
+      "type": "list[idraa.schemas.control.ControlFunctionAssignmentDTO]"
+    },
+    "compliance_mappings": {
+      "has_default": true,
+      "optional": false,
+      "type": "dict[str, Any]"
+    },
+    "description": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
+    "implementation_stage": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'ControlImplementationStage'>"
+    },
+    "iso_27001_domains": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "name": {
+      "has_default": false,
+      "optional": false,
+      "type": "<class 'str'>"
+    },
+    "nist_csf_functions": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "skill_requirements": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "status": {
+      "has_default": true,
+      "optional": false,
+      "type": "<enum 'EntityStatus'>"
+    },
+    "technology_dependencies": {
+      "has_default": true,
+      "optional": false,
+      "type": "list[str]"
+    },
+    "type": {
+      "has_default": false,
+      "optional": false,
+      "type": "<enum 'ControlType'>"
+    },
+    "version": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'str'>"
+    }
+  },
+  "schema_name": "ControlForm"
+}

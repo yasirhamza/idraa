@@ -1,0 +1,155 @@
+# Cross-platform pre-commit hooks. Runs locally via `pre-commit run`.
+# Ruff pin tracks the project's `uv.lock` ruff version; if you bump
+# `ruff` in `pyproject.toml` / `uv.lock`, bump `rev` here in the same PR
+# or the formatter will diverge between pre-commit and CI.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Vendored third-party bundles under static/vendor/ must stay BYTE-IDENTICAL
+      # to their upstream (the integrity story is "file sha384 == the pinned CDN
+      # SRI"), so the file-munging hooks must not touch them. tailwind.css is the
+      # SAME class of hazard even though it's first-party-config-driven, not
+      # vendored: it's a build_css.py-generated artifact, and `build-css --check`
+      # (the pre-push gate) requires it to byte-match a fresh rebuild exactly. A
+      # fixer hook silently appending a trailing newline (discovered live: PR
+      # build(css) Task 4) makes the committed file permanently diverge from
+      # every future build (the standalone Tailwind binary never emits one),
+      # so `--check` reports STALE forever. Exclude it too.
+      - id: trailing-whitespace
+        exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$'
+      - id: end-of-file-fixer
+        exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+        # Vendored bundles are legitimately large + version-pinned; the 500kb
+        # guard still applies to all first-party code.
+        exclude: '^src/idraa/static/vendor/'
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$'
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - fastapi>=0.115
+          - itsdangerous>=2.2
+          - jinja2>=3.1
+          - markupsafe>=2.1
+          - numpy>=2.0
+          - pydantic>=2.8
+          - pydantic-settings>=2.4
+          - sqlalchemy>=2.0
+          - types-passlib
+        args: [--config-file=pyproject.toml]
+        files: ^src/idraa/
+
+  # Secret scanning (#555 outbound-leak posture): staged-content scan at commit,
+  # full-history scan at push. Content-level complement to the tracked-path
+  # denylist below.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Tracked-path denylist (#555 outbound-leak posture): fails if any local
+      # tool/agent state dir, secrets-shaped file, or database becomes tracked.
+      # Catches whole-file/dir accidents that content scanning can miss.
+      - id: tracked-path-denylist
+        name: Tracked-path denylist (outbound-leak guard)
+        language: system
+        entry: python3 scripts/lint_tracked_paths.py
+        always_run: true
+        pass_filenames: false
+
+      # Deterministic scope-discipline gate — enforces required ## Scope budget
+      # and ## Scope drift log sections in every new design spec. Scope creep
+      # killed both prior project versions; this lint converts implicit drift
+      # into a commit-blocking signal. See feedback_scope_creep_killed_v1_v2.md
+      # and docs/superpowers/templates/spec-template.md.
+      - id: spec-scope-discipline
+        name: Spec scope-discipline lint
+        language: system
+        entry: python3 scripts/lint_specs.py
+        files: ^docs/superpowers/specs/.*\.md$
+        pass_filenames: true
+
+      # Pre-PUSH gates against scope-creep failure modes documented in
+      # obra/superpowers#528 (review-skipping under context pressure).
+      # External, deterministic — agent cannot skip them. Bypass with
+      # `git push --no-verify` (document reason in next commit).
+      - id: branch-state-test-count-and-clean-tree
+        name: Branch-state lint (test-count regression + working-tree-clean)
+        language: system
+        entry: python3 scripts/lint_branch_state.py
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+
+      # GHA is billing-disabled — pre-push IS the CI. Runs ruff check,
+      # ruff format --check, mypy, and the fast pytest suite (~3-4 min).
+      # IDRAA_GATE_SKIP_TESTS=1 skips pytest only; `git push --no-verify`
+      # skips the whole stage (document the reason in the next commit).
+      #
+      # `--extra dev` is LOAD-BEARING: the gate's tools (pytest, syrupy, mypy,
+      # ruff, openpyxl) all live in the `dev` optional-dependency group. A bare
+      # `uv run` syncs only the DEFAULT deps and leaves `dev` deps at whatever
+      # stale version happens to be installed — so the gate would silently run
+      # the wrong toolchain (e.g. syrupy 4.9.1 vs the locked 5.3.2 produced 37
+      # phantom snapshot failures, PR #407 session). `uv run --extra dev`
+      # reconciles the dev group to uv.lock before every gate run → self-healing.
+      - id: local-verification-gate
+        name: Local verification gate (ruff + mypy + fast pytest)
+        language: system
+        entry: uv run --extra dev python scripts/run_local_gate.py
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: forbid-inline-flash-dict
+        name: forbid inline-dict flash construction (use build_flash)
+        entry: >-
+          bash -c
+          'matches=$(grep -rn "\"flash\": *{" src/idraa/ | grep -v __pycache__ || true);
+          if [ -n "$matches" ]; then
+          echo "Inline flash dict forbidden - use build_flash(message, level):";
+          echo "$matches"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: lint-adapter-iter
+        name: Lint adapter-class list iteration
+        # `uv run python` resolves to the project venv's Python (3.11+,
+        # tomllib available). Bare `python3` resolved to system Python on
+        # macOS (3.9, no tomllib) and broke the hook.
+        entry: uv run python scripts/lint_adapter_iter.py
+        language: system
+        pass_filenames: true
+        files: ^src/idraa/services/(run_executor|.*_importer|.*_view_model|audit|scenario_library|seed_library_loader)\.py$
+
+      # Seed-UUID format foot-gun (recurred 4×): raw-text seed INSERTs binding
+      # str(uuid4()) store hyphenated UUIDs while the ORM Uuid type binds
+      # no-hyphen hex — id lookups then silently 404. Repair migrations
+      # b3e9c1a47d52 + e7d0c3a91f2b fixed the data; this lint blocks the
+      # pattern from recurring. Prescribed form: uuid4().hex.
+      - id: lint-alembic-uuids
+        name: Lint alembic seed-UUID format (use uuid4().hex)
+        entry: uv run python scripts/lint_alembic_uuids.py
+        language: system
+        pass_filenames: true
+        files: ^alembic/versions/.*\.py$

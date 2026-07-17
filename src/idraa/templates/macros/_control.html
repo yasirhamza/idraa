@@ -1,0 +1,25 @@
+{# Control rendering macros (issue #90).
+
+   ``control_domains(c)`` renders the set of FAIR-CAM domains a Control
+   spans, derived from its sub-function assignments. ``c.domains`` is the
+   ``frozenset[ControlDomain]`` property exposed by the ORM. Renders as a
+   comma-joined, sorted list of domain ``.value``s (e.g.
+   "decision_support, loss_event"), or an em-dash if the set is empty
+   (control with no assignments yet — exceptional state).
+
+   Usage:
+
+       {% from "macros/_control.html" import control_domains %}
+       <td>{{ control_domains(c) }}</td>
+#}
+
+{% macro control_domains(c) -%}
+{%- if c.domains -%}
+  {#- #454 item 3: humanize the FAIR-CAM domain slugs for display
+      (e.g. "decision_support" → "Decision Support"). Stored enum values
+      are untouched. -#}
+  <span class="text-body text-ink-1">{{ c.domains | map(attribute='value') | sort | map('humanize_slug') | join(', ') }}</span>
+{%- else -%}
+  <span class="text-body text-ink-3">&mdash;</span>
+{%- endif %}
+{%- endmacro %}

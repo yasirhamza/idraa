@@ -1,0 +1,176 @@
+# CI pipeline — mirrors `python -m idraa.tasks ci` locally, plus security gates.
+#
+# Local dev loop stays canonical (`python -m idraa.tasks ci`). GHA is the
+# merge gate for `main`; enable branch protection requiring these jobs to pass.
+#
+# Security-input note: this workflow only interpolates `env.*`, `matrix.*`, and
+# `github.ref` values — none of the untrusted-input fields listed in the
+# workflow-injection guide (issue titles, PR titles/bodies, comment bodies,
+# commit messages, head_ref, etc.). No shell commands run against user-
+# supplied text.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.4.27"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - name: Lint adapter-class list iteration
+        run: uv run python scripts/lint_adapter_iter.py --all
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - run: uv run mypy
+
+  test:
+    # Matrix trimmed 2026-05-09: dropped Python 3.11. Project targets 3.12;
+    # running both halved the test-job minute spend without catching real
+    # regressions. Cross-platform coverage retained via ubuntu-3.12 +
+    # windows-3.12. Bring 3.11 back if multi-interpreter support is ever
+    # a published deliverable.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12"]
+    runs-on: ${{ matrix.os }}
+    env:
+      # Pin uv's Python to the matrix value. Without this, `uv sync` on Windows
+      # silently resolved to a pre-installed 3.11 regardless of the matrix entry,
+      # so the 3.12 job wasn't actually testing 3.12. Covers `uv sync` + `uv run`.
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --extra dev
+      - run: uv run pytest
+
+  notebook-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - run: uv run python -m ipykernel install --user --name=python3
+      - run: uv run pytest -m notebook tests/smoke
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest tests/e2e -m e2e
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: idraa:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  sast:
+    # Python SAST via bandit. Scope = src/ (app code only); fair_cam, tests,
+    # notebooks, and alembic are excluded. Fails on MEDIUM+ severity (`-ll`).
+    # Also enforces a deny-list of Jinja2 dynamic-template APIs (SSTI vectors).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --extra dev
+      - run: uv run bandit -c pyproject.toml -r src/ -ll
+      - name: Ban Jinja2 dynamic-template APIs
+        # Safe pattern for this project: fastapi.templating.Jinja2Templates +
+        # TemplateResponse, rendering static .html files under templates/. Any
+        # dynamic template construction from strings is an SSTI vector.
+        run: |
+          if rg -n 'render_template_string|jinja2\.Template\(|from jinja2 import .*Template' src/; then
+            echo "::error::Banned Jinja2 dynamic-template API found in src/ — SSTI risk"
+            exit 1
+          fi
+
+  secrets:
+    # Secret scanning via gitleaks binary (full history). Catches
+    # accidentally committed API keys, tokens, credentials. Runs gitleaks
+    # directly instead of gitleaks-action@v2 because the action requires
+    # `pull-requests: write` to comment on PRs (default GITHUB_TOKEN on
+    # private repos doesn't have it — caused HttpError "Resource not
+    # accessible by integration"). Direct binary keeps results in the
+    # workflow log where reviewers already read them.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan full history
+        run: gitleaks detect --source . --no-banner --verbose
