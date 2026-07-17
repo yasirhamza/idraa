@@ -149,9 +149,10 @@ project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
   PR2: (5) digest-pin + SBOM job + `uv lock --check`; PR3: (6) pip-audit gate
   step + suppressions, (7) docs/supply-chain.md + branch-protection arming.
 - **target_loc_delta:** workflows/config dominated; new Python ≈ the pip-audit
-  gate step (`scripts/sca_gate.py` ≤95 physical lines incl. docstring and the
-  fail-closed error handling; core logic ≈60; the plan's reference
-  implementation is 91). Any task adding >50 lines of non-config logic is out
+  gate step (`scripts/sca_gate.py` ≤110 physical lines incl. docstring and the
+  fail-closed error handling; core logic ≈60. Budget addendum 2026-07-17: the
+  91-line reference implementation reflows to 104 under mandatory ruff-format
+  — whitespace only, zero added logic; ceiling raised accordingly). Any task adding >50 lines of non-config logic is out
   of budget.
 - **review_budget:** cross-cutting infra → 4-reviewer plan-gate on this design
   + the plan (iterated to 0/0) and a 4-reviewer final PR-gate on the last PR;
