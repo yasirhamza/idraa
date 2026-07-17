@@ -1,13 +1,10 @@
-# CI pipeline — mirrors `python -m idraa.tasks ci` locally, plus security gates.
+# CI — mirrors the local pre-push gate EXACTLY by running it verbatim, plus the
+# layers the gate cannot run locally (full-history secret scan, Docker build,
+# Playwright e2e, notebook smoke, Windows platform coverage).
 #
-# Local dev loop stays canonical (`python -m idraa.tasks ci`). GHA is the
-# merge gate for `main`; enable branch protection requiring these jobs to pass.
-#
-# Security-input note: this workflow only interpolates `env.*`, `matrix.*`, and
-# `github.ref` values — none of the untrusted-input fields listed in the
-# workflow-injection guide (issue titles, PR titles/bodies, comment bodies,
-# commit messages, head_ref, etc.). No shell commands run against user-
-# supplied text.
+# The local gate (scripts/run_local_gate.py) is the merge authority; this
+# workflow is its drift-proof mirror. Never re-implement a gate step here with
+# different flags — that is how the pre-2026-07 fossil drift happened.
 
 name: CI
 
@@ -22,97 +19,81 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  UV_VERSION: "0.4.27"
-  PYTHON_VERSION: "3.11"
+  # Aligned to the DEV toolchain's uv line — uv.lock is `revision = 3` schema
+  # (authored by uv 0.11.x); the old 0.4.27 pin may reject it and lacks
+  # `uv lock --check` (plan-gate A-I1). Keep this in lockstep with the dev uv.
+  UV_VERSION: "0.11.11"
 
 jobs:
-  lint:
+  gate:
+    name: gate (local gate, verbatim)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with:
           version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --extra dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - name: Lint adapter-class list iteration
-        run: uv run python scripts/lint_adapter_iter.py --all
+          enable-cache: true
+      - name: Sync (dev extras, frozen)
+        run: uv sync --frozen --extra dev
+      - name: Run the local gate verbatim
+        run: uv run --extra dev python scripts/run_local_gate.py
 
-  typecheck:
+  test-windows:
+    name: test (windows, platform coverage)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: Fast pytest suite (css gate is posix-only; covered by `gate`)
+        run: uv run --extra dev python -m pytest -q --no-cov
+        # No SESSION_SECRET needed: tests/conftest.py forces ENVIRONMENT=test,
+        # which bypasses the secret-hardening boot guard (verified at plan-gate).
+
+  sast:
+    name: sast
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with:
           version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --extra dev
-      - run: uv run mypy
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: ruff security rules (same config as the gate — zero drift)
+        run: uv run ruff check --select S src fair_cam scripts
+      - name: zizmor (GitHub-workflow SAST; locked dev dep)
+        run: uv run zizmor .github/workflows/
 
-  test:
-    # Matrix trimmed 2026-05-09: dropped Python 3.11. Project targets 3.12;
-    # running both halved the test-job minute spend without catching real
-    # regressions. Cross-platform coverage retained via ubuntu-3.12 +
-    # windows-3.12. Bring 3.11 back if multi-interpreter support is ever
-    # a published deliverable.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12"]
-    runs-on: ${{ matrix.os }}
-    env:
-      # Pin uv's Python to the matrix value. Without this, `uv sync` on Windows
-      # silently resolved to a pre-installed 3.11 regardless of the matrix entry,
-      # so the 3.12 job wasn't actually testing 3.12. Covers `uv sync` + `uv run`.
-      UV_PYTHON: ${{ matrix.python-version }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-        with:
-          version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: uv sync --extra dev
-      - run: uv run pytest
-
-  notebook-smoke:
+  secrets:
+    name: secrets (gitleaks, full history)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
         with:
-          version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --extra dev
-      - run: uv run python -m ipykernel install --user --name=python3
-      - run: uv run pytest -m notebook tests/smoke
-
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-        with:
-          version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --extra dev
-      - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest tests/e2e -m e2e
+          fetch-depth: 0
+      - name: Install gitleaks (sha256-verified — build_css.py precedent)
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          # Resolved once from the release's *_checksums.txt and hardcoded:
+          GITLEAKS_SHA256=9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+          curl -sSL -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xz -C /tmp -f /tmp/gitleaks.tgz gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - run: gitleaks detect --source . --no-banner --verbose
 
   docker-build:
+    name: docker-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,52 +106,48 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  sast:
-    # Python SAST via bandit. Scope = src/ (app code only); fair_cam, tests,
-    # notebooks, and alembic are excluded. Fails on MEDIUM+ severity (`-ll`).
-    # Also enforces a deny-list of Jinja2 dynamic-template APIs (SSTI vectors).
+  e2e:
+    name: e2e (Playwright)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with:
           version: ${{ env.UV_VERSION }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --extra dev
-      - run: uv run bandit -c pyproject.toml -r src/ -ll
-      - name: Ban Jinja2 dynamic-template APIs
-        # Safe pattern for this project: fastapi.templating.Jinja2Templates +
-        # TemplateResponse, rendering static .html files under templates/. Any
-        # dynamic template construction from strings is an SSTI vector.
-        run: |
-          if rg -n 'render_template_string|jinja2\.Template\(|from jinja2 import .*Template' src/; then
-            echo "::error::Banned Jinja2 dynamic-template API found in src/ — SSTI risk"
-            exit 1
-          fi
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - run: uv run playwright install chromium --with-deps
+      - run: uv run --extra dev python -m pytest -m e2e -q --no-cov tests/e2e/
+        env:
+          SESSION_SECRET: insecure-ci-only-dummy-session-secret
 
-  secrets:
-    # Secret scanning via gitleaks binary (full history). Catches
-    # accidentally committed API keys, tokens, credentials. Runs gitleaks
-    # directly instead of gitleaks-action@v2 because the action requires
-    # `pull-requests: write` to comment on PRs (default GITHUB_TOKEN on
-    # private repos doesn't have it — caused HttpError "Resource not
-    # accessible by integration"). Direct binary keeps results in the
-    # workflow log where reviewers already read them.
+  notebook-smoke:
+    name: notebook-smoke
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
         with:
-          fetch-depth: 0
-      - name: Install gitleaks
-        run: |
-          GITLEAKS_VERSION=8.24.3
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar -xz -C /tmp gitleaks
-          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-      - name: Scan full history
-        run: gitleaks detect --source . --no-banner --verbose
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: Install the Jupyter kernel papermill targets (old job's prerequisite)
+        run: uv run python -m ipykernel install --user --name=python3
+      - run: uv run --extra dev python -m idraa.tasks notebook-smoke
+
+  # Aggregator over the DETERMINISTIC core only (gate, test-windows, secrets,
+  # sast). e2e / docker-build / notebook-smoke stay visible-but-advisory so a
+  # flaky browser or kernel can never wedge merges (plan-gate A-I5).
+  ci-success:
+    name: ci-success
+    if: always()
+    needs: [gate, test-windows, secrets, sast]
+    runs-on: ubuntu-latest
+    steps:
+      # Expression-based check: the original grep idiom NEVER failed
+      # (grep -qv on multi-line JSON — plan-gate A-B1/Sec-B1, empirically
+      # confirmed). contains() on needs.*.result is the standard idiom.
+      - name: Fail if any needed job did not succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - run: echo "deterministic core green"
