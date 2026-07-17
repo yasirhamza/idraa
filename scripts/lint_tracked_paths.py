@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import fnmatch
 import subprocess
-import sys
 
 # Directory prefixes that must never be tracked. Local tool/agent state only —
 # future first-party docs (specs/plans/runbooks) are legitimate tracked content.
@@ -53,8 +52,8 @@ ALLOW: frozenset[str] = frozenset(
 
 
 def main() -> int:
-    tracked = subprocess.run(  # noqa: S603 - fixed argv, no user input
-        ["git", "ls-files"],  # noqa: S607 - git resolved from PATH by design
+    tracked = subprocess.run(
+        ["git", "ls-files"],
         capture_output=True,
         text=True,
         check=True,
