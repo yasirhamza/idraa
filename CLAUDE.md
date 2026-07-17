@@ -66,6 +66,17 @@ Fly.io app `idraa` (https://idraa.fly.dev/), config in `fly.toml`. Deploy via
 macOS Keychain (service `riskflow-fly-token`, name kept for credential
 compatibility).
 
+## Issue tracker convention
+
+Feature/quality issues live on THIS repo's public tracker (the backlog was
+migrated here 2026-07-18 as sanitized recreations; `riskflow#NNN (private
+archive)` footers point at the originals). **Security-sensitive issues —
+anything enumerating an open gap in the live app — are filed on the private
+archive repo's tracker instead**, and migrate here only after they are fixed.
+When writing public issue bodies: no bare `#NN` cross-refs to archive numbers
+(GitHub autolinks them to unrelated issues here) — use the plain-text
+`riskflow#NNN` form.
+
 ## Outbound hygiene
 
 `scripts/lint_tracked_paths.py` (pre-commit) fails if any denylisted local-state
