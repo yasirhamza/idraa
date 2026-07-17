@@ -44,24 +44,30 @@ gate deliberately scopes out), standalone `bandit -ll` reports 3 untriaged
 mediums (the gate uses ruff-S), and the test matrix runs Python 3.12 while the
 project pins 3.11. `lint` was fixed in PR #1; the rest is this epic's work.
 
-## Design — five layers on the public substrate
+## Design — six layers on the public substrate
 
 | # | Layer | Mechanism | Enforcement |
 |---|---|---|---|
 | 1 | Dependency integrity | `uv.lock` sha256 hashes (done) + `uv lock --check` freshness in the gate | local gate + CI |
 | 2 | Dependency vulns (SCA) | `dependency-review-action` (delta, PR gate) + Dependabot alerts (standing tree) + `pip-audit` in the local gate (offline belt-and-suspenders) | PR gate + Security tab + pre-push |
 | 3 | CI/build hardening | ci.yml runs the **local gate script verbatim** (single source of truth — kills drift permanently) + SHA-pin every action + least-privilege permissions | Actions |
-| 4 | Release integrity | Docker base image **digest-pinned**; CycloneDX SBOM from `uv.lock` generated in CI per main push (artifact, sha-keyed); Fly remote builds unchanged — image provenance explicitly out of scope (owner decision) | CI + Dockerfile |
-| 5 | First-party SAST | ruff-S in the gate (done) + CodeQL `python` on PRs + weekly cron, **advisory** | Security tab |
+| 4 | Build/release transparency | Docker base image **digest-pinned**; CycloneDX SBOM from `uv.lock` generated in CI per main push (artifact, sha-keyed); Fly remote builds unchanged — image provenance explicitly out of scope (owner decision) | CI + Dockerfile |
+| 5 | First-party SAST | ruff-S in the gate (done) + a **named blocking `sast` CI job** (ruff-S re-run, same config — zero drift; + `zizmor` for GitHub-workflow SAST, locked dev dep) + CodeQL `python` on PRs + weekly cron, **advisory** | gate + ci-success + Security tab |
 | 6 | Outbound-leak control | gitleaks hooks + denylist guard (done) — this epic **red-tests** both live and adds `docs/supply-chain.md` | pre-commit/pre-push |
 
-### SCA policy (unchanged from #555 / #252)
+### SCA policy (two complementary layers — NOT the same rule)
 
-`severity ≥ HIGH && fix exists → FAIL`; `≥ HIGH && no fix → WARN + suppressions
-entry (GHSA id + reason + review-date)`; MEDIUM/LOW → report only.
-`dependency-review-config.yml` holds `allow-ghsas`. `pip-audit` in the gate uses
-the same policy with its own suppressions file and an `IDRAA_GATE_SKIP_AUDIT=1`
-offline hatch (consistent with the existing gate skip vars).
+- **PR delta gate (`dependency-review-action`): severity-based.**
+  `severity ≥ HIGH && introduced by this PR → FAIL`; suppressions in
+  `dependency-review-config.yml` `allow-ghsas` (reason + review-date).
+- **Local gate (`pip-audit`): fixability-based.** pip-audit's JSON carries
+  fixability but NOT severity, so the gate `FAILS on any FIXABLE vulnerability
+  not suppressed` and `WARNS on unfixable/suppressed ones` — strictly stronger
+  than the PR rule on fixable findings (it also catches standing-tree and
+  MEDIUM/LOW fixables), never weaker. Suppressions in
+  `scripts/sca_suppressions.txt`; every id REQUIRES a preceding comment stating
+  the reason + a review-by date (machine-enforced — a bare id fails the gate).
+  Offline hatch: `IDRAA_GATE_SKIP_AUDIT=1`.
 
 ## Rollout — three risk-ordered PRs
 
@@ -83,6 +89,11 @@ offline hatch (consistent with the existing gate skip vars).
   comment.
 - Add `.github/dependabot.yml`: ecosystems `uv`, `github-actions`, `docker`;
   grouped; monthly; low-noise.
+- Add a named blocking `sast` job (owner decision 2026-07-17): `ruff check
+  --select S src fair_cam scripts` (same tool+config as the gate — no dual
+  suppression syntax, no drift) + `zizmor .github/workflows/` (workflow SAST —
+  closes the one tooling gap; zizmor added as a locked dev dependency). Part of
+  `ci-success`'s deterministic core.
 - **Red-test both outbound guards live** in this PR's branch: stage a fake
   `.env`-shaped tracked file → denylist hook must fail; stage a fake secret →
   gitleaks must block. Record both refusals in the PR body, then remove.
@@ -103,9 +114,9 @@ offline hatch (consistent with the existing gate skip vars).
   policy, the outbound-leak surface (denylist + gitleaks + what must never
   leave the machine), the deliberate keeps (Fly-built images unattested, by
   decision), and the "am I affected?" runbook (graph + SBOM lookup).
-- **Arm branch protection** on `main`: require the `gate` job (and `secrets`)
-  once they have a green streak ≥ 3 runs; CodeQL stays advisory (AndroDR
-  lesson). Admin-bypass merges remain possible (agentic flow unchanged); the
+- **Arm branch protection** on `main`: require `ci-success` (the deterministic
+  aggregator), `secrets (gitleaks, full history)`, and `dependency-review`
+  once green streak ≥ 3 runs; CodeQL stays advisory (AndroDR lesson). Admin-bypass merges remain possible (agentic flow unchanged); the
   ruleset is the backstop, the local gate remains the authority.
 
 ## Out of scope (explicit)
@@ -126,7 +137,8 @@ offline hatch (consistent with the existing gate skip vars).
   PR2: (5) digest-pin + SBOM job + `uv lock --check`; PR3: (6) pip-audit gate
   step + suppressions, (7) docs/supply-chain.md + branch-protection arming.
 - **target_loc_delta:** workflows/config dominated; new Python ≈ the pip-audit
-  gate step (<50 lines). Any task adding >50 lines of non-config logic is out
+  gate step (`scripts/sca_gate.py` ≤90 physical lines incl. docstring and the
+  fail-closed error handling; core logic ≈60). Any task adding >50 lines of non-config logic is out
   of budget.
 - **review_budget:** cross-cutting infra → 4-reviewer plan-gate on this design
   + the plan (iterated to 0/0) and a 4-reviewer final PR-gate on the last PR;
@@ -149,6 +161,28 @@ If exceeded, append `## Scope budget — addendum` with owner re-approval.
   +added · **Justification:** discovered on the first public runs (typecheck/
   sast red from gate drift); the gate-verbatim rewrite fixes it as a
   structural property rather than patching three jobs individually.
+- **Item:** local pip-audit policy = FIXABILITY-based, not severity-based ·
+  **Direction:** ↔reframed · **Justification:** pip-audit JSON has no severity
+  field; the gate fails on any fixable unsuppressed vuln (strictly stronger),
+  severity gating delegated to dependency-review on the PR path. (Plan-gate
+  S-B1/M-I1 — the two docs previously disagreed silently.)
+- **Item:** ci-success aggregator scoped to the deterministic core (gate,
+  test-windows, secrets); e2e/docker-build/notebook-smoke advisory ·
+  **Direction:** ↔reframed · **Justification:** plan-gate A-I5 — requiring
+  flake-prone jobs contradicts the wedge lesson; --admin bypass exists but a
+  wedging default is wrong.
+- **Item:** CI uv version aligned to the dev toolchain (0.11.x line), not the
+  stale 0.4.27 pin · **Direction:** +added · **Justification:** plan-gate A-I1 —
+  uv.lock is `revision = 3` schema (authored by uv 0.11.x); a 0.4.27 CI/Docker
+  uv may reject it and lacks `uv lock --check`.
+- **Item:** gitleaks CI binary sha256-pinned · **Direction:** +added ·
+  **Justification:** plan-gate Sec-I1 — a supply-chain epic must not
+  curl|tar its own scanner unverified; follows the build_css.py precedent.
+- **Item:** named blocking `sast` CI job (ruff-S + zizmor) added ·
+  **Direction:** +added · **Justification:** owner decision 2026-07-17 —
+  visible, blocking SAST check; ruff-S re-run has zero drift risk (same
+  tool/config as the gate), zizmor covers workflow files (previously
+  hand-audited only).
 - **Item:** bandit `-ll` medium-finding triage absorbed into PR1 ·
   **Direction:** +added (small) · **Justification:** the fossil sast job
   surfaced 3 untriaged mediums; they must be dispositioned (fix or suppress

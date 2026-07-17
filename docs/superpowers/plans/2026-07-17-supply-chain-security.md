@@ -16,7 +16,7 @@
 - Every `uses:` in every workflow is **SHA-pinned with a `# vN` comment**. Resolve SHAs at implementation time: `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`.
 - Top-level workflow `permissions: contents: read`; broader scopes only per-job where required (CodeQL: `security-events: write`).
 - The **local pre-push gate remains the merge authority**; CI is the mirror + the layers the gate can't run. Run all local verification in the FOREGROUND.
-- The 3 bandit `-ll` mediums are **pre-triaged** (ruff-S noqa with rationale: `formatting.py:59` S704 — all text nodes escaped via markupsafe; `build_css.py:90` + `vendor_sync.py:57` S310 — https-pinned, sha256-verified downloads). No new suppressions needed; the standalone bandit job is deleted because ruff-S in the gate covers these rules and honors the noqas.
+- The 3 bandit `-ll` mediums are **pre-triaged** (ruff-S noqa with rationale: `src/idraa/formatting.py:59` S704 — all text nodes escaped via markupsafe; `src/idraa/tasks/build_css.py:90` S310 — https-pinned, sha256-VERIFIED download; `src/idraa/tasks/vendor_sync.py:57` S310 — hardcoded https CDN template + version from committed package.json, no user input; it RECORDS a sha384 SRI on first fetch, trust-on-first-use, NOT a pin-verify). No new suppressions needed; the standalone bandit job is deleted because ruff-S in the gate covers these rules and honors the noqas.
 - Commit style: conventional commits + trailers `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` / `Claude-Session: https://claude.ai/code/session_01QBaSMmrYC19RBbdYgQVE3o`.
 - Merges: local gate green → `gh pr merge --admin --squash` (billing history makes required-checks unreliable until PR3 arms them; verify merged state after).
 
@@ -28,7 +28,7 @@
 - Modify: `.github/workflows/ci.yml` (full rewrite)
 
 **Interfaces:**
-- Produces: jobs named `gate`, `test-windows`, `secrets`, `docker-build`, `e2e`, `notebook-smoke`, `ci-success` (the aggregator later required by branch protection in Task 7). Tasks 2–3 add SHA pins and sibling workflows around this file.
+- Produces: jobs named `gate`, `test-windows`, `sast`, `secrets`, `docker-build`, `e2e`, `notebook-smoke`, `ci-success` (aggregating the deterministic core: gate, test-windows, secrets, sast) (the aggregator later required by branch protection in Task 7). Tasks 2–3 add SHA pins and sibling workflows around this file.
 
 - [ ] **Step 1: Rewrite `.github/workflows/ci.yml`**
 
@@ -60,7 +60,10 @@ permissions:
   contents: read
 
 env:
-  UV_VERSION: "0.4.27"
+  # Aligned to the DEV toolchain's uv line — uv.lock is `revision = 3` schema
+  # (authored by uv 0.11.x); the old 0.4.27 pin may reject it and lacks
+  # `uv lock --check` (plan-gate A-I1). Keep this in lockstep with the dev uv.
+  UV_VERSION: "0.11.11"
 
 jobs:
   gate:
@@ -89,8 +92,23 @@ jobs:
       - run: uv sync --frozen --extra dev
       - name: Fast pytest suite (css gate is posix-only; covered by `gate`)
         run: uv run --extra dev python -m pytest -q --no-cov
-        env:
-          SESSION_SECRET: insecure-ci-only-dummy-session-secret
+        # No SESSION_SECRET needed: tests/conftest.py forces ENVIRONMENT=test,
+        # which bypasses the secret-hardening boot guard (verified at plan-gate).
+
+  sast:
+    name: sast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --extra dev
+      - name: ruff security rules (same config as the gate — zero drift)
+        run: uv run ruff check --select S src fair_cam scripts
+      - name: zizmor (GitHub-workflow SAST; locked dev dep)
+        run: uv run zizmor .github/workflows/
 
   secrets:
     name: secrets (gitleaks, full history)
@@ -99,11 +117,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Install gitleaks
+      - name: Install gitleaks (sha256-verified — build_css.py precedent)
         run: |
           GITLEAKS_VERSION=8.24.3
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar -xz -C /tmp gitleaks
+          # Resolve once from the release's *_checksums.txt and hardcode:
+          GITLEAKS_SHA256=<resolve: curl -sSL .../v8.24.3/gitleaks_8.24.3_checksums.txt | grep linux_x64.tar.gz>
+          curl -sSL -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xz -C /tmp -f /tmp/gitleaks.tgz gitleaks
           sudo install /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
       - run: gitleaks detect --source . --no-banner --verbose
@@ -147,23 +168,31 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv sync --frozen --extra dev
+      - name: Install the Jupyter kernel papermill targets (old job's prerequisite)
+        run: uv run python -m ipykernel install --user --name=python3
       - run: uv run --extra dev python -m idraa.tasks notebook-smoke
 
+  # Aggregator over the DETERMINISTIC core only (gate, test-windows, secrets,
+  # sast). e2e / docker-build / notebook-smoke stay visible-but-advisory so a
+  # flaky browser or kernel can never wedge merges (plan-gate A-I5).
   ci-success:
     name: ci-success
     if: always()
-    needs: [gate, test-windows, secrets, docker-build, e2e, notebook-smoke]
+    needs: [gate, test-windows, secrets, sast]
     runs-on: ubuntu-latest
     steps:
-      - name: All required jobs green?
-        run: |
-          results='${{ toJSON(needs) }}'
-          echo "$results"
-          echo "$results" | grep -qv '"result": "failure"' || exit 1
-          echo "$results" | grep -q '"result": "cancelled"' && exit 1 || true
+      # Expression-based check: the original grep idiom NEVER failed
+      # (grep -qv on multi-line JSON — plan-gate A-B1/Sec-B1, empirically
+      # confirmed). contains() on needs.*.result is the standard idiom.
+      - name: Fail if any needed job did not succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+      - run: echo "deterministic core green"
 ```
 
 Adaptation notes for the implementer (verify against the CURRENT file before deleting):
+- Add `zizmor` to the dev extra in this task (`uv add --optional dev zizmor && uv sync --extra dev`) and run `uv run zizmor .github/workflows/` locally; triage any finding it raises on the NEW workflows before committing (fix or annotate per zizmor's docs).
+- Resolve the gitleaks sha256 before committing: `curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_checksums.txt | grep linux_x64.tar.gz` and hardcode the hash in the workflow (supply-chain epic must not curl|tar its own scanner unverified — Sec-I1; build_css.py precedent).
 - The `SESSION_SECRET` dummy is deliberately LOW-ENTROPY (word-based) — a random-looking value trips gitleaks' generic-api-key rule in the `secrets` job and the pre-commit hook (verified live: the first version of this very plan document was blocked by the hook). Keep it word-based.
 - Preserve the existing file's `notebook-smoke` invocation if it differs (read the old job first; keep its exact command).
 - The old `lint`/`typecheck`/`sast` jobs and the 3.12 `test` matrix are DELETED — coverage now: gate job (ruff+format+mypy+css+pytest at the gate's exact scope) + `test-windows` (3.11 via `.python-version`, platform coverage per the cross-platform rule).
@@ -362,7 +391,13 @@ python3 scripts/lint_tracked_paths.py && echo "clean again ✓"
 - [ ] **Step 2: Red-test gitleaks (staged secret)**
 
 ```bash
-printf 'aws_secret="AKIAIOSFODNN7EXAMPLE1234"\n' > redtest_secret.txt && git add -f redtest_secret.txt
+# Do NOT use AWS's documented example key (AKIAIOSFODNN7EXAMPLE...) — gitleaks
+# v8.24.3 explicitly allowlists it (rule-level `.+EXAMPLE$` + global "example"
+# stopword), and extra trailing chars break the \b16-char match entirely
+# (plan-gate Sec-I2, verified against the pinned gitleaks.toml). Generate a
+# random, non-allowlisted key of the exact AKIA+16 shape:
+KEY=$(python3 -c "import secrets,string; print('AKIA'+''.join(secrets.choice(string.ascii_uppercase+string.digits) for _ in range(16)))")
+printf 'aws_access_key_id = "%s"\n' "$KEY" > redtest_secret.txt && git add -f redtest_secret.txt
 uv run pre-commit run gitleaks --files redtest_secret.txt; echo "exit=$?"   # MUST be nonzero (leak detected)
 git rm --cached -q redtest_secret.txt && rm redtest_secret.txt
 ```
@@ -383,6 +418,8 @@ If the gitleaks hook passes the fake key, STOP — the hook is miswired; fix `.p
 
 **Interfaces:**
 - Produces: `sbom` job uploading artifact `idraa-sbom-<sha>`; gate step label `uv lock --check`.
+
+- [ ] **Step 0: Align the Dockerfile's uv pin with CI/dev** — `Dockerfile` line `RUN pip install --no-cache-dir uv==0.4.27` → `uv==0.11.11` (same A-I1 skew: the builder must parse the revision-3 lock). Rebuild check happens via this PR's docker-build job.
 
 - [ ] **Step 1: Digest-pin the base image**
 
@@ -433,7 +470,7 @@ FROM python:3.11-slim@sha256:<digest> AS runtime
     # Dev-path lockfile freshness — matches Docker's `uv sync --frozen`.
     # Runs the uv BINARY (not python -m), so it sits outside GATE_STEPS.
     print("local gate: uv lock --check")
-    lock = subprocess.run(["uv", "lock", "--check"], cwd=REPO_ROOT, check=False)  # noqa: S607
+    lock = subprocess.run(["uv", "lock", "--check"], cwd=REPO_ROOT, check=False)  # noqa: S603
     if lock.returncode != 0:
         print("local gate: FAILED at uv lock --check (pyproject/uv.lock drift)")
         return lock.returncode
@@ -453,7 +490,7 @@ git add -A && git commit -m "build: digest-pin base image; CycloneDX SBOM per ma
 ### Task 6: pip-audit in the local gate (PR3)
 
 **Files:**
-- Create: `scripts/sca_gate.py` (policy wrapper, keep <60 lines)
+- Create: `scripts/sca_gate.py` (policy wrapper; ≤95 physical lines incl. docstring + fail-closed error handling; core logic ≈60)
 - Create: `scripts/sca_suppressions.txt`
 - Modify: `scripts/run_local_gate.py` (audit step + `IDRAA_GATE_SKIP_AUDIT`)
 - Modify: `pyproject.toml` (add `pip-audit` to dev extra)
@@ -495,10 +532,19 @@ def test_suppressed_fixable_warns_not_fails():
     assert not failures and len(warnings) == 1
 
 
-def test_parse_suppressions_ignores_comments(tmp_path):
+def test_parse_suppressions_requires_reason_comment(tmp_path):
     f = tmp_path / "s.txt"
     f.write_text("# reason: unfixable transitive; review-by 2026-10-01\nGHSA-zzzz\n\n")
     assert parse_suppressions(f) == {"GHSA-zzzz"}
+
+
+def test_bare_suppression_id_raises(tmp_path):
+    import pytest
+
+    f = tmp_path / "s.txt"
+    f.write_text("GHSA-bare\n")
+    with pytest.raises(ValueError, match="lacks a reason comment"):
+        parse_suppressions(f)
 ```
 
 Run: `uv run --extra dev python -m pytest -q --no-cov tests/unit/test_sca_gate.py` → FAIL (module missing).
@@ -509,14 +555,17 @@ Run: `uv run --extra dev python -m pytest -q --no-cov tests/unit/test_sca_gate.p
 """pip-audit policy gate (#555). FAIL on fixable+unsuppressed, WARN otherwise.
 
 pip-audit's JSON has fixability but not severity; severity-aware gating is
-dependency-review-action's job on the PR path. Suppressions file: one GHSA/PYSEC
-id per line; comment lines (#) must state the reason + a review-by date.
-Offline hatch: IDRAA_GATE_SKIP_AUDIT=1 (document the reason in the next commit).
+dependency-review-action's job on the PR path. Suppressions: one GHSA/PYSEC id
+per line, each immediately preceded by a comment stating the reason + a
+review-by date — a bare id FAILS the gate (machine-enforced auditability).
+Tool errors fail CLOSED with a pointer at the offline hatch
+IDRAA_GATE_SKIP_AUDIT=1 (document the reason in the next commit).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -524,16 +573,27 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPRESSIONS = REPO_ROOT / "scripts" / "sca_suppressions.txt"
+SKIP_HINT = "offline? set IDRAA_GATE_SKIP_AUDIT=1 and document why in the next commit"
 
 
 def parse_suppressions(path: Path) -> set[str]:
+    """Ids must be preceded by a reason comment; a bare id raises."""
     if not path.exists():
         return set()
-    return {
-        line.strip()
-        for line in path.read_text().splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    }
+    ids: set[str] = set()
+    prev_comment = False
+    for line in path.read_text().splitlines():
+        s = line.strip()
+        if not s:
+            prev_comment = False
+        elif s.startswith("#"):
+            prev_comment = True
+        else:
+            if not prev_comment:
+                raise ValueError(f"suppression {s!r} lacks a reason comment above it")
+            ids.add(s)
+            prev_comment = False
+    return ids
 
 
 def evaluate(deps: list[dict], suppressed: set[str]) -> tuple[list[str], list[str]]:
@@ -551,15 +611,28 @@ def evaluate(deps: list[dict], suppressed: set[str]) -> tuple[list[str], list[st
 def main() -> int:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
         req = tf.name
-    subprocess.run(
-        ["uv", "export", "--frozen", "--no-dev", "--no-hashes", "-o", req],
-        cwd=REPO_ROOT, check=True,
-    )
-    proc = subprocess.run(
-        ["uv", "run", "pip-audit", "-r", req, "--format", "json", "--progress-spinner", "off"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
-    )
-    deps = json.loads(proc.stdout).get("dependencies", [])
+    try:
+        subprocess.run(  # noqa: S603 — fixed argv, no user input
+            ["uv", "export", "--frozen", "--no-dev", "--no-hashes", "-o", req],
+            cwd=REPO_ROOT, check=True,
+        )
+        proc = subprocess.run(  # noqa: S603 — direct module run, no nested uv resolve
+            [sys.executable, "-m", "pip_audit", "-r", req, "--format", "json",
+             "--progress-spinner", "off"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        )
+    finally:
+        os.unlink(req)
+    # pip-audit: 0 = clean, 1 = vulns found, anything else = tool/network error.
+    if proc.returncode not in (0, 1):
+        print(proc.stderr, file=sys.stderr)
+        print(f"sca_gate: pip-audit errored (exit {proc.returncode}) — failing closed; {SKIP_HINT}")
+        return 2
+    try:
+        deps = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
+    except (json.JSONDecodeError, KeyError) as exc:
+        print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
+        return 2
     failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))
     for w in warnings:
         print(f"sca_gate WARN: {w}")
@@ -586,7 +659,7 @@ if __name__ == "__main__":
         print("local gate: IDRAA_GATE_SKIP_AUDIT=1 — SKIPPING pip-audit")
     else:
         print("local gate: pip-audit (fixable-vuln policy)")
-        audit = subprocess.run(
+        audit = subprocess.run(  # noqa: S603 — fixed argv, no user input
             [sys.executable, "scripts/sca_gate.py"], cwd=REPO_ROOT, check=False
         )
         if audit.returncode != 0:
@@ -598,7 +671,7 @@ if __name__ == "__main__":
 
 ```bash
 uv add --optional dev pip-audit && uv sync --extra dev
-uv run --extra dev python -m pytest -q --no-cov tests/unit/test_sca_gate.py   # 4 pass
+uv run --extra dev python -m pytest -q --no-cov tests/unit/test_sca_gate.py   # 5 pass
 uv run python scripts/sca_gate.py; echo "exit=$?"    # inspect real output; triage any finding NOW
 uv run --extra dev python scripts/run_local_gate.py  # full gate green (network needed)
 git add -A && git commit -m "gate: pip-audit SCA step — fail fixable, warn unfixable, suppressions with rationale (#555)"
@@ -617,11 +690,13 @@ If the real run FAILS on a current fixable vuln: bump the dependency in this tas
 **Interfaces:** consumes everything; produces the public posture narrative + the armed ruleset.
 
 - [ ] **Step 1: Write `docs/supply-chain.md`** covering, in order (write real prose, ~120 lines):
-  1. The five layers table from the design (mechanism + enforcement point per layer).
+  1. The SIX layers table from the design (mechanism + enforcement point per layer).
   2. SCA triage policy: delta PR gate at HIGH+ (dependency-review), standing tree via Dependabot alerts, local pip-audit fixability policy + the severity-data caveat, both suppressions files and their reason+review-by convention.
   3. Outbound-leak surface: gitleaks (commit staged / push full-history / CI full-history), the tracked-path denylist, what must never leave the machine (.env, DBs, agent state, keys), and the licensed-material rule (first-party or verifiably-permissive only).
   4. Deliberate keeps with rationale: Fly-built images are NOT provenance-attested (owner decision — no deploy token in public Actions); CodeQL advisory (wedging lesson); `/data/riskflow.db` filename (WAL-safe).
   5. "Am I affected?" runbook: Security tab → Dependabot alerts; the dependency graph; downloading the latest `idraa-sbom-<sha>` artifact and grepping it.
+  6. Coverage notes: Dependabot alerts cover the FULL lockfile (dev deps included) while local pip-audit scans runtime-only — state the split; setup-uv cache poisoning is doubly mitigated (fork-PR cache isolation + `uv sync --frozen` hash verification).
+  7. Build-asset transparency: Tailwind binary sha256-pinned with no upstream attestation (re-hash is the strongest achievable check); vendored assets carry recorded sha384 SRI (trust-on-first-use at vendor time, verified thereafter).
 
 - [ ] **Step 2: Arm branch protection (only after ≥3 consecutive green `gate` runs on main)**
 
@@ -629,14 +704,11 @@ If the real run FAILS on a current fixable vuln: bump the dependency in this tas
 gh api "repos/yasirhamza/idraa/actions/workflows/ci.yml/runs?branch=main&per_page=5" --jq '.workflow_runs[] | "\(.head_sha[0:8]) \(.conclusion)"'
 # require the aggregator + secrets; enforce_admins=false keeps the agentic
 # --admin merge path (local gate remains the authority; this is the backstop)
-gh api -X PUT repos/yasirhamza/idraa/branches/main/protection \
-  -F 'required_status_checks[strict]=false' \
-  -f 'required_status_checks[contexts][]=ci-success' \
-  -f 'required_status_checks[contexts][]=secrets (gitleaks, full history)' \
-  -f 'required_status_checks[contexts][]=dependency-review' \
-  -F 'enforce_admins=false' \
-  -F 'required_pull_request_reviews=null' \
-  -F 'restrictions=null'
+# gh api does NOT expand bracket-keys into nested JSON (plan-gate A-I4) - use a body:
+gh api -X PUT repos/yasirhamza/idraa/branches/main/protection --input - <<'JSON'
+{"required_status_checks":{"strict":false,"contexts":["ci-success","secrets (gitleaks, full history)","dependency-review"]},
+ "enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}
+JSON
 # dependency-review runs on EVERY PR (no path filter) so it cannot wedge the way
 # a path-filtered CodeQL ruleset does — safe to require. CodeQL stays advisory.
 gh api repos/yasirhamza/idraa/branches/main/protection --jq '.required_status_checks.contexts'
