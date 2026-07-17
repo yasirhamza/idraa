@@ -33,7 +33,8 @@ def test_xlsxwriter_runtime_imports_confined_to_allowlist():
         rel
         for py in _runtime_py_files(root)
         if bad.search(py.read_text())
-        and (rel := str(py.relative_to(root))) not in _XLSXWRITER_RUNTIME_ALLOWLIST
+        and (rel := py.relative_to(root).as_posix())
+        not in _XLSXWRITER_RUNTIME_ALLOWLIST  # as_posix: str() yields backslashes on Windows
     ]
     assert offenders == [], f"xlsxwriter imported outside the allowlist: {offenders}"
 
@@ -43,7 +44,9 @@ def test_openpyxl_not_imported_at_runtime():
     root = pathlib.Path(__file__).resolve().parent.parent.parent
     bad = re.compile(r"^\s*(import|from)\s+openpyxl\b", re.M)
     offenders = [
-        str(py.relative_to(root)) for py in _runtime_py_files(root) if bad.search(py.read_text())
+        py.relative_to(root).as_posix()
+        for py in _runtime_py_files(root)
+        if bad.search(py.read_text(encoding="utf-8"))
     ]
     assert offenders == [], (
         f"openpyxl is dev-only — runtime import would ImportError in prod: {offenders}"
