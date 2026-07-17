@@ -55,6 +55,7 @@ dev = [
   "pypdf>=5.0",
   "beautifulsoup4>=4.12",
   "html5lib>=1.1",
+  "zizmor>=1.27.0",
 ]
 
 [project.scripts]
