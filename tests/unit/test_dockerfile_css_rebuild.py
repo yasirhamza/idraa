@@ -39,8 +39,10 @@ def test_builder_stage_rebuilds_css_after_copying_src() -> None:
     assert run_build.start() > copy_src, "build-css RUN must come after COPY src"
 
     # And within the BUILDER stage (before the runtime FROM), so the output
-    # rides the existing `COPY --from=builder /app /app`.
-    runtime_from = _DOCKERFILE.find("FROM python:3.11-slim AS runtime")
+    # rides the existing `COPY --from=builder /app /app`. Match on the stage
+    # name only (not the full FROM line) so this survives base-image digest
+    # bumps (#555 digest-pin; Dependabot keeps the sha256 current).
+    runtime_from = _DOCKERFILE.find("AS runtime")
     assert runtime_from != -1
     assert run_build.start() < runtime_from, "build-css RUN must be in the builder stage"
 

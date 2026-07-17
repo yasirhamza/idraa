@@ -157,6 +157,28 @@ jobs:
         run: uv run python -m ipykernel install --user --name=python3
       - run: uv run --extra dev python -m idraa.tasks notebook-smoke
 
+  sbom:
+    name: sbom (CycloneDX from uv.lock)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --frozen --extra dev
+      - name: Export locked runtime deps + generate CycloneDX SBOM
+        run: |
+          uv export --frozen --no-dev --no-hashes -o /tmp/requirements-locked.txt
+          uv run cyclonedx-py requirements /tmp/requirements-locked.txt --of JSON -o idraa-sbom.cdx.json
+          uv run python -c "import json; d=json.load(open('idraa-sbom.cdx.json')); assert d['bomFormat']=='CycloneDX'; print('components:', len(d.get('components', [])))"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: idraa-sbom-${{ github.sha }}
+          path: idraa-sbom.cdx.json
+
   # Aggregator over the DETERMINISTIC core only (gate, test-windows, secrets,
   # sast). e2e / docker-build / notebook-smoke stay visible-but-advisory so a
   # flaky browser or kernel can never wedge merges (plan-gate A-I5).

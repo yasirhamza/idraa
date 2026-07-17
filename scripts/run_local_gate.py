@@ -98,6 +98,17 @@ def main() -> int:
     skipped_css = os.environ.get(SKIP_CSS_ENV) == "1"
     if skipped_css:
         print(f"local gate: {SKIP_CSS_ENV}=1 — SKIPPING css staleness check")
+
+    # Dev-path lockfile freshness — matches Docker's `uv sync --frozen`.
+    # Runs the uv BINARY (not python -m), so it sits outside GATE_STEPS.
+    print("local gate: uv lock --check")
+    # Args are a fully-literal list — ruff's S603 doesn't fire on this shape
+    # (unlike the sys.executable/*argv call above), so no noqa is needed.
+    lock = subprocess.run(["uv", "lock", "--check"], cwd=REPO_ROOT, check=False)
+    if lock.returncode != 0:
+        print("local gate: FAILED at uv lock --check (pyproject/uv.lock drift)")
+        return lock.returncode
+
     for label, argv in steps_to_run():
         rc = run_step(label, argv)
         if rc != 0:
