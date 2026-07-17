@@ -59,6 +59,15 @@ jobs:
       - run: uv sync --frozen --extra dev
       - name: Fast pytest suite (css gate is posix-only; covered by `gate`)
         run: uv run --extra dev python -m pytest -q --no-cov
+        env:
+          # First-ever green-path run of this job (Actions were billing-blocked
+          # through the fossil era) surfaced two Windows-only classes:
+          # cp1252 default-encoding reads (PYTHONUTF8 fixes hermetically — prod
+          # is Linux/UTF-8, so this is dev-parity, not masking) and Babel
+          # locale detection returning None without LANG/LC_ALL.
+          PYTHONUTF8: "1"
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
         # No SESSION_SECRET needed: tests/conftest.py forces ENVIRONMENT=test,
         # which bypasses the secret-hardening boot guard (verified at plan-gate).
 
