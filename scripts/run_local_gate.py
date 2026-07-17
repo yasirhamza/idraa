@@ -109,6 +109,17 @@ def main() -> int:
         print("local gate: FAILED at uv lock --check (pyproject/uv.lock drift)")
         return lock.returncode
 
+    if os.environ.get("IDRAA_GATE_SKIP_AUDIT") == "1":
+        print("local gate: IDRAA_GATE_SKIP_AUDIT=1 — SKIPPING pip-audit")
+    else:
+        print("local gate: pip-audit (fixable-vuln policy)")
+        # Fully-literal list, same shape as the uv lock --check call above —
+        # ruff's S603 doesn't fire on this shape, so no noqa is needed.
+        audit = subprocess.run([sys.executable, "scripts/sca_gate.py"], cwd=REPO_ROOT, check=False)
+        if audit.returncode != 0:
+            print("local gate: FAILED at pip-audit — fix, or suppress with rationale")
+            return audit.returncode
+
     for label, argv in steps_to_run():
         rc = run_step(label, argv)
         if rc != 0:

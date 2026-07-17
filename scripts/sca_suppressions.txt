@@ -1,0 +1,2 @@
+# SCA suppressions (#555). One GHSA/PYSEC id per line. Every entry MUST carry a
+# comment stating why it is accepted/unfixable and a review-by date.
