@@ -28,14 +28,42 @@ FK behaviour:
 
 The ``ix_csv_import_preview_expires_at`` index lets a future cleanup job
 (out of scope for C6) sweep expired rows efficiently.
+
+``state_json`` (epic #34 P1c Task 2): accumulating step-choice storage for
+the staged register-import flow (``entity_type`` prefixed ``"register:"``,
+see ``services/register_import.py`` Task 3) — sheet selection, column map,
+value bindings pile up here across the wizard's full-page-redirect steps,
+re-read and re-written at each step against the same immutable
+``csv_bytes``. Register-import-only today: the C6 overlay importer and the
+calibration-override importer leave it NULL. A future flow could reuse it,
+but nothing else writes it yet.
+
+**Write rule (Arch-I1 plan-gate amendment, BINDING):** ``state_json`` is a
+plain ``JSON`` column — SQLAlchemy does NOT track in-place mutation of a
+plain ``dict`` attribute (no ``MutableDict`` wrapper here, deliberately).
+Every setter MUST reassign the whole dict rather than mutate a key in
+place::
+
+    # correct — reassigns the whole dict, SQLAlchemy sees the change
+    preview.state_json = {**(preview.state_json or {}), "column_map": value}
+
+    # WRONG — silently lost on flush/commit, no dirty-tracking fires
+    preview.state_json["column_map"] = value
+
+This mirrors the only other in-repo precedent for a raw-``JSON``-column
+step-accumulator, ``services/wizard_state.py:248``. Do not introduce
+``MutableDict`` here as a shortcut — the reassignment discipline is the
+chosen fix, consistent with the existing precedent.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -73,6 +101,10 @@ class CSVImportPreview(IdMixin, TimestampMixin, OrgMixin, Base):
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     csv_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Register-import-only (see class docstring). NULL for every other
+    # entity_type. See the module docstring's Arch-I1 write rule before
+    # writing to this column — whole-dict reassignment only, never `[key] =`.
+    state_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         # length() is cross-DB (SQLite + Postgres); char_length is Postgres-only.

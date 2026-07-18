@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/import_preview.html" import preview_table %}
+{% block title %}Register import — preview{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Preview",
+  breadcrumb=[("Home", "/"), ("Register import", "/register-import"), ("Preview", none)]
+) }}
+
+<div class="max-w-5xl mx-auto space-y-6">
+  {# Epistemic callout (methodology-owned copy, plan Task 6): converting a
+     register row NEVER produces a final result — only a DRAFT prior pending
+     review. Repeated here (upload.html states it too) because this is the
+     last screen before the write actually happens. #}
+  <div class="alert alert-info">
+    <div>
+      <p class="text-sm">
+        Converted scenarios land as <strong>DRAFTS</strong> with starting
+        priors — never results. Nothing below has been written yet; review
+        the classification, then convert.
+      </p>
+    </div>
+  </div>
+
+  <p class="text-body text-ink-2">
+    Preview of <strong>{{ filename or "the uploaded register" }}</strong>.
+  </p>
+
+  {# SL_NOTE (services.qualitative_converter) — fixed sentence, identical on
+     every conversion preview/report: secondary loss cannot be derived from a
+     single register impact score. #}
+  <p class="text-meta text-ink-2">{{ sl_note }}</p>
+
+  <div class="flex flex-wrap gap-2 text-sm">
+    <span class="badge badge-success badge-sm">{{ would_create_count }} to create</span>
+    <span class="badge badge-ghost badge-sm">{{ parked_count }} parked</span>
+    <span class="badge badge-warning badge-sm">{{ duplicate_count }} duplicate</span>
+    <span class="badge badge-error badge-sm">{{ error_count }} error{{ "s" if error_count != 1 else "" }}</span>
+  </div>
+
+  {% if rows %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-3 md:p-0">
+    {{ preview_table(rows, [
+         {"label": "Line", "key": "line", "mono": True},
+         {"label": "Title", "key": "title"},
+         {"label": "Note", "key": "note"},
+         {"label": "Action", "key": "action"},
+       ], action_key="action") }}
+  </div>
+  {% else %}
+  <div class="alert">
+    <span>No rows parsed from this register.</span>
+  </div>
+  {% endif %}
+
+  <div class="pb-24" aria-hidden="true"></div>
+  <div class="sticky-action-bar sticky bottom-0 z-20 bg-surface-0/95 backdrop-blur border-t border-border-subtle -mx-6 px-6 py-3 flex gap-3 mt-6">
+    <a href="/register-import/{{ token }}/bind" class="btn btn-ghost btn-sm">Back</a>
+    <form method="post" action="/register-import/{{ token }}/convert" class="inline">
+      {{ csrf_field() }}
+      <button type="submit" class="btn btn-primary btn-sm"
+              {% if would_create_count == 0 %}disabled{% endif %}>
+        Convert ({{ would_create_count }} scenario{{ "s" if would_create_count != 1 else "" }})
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

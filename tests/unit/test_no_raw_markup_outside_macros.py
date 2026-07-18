@@ -104,6 +104,11 @@ ALLOWED_DIRS = {"macros"}
 #       Single raw <table> for the overrides grid; data_table migration is a
 #       separate task (F24 scope is cleanup, not migration of all overrides pages).
 #
+#   register_import/upload.html
+#       <input type="file"> is the page's purpose; form_field has no file
+#       variant (same constraint as scenarios/import.html, controls/import.html,
+#       library/import.html) — epic #34 P1c Task 4.
+#
 #   organization/form.html
 #       Complex org form: custom-styled <select> for industry/size/risk-appetite
 #       and a checkbox for cyber-insurance flag — form_field has no checkbox or
@@ -227,6 +232,7 @@ ALLOWLIST: set[str] = {
     "library/import_result.html",
     "library/overrides/form.html",
     "library/overrides/list.html",
+    "register_import/upload.html",
     "organization/form.html",
     "overlays/edit.html",
     "overlays/import_result.html",
@@ -291,7 +297,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 39 = 38 + step_4_impact.html (Milestone B #loss-pert-overhaul: the
     # catastrophic toggle needs Alpine x-model/custom value the form_field
     # toggle variant doesn't support — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 41, (
+    # 42 = 41 + register_import/upload.html (epic #34 P1c Task 4: file input,
+    # same file-variant gap as its scenarios/controls/library import.html
+    # siblings — justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 42, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

@@ -266,7 +266,10 @@ async def test_mapping_versions_shape(
 
     versions = await svc.mapping_versions(seed_organization.id)
 
-    assert versions["canonical"] == 1
+    # Per-(kind, label) shape (P1c Task 3 Meth-N3 rewire) — every canonical
+    # row's own version, not a collapsed max, so a shadowed canonical band's
+    # version is still visible in the provenance snapshot.
+    assert versions["canonical"] == {"frequency:low": 1, "magnitude:low": 1}
     assert versions["org"] == {"frequency:low": 1}
 
 
@@ -499,6 +502,32 @@ async def test_create_org_band_rejects_label_over_40_chars(
             reason="label too long",
             user=seed_user,
         )
+
+
+@pytest.mark.asyncio
+async def test_create_org_band_rejects_non_finite_high(
+    db_session: AsyncSession,
+    seed_organization: Organization,
+    seed_user: User,
+) -> None:
+    """Sec-I1 (P1c Task 3 amendment): inf slips past `low <= mode <= high`
+    (any low/mode compares as strictly less than inf) — must be caught by a
+    dedicated finiteness check, not silently accepted."""
+    svc = QualitativeBandService(db_session)
+    with pytest.raises(ValidationError, match="finite"):
+        await svc.create_org_band(
+            organization_id=seed_organization.id,
+            kind="frequency",
+            label="custom_tier",
+            low=1.0,
+            mode=3.0,
+            high=float("inf"),
+            reason="non-finite high",
+            user=seed_user,
+        )
+
+    rows = (await db_session.execute(select(QualitativeMappingOrgBand))).scalars().all()
+    assert rows == []
 
 
 @pytest.mark.asyncio

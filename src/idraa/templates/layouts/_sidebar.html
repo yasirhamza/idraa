@@ -142,6 +142,22 @@
           <span x-show="collapsed" aria-hidden="true" class="text-meta">FX</span>
         </a>
       </li>
+      <li>
+        <a href="/register-import"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/register-import' or request.url.path.startswith('/register-import/') %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Register import</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">R</span>
+        </a>
+      </li>
+      <li>
+        <a href="/qualitative-bands"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/qualitative-bands' or request.url.path.startswith('/qualitative-bands/') %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Mapping bands</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">M</span>
+        </a>
+      </li>
     </ul>
     {% endif %}
   </nav>

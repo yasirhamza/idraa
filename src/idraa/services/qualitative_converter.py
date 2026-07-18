@@ -18,6 +18,7 @@ Plan: docs/superpowers/plans/2026-07-18-mapping-tables-converter-p1b.md Task 5
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.errors import IdraaError
+from idraa.errors import IDORError, IdraaError
 from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
 from idraa.schemas.scenario import ScenarioForm
@@ -40,6 +41,14 @@ from idraa.services.scenarios import ScenarioService
 
 if TYPE_CHECKING:
     from idraa.models.user import User
+
+logger = logging.getLogger(__name__)
+
+# Generic apply-time message for a caught SQLAlchemyError (P1c Task 3 brief
+# (b)): the raw exception text can carry SQL fragments (bound params, table/
+# column names) — never surfaced to the row-error list the admin reads.
+# Full detail goes to the server log via ``logger.exception`` instead.
+_SQL_ERROR_MESSAGE = "internal error converting this row — see server logs"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -199,6 +208,27 @@ class ConversionReport:
     source_file: str
 
 
+@dataclass(frozen=True)
+class ClassifiedRows:
+    """Dry-run disposition of a batch, per P1c Task 3's shared classification
+    seam (Spec-I2, BINDING). Reproduces every per-row check ``convert()``
+    makes EXCEPT the actual DB persist, so a caller (the register-import
+    preview route, or ``convert()`` itself) sees byte-identical per-row
+    outcomes without writing anything.
+
+    ``would_create`` rows are ``BoundRow`` — NOT yet materialised into a
+    ``Scenario`` — ``convert()`` re-derives the ``ScenarioForm``/
+    ``ConversionMetadata`` for each one at persist time (same effective
+    bands, same organization, same transaction — no interleaving write can
+    change the answer between classify and persist).
+    """
+
+    would_create: list[BoundRow]
+    parked: list[int]
+    duplicates: list[SkippedRow]
+    errors: list[RowError]
+
+
 # ---------------------------------------------------------------------------
 # Dedup lookups (org-scoped, ALL statuses — spec §3.1 / Sec-I1)
 # ---------------------------------------------------------------------------
@@ -266,22 +296,42 @@ class QualitativeConverterService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def convert(
+    async def classify_rows(
         self,
         *,
         organization_id: uuid.UUID,
-        user: User,
         source_file: str,
         rows: list[BoundRow],
-        ip_address: str | None = None,
-    ) -> ConversionReport:
-        """Convert every bound row; row failures never abort the batch.
+    ) -> ClassifiedRows:
+        """Pure dry-run classification — read-only band lookups, no writes.
 
-        Order per row: park (category is None) → dedup (name, then
-        same-source) → band lookup → input bounds → build + persist. A
-        RowError rolls back only that row's SAVEPOINT
-        (``async with self._db.begin_nested()``); rows before and after it
-        are unaffected (Arch-I4).
+        P1c Task 3 shared classification seam (Spec-I2, BINDING). Extracted
+        from ``convert()``'s per-row disposition (park / name-dedup /
+        same-source-dedup / band-lookup / bounds) so BOTH the register-import
+        preview route and ``convert()`` itself see IDENTICAL per-row outcomes
+        without a real persist — ``convert()`` calls this method and then
+        creates ONLY the ``would_create`` bucket (single seam, no duplicated
+        disposition logic).
+
+        Pinned seam semantics (R2 plan-gate amendment, BINDING):
+
+        - ``seen_names``/``seen_sources`` are claimed the MOMENT a row is
+          decided ``would_create`` — stateful, in row order — reproducing
+          ``convert()``'s original stateful sweep exactly.
+        - This is a DELIBERATE behavior change from the pre-P1c converter,
+          stated not silent: a ``would_create`` row claims its name/source
+          even though this method never persists it. ``convert()`` honors
+          that claim even if the row's LATER real persist fails — a
+          following row sharing the same name or (stem, source_row) still
+          lands ``duplicate``, never a second create attempt. Strictly more
+          conservative than the retired "free the name back up on persist
+          failure" behavior: the batch can never double-create a name.
+        - This method ALSO dry-constructs ``ScenarioForm`` +
+          ``ConversionMetadata`` per row (never persisted — just Pydantic
+          validation), so every structural/bounds failure ``convert()``'s
+          old inline loop used to catch is caught HERE instead. Only a live
+          DB round-trip failure (``SQLAlchemyError``) is NOT reproducible
+          here and remains apply-time-only in ``convert()``.
         """
         band_service = QualitativeBandService(self._db)
         effective = await band_service.effective_bands(organization_id)
@@ -293,9 +343,9 @@ class QualitativeConverterService:
         seen_names: set[str] = set()
         seen_sources: set[tuple[str, int]] = set()
 
-        created: list[ConvertedRow] = []
+        would_create: list[BoundRow] = []
         parked: list[int] = []
-        skipped: list[SkippedRow] = []
+        duplicates: list[SkippedRow] = []
         errors: list[RowError] = []
 
         for row in rows:
@@ -306,14 +356,14 @@ class QualitativeConverterService:
 
                 name_key = row.title.strip().casefold()
                 if name_key in existing_names or name_key in seen_names:
-                    skipped.append(
+                    duplicates.append(
                         SkippedRow(source_row=row.source_row, title=row.title, reason="name")
                     )
                     continue
 
                 source_key = (source_stem, row.source_row)
                 if source_key in existing_sources or source_key in seen_sources:
-                    skipped.append(
+                    duplicates.append(
                         SkippedRow(source_row=row.source_row, title=row.title, reason="same_source")
                     )
                     continue
@@ -351,11 +401,119 @@ class QualitativeConverterService:
                     "high": mag_band.high,
                 }
 
-                form = ScenarioForm(
+                # Dry-construct — never persisted. Raising here surfaces the
+                # SAME structural/Pydantic failures the real persist would.
+                ScenarioForm(
                     name=row.title.strip(),
                     description=_compose_description(row, source_file=source_file),
                     scenario_type=ScenarioType.CUSTOM,
                     threat_category=row.category.value,
+                    threat_event_frequency=tef,
+                    vulnerability=dict(NEUTRAL_VULN_PERT),
+                    primary_loss=pl,
+                    secondary_loss=None,
+                    source=ScenarioSource.QUALITATIVE_REGISTER_IMPORT,
+                    status=EntityStatus.DRAFT,
+                )
+                ConversionMetadata(
+                    source_file=source_file,
+                    source_row=row.source_row,
+                    raw=row.raw,
+                    bindings={
+                        "likelihood_label": row.likelihood_label,
+                        "magnitude_label": row.magnitude_label,
+                        "category": row.category.value,
+                    },
+                    mapping_versions=mapping_versions,
+                    converted_at=datetime.now(UTC).isoformat(),
+                )
+
+                would_create.append(row)
+                seen_names.add(name_key)
+                seen_sources.add(source_key)
+            except (IdraaError, PydanticValidationError, ValueError) as exc:
+                errors.append(RowError(source_row=row.source_row, message=str(exc)))
+                continue
+
+        return ClassifiedRows(
+            would_create=would_create, parked=parked, duplicates=duplicates, errors=errors
+        )
+
+    async def convert(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        user: User,
+        source_file: str,
+        rows: list[BoundRow],
+        ip_address: str | None = None,
+        binding_profile_id: uuid.UUID | None = None,
+    ) -> ConversionReport:
+        """Convert every bound row; row failures never abort the batch.
+
+        Calls :meth:`classify_rows` (the single classification seam) then
+        persists ONLY the ``would_create`` bucket. A persist failure rolls
+        back only that row's SAVEPOINT (``async with self._db.begin_nested()``
+        ); rows before and after it are unaffected (Arch-I4). Per Task 3's
+        BINDING plan-gate amendments: an early cross-org guard, and
+        ``binding_profile_id`` threaded into ``ConversionMetadata`` when a
+        saved profile drove the bindings.
+        """
+        # Sec-N: early cross-org guard, mirrors ScenarioService.create's
+        # IDOR check — a caller passing a ``user`` from a different org than
+        # ``organization_id`` is blocked before any read/write.
+        if user.organization_id != organization_id:
+            raise IDORError(
+                f"user.organization_id={user.organization_id} does not match "
+                f"organization_id={organization_id} — cross-org convert blocked"
+            )
+
+        band_service = QualitativeBandService(self._db)
+        mapping_versions = await band_service.mapping_versions(organization_id)
+
+        classified = await self.classify_rows(
+            organization_id=organization_id, source_file=source_file, rows=rows
+        )
+
+        # Re-fetch effective bands for the actual persist loop — read-only,
+        # same organization, same transaction as classify_rows just used, so
+        # this cannot disagree with the classification decision above it.
+        effective = await band_service.effective_bands(organization_id)
+
+        created: list[ConvertedRow] = []
+        errors: list[RowError] = list(classified.errors)
+
+        for row in classified.would_create:
+            try:
+                # classify_rows already proved these labels resolve.
+                freq_band = effective[("frequency", row.likelihood_label)]
+                mag_band = effective[("magnitude", row.magnitude_label)]
+
+                tef = {
+                    "distribution": "PERT",
+                    "low": freq_band.low,
+                    "mode": freq_band.mode,
+                    "high": freq_band.high,
+                }
+                pl = {
+                    "distribution": "PERT",
+                    "low": mag_band.low,
+                    "mode": mag_band.mode,
+                    "high": mag_band.high,
+                }
+
+                category = row.category
+                if category is None:
+                    # classify_rows() routes category=None rows into
+                    # `parked` — would_create never contains one. Defensive
+                    # skip (not a bare assert) purely for mypy narrowing.
+                    continue
+
+                form = ScenarioForm(
+                    name=row.title.strip(),
+                    description=_compose_description(row, source_file=source_file),
+                    scenario_type=ScenarioType.CUSTOM,
+                    threat_category=category.value,
                     threat_event_frequency=tef,
                     vulnerability=dict(NEUTRAL_VULN_PERT),
                     primary_loss=pl,
@@ -371,9 +529,12 @@ class QualitativeConverterService:
                     bindings={
                         "likelihood_label": row.likelihood_label,
                         "magnitude_label": row.magnitude_label,
-                        "category": row.category.value,
+                        "category": category.value,
                     },
                     mapping_versions=mapping_versions,
+                    binding_profile_id=(
+                        str(binding_profile_id) if binding_profile_id is not None else None
+                    ),
                     converted_at=datetime.now(UTC).isoformat(),
                 )
 
@@ -393,9 +554,22 @@ class QualitativeConverterService:
                         scenario_id=scenario.id, source_row=row.source_row, title=row.title
                     )
                 )
-                seen_names.add(name_key)
-                seen_sources.add(source_key)
-            except (IdraaError, PydanticValidationError, SQLAlchemyError, ValueError) as exc:
+            except SQLAlchemyError:
+                # Brief (b): never leak raw SQL/param text into the row-error
+                # list an admin reads — full detail goes to the server log.
+                logger.exception(
+                    "qualitative register conversion: row %s failed to persist "
+                    "(organization_id=%s, source_file=%s)",
+                    row.source_row,
+                    organization_id,
+                    source_file,
+                )
+                errors.append(RowError(source_row=row.source_row, message=_SQL_ERROR_MESSAGE))
+                continue
+            except (IdraaError, PydanticValidationError, ValueError) as exc:
+                # Defense-in-depth only — classify_rows already dry-ran this
+                # exact construction, so this branch should not fire in
+                # practice under a single-writer transaction.
                 errors.append(RowError(source_row=row.source_row, message=str(exc)))
                 continue
 
@@ -406,8 +580,8 @@ class QualitativeConverterService:
             action="scenario.convert_qualitative",
             changes={
                 "created": [str(c.scenario_id) for c in created],
-                "parked": len(parked),
-                "skipped": len(skipped),
+                "parked": len(classified.parked),
+                "skipped": len(classified.duplicates),
                 "errors": len(errors),
                 "source_file": source_file,
                 "vuln_framing": "legacy_residual",
@@ -419,8 +593,8 @@ class QualitativeConverterService:
 
         return ConversionReport(
             created=created,
-            parked=parked,
-            skipped_duplicates=skipped,
+            parked=classified.parked,
+            skipped_duplicates=classified.duplicates,
             errors=errors,
             sl_note=SL_NOTE,
             mapping_versions=mapping_versions,

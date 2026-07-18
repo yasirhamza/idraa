@@ -32,6 +32,7 @@ from idraa.models.mixins import IdMixin, OrgMixin, TimestampMixin
 from idraa.models.organization import Organization
 from idraa.models.overlay import OverlayDefinition, OverlayDefinitionRevision
 from idraa.models.qualitative_mapping import QualitativeMappingBand, QualitativeMappingOrgBand
+from idraa.models.register_binding_profile import RegisterBindingProfile
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
@@ -68,6 +69,7 @@ __all__ = [
     "OverlayDefinitionRevision",
     "QualitativeMappingBand",
     "QualitativeMappingOrgBand",
+    "RegisterBindingProfile",
     "RiskAnalysisRun",
     "RunSamples",
     "RunStatus",

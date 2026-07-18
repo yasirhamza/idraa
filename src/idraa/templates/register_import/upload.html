@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Register import{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Import register",
+  breadcrumb=[("Home", "/"), ("Register import", none)]
+) }}
+
+<div class="max-w-2xl mx-auto space-y-6">
+  <p class="text-body text-ink-2">
+    Upload a qualitative risk register (.xlsx or .csv). Nothing is converted
+    until you map its columns, bind its likelihood / impact / category
+    values to FAIR frequency and magnitude bands, and review a preview.
+    Converted rows land as <strong>DRAFT</strong> scenarios with starting
+    priors pending review — never final results.
+  </p>
+
+  {# <input type="file"> is this page's purpose; form_field has no file
+     variant (same constraint as controls/import.html, scenarios/import.html,
+     library/import.html — allowlisted in test_no_raw_markup_outside_macros.py). #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-3">Upload</h2>
+    <form method="post" action="/register-import" enctype="multipart/form-data" class="space-y-4">
+      {{ csrf_field() }}
+      <div class="max-w-md">
+        <p class="text-meta text-ink-2 mb-2">Register file (.xlsx or .csv)</p>
+        <input class="file-input file-input-bordered w-full" type="file"
+               name="file" accept=".xlsx,.csv" required/>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm">Upload &amp; continue</button>
+      </div>
+    </form>
+  </div>
+
+  {% if profiles %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
+    <h2 class="text-h3 text-ink-1 mb-1">Saved binding profiles</h2>
+    <p class="text-meta text-ink-2 mb-3">
+      These per-organization profiles remember a prior upload's column map
+      and value bindings. Apply one from the value-bind step once you've
+      uploaded a register of the same shape.
+    </p>
+    <ul class="text-sm text-ink-1 list-disc ml-5 space-y-1">
+      {% for p in profiles %}
+      <li>{{ p.name }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

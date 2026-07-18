@@ -831,6 +831,8 @@ def create_app() -> FastAPI:
     from idraa.routes import library_overrides as library_overrides_router
     from idraa.routes import organization as organization_router
     from idraa.routes import overlays as overlays_router
+    from idraa.routes import qualitative_bands as qualitative_bands_router
+    from idraa.routes import register_import as register_import_router
     from idraa.routes import reports as reports_router
     from idraa.routes import runs as runs_router
     from idraa.routes import scenario_import as scenario_import_router
@@ -878,6 +880,8 @@ def create_app() -> FastAPI:
     app.include_router(library_router.router)
     app.include_router(library_overrides_router.router)
     app.include_router(fx_rates_router.router)
+    app.include_router(register_import_router.router)
+    app.include_router(qualitative_bands_router.router)
     app.include_router(reports_router.router)
     app.include_router(sme_directory_router.router)
     app.include_router(

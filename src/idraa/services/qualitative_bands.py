@@ -12,6 +12,7 @@ Spec: docs/superpowers/specs/2026-07-18-qualitative-register-converter-design.md
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -112,19 +113,33 @@ class QualitativeBandService:
     async def mapping_versions(self, organization_id: uuid.UUID) -> dict[str, Any]:
         """Version-pinning snapshot for ``conversion_metadata`` (Task 5).
 
-        Shape: ``{"canonical": <max canonical version across all bands>,
-        "org": {"<kind>:<label>": <org row version>, ...}}``. The ``"org"``
-        keys use the ``"<kind>:<label>"`` string form (not a tuple) because
-        this dict is destined for JSON storage on ``Scenario
-        .conversion_metadata``.
+        Shape: ``{"canonical": {"<kind>:<label>": <version>, ...}, "org":
+        {"<kind>:<label>": <org row version>, ...}}``. Both keys use the
+        ``"<kind>:<label>"`` string form (not a tuple) because this dict is
+        destined for JSON storage on ``Scenario.conversion_metadata``.
+
+        P1c Task 3 amendment (Meth-N3, BINDING — supersedes the original
+        "max canonical version across all bands" shape): a single collapsed
+        max would silently drop the per-(kind, label) reproducibility
+        invariant a re-derivation of ONE band needs — e.g. bumping only the
+        "high" magnitude band's version must be visible in a converted
+        scenario's stored provenance even though every OTHER canonical
+        band's version is unchanged. Building this from ``list_canonical()``
+        (ALL canonical rows) rather than the merged ``effective_bands()``
+        view is deliberate too: an org override SHADOWS a canonical
+        (kind, label) in the merged view, but the canonical row's own
+        version must still appear here — a shadowed canonical must never
+        drop out of the provenance snapshot. Safe as a stored-JSON shape
+        change (spec §8) solely because NO converted rows exist yet in any
+        deployed environment before P1c ships.
         """
         canonical = await self.repo.list_canonical()
-        canonical_max = max((band.version for band in canonical), default=0)
+        canonical_versions = {f"{band.kind}:{band.label}": band.version for band in canonical}
 
         org_bands = await self.repo.list_org_bands(organization_id)
         org_versions = {f"{band.kind}:{band.label}": band.version for band in org_bands}
 
-        return {"canonical": canonical_max, "org": org_versions}
+        return {"canonical": canonical_versions, "org": org_versions}
 
     # ------------------------------------------------------------------
     # Write side — org band CRUD
@@ -319,6 +334,15 @@ class QualitativeBandService:
         if not LABEL_PATTERN.match(label):
             raise ValidationError(
                 f"label {label!r} must match ^[a-z_]{{1,40}}$ (lowercase snake_case, 1-40 chars)"
+            )
+        # Sec-I1 (P1c Task 3 amendment): reject non-finite values BEFORE the
+        # ordering/positivity checks below — inf/-inf/nan can otherwise slip
+        # through `low <= mode <= high` (e.g. high=inf) or a NaN comparison
+        # (always False) would surface as a confusing "ordering" error
+        # instead of the actual problem.
+        if not (math.isfinite(low) and math.isfinite(mode) and math.isfinite(high)):
+            raise ValidationError(
+                f"band values must be finite numbers; got low={low}, mode={mode}, high={high}"
             )
         if not (low <= mode <= high):
             raise ValidationError(

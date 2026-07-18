@@ -17,6 +17,7 @@ from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.errors import IDORError
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.models.organization import Organization
@@ -372,7 +373,14 @@ async def test_conversion_metadata_pinned_shape_and_versions(
         "magnitude_label": "high",
         "category": ThreatCategory.SOCIAL_ENGINEERING.value,
     }
-    assert cm["mapping_versions"] == {"canonical": 1, "org": {}}
+    # Per-(kind, label) shape (P1c Task 3 Meth-N3 mapping_versions rewire) —
+    # asserts the reproducibility invariant (both seeded canonical bands'
+    # OWN versions present as keys), derived analytically from _seed_bands
+    # (both version=1), not copied from an observed run.
+    assert cm["mapping_versions"] == {
+        "canonical": {"frequency:moderate": 1, "magnitude:high": 1},
+        "org": {},
+    }
     assert cm["binding_profile_id"] is None
     assert cm.get("converted_at")
 
@@ -548,6 +556,12 @@ async def test_poison_row_post_flush_failure_isolated(
     assert {c.title for c in report.created} == {"Row 1", "Row 3"}
     assert len(report.errors) == 1
     assert report.errors[0].source_row == 2
+    # Brief (b): SQLAlchemyError rows get a GENERIC message — the raw
+    # IntegrityError text ("forced", "forced failure") must never leak into
+    # the row-error list an admin reads.
+    assert report.errors[0].message == "internal error converting this row — see server logs"
+    assert "forced" not in report.errors[0].message
+    assert "IntegrityError" not in report.errors[0].message
 
     scenarios = (
         (await db_session.execute(select(Scenario).where(Scenario.organization_id == org.id)))
@@ -581,3 +595,131 @@ async def test_scenario_type_is_custom_explicitly(
         )
     ).scalar_one()
     assert scenario.scenario_type == ScenarioType.CUSTOM
+
+
+# ---------------------------------------------------------------------------
+# Converter brief (a): early cross-org IDOR guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_convert_cross_org_user_raises_idor(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    org_a, user_a = await seed_org_user(db_session, org_name="Org A", email="idor-a@example.com")
+    org_b, _user_b = await seed_org_user(db_session, org_name="Org B", email="idor-b@example.com")
+    await _seed_bands(db_session)
+
+    with pytest.raises(IDORError):
+        await QualitativeConverterService(db_session).convert(
+            organization_id=org_b.id,  # user_a belongs to org_a, not org_b
+            user=user_a,
+            source_file="register.xlsx",
+            rows=[_bound_row(source_row=1)],
+        )
+
+    # No scenario created and no scenarios visible in either org.
+    scenarios = (await db_session.execute(select(Scenario))).scalars().all()
+    assert scenarios == []
+
+
+# ---------------------------------------------------------------------------
+# Pinned seam semantics (R2 plan-gate amendment, BINDING): classify_rows
+# claims a row's name/source the moment it decides would_create — BEFORE any
+# real persist. A later persist failure on that row does NOT free the name/
+# source back up.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_classify_seam_claims_name_and_source_even_on_persist_failure(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    """Regression test named by the plan-gate amendment: row 1 (would_create)
+    fails at DB create; row 2 shares row 1's name; row 3 shares row 1's
+    (source stem, source_row). Rows 2 and 3 must land `duplicate` — the
+    failed row's claim on its name/source is never freed back up, so the
+    batch can never double-create a name (strictly more conservative than
+    the retired free-on-persist-failure behavior)."""
+    org, user = await seed_org_user(db_session)
+    await _seed_bands(db_session)
+
+    poison_title = "Poison Row"
+
+    def _boom(mapper: object, connection: object, target: Scenario) -> None:
+        if target.name == poison_title and target.organization_id == org.id:
+            raise IntegrityError("forced", {}, Exception("forced failure"))
+
+    event.listen(Scenario, "before_insert", _boom)
+    try:
+        rows = [
+            _bound_row(source_row=1, title=poison_title),
+            _bound_row(source_row=2, title=poison_title),  # shares row 1's name
+            _bound_row(source_row=1, title="Different Title"),  # shares row 1's (stem, row)
+        ]
+        report = await QualitativeConverterService(db_session).convert(
+            organization_id=org.id, user=user, source_file="register.xlsx", rows=rows
+        )
+    finally:
+        event.remove(Scenario, "before_insert", _boom)
+
+    assert report.created == []
+    assert len(report.errors) == 1
+    assert report.errors[0].source_row == 1
+
+    assert len(report.skipped_duplicates) == 2
+    assert {(d.source_row, d.reason) for d in report.skipped_duplicates} == {
+        (2, "name"),
+        (1, "same_source"),
+    }
+
+    scenarios = (
+        (await db_session.execute(select(Scenario).where(Scenario.organization_id == org.id)))
+        .scalars()
+        .all()
+    )
+    assert scenarios == []
+
+
+# ---------------------------------------------------------------------------
+# classify_rows() as a standalone seam — same disposition as convert(),
+# but writes nothing.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_classify_rows_is_pure_and_matches_convert_disposition(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    org, user = await seed_org_user(db_session)
+    await _seed_bands(db_session)
+
+    rows = [
+        _bound_row(source_row=1, title="Row 1"),
+        _bound_row(source_row=2, title="Row 2", category=None),
+        _bound_row(source_row=3, title="Row 3 (bad label)", likelihood_label="nope"),
+    ]
+    classified = await QualitativeConverterService(db_session).classify_rows(
+        organization_id=org.id, source_file="register.xlsx", rows=rows
+    )
+
+    assert [r.source_row for r in classified.would_create] == [1]
+    assert classified.parked == [2]
+    assert classified.duplicates == []
+    assert len(classified.errors) == 1
+    assert classified.errors[0].source_row == 3
+
+    # No DB writes at all — classify_rows is read-only.
+    scenarios = (await db_session.execute(select(Scenario))).scalars().all()
+    assert scenarios == []
+
+    # convert() over the SAME rows produces the identical disposition counts
+    # (this is the single-seam guarantee: convert() calls classify_rows).
+    report = await QualitativeConverterService(db_session).convert(
+        organization_id=org.id, user=user, source_file="register.xlsx", rows=rows
+    )
+    assert len(report.created) == 1
+    assert report.parked == [2]
+    assert report.skipped_duplicates == []
+    assert len(report.errors) == 1
+    assert report.errors[0].source_row == 3

@@ -297,6 +297,13 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## Scope drift log
 
+- 2026-07-19 (P1c final PR-gate): converter-aware copy additionally shipped on
+  the scenario EDIT page (form.html frequency-baseline banner variant,
+  c8e59b4) — a final-gate reviewer IMPORTANT: Path B routes reviewers to the
+  edit page, whose vuln-centric banner would have advised raising the neutral
+  vulnerability (auto-flipping the review flag without a frequency review).
+
+
 - 2026-07-18 (P1b): `ScenarioSource` member is `QUALITATIVE_REGISTER_IMPORT`, not
   the earlier `QUALITATIVE_CONVERTED` — the enum's own anticipatory placeholder
   (models/enums.py) predates this spec and governs (PR-gate Spec-I).
@@ -327,6 +334,21 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
   O-RA 2.0.1 PDF — magnitude edges upgraded from convention to cited (Table 1,
   §6.6, p.33); frequency confirmed citation-free in O-RA (stays convention);
   §6.5/§5.2.1/§6.3 citations added. No numeric value changed.
+- 2026-07-18/19 (P1c Task 8): **shipped** the converter-aware confirm/banner
+  COPY deferred at the P1b plan-gate (§3 Meth-I1) — closes that deferral. The
+  scenario-detail F2 banner branches on `source == QUALITATIVE_REGISTER_IMPORT`
+  to a "Frequency baseline needs review." heading + explicit Path A
+  (accept-residual, no controls attached) / Path B (edit to inherent, then
+  attach controls) structure, never co-rendering the generic vuln-banner's
+  "re-enter Vulnerability … higher" instruction; the DRAFT banner gains the
+  raw→bound band-binding display (`conversion_metadata.raw` +
+  `.bindings`) that P1a's own comment deferred to "when conversion_metadata
+  exists"; `ScenarioService.promote`'s refusal string is converter-aware.
+  Consumer-side fix bundled in the same PR (same-PR rule, <100 LOC): the
+  scenario-detail "no mitigating controls" empty state claimed analyses
+  "fall back to all controls in your org" — false since #89 — corrected to
+  state the true zero-control behavior, since the false claim directly
+  contradicted converted-row Path A guidance.
 
 ## 8. Ceremony
 

@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% block title %}Register import — bind values{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Bind values",
+  breadcrumb=[("Home", "/"), ("Register import", "/register-import"), ("Bind values", none)]
+) }}
+
+<div class="max-w-4xl mx-auto space-y-6">
+  <div class="alert alert-info">
+    <div>
+      <p class="text-sm">
+        Values bound to <strong>Parked — out of scope</strong> are counted
+        and reported in the conversion summary — they are never treated as
+        errors. If a value deserves its own frequency or magnitude band
+        instead of being parked,
+        <a class="link" href="/qualitative-bands">manage mapping bands</a>.
+      </p>
+    </div>
+  </div>
+
+  {% if profile_options %}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Apply a saved profile</h2>
+    <p class="text-meta text-ink-2 mb-3">
+      Pre-fills the column map and value bindings from a prior import of the
+      same shape. Any binding that no longer resolves against the current
+      mapping bands is left blank for you to re-bind below.
+    </p>
+    <form method="post" action="/register-import/{{ token }}/apply-profile" class="flex items-end gap-3">
+      {{ csrf_field() }}
+      <div class="w-64">
+        {{ form_field(
+          name="profile_id",
+          label="Profile",
+          input_type="select",
+          options=profile_options
+        ) }}
+      </div>
+      <button type="submit" class="btn btn-secondary btn-sm">Apply</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/register-import/{{ token }}/bind" class="space-y-8">
+    {{ csrf_field() }}
+
+    <fieldset class="space-y-3">
+      <legend class="text-h3 text-ink-1 mb-2">Likelihood</legend>
+      <p class="text-meta text-ink-2 mb-2">
+        Bind each distinct likelihood value to a frequency band.
+      </p>
+      {% for value in distinct.likelihood %}
+      <div class="p-3 rounded-card border border-border-subtle bg-surface-1 flex items-center gap-4">
+        <input type="hidden" name="likelihood_value_{{ loop.index0 }}" value="{{ value }}">
+        <span class="text-body text-ink-1 font-medium flex-1 truncate" title="{{ value }}">
+          {{ value if value else "(blank)" }}
+        </span>
+        <div class="w-64">
+          {{ form_field(
+            name="likelihood_target_" ~ loop.index0,
+            label="Frequency band",
+            input_type="select",
+            value=bindings.likelihood.get(value, ""),
+            options=likelihood_options,
+            error=field_errors.likelihood.get(value)
+          ) }}
+        </div>
+      </div>
+      {% endfor %}
+      {% if not distinct.likelihood %}
+      <p class="text-sm text-ink-2">No likelihood values found in this file.</p>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="text-h3 text-ink-1 mb-2">Impact</legend>
+      <p class="text-meta text-ink-2 mb-2">
+        Bind each distinct impact value to a magnitude band.
+      </p>
+      {% for value in distinct.impact %}
+      <div class="p-3 rounded-card border border-border-subtle bg-surface-1 flex items-center gap-4">
+        <input type="hidden" name="impact_value_{{ loop.index0 }}" value="{{ value }}">
+        <span class="text-body text-ink-1 font-medium flex-1 truncate" title="{{ value }}">
+          {{ value if value else "(blank)" }}
+        </span>
+        <div class="w-64">
+          {{ form_field(
+            name="impact_target_" ~ loop.index0,
+            label="Magnitude band",
+            input_type="select",
+            value=bindings.impact.get(value, ""),
+            options=impact_options,
+            error=field_errors.impact.get(value)
+          ) }}
+        </div>
+      </div>
+      {% endfor %}
+      {% if not distinct.impact %}
+      <p class="text-sm text-ink-2">No impact values found in this file.</p>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="space-y-3">
+      <legend class="text-h3 text-ink-1 mb-2">Category</legend>
+      <p class="text-meta text-ink-2 mb-2">
+        Bind each distinct category value to a FAIR threat category, or park
+        it as out of scope.
+      </p>
+      {% for value in distinct.category %}
+      <div class="p-3 rounded-card border border-border-subtle bg-surface-1 flex items-center gap-4">
+        <input type="hidden" name="category_value_{{ loop.index0 }}" value="{{ value }}">
+        <span class="text-body text-ink-1 font-medium flex-1 truncate" title="{{ value }}">
+          {{ value if value else "(blank)" }}
+        </span>
+        <div class="w-64">
+          {{ form_field(
+            name="category_target_" ~ loop.index0,
+            label="Category",
+            input_type="select",
+            value=bindings.category.get(value, ""),
+            options=category_options,
+            error=field_errors.category.get(value)
+          ) }}
+        </div>
+      </div>
+      {% endfor %}
+      {% if not distinct.category %}
+      <p class="text-sm text-ink-2">
+        This file has no category column mapped — every converted row will
+        be uncategorized.
+      </p>
+      {% endif %}
+    </fieldset>
+
+    <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+      <h2 class="text-h3 text-ink-1 mb-1">Save these bindings as a profile</h2>
+      <p class="text-meta text-ink-2 mb-3">
+        Optional — reuse this column map and these value bindings on a
+        future upload of the same shape.
+      </p>
+      {{ form_field(
+        name="profile_name",
+        label="Profile name",
+        input_type="text",
+        value=profile_name,
+        placeholder="e.g. Quarterly ERM export"
+      ) }}
+    </div>
+
+    <div class="pb-24" aria-hidden="true"></div>
+    <div class="sticky-action-bar sticky bottom-0 z-20 bg-surface-0/95 backdrop-blur border-t border-border-subtle -mx-6 px-6 py-3 flex gap-3 mt-6">
+      <a href="/register-import/{{ token }}/columns" class="btn btn-ghost btn-sm">Back</a>
+      <button type="submit" class="btn btn-primary btn-sm">Continue</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
