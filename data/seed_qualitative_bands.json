@@ -1,0 +1,92 @@
+[
+  {
+    "kind": "frequency",
+    "label": "very_low",
+    "low": 0.01,
+    "mode": 0.032,
+    "high": 0.1,
+    "sort_order": 0,
+    "derivation": "v3 derivation, priors for calibrated review, not an empirical claim: a log-decade convention by analogy with O-RA Table 1's decade structure — O-RA 2.0.1 publishes NO frequency scale (§5.2 gives estimation guidance only, not a table). Mode = geometric midpoint √(low×high) of the band, rounded to 2 significant figures."
+  },
+  {
+    "kind": "frequency",
+    "label": "low",
+    "low": 0.1,
+    "mode": 0.32,
+    "high": 1,
+    "sort_order": 1,
+    "derivation": "v3 derivation, priors for calibrated review, not an empirical claim: a log-decade convention by analogy with O-RA Table 1's decade structure — O-RA 2.0.1 publishes NO frequency scale (§5.2 gives estimation guidance only, not a table). Mode = geometric midpoint √(low×high) of the band, rounded to 2 significant figures."
+  },
+  {
+    "kind": "frequency",
+    "label": "moderate",
+    "low": 1,
+    "mode": 3.2,
+    "high": 10,
+    "sort_order": 2,
+    "derivation": "v3 derivation, priors for calibrated review, not an empirical claim: a log-decade convention by analogy with O-RA Table 1's decade structure — O-RA 2.0.1 publishes NO frequency scale (§5.2 gives estimation guidance only, not a table). Mode = geometric midpoint √(low×high) of the band, rounded to 2 significant figures."
+  },
+  {
+    "kind": "frequency",
+    "label": "high",
+    "low": 10,
+    "mode": 32,
+    "high": 100,
+    "sort_order": 3,
+    "derivation": "v3 derivation, priors for calibrated review, not an empirical claim: a log-decade convention by analogy with O-RA Table 1's decade structure — O-RA 2.0.1 publishes NO frequency scale (§5.2 gives estimation guidance only, not a table). Mode = geometric midpoint √(low×high) of the band, rounded to 2 significant figures."
+  },
+  {
+    "kind": "frequency",
+    "label": "very_high",
+    "low": 100,
+    "mode": 160,
+    "high": 250,
+    "sort_order": 4,
+    "derivation": "v3 derivation, priors for calibrated review, not an empirical claim: a log-decade convention by analogy with O-RA Table 1's decade structure — O-RA 2.0.1 publishes NO frequency scale (§5.2 gives estimation guidance only, not a table). Mode = geometric midpoint √(low×high) of the band, rounded to 2 significant figures. Top band is open-ended in concept; capped at 250/yr (≈ business-daily) as a documented v3 choice."
+  },
+  {
+    "kind": "magnitude",
+    "label": "very_low",
+    "low": 1000,
+    "mode": 3200,
+    "high": 10000,
+    "sort_order": 0,
+    "derivation": "O-RA Table 1 (§6.6, p.33 — \"An Example Scale Translating Quantitative Values to Qualitative Labels\") anchors this band: Very Low (VL) < $10K. Two honest caveats recorded here: (a) O-RA presents Table 1 as an example scale that \"should be guided by scales that have been approved by management\" — the org override layer implements exactly that approval step; (b) O-RA's direction of use is output-translation (quantitative → qualitative); this canonical table repurposes the same edges input-ward as priors, which is exactly the move §6.5 (pp.32-33) cautions against — mitigated structurally by DRAFT status and never-auto-final review, not by this table alone. The $1K floor closes O-RA's open lower end; a documented v3 choice, not O-RA-cited. Mode = geometric midpoint √(low×high) of the closed band, rounded to 2 significant figures — a v3 derivation choice, not from O-RA Table 1 (which supplies band edges only)."
+  },
+  {
+    "kind": "magnitude",
+    "label": "low",
+    "low": 10000,
+    "mode": 32000,
+    "high": 100000,
+    "sort_order": 1,
+    "derivation": "O-RA Table 1 (§6.6, p.33 — \"An Example Scale Translating Quantitative Values to Qualitative Labels\") anchors this band: Low (L) $10K–$100K. Two honest caveats recorded here: (a) O-RA presents Table 1 as an example scale that \"should be guided by scales that have been approved by management\" — the org override layer implements exactly that approval step; (b) O-RA's direction of use is output-translation (quantitative → qualitative); this canonical table repurposes the same edges input-ward as priors, which is exactly the move §6.5 (pp.32-33) cautions against — mitigated structurally by DRAFT status and never-auto-final review, not by this table alone. Mode = geometric midpoint √(low×high) of the closed band, rounded to 2 significant figures — a v3 derivation choice, not from O-RA Table 1 (which supplies band edges only)."
+  },
+  {
+    "kind": "magnitude",
+    "label": "moderate",
+    "low": 100000,
+    "mode": 320000,
+    "high": 1000000,
+    "sort_order": 2,
+    "derivation": "O-RA Table 1 (§6.6, p.33 — \"An Example Scale Translating Quantitative Values to Qualitative Labels\") anchors this band: Moderate (M) $100K–$1M. Two honest caveats recorded here: (a) O-RA presents Table 1 as an example scale that \"should be guided by scales that have been approved by management\" — the org override layer implements exactly that approval step; (b) O-RA's direction of use is output-translation (quantitative → qualitative); this canonical table repurposes the same edges input-ward as priors, which is exactly the move §6.5 (pp.32-33) cautions against — mitigated structurally by DRAFT status and never-auto-final review, not by this table alone. Mode = geometric midpoint √(low×high) of the closed band, rounded to 2 significant figures — a v3 derivation choice, not from O-RA Table 1 (which supplies band edges only)."
+  },
+  {
+    "kind": "magnitude",
+    "label": "high",
+    "low": 1000000,
+    "mode": 3200000,
+    "high": 10000000,
+    "sort_order": 3,
+    "derivation": "O-RA Table 1 (§6.6, p.33 — \"An Example Scale Translating Quantitative Values to Qualitative Labels\") anchors this band: High (H) $1M–$10M. Two honest caveats recorded here: (a) O-RA presents Table 1 as an example scale that \"should be guided by scales that have been approved by management\" — the org override layer implements exactly that approval step; (b) O-RA's direction of use is output-translation (quantitative → qualitative); this canonical table repurposes the same edges input-ward as priors, which is exactly the move §6.5 (pp.32-33) cautions against — mitigated structurally by DRAFT status and never-auto-final review, not by this table alone. Mode = geometric midpoint √(low×high) of the closed band, rounded to 2 significant figures — a v3 derivation choice, not from O-RA Table 1 (which supplies band edges only)."
+  },
+  {
+    "kind": "magnitude",
+    "label": "very_high",
+    "low": 10000000,
+    "mode": 100000000,
+    "high": 1000000000,
+    "sort_order": 4,
+    "derivation": "O-RA Table 1 (§6.6, p.33 — \"An Example Scale Translating Quantitative Values to Qualitative Labels\") anchors this band: Severe (SV) > $10M. Two honest caveats recorded here: (a) O-RA presents Table 1 as an example scale that \"should be guided by scales that have been approved by management\" — the org override layer implements exactly that approval step; (b) O-RA's direction of use is output-translation (quantitative → qualitative); this canonical table repurposes the same edges input-ward as priors, which is exactly the move §6.5 (pp.32-33) cautions against — mitigated structurally by DRAFT status and never-auto-final review, not by this table alone. The $1B cap ≈ p99.9 of the scenario library's σ≈2.27 catastrophic-loss cluster, ~1 order of magnitude below the heaviest supply-chain tails' p99.9 (≈$20B, σ=3.47) — the catastrophic class itself stays deliberately unbounded; this cap is a documented v3 choice closing O-RA's open upper end, not O-RA-cited. Mode = geometric midpoint √(low×high) of the closed band, rounded to 2 significant figures — a v3 derivation choice, not from O-RA Table 1 (which supplies band edges only)."
+  }
+]

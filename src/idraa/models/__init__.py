@@ -31,6 +31,7 @@ from idraa.models.fx_rate import FxRate
 from idraa.models.mixins import IdMixin, OrgMixin, TimestampMixin
 from idraa.models.organization import Organization
 from idraa.models.overlay import OverlayDefinition, OverlayDefinitionRevision
+from idraa.models.qualitative_mapping import QualitativeMappingBand, QualitativeMappingOrgBand
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
@@ -65,6 +66,8 @@ __all__ = [
     "Organization",
     "OverlayDefinition",
     "OverlayDefinitionRevision",
+    "QualitativeMappingBand",
+    "QualitativeMappingOrgBand",
     "RiskAnalysisRun",
     "RunSamples",
     "RunStatus",

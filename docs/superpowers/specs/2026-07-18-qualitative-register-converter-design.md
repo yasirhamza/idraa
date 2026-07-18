@@ -30,7 +30,9 @@ no Scenario row uses DRAFT today — D4 is a new workflow, not reuse.
 - **P1b — mapping tables + conversion service**: canonical band table, org override
   layer, converter core, conversion report. Methodology-reviewer territory.
 - **P1c — import UI**: upload / column-map / value-bind / preview / confirm, xlsx
-  parser, binding profiles.
+  parser, binding profiles, org-band admin CRUD UI (service layer lands in P1b),
+  converter-aware confirm/banner COPY for converted rows (backend audit action
+  lands in P1b — see §3 Meth-I1).
 - **P2 — library-matching assist** (own design pass later): suggest one of the 102
   curated entries per register row from taxonomy/tag/category signals.
   Structured/exact matching first — fuzzy string matching would be a codebase first
@@ -69,9 +71,10 @@ use of "the names, labels, etc." contained in the specification):
   Translating Quantitative Values to Qualitative Labels") — Severe > $10M, High
   $1M–$10M, Moderate $100K–$1M, Low $10K–$100K, Very Low < $10K. Our canonical
   magnitude bands adopt exactly these log-decade edges, closing the two open ends
-  ($1K floor, $1B cap — both documented v3 choices; the cap sits at the order of
-  magnitude of the heaviest catastrophic-entry tails, ≈p99.9 of their uncapped
-  lognormals — the catastrophic class itself is deliberately unbounded). Two honest caveats recorded in `derivation`: (a) O-RA
+  ($1K floor, $1B cap — both documented v3 choices; $1B ≈ p99.9 of the library's
+  σ≈2.27 catastrophic cluster and ~1 order of magnitude BELOW the heaviest
+  supply-chain tails' p99.9 (≈$20B, σ=3.47) — the catastrophic class itself is
+  deliberately unbounded; plan-gate M2 recomputation). Two honest caveats recorded in `derivation`: (a) O-RA
   presents Table 1 as an *example* scale that "should be guided by scales that
   have been approved by management" — which is precisely what the org override
   layer implements; (b) O-RA's direction of use is output-translation
@@ -98,15 +101,16 @@ Frequency bands (events/year), log-decade edges, PERT mode = geometric midpoint
 
 | label | low | mode | high |
 |---|---|---|---|
-| very_low | 0.01 | 0.03 | 0.1 |
-| low | 0.1 | 0.3 | 1 |
-| moderate | 1 | 3 | 10 |
+| very_low | 0.01 | 0.032 | 0.1 |
+| low | 0.1 | 0.32 | 1 |
+| moderate | 1 | 3.2 | 10 |
 | high | 10 | 32 | 100 |
-| very_high | 100 | 158 | 250 |
+| very_high | 100 | 160 | 250 |
 
 Top band is open-ended in concept; capped at 250/yr (≈ business-daily) — documented
-in `derivation`. Modes rounded to 2 significant figures from the geometric midpoint
-(√(100·250) ≈ 158).
+in `derivation`. Modes rounded to 2 significant figures from the geometric midpoint — uniformly,
+all ten bands (√(100·250) ≈ 158.1 → 160; plan-gate M1 corrected the earlier
+1-sig-fig frequency roundings).
 
 Magnitude bands (USD), same rule:
 
@@ -118,10 +122,11 @@ Magnitude bands (USD), same rule:
 | high | 1,000,000 | 3,200,000 | 10,000,000 |
 | very_high | 10,000,000 | 100,000,000 | 1,000,000,000 |
 
-Top band mode = √(10M·1B) ≈ $100M; the $1B cap sits at the order of magnitude of
-the heaviest catastrophic-entry tails (≈p99.9 of their uncapped lognormals — the
-catastrophic class itself is unbounded; P1b's methodology re-gate revisits before
-the band table becomes code). Orgs whose loss capacity differs express it through the org layer
+Top band mode = √(10M·1B) ≈ $100M; the $1B cap ≈ p99.9 of the library's σ≈2.27
+catastrophic cluster, ~1 order of magnitude below the heaviest supply-chain
+tails' p99.9 (≈$20B at σ=3.47); the catastrophic class itself is unbounded.
+(Verified quantitatively at the P1b plan-gate, M2 — this wording is the
+derivation-string requirement.) Orgs whose loss capacity differs express it through the org layer
 (that IS the evaluator workshop-calibration step), not a revenue multiplier.
 
 Canonical label slugs stay symmetric across both kinds (`very_low … very_high`);
@@ -156,17 +161,25 @@ Per register row, after binding:
 - `vuln_framing = "legacy_residual"` — the shipped F2 banner + confirm/re-frame flow
   is the calibration-review driver. Register likelihood is (almost always) residual;
   this framing says so instead of double-counting controls.
-  **P1b must mint converter-specific review copy + audit action** (plan-gate
-  finding Meth-I1): the F2 flow's prose and `scenario.confirm_vuln_framing`
-  audit action speak about the stored *vulnerability values*, but for a
-  converted row vuln is a neutral pass-through — the genuine residual/inherent
-  question attaches to the frequency band (LEF). Reusing the F2 machinery's
-  *mechanics* (flag, banner slot, confirm flip) is right; reusing its copy and
-  audit action verbatim would record "vuln framing reviewed" for what is
-  actually a frequency-baseline acceptance. P1b's converter-aware copy list
-  includes the P1a promote-refusal string ("confirm vulnerability framing
-  before promoting…") — vuln-centric wording that must gain frequency-framing
-  copy once converted rows exist (plan-gate Meth-R2-NTH).
+  **Meth-I1 split (P1b plan-gate R1/R2):** the F2 flow's prose and
+  `scenario.confirm_vuln_framing` audit action speak about the stored
+  *vulnerability values*, but for a converted row vuln is a neutral
+  pass-through — the genuine residual/inherent question attaches to the
+  frequency band (LEF). Reusing the F2 *mechanics* (flag, banner slot, confirm
+  flip) is right; reusing copy + audit action verbatim would record "vuln
+  framing reviewed" for what is actually a frequency-baseline acceptance.
+  Therefore: **P1b ships the converter-aware AUDIT ACTION** —
+  `confirm_vuln_framing` writes `"scenario.confirm_frequency_baseline"` when
+  `source == QUALITATIVE_REGISTER_IMPORT` (Task 5b) — and **P1c ships the
+  converter-aware COPY** (banner + the P1a promote-refusal string, which stay
+  vuln-centric until then; safe: no converted rows can exist before P1c's UI).
+  Two P1c briefs recorded now: (a) any "was this confirmed?" view must union
+  BOTH action strings (the state gate is `vuln_framing == "inherent"`);
+  (b) `vuln_framing` is deliberately OVERLOADED on converted rows — the stored
+  terminal value "inherent" there means "frequency baseline accepted", not a
+  vuln-values claim (vuln stays neutral (1,1,1)); converted-row confirm copy
+  must warn that clearing the residual flag and then attaching FAIR-CAM
+  controls double-discounts an already-residual register frequency.
 - `primary_loss` = magnitude band PERT. `secondary_loss = NULL` (engine-safe
   post-#525). Conversion report flags every row: "SL not derivable from a single
   impact score — add during review or anchor to a library entry (P2)."
@@ -177,7 +190,7 @@ Per register row, after binding:
 - `name` = register title (dedup per §3.1); `description` = register description +
   a "Register provenance" block (owner, raw likelihood/impact/category values, any
   unmapped columns the user chose to carry, source file + row number).
-- `source` = new `ScenarioSource.QUALITATIVE_CONVERTED`.
+- `source` = new `ScenarioSource.QUALITATIVE_REGISTER_IMPORT`.
 - `conversion_metadata` (new nullable JSON on Scenario, validated by a Pydantic
   model): `{source_file, source_row, raw: {likelihood, impact, category}, bindings:
   {likelihood_label, magnitude_label, category}, mapping_versions: {canonical, org},
@@ -283,6 +296,21 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
   separate future spec+plan and is NOT in this budget.
 
 ## Scope drift log
+
+- 2026-07-18 (P1b): `ScenarioSource` member is `QUALITATIVE_REGISTER_IMPORT`, not
+  the earlier `QUALITATIVE_CONVERTED` — the enum's own anticipatory placeholder
+  (models/enums.py) predates this spec and governs (PR-gate Spec-I).
+- 2026-07-18 (P1b execution): Task 3 confirmed the PRIMARY neutral-vuln encoding
+  (1.0, 1.0, 1.0) — fair_cam's low==high point-mass short-circuit; the 0.99
+  fallback was NOT needed. Converter-aware confirm COPY deferred to P1c (audit
+  action `scenario.confirm_frequency_baseline` shipped in P1b); ORM↔DTO
+  field-sync for band models is N/A until P1c's band form DTO exists (ORM
+  snapshots cover structure). Accepted NTH: name-dedup strip asymmetry
+  (same-source branch covers the practical case).
+- 2026-07-18 (P1b plan-gate R1): frequency modes corrected to uniform 2sf
+  (0.032/0.32/3.2/32/160 — M1); $1B-cap rationale corrected to the σ≈2.27-cluster
+  p99.9 wording (M2, quantitatively verified); P1c explicitly owns band-admin UI
+  + converter-aware confirm copy (backend audit action in P1b).
 
 - 2026-07-18 (spec vs originating issue #34): **corrected stale premises** — #306
   has no column mapper (mapper is new UI, D1); #517 revenue scaling was removed,

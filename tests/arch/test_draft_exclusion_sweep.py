@@ -28,6 +28,7 @@ AUDITED = {
     "services/attack_coverage.py": "excludes-drafts",  # pre-existing ACTIVE filter
     "services/scenario_import.py": "shows-all-by-design",  # dedup vs ACTIVE names (P1b revisits)
     "services/reports.py": "run-committed-upstream-gated",
+    "services/qualitative_converter.py": "shows-all-by-design",  # dedup reads ALL statuses incl DRAFT (spec §3.1)
 }
 
 QUERY_RE = re.compile(

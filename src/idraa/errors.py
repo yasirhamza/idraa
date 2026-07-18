@@ -157,6 +157,19 @@ class LibraryOverrideVersionConflictError(ConflictError):
     reference (no such class on main per paranoid review)."""
 
 
+class QualitativeBandVersionConflictError(ConflictError):
+    """Optimistic-lock failure on ``QualitativeBandService.update_org_band``
+    (epic #34 P1b).
+
+    Mirrors :class:`LibraryOverrideVersionConflictError`'s shape so the route
+    layer's 409 mapping pattern stays consistent across all lock-conflict
+    cases. Distinct lock field, by design: unlike ``ScenarioLibraryOverride``
+    (whose service-layer check compares the descriptive ``version`` counter),
+    ``QualitativeMappingOrgBand`` checks against ``row_version`` — the
+    dedicated optimistic-lock primitive — per the P1b plan's
+    ``expected_row_version`` parameter name."""
+
+
 class LibraryEntryStatusError(ValidationError):
     """Attempt to clone from a draft or deprecated entry."""
 
