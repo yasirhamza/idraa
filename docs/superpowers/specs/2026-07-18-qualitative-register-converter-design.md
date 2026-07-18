@@ -297,6 +297,13 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## Scope drift log
 
+- 2026-07-19 (P1c final PR-gate): converter-aware copy additionally shipped on
+  the scenario EDIT page (form.html frequency-baseline banner variant,
+  c8e59b4) — a final-gate reviewer IMPORTANT: Path B routes reviewers to the
+  edit page, whose vuln-centric banner would have advised raising the neutral
+  vulnerability (auto-flipping the review flag without a frequency review).
+
+
 - 2026-07-18 (P1b): `ScenarioSource` member is `QUALITATIVE_REGISTER_IMPORT`, not
   the earlier `QUALITATIVE_CONVERTED` — the enum's own anticipatory placeholder
   (models/enums.py) predates this spec and governs (PR-gate Spec-I).

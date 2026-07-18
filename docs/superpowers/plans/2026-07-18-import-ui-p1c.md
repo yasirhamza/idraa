@@ -35,8 +35,8 @@
 - `parse_register(data: bytes, fmt: str, sheet_name: str | None) -> ParsedRegister` where `@dataclass ParsedRegister: headers: list[str]; rows: list[dict[str, str]]  # header -> str(cell), 1-based source_row in key "_row"` — enforces MAX_ROWS (hard error dict like #306), skips fully-empty rows, coerces every cell via `str(v).strip()` with `None` → `""`; csv path mirrors `scenario_import_parsers` reader conventions (UTF-8-sig, delimiter sniff NOT needed — comma per #306 precedent).
 - `_zip_guard(data: bytes) -> None` — raises `ValueError("workbook rejected: ...")` per Global Constraints bounds.
 
-- [ ] **Step 1: failing tests** — build tiny xlsx fixtures IN the test via openpyxl write-mode (allowed in tests): happy 3-row sheet; two-sheet workbook (list_sheet_names order); formula cell (`=1+1`) asserting the parser sees the CACHED value or `""` never the formula string (write with `data_only` semantics: write value+formula, assert no leading `=` in output); >500 rows → hard error; zip-bomb guard (craft a zip with an oversize member via `zipfile` directly) → ValueError; csv happy path + BOM; sniff conflicts (xlsx magic named .csv → ValueError; .xlsx without magic → ValueError).
-- [ ] **Step 2: verify fail. Step 3: implement. Step 4: verify pass + `uv run pytest tests/unit/test_register_import_parsers.py -q`. Step 5: commit** — `feat(import): register parsers with xlsx hardening (epic #34 P1c)`
+- [x] **Step 1: failing tests** — build tiny xlsx fixtures IN the test via openpyxl write-mode (allowed in tests): happy 3-row sheet; two-sheet workbook (list_sheet_names order); formula cell (`=1+1`) asserting the parser sees the CACHED value or `""` never the formula string (write with `data_only` semantics: write value+formula, assert no leading `=` in output); >500 rows → hard error; zip-bomb guard (craft a zip with an oversize member via `zipfile` directly) → ValueError; csv happy path + BOM; sniff conflicts (xlsx magic named .csv → ValueError; .xlsx without magic → ValueError).
+- [x] **Step 2: verify fail. Step 3: implement. Step 4: verify pass + `uv run pytest tests/unit/test_register_import_parsers.py -q`. Step 5: commit** — `feat(import): register parsers with xlsx hardening (epic #34 P1c)`
 
 ### Task 2: staging state + binding profiles (models + migration)
 
@@ -47,7 +47,7 @@
 - Create: `alembic/versions/<autogen>_register_import_ui.py` (autogenerate; verify add_column + create_table; downgrade drops both)
 - Test: `tests/unit/test_register_binding_profile_model.py` + snapshot regen (`--snapshot-update` ONLY test_schema_snapshots.py; expected diff: CSVImportPreview + new model)
 
-- [ ] **Steps (TDD as Task 1): model roundtrip tests, migration up/down test in tests/migrations/, snapshot regen with inspected diff. Commit** — `feat(models): register import staging state + binding profiles (epic #34 P1c)`
+- [x] **Steps (TDD as Task 1): model roundtrip tests, migration up/down test in tests/migrations/, snapshot regen with inspected diff. Commit** — `feat(models): register import staging state + binding profiles (epic #34 P1c)`
 
 ### Task 3: import-flow service + P1b hardening briefs
 
@@ -69,7 +69,7 @@
 
 Converter briefs (same task): (a) first line of `convert()`: `if user.organization_id != organization_id: raise IDORError(...)` + test; (b) `SQLAlchemyError` rows → `RowError(message="internal error converting this row — see server logs")` + `logger.exception` + test asserting no SQL text leaks; (c) `qualitative_bands.mapping_versions` now returns `{"canonical": {"kind:label": version, ...}, "org": {...}}` built FROM `effective_bands()` per-band `source`/`source_version` (fixes the lossy global max; update its tests + the converter metadata test pin).
 
-- [ ] **Steps (TDD): full test set incl. profile drift-warning, single-use token deletion, unbound-value rejection, distinct>50 guard, org-scoping negative tests. Commit** — `feat(services): register import flow + converter hardening briefs (epic #34 P1c)`
+- [x] **Steps (TDD): full test set incl. profile drift-warning, single-use token deletion, unbound-value rejection, distinct>50 guard, org-scoping negative tests. Commit** — `feat(services): register import flow + converter hardening briefs (epic #34 P1c)`
 
 ### Task 4: routes + templates — upload, sheet, column-map
 
@@ -85,7 +85,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 - `GET+POST /register-import/{token}/sheet` → radio list of sheets → `set_sheet` → 303 columns.
 - `GET /register-import/{token}/columns` → table of file headers, each with a target `<select>` (form_field macro, options = the 8 targets, default `ignore`; pre-fill from profile if applied); `POST` → `set_column_map` → 303 to `/register-import/{token}/bind`. 422 re-render with `build_flash` on ValidationError (mirror library_overrides pattern); expired token → 409 via the NEW `templates/register_import/import_expired.html` (see amendments — existing expired templates are entity-worded, not reusable).
 
-- [ ] **Steps (TDD: route status/flow tests incl. RBAC 403 for analyst, CSRF implicit, expired 409, sheet flow). Commit** — `feat(routes): register import upload + column-map steps (epic #34 P1c)`
+- [x] **Steps (TDD: route status/flow tests incl. RBAC 403 for analyst, CSRF implicit, expired 409, sheet flow). Commit** — `feat(routes): register import upload + column-map steps (epic #34 P1c)`
 
 ### Task 5: routes + templates — value-bind + profiles
 
@@ -98,7 +98,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 - `POST /register-import/{token}/bind` → `set_value_bindings` (+ `save_profile` when name given; duplicate name → 422 flash) → 303 preview. Unbound value → 422 re-render with per-field errors.
 - `POST /register-import/{token}/apply-profile` (from upload OR bind page) → `apply_profile` → 303 back with drift warnings flashed (warning level).
 
-- [ ] **Steps (TDD: bind flow, pre-selection exactness — "High" pre-selects `high`, "Hi" does NOT; park binding; profile save/apply + drift warning; unbound 422). Commit** — `feat(routes): value-bind step + binding profiles (epic #34 P1c)`
+- [x] **Steps (TDD: bind flow, pre-selection exactness — "High" pre-selects `high`, "Hi" does NOT; park binding; profile save/apply + drift warning; unbound 422). Commit** — `feat(routes): value-bind step + binding profiles (epic #34 P1c)`
 
 ### Task 6: preview, convert, report
 
@@ -111,7 +111,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 - `POST /register-import/{token}/convert` → `apply()` → render `report.html` directly (200): created (links to each scenario), parked, skipped (reason), errors, mapping versions, "what next" box (review → confirm frequency baseline → promote). Token now deleted; re-POST → 409 expired page (single-use test).
 - Full-journey test: upload xlsx → columns → bind (with one parked category + one unbindable-then-bound value) → preview counts → convert → report shows created N; then assert the created scenarios are DRAFT + legacy_residual + excluded from `/analyses/new`.
 
-- [ ] **Steps (TDD). Commit** — `feat(routes): preview, convert, and report steps (epic #34 P1c)`
+- [x] **Steps (TDD). Commit** — `feat(routes): preview, convert, and report steps (epic #34 P1c)`
 
 ### Task 7: org-band admin CRUD UI
 
@@ -122,7 +122,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 
 Mirror `library_overrides.py` exactly: list page shows the EFFECTIVE table (canonical rows marked "canonical", org rows marked "override/custom" with edit/delete), new/edit form (kind select, label, low/mode/high via form_field number/money by kind, reason textarea required, hidden expected_row_version on edit), 422 flash re-render, 409 optimistic-lock re-render, delete POST with confirm. Canonical rows are read-only (no edit/delete affordance). RBAC: ADMIN all routes; reviewer/analyst 403 test.
 
-- [ ] **Steps (TDD incl. IDOR 404 cross-org, lock-conflict 409, delete-then-recreate flow). Commit** — `feat(routes): qualitative band admin CRUD (epic #34 P1c)`
+- [x] **Steps (TDD incl. IDOR 404 cross-org, lock-conflict 409, delete-then-recreate flow). Commit** — `feat(routes): qualitative band admin CRUD (epic #34 P1c)`
 
 ### Task 8: converter-aware copy + e2e + gate
 
@@ -144,7 +144,7 @@ Mirror `library_overrides.py` exactly: list page shows the EFFECTIVE table (cano
 - Spec drift-log: P1c copy shipped (closes the Meth-I1 deferral).
 - **Full local gate FOREGROUND** (`uv run python scripts/run_local_gate.py`) + the chart-e2e-style rule: run `uv run pytest tests/e2e/test_register_import_journey.py -q` explicitly (fast gate deselects e2e).
 
-- [ ] **Steps (TDD). Commit** — `feat(ui): converter-aware review copy + e2e journey (epic #34 P1c)`
+- [x] **Steps (TDD). Commit** — `feat(ui): converter-aware review copy + e2e journey (epic #34 P1c)`
 
 ---
 
