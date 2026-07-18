@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "macros/viewport_block_authoring.html" import viewport_block_authoring, only_on_md %}
+{% from "macros/form_field.html" import form_field %}
+{% block title %}{% if band %}Edit mapping band{% else %}New mapping band{% endif %}{% endblock %}
+{% block content %}
+
+{{ viewport_block_authoring() }}
+
+{% call only_on_md() %}
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-h1 text-ink-1 mb-4">
+    {% if band %}Edit mapping band{% else %}New mapping band{% endif %}
+  </h1>
+
+  {# Flash rendered by base.html -> layouts/_flash.html (single source). #}
+
+  {%- set effective_kind = band.kind if band else (form.kind if form else none) -%}
+  {%- set value_input_type = 'money' if effective_kind == 'magnitude' else 'number' -%}
+  {%- set value_suffix = none if value_input_type == 'money' else '/yr' -%}
+
+  <form method="post"
+        action="{% if band %}/qualitative-bands/{{ band.id }}{% else %}/qualitative-bands{% endif %}"
+        class="card bg-surface-1 border border-border-subtle rounded-card p-6 grid grid-cols-1 gap-4">
+    {{ csrf_field() }}
+
+    {% if band %}
+    {# Optimistic-lock: hidden field carries the row_version this form was rendered against. #}
+    <input type="hidden" name="expected_row_version" value="{{ band.row_version }}">
+    {# kind/label are immutable after creation (identity fields) — display-only,
+       not submitted. QualitativeBandService.update_org_band takes no kind/label
+       params. #}
+    {{ form_field(name="kind_display", label="Kind", mode="display", value=(band.kind | humanize_slug)) }}
+    {{ form_field(name="label_display", label="Label", mode="display", value=band.label) }}
+    {% else %}
+    {{ form_field(name="kind", label="Kind", input_type="select",
+                  value=(form.kind if form else none),
+                  options=kind_options,
+                  required=True) }}
+    {{ form_field(name="label", label="Label", input_type="text",
+                  value=(form.label if form else none),
+                  help="lowercase snake_case, 1-40 chars — e.g. very_high",
+                  required=True) }}
+    {% endif %}
+
+    {{ form_field(name="low", label="Low", input_type=value_input_type,
+                  value=(band.low if band else (form.low if form else none)),
+                  step="any", suffix=value_suffix, required=True) }}
+    {{ form_field(name="mode", label="Mode", input_type=value_input_type,
+                  value=(band.mode if band else (form.mode if form else none)),
+                  step="any", suffix=value_suffix, required=True) }}
+    {{ form_field(name="high", label="High", input_type=value_input_type,
+                  value=(band.high if band else (form.high if form else none)),
+                  step="any", suffix=value_suffix, required=True) }}
+
+    {{ form_field(name="reason", label="Reason", input_type="textarea",
+                  value=(band.reason if band else (form.reason if form else none)),
+                  rows=3, required=True) }}
+
+    <div class="flex justify-between mt-6">
+      <a href="/qualitative-bands" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        {% if band %}Save changes{% else %}Create band{% endif %}
+      </button>
+    </div>
+  </form>
+
+  {% if band %}
+  <form method="post" action="/qualitative-bands/{{ band.id }}/delete" class="mt-8"
+        onsubmit="return window.confirm('Delete this org band override? Reverts to the canonical band.');">
+    {{ csrf_field() }}
+    <button type="submit" class="btn btn-error">Delete override</button>
+  </form>
+  {% endif %}
+</div>
+{% endcall %}
+{% endblock %}

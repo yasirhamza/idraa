@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/data_table.html" import data_table %}
+{% block title %}Mapping bands{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Mapping bands",
+  breadcrumb=breadcrumb_for(request),
+  meta="Frequency and magnitude bands used to convert qualitative register likelihood/impact labels into FAIR distributions. Canonical bands are read-only; add an org override to calibrate for your organization.",
+  actions=[
+    {"label": "+ New org band", "href": "/qualitative-bands/new", "style": "primary", "requires_md": True},
+  ],
+) }}
+
+{% set columns = [
+  {"key": "kind_label",    "label": "Kind",    "priority": "secondary"},
+  {"key": "label",         "label": "Label",   "priority": "primary"},
+  {"key": "low_value",     "label": "Low",     "numeric": True, "align": "right"},
+  {"key": "mode_value",    "label": "Mode",    "numeric": True, "align": "right"},
+  {"key": "high_value",    "label": "High",    "numeric": True, "align": "right"},
+  {"key": "source_badge",  "label": "Source",  "kind": "badge"},
+  {"key": "version_label", "label": "Version", "numeric": True, "align": "right", "priority": "hidden_on_mobile"},
+  {"key": "_actions",      "label": "",        "kind": "action_menu"},
+] %}
+
+{% set rows = [] %}
+{% for b in bands %}
+{%- set _ = rows.append({
+  "kind_label":    b.kind | humanize_slug,
+  "label":         b.label,
+  "low_value":     b.low,
+  "mode_value":    b.mode,
+  "high_value":    b.high,
+  "source_badge":  {"label": "org override", "tone": "badge-info"} if b.source == "org" else {"label": "canonical", "tone": "badge-ghost"},
+  "version_label": "v" ~ b.source_version,
+  "_actions": ([
+    {"label": "Edit", "href": "/qualitative-bands/" ~ b.band_id ~ "/edit"},
+    {
+      "label": "Delete",
+      "action": "/qualitative-bands/" ~ b.band_id ~ "/delete",
+      "method": "post",
+      "danger": True,
+      "confirm": "Delete this org band override? Reverts to the canonical band.",
+    },
+  ] if b.band_id else []),
+}) -%}
+{% endfor %}
+
+{{ data_table(
+  rows=rows,
+  columns=columns,
+  empty={
+    "icon": "◇",
+    "title": "No mapping bands",
+    "body": "Canonical bands seed at boot; add an org override to calibrate for your organization.",
+    "cta": [
+      {"label": "+ New org band", "href": "/qualitative-bands/new", "style": "primary"},
+    ],
+  },
+) }}
+
+{% endblock %}
