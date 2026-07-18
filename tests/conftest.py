@@ -27,6 +27,19 @@ from typing import Any as _Any
 # default; `dev` and `prod` now require an explicit non-default secret.
 os.environ.setdefault("ENVIRONMENT", "test")
 
+# Raise the per-fit scipy.optimize wall-clock budget for the test suite
+# (issue #36). The prod default (500ms, ``Settings.quantile_fit_wall_clock_ms``)
+# is a REAL-TIME deadline inside ``DeadlineCallback`` and is sensitive to
+# suite-accumulated load (leaked worker threads, BLAS pool state) — a full
+# fast-suite run non-deterministically failed
+# ``test_finalize_double_post_creates_only_one_scenario`` on it, and that
+# test verifies WizardDraft locking semantics, not optimizer latency.
+# ``setdefault`` (not assignment) so an explicit env override still wins.
+# Guarded by tests/unit/test_config_environment_guard.py::
+# test_quantile_fit_budget_raised_in_test_env — do not remove one without
+# the other.
+os.environ.setdefault("QUANTILE_FIT_WALL_CLOCK_MS", "5000")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

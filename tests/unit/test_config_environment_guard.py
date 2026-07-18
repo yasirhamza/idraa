@@ -80,3 +80,23 @@ def test_environment_default_is_dev(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     s = Settings(session_secret="x" * 16)
     assert s.environment == "dev"
+
+
+def test_quantile_fit_budget_raised_in_test_env() -> None:
+    """The suite-wide scipy.optimize deadline must stay raised (issue #36).
+
+    ``tests/conftest.py`` sets ``QUANTILE_FIT_WALL_CLOCK_MS=5000`` before
+    importing ``idraa`` because the prod default (500ms) is a real-time
+    deadline that suite-accumulated load can bust, non-deterministically
+    failing wizard-finalize tests that assert locking semantics, not
+    optimizer latency. If this assertion fires, the conftest override was
+    removed or reordered below the ``idraa`` import — restore it rather
+    than deleting this test, or the full-suite flake returns.
+    """
+    from idraa.config import get_settings
+
+    assert get_settings().quantile_fit_wall_clock_ms >= 5000
+
+    # The raise is test-harness-only: the shipped default stays 500ms.
+    field = Settings.model_fields["quantile_fit_wall_clock_ms"]
+    assert field.default == 500
