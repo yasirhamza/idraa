@@ -84,6 +84,33 @@ def test_qualitative_mapping_org_bands_table_empty_on_seed(
     assert count == 0
 
 
+def test_source_column_widened_to_27_and_narrowed_on_downgrade(
+    alembic_config: Config, alembic_engine: Engine
+) -> None:
+    """Spec-T1-I: `qualitative_register_import` (27 chars) overflows the
+    scenarios.source DDL created VARCHAR(15) in 1a3794c327d4 — SQLite
+    tolerates, Postgres would reject inserts. The migration widens it
+    dialect-aware (08358cf073b8 precedent); downgrade narrows back (with a
+    truncation guard, not exercised here — the test DB has no scenarios)."""
+    command.upgrade(alembic_config, _REV)
+    with alembic_engine.connect() as conn:
+        cols = {
+            r["name"]: r["type"]
+            for r in conn.execute(sa.text("PRAGMA table_info(scenarios)")).mappings()
+        }
+    assert cols["source"] == "VARCHAR(27)"
+
+    command.downgrade(alembic_config, _PRE_REV)
+    with alembic_engine.connect() as conn:
+        cols = {
+            r["name"]: r["type"]
+            for r in conn.execute(sa.text("PRAGMA table_info(scenarios)")).mappings()
+        }
+    assert cols["source"] == "VARCHAR(15)"
+
+    command.upgrade(alembic_config, _REV)
+
+
 def test_downgrade_drops_both_tables_and_scenarios_column(
     alembic_config: Config, alembic_engine: Engine
 ) -> None:
