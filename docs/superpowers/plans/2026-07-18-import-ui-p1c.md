@@ -94,7 +94,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 - Create: `templates/register_import/bind.html`
 - Test: extend `tests/integration/test_register_import_routes.py`
 
-- `GET /register-import/{token}/bind` — three fieldsets (likelihood / impact / category), one row per distinct file value: value text + `<select>` of targets (frequency band labels from `effective_bands` for likelihood; magnitude labels for impact; ThreatCategory members + `"Parked — out of scope (not information- or OT-risk; see #39)"` (OT is IN scope — plan-gate M-2) for category), pre-selected per `preselect_bindings`; an info callout names the park semantics (spec D5 copy: counted + reported, never errors) and links `/qualitative-bands` for band management; "Save these bindings as a profile" optional name input.
+- `GET /register-import/{token}/bind` — three fieldsets (likelihood / impact / category), one row per distinct file value: value text + `<select>` of targets (frequency band labels from `effective_bands` for likelihood; magnitude labels for impact; ThreatCategory members + `"Parked — out of scope (neither information- nor OT-risk; see #39)"` (OT is IN scope — plan-gate M-2) for category), pre-selected per `preselect_bindings`; an info callout names the park semantics (spec D5 copy: counted + reported, never errors) and links `/qualitative-bands` for band management; "Save these bindings as a profile" optional name input.
 - `POST /register-import/{token}/bind` → `set_value_bindings` (+ `save_profile` when name given; duplicate name → 422 flash) → 303 preview. Unbound value → 422 re-render with per-field errors.
 - `POST /register-import/{token}/apply-profile` (from upload OR bind page) → `apply_profile` → 303 back with drift warnings flashed (warning level).
 
