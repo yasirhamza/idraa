@@ -31,6 +31,8 @@ from typing import Any
 import httpx
 import pytest
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -168,7 +170,7 @@ async def test_run_detail_summary_view_journey(migrated_server_url: str) -> None
             )
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # 1. Bootstrap first admin + login.
         await _bootstrap_admin_and_login(page, base)
@@ -332,7 +334,7 @@ async def test_run_detail_summary_view_journey(migrated_server_url: str) -> None
         # 11. Mobile pass: new 390x844 context, same URL.
         mobile_context = await browser.new_context(viewport={"width": 390, "height": 844})
         mobile_page = await mobile_context.new_page()
-        mobile_page.set_default_timeout(15_000)
+        mobile_page.set_default_timeout(E2E_TIMEOUT_MS)
         # Re-auth on the new context (cookies are per-context).
         await _bootstrap_admin_and_login(mobile_page, base)
         await mobile_page.goto(f"{base}/runs/{run_id}")

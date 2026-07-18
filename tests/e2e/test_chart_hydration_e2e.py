@@ -48,6 +48,8 @@ import pytest
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, async_playwright, expect
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -273,7 +275,7 @@ def completed_aggregate_run_url(migrated_server_url: str) -> Iterator[str]:
             try:
                 context = await browser.new_context(viewport={"width": 1280, "height": 900})
                 page = await context.new_page()
-                page.set_default_timeout(15_000)
+                page.set_default_timeout(E2E_TIMEOUT_MS)
                 await _bootstrap_admin_and_login(page, migrated_server_url)
                 await _set_org_loss_tolerance(page, migrated_server_url)
                 run_id = await _create_completed_aggregate_run(page, migrated_server_url)
@@ -319,7 +321,7 @@ def completed_single_run_url(migrated_server_url: str) -> Iterator[str]:
             try:
                 context = await browser.new_context(viewport={"width": 1280, "height": 900})
                 page = await context.new_page()
-                page.set_default_timeout(15_000)
+                page.set_default_timeout(E2E_TIMEOUT_MS)
                 await _bootstrap_admin_and_login(page, migrated_server_url)
                 await _set_org_loss_tolerance(page, migrated_server_url)
                 run_id = await _create_completed_single_run(page, migrated_server_url)
@@ -356,7 +358,7 @@ async def test_lec_slider_toggle_tooltip(
             )
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
         # Re-auth on the new context (cookies are per-context).
         await _bootstrap_admin_and_login(page, migrated_server_url)
 
@@ -426,7 +428,7 @@ async def test_epc_hover_only_tooltip(
             )
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
         await _bootstrap_admin_and_login(page, migrated_server_url)
 
         await page.goto(completed_aggregate_run_url)
@@ -468,7 +470,7 @@ async def test_download_data_csv(
             viewport={"width": 1280, "height": 900}, accept_downloads=True
         )
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
         await _bootstrap_admin_and_login(page, migrated_server_url)
         await page.goto(completed_aggregate_run_url)
         fig = page.locator('[data-chart-hydrate="lec"]').first
@@ -508,7 +510,7 @@ async def test_curve_hover_tooltip(migrated_server_url: str, completed_single_ru
             )
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
         await _bootstrap_admin_and_login(page, migrated_server_url)
 
         await page.goto(completed_single_run_url)
@@ -547,7 +549,7 @@ async def test_bars_hover_tooltip(migrated_server_url: str, completed_single_run
             )
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
         await _bootstrap_admin_and_login(page, migrated_server_url)
 
         await page.goto(completed_single_run_url)
