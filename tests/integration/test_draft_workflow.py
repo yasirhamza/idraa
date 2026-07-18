@@ -47,3 +47,29 @@ async def test_run_create_rejects_mixed_active_and_draft(authed_analyst, db_sess
         follow_redirects=False,
     )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_new_analysis_picker_omits_drafts(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    _seed_scenario(db_session, org_id=org_id, name="Visible Active", status=EntityStatus.ACTIVE)
+    _seed_scenario(db_session, org_id=org_id, name="Hidden Draft", status=EntityStatus.DRAFT)
+    await db_session.commit()
+    r = await client.get("/analyses/new")
+    assert "Visible Active" in r.text and "Hidden Draft" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_counts_exclude_drafts(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    _seed_scenario(db_session, org_id=org_id, name="Counted", status=EntityStatus.ACTIVE)
+    _seed_scenario(db_session, org_id=org_id, name="Not Counted", status=EntityStatus.DRAFT)
+    await db_session.commit()
+    from idraa.repositories.scenario_repo import ScenarioRepo
+
+    repo = ScenarioRepo(db_session)
+    # dashboard calls count_for_org(status=ACTIVE) after this task
+    assert await repo.count_for_org(organization_id=org_id, status=EntityStatus.ACTIVE) == 1
+    pinned = await repo.list_pinned_library_entry_ids_for_org(org_id)
+    # neither seed pins a library entry; assertion is that the signature accepts the default
+    assert pinned == []

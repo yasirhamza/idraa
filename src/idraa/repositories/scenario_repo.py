@@ -99,6 +99,8 @@ class ScenarioRepo:
     async def list_pinned_library_entry_ids_for_org(
         self,
         organization_id: uuid.UUID,
+        *,
+        statuses: tuple[EntityStatus, ...] = (EntityStatus.ACTIVE,),
     ) -> list[str]:
         """Distinct ``library_pin.entry_id`` values across the org's scenarios.
 
@@ -109,10 +111,16 @@ class ScenarioRepo:
         case (SQLAlchemy's JSON type encodes an explicit Python ``None`` as
         the JSON literal ``'null'``, not SQL NULL; mirrors the NULLIF guard
         in ``scenario_library_repo.py``'s ``_is_json_null``).
+
+        ``statuses`` defaults to ACTIVE-only (epic #34 P1a): a DRAFT
+        scenario's library pin is a review-pending prior, not yet counted
+        as coverage. Callers that ever need drafts included must pass
+        ``statuses`` explicitly.
         """
         stmt = (
             select(func.json_extract(Scenario.library_pin, "$.entry_id"))
             .where(Scenario.organization_id == organization_id)
+            .where(Scenario.status.in_(statuses))
             .where(func.nullif(Scenario.library_pin, "null").isnot(None))
             .distinct()
         )

@@ -21,6 +21,7 @@ from idraa.models.control import Control
 from idraa.models.enums import (
     AssetClass,
     ControlType,
+    EntityStatus,
     IndustrySubSector,
     ThreatActorType,
     ThreatCategory,
@@ -272,3 +273,34 @@ async def test_build_dashboard_scenario_coverage_counts_unpinned_reference_entri
     assert data.scenario_coverage.covered_count == 1
     assert data.scenario_coverage.reference_count == 2
     assert data.scenario_coverage.ratio == pytest.approx(0.5)
+
+
+async def test_build_dashboard_scenario_count_and_coverage_exclude_drafts(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """Epic #34 P1a Task 2: DRAFT scenarios are review-pending priors —
+    excluded from both scenario_count (ACTIVE-only) and scenario_coverage's
+    covered_count (a draft's library_pin must not count as coverage until
+    the scenario is promoted)."""
+    _, org_id = authed_admin
+    org = (
+        await db_session.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one()
+    org.industry_sub_sector = IndustrySubSector.WATER_UTILITY
+
+    entry = _make_library_entry(slug="water-draft-pin", sub_sectors=["water_utility"])
+    db_session.add(entry)
+    await db_session.flush()
+
+    draft = _make_scenario(org_id=org.id, name="Draft Pinned Scenario")
+    draft.status = EntityStatus.DRAFT
+    draft.library_pin = {"entry_id": str(entry.id), "version": entry.version}
+    db_session.add(draft)
+    await db_session.flush()
+
+    data = await build_dashboard(db_session, org)
+
+    assert data.scenario_count == 0
+    assert data.scenario_coverage.covered_count == 0
+    assert data.scenario_coverage.reference_count == 1

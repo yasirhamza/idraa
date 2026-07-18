@@ -48,6 +48,7 @@ from idraa.errors import (
 )
 from idraa.formatting import utc_isoformat
 from idraa.models.enums import (
+    EntityStatus,
     FairCamSubFunction,
     UserRole,
 )
@@ -904,6 +905,11 @@ async def get_new_analysis_form(
     _scenario_stmt = (
         select(Scenario)
         .where(Scenario.organization_id == org_id)
+        # Epic #34 P1a: DRAFT scenarios are review-pending priors, excluded
+        # from the run-creation picker. Convenience filter only — the
+        # authoritative gate is the server-side check in
+        # services/runs.py::create_and_dispatch.
+        .where(Scenario.status == EntityStatus.ACTIVE)
         .options(selectinload(Scenario.mitigating_controls))
         .order_by(Scenario.updated_at.desc())
     )
