@@ -622,9 +622,18 @@ class ScenarioService:
                 f"only draft scenarios can be promoted (status={scenario.status.value})"
             )
         if scenario.vuln_framing == "legacy_residual":
-            raise ValidationError(
-                "confirm vulnerability framing before promoting — see the banner on this scenario"
+            # Epic #34 P1c Task 8: a converted register row's confirm gate is
+            # the FREQUENCY baseline (spec §3 Meth-I1) — vuln stays neutral —
+            # so the refusal message must not tell the reviewer to confirm
+            # "vulnerability framing" when there is no vulnerability review
+            # to do. Non-converted scenarios keep the original string.
+            message = (
+                "confirm the frequency baseline before promoting — see the banner on this scenario"
+                if scenario.source == ScenarioSource.QUALITATIVE_REGISTER_IMPORT
+                else "confirm vulnerability framing before promoting — see the "
+                "banner on this scenario"
             )
+            raise ValidationError(message)
         prev_row_version = scenario.row_version
         scenario.status = EntityStatus.ACTIVE
         scenario.row_version = prev_row_version + 1

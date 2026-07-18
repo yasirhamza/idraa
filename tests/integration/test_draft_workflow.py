@@ -147,6 +147,40 @@ async def test_promote_refuses_unconfirmed_legacy_residual(
     await db_session.commit()
     r = await csrf_post(client, f"/scenarios/{d.id}/promote", {}, follow_redirects=False)
     assert r.status_code == 422
+    # Epic #34 P1c Task 8: non-converted scenarios keep the original,
+    # vuln-centric refusal string.
+    assert (
+        "confirm vulnerability framing before promoting — see the banner on this scenario" in r.text
+    )
+    await db_session.refresh(d)
+    assert d.status == EntityStatus.DRAFT
+
+
+@pytest.mark.asyncio
+async def test_promote_refuses_converted_row_with_frequency_baseline_message(
+    authed_analyst, db_session: AsyncSession
+):
+    """Epic #34 P1c Task 8: a converted (QUALITATIVE_REGISTER_IMPORT) row's
+    promote-refusal string is frequency-baseline-worded, not
+    vulnerability-worded — the F2 confirm gate on a converted row is an
+    acceptance of the register-derived frequency, not a vulnerability
+    review (spec §3 Meth-I1)."""
+    from idraa.models.enums import ScenarioSource
+
+    client, org_id = authed_analyst
+    d = _seed_scenario(
+        db_session, org_id=org_id, name="Converted Residual Draft", status=EntityStatus.DRAFT
+    )
+    d.vuln_framing = "legacy_residual"
+    d.source = ScenarioSource.QUALITATIVE_REGISTER_IMPORT
+    await db_session.commit()
+    r = await csrf_post(client, f"/scenarios/{d.id}/promote", {}, follow_redirects=False)
+    assert r.status_code == 422
+    assert (
+        "confirm the frequency baseline before promoting — see the banner on this scenario"
+        in r.text
+    )
+    assert "confirm vulnerability framing" not in r.text
     await db_session.refresh(d)
     assert d.status == EntityStatus.DRAFT
 

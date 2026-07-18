@@ -10,6 +10,10 @@ Per docs/superpowers/specs/2026-06-10-audit-remediation-f1-f2-design.md:
 - ScenarioService.update flips the stamp ONLY when the vulnerability
   (low, mode, high) numeric triple changes — wizard-shaped nodes (sidecar
   metadata, no "distribution" key) must NOT false-positive-flip (SC-B1).
+
+Epic #34 P1c Task 8 adds: converted-row (source ==
+QUALITATIVE_REGISTER_IMPORT) F2 banner copy variant — heading, two-path
+structure, promote-refusal-message assertions live in test_draft_workflow.py.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.audit_log import AuditLog
-from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
+from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.schemas.scenario import ScenarioForm
@@ -118,6 +122,157 @@ async def test_edit_form_shows_banner_text_without_button(
 
 
 # ---------------------------------------------------------------------------
+# Converted-row (epic #34 P1c Task 8) banner variant — plan-gate M-1
+# ---------------------------------------------------------------------------
+
+
+async def _seed_converted_scenario(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    *,
+    name: str = "converted register row",
+) -> Scenario:
+    """A legacy_residual scenario sourced from the qualitative register
+    converter, with a full conversion_metadata payload (M-4 provenance
+    display)."""
+    s = await _seed_legacy_scenario(db, org_id, name=name)
+    s.source = ScenarioSource.QUALITATIVE_REGISTER_IMPORT
+    s.conversion_metadata = {
+        "source_file": "register.xlsx",
+        "source_row": 1,
+        "raw": {"likelihood": "High", "impact": "Severe", "category": "Ransomware"},
+        "bindings": {
+            "likelihood_label": "high",
+            "magnitude_label": "very_high",
+            "category": "ransomware",
+        },
+        "mapping_versions": {
+            "canonical": {"frequency:high": 1, "magnitude:very_high": 1},
+            "org": {},
+        },
+        "binding_profile_id": None,
+        "converted_at": "2026-07-18T00:00:00+00:00",
+    }
+    await db.commit()
+    await db.refresh(s)
+    return s
+
+
+@pytest.mark.asyncio
+async def test_converted_row_shows_frequency_baseline_banner(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """M-1: a converted, unconfirmed row shows the converter-aware heading,
+    both explicitly-labelled paths, and the converter-aware confirm button —
+    NEVER the generic vulnerability-review copy (exclusivity)."""
+    client, org_id = authed_analyst
+    s = await _seed_converted_scenario(db_session, org_id)
+    body = (await client.get(f"/scenarios/{s.id}")).text
+
+    assert "Frequency baseline needs review." in body
+    assert "Path A" in body and "Path B" in body
+    assert "Confirm — accept frequency baseline" in body
+    assert f"/scenarios/{s.id}/confirm-vuln-framing" in body
+
+    # Exclusivity (Meth-R2): never co-render the generic vuln-banner heading
+    # or its "re-enter Vulnerability … higher" instruction — wrong advice
+    # for an intentionally-neutral (1,1,1) vuln triple.
+    assert "Vulnerability needs review." not in body
+    assert "re-enter Vulnerability" not in body
+    assert "Confirm — values are already inherent" not in body
+
+    # "inherent" is reserved for Path B's edit action — never describes what
+    # the Confirm button does (M-1, BINDING).
+    before_path_b, _, after_path_b = body.partition("Path B")
+    assert "inherent" not in before_path_b.lower()
+    assert "inherent" in after_path_b.lower()
+
+
+@pytest.mark.asyncio
+async def test_non_converted_row_keeps_existing_vuln_banner_copy(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Non-converted (default EXPERT_JUDGMENT source) scenarios are
+    unaffected by Task 8 — the original F2 copy renders verbatim."""
+    client, org_id = authed_analyst
+    s = await _seed_legacy_scenario(db_session, org_id, name="ordinary legacy scenario")
+    body = (await client.get(f"/scenarios/{s.id}")).text
+
+    assert "Vulnerability needs review." in body
+    assert "Confirm — values are already inherent" in body
+    assert "Frequency baseline needs review." not in body
+    assert "Confirm — accept frequency baseline" not in body
+
+
+@pytest.mark.asyncio
+async def test_draft_banner_shows_raw_to_band_binding_arrows(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """M-4: the DRAFT banner on a converted row lists raw→bound arrows
+    sourced from BOTH conversion_metadata.raw and .bindings — closing the
+    P1a provenance-display deferral."""
+    client, org_id = authed_analyst
+    s = await _seed_converted_scenario(db_session, org_id)
+    s.status = EntityStatus.DRAFT
+    await db_session.commit()
+    body = (await client.get(f"/scenarios/{s.id}")).text
+
+    # &lsquo;/&rsquo;/&rarr; are literal HTML entities in the template source
+    # (not values routed through Jinja escaping) — the raw response body
+    # carries the entity text verbatim; a browser renders the curly quotes
+    # and arrow. Exact fragments (not just "high band" — the ambient page
+    # already shows the scenario's own threat_category "ransomware") pin the
+    # arrow renders raw -> bound, not just that both substrings appear
+    # somewhere on the page.
+    assert "likelihood &lsquo;High&rsquo; &rarr; high band" in body
+    assert "impact &lsquo;Severe&rsquo; &rarr; very_high band" in body
+    assert "category &lsquo;Ransomware&rsquo; &rarr; ransomware" in body
+
+
+@pytest.mark.asyncio
+async def test_draft_banner_escapes_script_laden_raw_cell(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Sec-R2-NTH: conversion_metadata.raw is attacker-controlled register
+    text (the admin who uploads a register need not be the same admin who
+    later reviews it) — it must render through Jinja's default autoescape
+    ONLY, never |safe. A <script>-laden cell must reach the page escaped."""
+    client, org_id = authed_analyst
+    s = await _seed_converted_scenario(db_session, org_id, name="script cell row")
+    s.status = EntityStatus.DRAFT
+    metadata = dict(s.conversion_metadata)
+    metadata["raw"] = dict(metadata["raw"])
+    metadata["raw"]["likelihood"] = "<script>alert('xss')</script>"
+    s.conversion_metadata = metadata
+    await db_session.commit()
+    body = (await client.get(f"/scenarios/{s.id}")).text
+
+    assert "<script>alert" not in body
+    assert "&lt;script&gt;" in body
+
+
+@pytest.mark.asyncio
+async def test_mitigating_controls_empty_state_states_zero_controls(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Meth-R2-New-2 (consumer-side same-PR rule): the control-less empty
+    state used to claim analyses "fall back to all controls in your org" —
+    false since #89 (controls are strictly coupled to
+    scenario.mitigating_controls; empty -> zero controls applied). The
+    corrected copy must state the true zero-control behavior — this is what
+    makes Path A ("do not attach controls") sound advice rather than a
+    contradiction."""
+    client, org_id = authed_analyst
+    s = await _seed_legacy_scenario(db_session, org_id, name="no controls scenario")
+    s.vuln_framing = "inherent"  # keep the F2 banner out of this assertion's way
+    await db_session.commit()
+    body = (await client.get(f"/scenarios/{s.id}")).text
+
+    assert "fall back to all controls in your org" not in body
+    assert "zero controls" in body
+
+
+# ---------------------------------------------------------------------------
 # Confirm endpoint
 # ---------------------------------------------------------------------------
 
@@ -184,8 +339,6 @@ async def test_confirm_converted_scenario_writes_frequency_baseline_action(
     the converter-aware audit action — the epistemic act is acceptance of
     the frequency baseline, not a review of (neutral, pass-through)
     vulnerability values."""
-    from idraa.models.enums import ScenarioSource
-
     client, org_id = authed_analyst
     s = await _seed_legacy_scenario(db_session, org_id, name="converted register row")
     s.source = ScenarioSource.QUALITATIVE_REGISTER_IMPORT
