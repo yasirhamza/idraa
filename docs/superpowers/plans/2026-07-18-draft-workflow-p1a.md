@@ -4,7 +4,9 @@
 
 **Goal:** First real use of `EntityStatus.DRAFT` on Scenario: draft scenarios are visible/editable but excluded from run creation, dashboard metrics, and coverage until an audit-logged promote flips them ACTIVE.
 
-**Architecture:** No schema change (enum member + `status` column already exist; no migration). Enforcement is server-side in `RunService.create_and_dispatch` (the form picker filter is convenience only), with defense-in-depth in the run executor. Promote mirrors the shipped `confirm_vuln_framing` service/route/banner pattern. A query-site allowlist test makes the exclusion sweep provably total.
+**Architecture:** No schema change (enum member + `status` column already exist; no migration). Enforcement is server-side in `RunService.create_and_dispatch` (the form picker filter is convenience only), with defense-in-depth in the run executor. Promote mirrors the shipped `confirm_vuln_framing` service/route/banner pattern, and is the ONLY status-transition path — `update()` rejects status changes (plan-gate B-1). A query-site allowlist tripwire makes the exclusion sweep enumerable-and-audited.
+
+**Acknowledged deviation from spec §4 (plan-gate Spec-I4):** the spec prescribes one central `include_drafts=False` chokepoint. No such chokepoint exists — there is no service-layer list wrapper; consumers query `ScenarioRepo` primitives directly. Adding one would mean refactoring every consumer in the same PR. Instead, exclusion lands at each consumer (Tasks 1-2) and Task 4's tripwire supplies the totality property the spec's chokepoint was after: any NEW query surface fails CI until it carries an explicit draft decision. Equivalent guarantee, smaller diff.
 
 **Tech Stack:** FastAPI, SQLAlchemy 2 async, Jinja2/HTMX, pytest + httpx.
 
@@ -29,7 +31,7 @@
 
 **Interfaces:**
 - Consumes: `ScenarioRepo.get_for_org_or_raise` / `fetch_by_ids_for_org` (existing, unchanged).
-- Produces: `ValidationError("scenario '<name>' is a draft — promote it before running an analysis")` raised from `create_and_dispatch` for ANY non-ACTIVE scenario in `scenario_ids`. Task 2's picker and Task 4's contract test rely on this being the authoritative gate.
+- Produces: `RunValidationError("scenario '<name>' is a draft — promote it before running an analysis")` raised from `create_and_dispatch` for ANY non-ACTIVE scenario in `scenario_ids`. Task 2's picker and Task 4's contract test rely on this being the authoritative gate.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -57,9 +59,9 @@ from tests.integration.test_scenario_routes import _seed_scenario
 @pytest.mark.asyncio
 async def test_run_create_rejects_draft_scenario(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    draft = await _seed_scenario(db_session, org_id=org_id, name="Draft S", status=EntityStatus.DRAFT)
+    draft = _seed_scenario(db_session, org_id=org_id, name="Draft S", status=EntityStatus.DRAFT)
     await db_session.commit()
-    r = await csrf_post(client, "/analyses", {"scenario_ids": [str(draft.id)], "iterations": "1000"}, follow_redirects=False)
+    r = await csrf_post(client, "/analyses", {"scenario_ids": [str(draft.id)], "mc_iterations": "1000"}, follow_redirects=False)
     assert r.status_code == 422
     assert "draft" in r.text.lower()
 
@@ -67,10 +69,10 @@ async def test_run_create_rejects_draft_scenario(authed_analyst, db_session: Asy
 @pytest.mark.asyncio
 async def test_run_create_rejects_mixed_active_and_draft(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    active = await _seed_scenario(db_session, org_id=org_id, name="Active S", status=EntityStatus.ACTIVE)
-    draft = await _seed_scenario(db_session, org_id=org_id, name="Draft T", status=EntityStatus.DRAFT)
+    active = _seed_scenario(db_session, org_id=org_id, name="Active S", status=EntityStatus.ACTIVE)
+    draft = _seed_scenario(db_session, org_id=org_id, name="Draft T", status=EntityStatus.DRAFT)
     await db_session.commit()
-    r = await csrf_post(client, "/analyses", {"scenario_ids": [str(active.id), str(draft.id)], "iterations": "1000"}, follow_redirects=False)
+    r = await csrf_post(client, "/analyses", {"scenario_ids": [str(active.id), str(draft.id)], "mc_iterations": "1000"}, follow_redirects=False)
     assert r.status_code == 422
 ```
 
@@ -85,21 +87,23 @@ async def test_run_create_rejects_mixed_active_and_draft(authed_analyst, db_sess
         non_active = [s for s in scenarios if s.status != EntityStatus.ACTIVE]
         if non_active:
             names = ", ".join(sorted(s.name for s in non_active))
-            raise ValidationError(
+            raise RunValidationError(
                 f"scenario '{names}' is a draft — promote it before running an analysis"
             )
 ```
 
-(Reuse the module's existing `ValidationError`→422 handling in `routes/runs.py::post_create_analysis`; verify by reading how existing validation failures surface there and match it.)
+(`RunValidationError` is the module's existing validation type — `services/runs.py:98,125,137` — and the ONLY type the route maps to 422 at `routes/runs.py:1001-1002`. Do not invent a new exception.)
 
-In `services/run_executor.py`, after each committed-run re-fetch (~L1852 SINGLE, ~L1863 AGGREGATE), add the defense-in-depth guard (same comment, raising the executor's existing failure-path exception type so the run lands `failed`, not crashed):
+In `services/run_executor.py`, add ONE defense-in-depth guard AFTER BOTH branches have populated `scenarios` — i.e. after `scenarios = [scenario]` (~L1857) and the AGGREGATE `fetch_by_ids_for_org` (~L1863) converge; placing it at L1852 would NameError on the SINGLE branch where only `scenario` is bound:
 
 ```python
+        # Epic #34 P1a defense-in-depth: the create-time gate is authoritative;
+        # this guard only fires if a future path enqueues a run for a draft.
         if any(s.status != EntityStatus.ACTIVE for s in scenarios):
-            raise RunExecutionError("run references a non-ACTIVE scenario (draft?) — refusing to execute")
+            raise ValueError("run references a non-ACTIVE scenario (draft?) — refusing to execute")
 ```
 
-(Use the module's actual failure exception — read the surrounding except-clauses and match; if none fits, `ValueError` caught by the generic failure path is acceptable.)
+(`ValueError` is deliberate: the guard sits inside the executor try at ~L1818 whose `except Exception` at ~L2512 terminalizes the run to FAILED with `error_message` + audit — verified failure path, no stuck RUNNING rows.)
 
 - [ ] **Step 4: Run tests to verify both PASS**, plus `uv run pytest tests/integration/test_run_routes.py tests/services/test_runs*.py -q` for regressions.
 
@@ -123,8 +127,8 @@ In `services/run_executor.py`, after each committed-run re-fetch (~L1852 SINGLE,
 @pytest.mark.asyncio
 async def test_new_analysis_picker_omits_drafts(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    await _seed_scenario(db_session, org_id=org_id, name="Visible Active", status=EntityStatus.ACTIVE)
-    await _seed_scenario(db_session, org_id=org_id, name="Hidden Draft", status=EntityStatus.DRAFT)
+    _seed_scenario(db_session, org_id=org_id, name="Visible Active", status=EntityStatus.ACTIVE)
+    _seed_scenario(db_session, org_id=org_id, name="Hidden Draft", status=EntityStatus.DRAFT)
     await db_session.commit()
     r = await client.get("/analyses/new")
     assert "Visible Active" in r.text and "Hidden Draft" not in r.text
@@ -133,8 +137,8 @@ async def test_new_analysis_picker_omits_drafts(authed_analyst, db_session: Asyn
 @pytest.mark.asyncio
 async def test_dashboard_counts_exclude_drafts(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    await _seed_scenario(db_session, org_id=org_id, name="Counted", status=EntityStatus.ACTIVE)
-    await _seed_scenario(db_session, org_id=org_id, name="Not Counted", status=EntityStatus.DRAFT)
+    _seed_scenario(db_session, org_id=org_id, name="Counted", status=EntityStatus.ACTIVE)
+    _seed_scenario(db_session, org_id=org_id, name="Not Counted", status=EntityStatus.DRAFT)
     await db_session.commit()
     from idraa.repositories.scenario_repo import ScenarioRepo
     repo = ScenarioRepo(db_session)
@@ -161,7 +165,9 @@ Plus a template-level dashboard assertion if `build_dashboard` is cheaply invoka
 - Modify: `src/idraa/services/scenarios.py` (new method after `confirm_vuln_framing`, ~L556)
 - Modify: `src/idraa/routes/scenarios.py` (new route after `confirm_vuln_framing` route, ~L1094)
 - Modify: `src/idraa/templates/scenarios/view.html` (banner after the legacy_residual block ~L62; fix `status_pill(..., kind="control")` → `kind="entity"` at L69)
-- Modify: `src/idraa/templates/scenarios/form.html:69` (hidden status input → visible select with `active`/`draft`)
+- Modify: `src/idraa/services/scenarios.py` `update()` ~L467 (reject status transitions — plan-gate B-1)
+- Modify: `src/idraa/templates/scenarios/form.html:69` (CREATE mode only: labeled select `active`/`draft`; EDIT mode: keep the hidden preserve-mirror EXACTLY as-is)
+- Modify: `src/idraa/templates/scenarios/list.html` (status filter chips — plan-gate Spec-I1)
 - Test: append to `tests/integration/test_draft_workflow.py`
 
 **Interfaces:**
@@ -173,7 +179,7 @@ Plus a template-level dashboard assertion if `build_dashboard` is cheaply invoka
 @pytest.mark.asyncio
 async def test_promote_flips_draft_to_active_with_audit(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    draft = await _seed_scenario(db_session, org_id=org_id, name="Promotable", status=EntityStatus.DRAFT)
+    draft = _seed_scenario(db_session, org_id=org_id, name="Promotable", status=EntityStatus.DRAFT)
     await db_session.commit()
     r = await csrf_post(client, f"/scenarios/{draft.id}/promote", {}, follow_redirects=False)
     assert r.status_code == 303
@@ -189,7 +195,7 @@ async def test_promote_flips_draft_to_active_with_audit(authed_analyst, db_sessi
 @pytest.mark.asyncio
 async def test_promote_idempotent_on_active(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    s = await _seed_scenario(db_session, org_id=org_id, name="Already Active", status=EntityStatus.ACTIVE)
+    s = _seed_scenario(db_session, org_id=org_id, name="Already Active", status=EntityStatus.ACTIVE)
     await db_session.commit()
     prev = s.row_version
     r = await csrf_post(client, f"/scenarios/{s.id}/promote", {}, follow_redirects=False)
@@ -201,7 +207,7 @@ async def test_promote_idempotent_on_active(authed_analyst, db_session: AsyncSes
 @pytest.mark.asyncio
 async def test_promote_refuses_unconfirmed_legacy_residual(authed_analyst, db_session: AsyncSession):
     client, org_id = authed_analyst
-    d = await _seed_scenario(db_session, org_id=org_id, name="Residual Draft", status=EntityStatus.DRAFT)
+    d = _seed_scenario(db_session, org_id=org_id, name="Residual Draft", status=EntityStatus.DRAFT)
     d.vuln_framing = "legacy_residual"
     await db_session.commit()
     r = await csrf_post(client, f"/scenarios/{d.id}/promote", {}, follow_redirects=False)
@@ -213,7 +219,7 @@ async def test_promote_refuses_unconfirmed_legacy_residual(authed_analyst, db_se
 @pytest.mark.asyncio
 async def test_promote_forbidden_for_reviewer(authed_reviewer, db_session: AsyncSession):
     client, org_id = authed_reviewer
-    d = await _seed_scenario(db_session, org_id=org_id, name="RBAC Draft", status=EntityStatus.DRAFT)
+    d = _seed_scenario(db_session, org_id=org_id, name="RBAC Draft", status=EntityStatus.DRAFT)
     await db_session.commit()
     r = await csrf_post(client, f"/scenarios/{d.id}/promote", {}, follow_redirects=False)
     assert r.status_code == 403
@@ -276,7 +282,65 @@ Route: copy the `confirm_vuln_framing` route shape verbatim (`routes/scenarios.p
 {% endif %}
 ```
 
-Form: replace the hidden input at `form.html:69` with a labeled select (`active` / `draft`, current value selected), matching the form's existing field markup conventions (read neighboring fields and copy their label/classes). Fix `view.html:69` pill kind to `"entity"`.
+(P1a-subset note, plan-gate Spec-N2: the banner above is the P1a slice of spec §4's conversion-provenance banner; band-binding provenance content arrives with P1b/P1c when `conversion_metadata` exists.)
+
+**Status field (plan-gate B-1 — triple-converged BLOCKER; read carefully).** `ScenarioService.update()` currently writes `scenario.status = form.status` unconditionally (`services/scenarios.py:467`), so a visible select on the EDIT form would be an unguarded second promote/demote path bypassing the legacy_residual refusal and the `scenario.promote` audit action. Therefore:
+
+1. **Harden `update()`:** before the `scenario.status = form.status` assignment, add:
+
+```python
+        if form.status != scenario.status:
+            # Epic #34 P1a (plan-gate B-1): status transitions go ONLY through
+            # the audited promote flow — the edit path must not be a second,
+            # unguarded promote/demote surface.
+            raise ValidationError("status cannot be changed here — use Promote on the scenario page")
+```
+
+(Match the module's existing validation-error type for update-path 422s — read how `update()` surfaces validation errors today and use that exact type + route mapping.)
+
+2. **Template:** in `form.html`, render the status field as a labeled select (`active` / `draft`) ONLY in create mode; in edit mode keep the existing hidden preserve-mirror at L69 untouched. Determine create-vs-edit the way the template already does (inspect how it branches for the form action/heading; reuse that condition).
+
+3. **Filter chips (Spec-I1):** `GET /scenarios` already accepts `?status=` (`routes/scenarios.py:167-213`). Add a chip row above the list table in `list.html`: `All` (no param), `Active` (`?status=active`), `Draft` (`?status=draft`), current one visually active — match the template's existing link/badge classes (read neighboring markup for precedent).
+
+Fix `view.html:69` pill kind to `"entity"`.
+
+Extra failing tests to add in Step 1 (plan-gate B-1/Spec-I1):
+
+```python
+@pytest.mark.asyncio
+async def test_edit_form_cannot_change_status(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    d = _seed_scenario(db_session, org_id=org_id, name="Sticky Draft", status=EntityStatus.DRAFT)
+    await db_session.commit()
+    # build the full valid edit payload the way the existing update-route test
+    # in tests/integration/test_scenario_routes.py does; then set status=active
+    payload = _valid_update_payload_for(d) | {"status": "active"}
+    r = await csrf_post(client, f"/scenarios/{d.id}", payload, follow_redirects=False)
+    assert r.status_code == 422
+    await db_session.refresh(d)
+    assert d.status == EntityStatus.DRAFT
+
+
+@pytest.mark.asyncio
+async def test_create_as_draft_works(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    # copy the create payload dict verbatim from
+    # test_create_scenario_persists_and_redirects (test_scenario_routes.py:310-340),
+    # override status="draft"; POST /scenarios; assert 303 and the row is DRAFT
+
+
+@pytest.mark.asyncio
+async def test_scenario_list_has_draft_filter_chip(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    _seed_scenario(db_session, org_id=org_id, name="Chip Draft", status=EntityStatus.DRAFT)
+    await db_session.commit()
+    r = await client.get("/scenarios")
+    assert "?status=draft" in r.text          # chip present
+    r2 = await client.get("/scenarios?status=draft")
+    assert "Chip Draft" in r2.text
+```
+
+(`_valid_update_payload_for` is a tiny local helper the implementer builds from the existing test's payload dict; the create-as-draft body is payload reuse from the named test, not a design placeholder.)
 
 - [ ] **Step 4: Run** all of `tests/integration/test_draft_workflow.py` + `tests/integration/test_scenario_routes.py -q`.
 
@@ -293,11 +357,15 @@ Form: replace the hidden input at `form.html:69` with a labeled select (`active`
 - [ ] **Step 1: Write the sweep test** — every `select(Scenario` / `ScenarioRepo` query site in `src/idraa/` must be in the audited allowlist, so any FUTURE query surface fails CI until someone decides draft-inclusion explicitly:
 
 ```python
-"""Draft-exclusion totality sweep (epic #34 P1a, spec §4).
+"""Draft-exclusion totality tripwire (epic #34 P1a, spec §4).
 
 Any new code that queries Scenario rows must be added to AUDITED with an
-explicit draft-handling decision, or this test fails. This is what makes
-"drafts are excluded from computation" provably total instead of a hand-list.
+explicit draft-handling decision, or this test fails. Enumeration is a
+source-pattern sweep over every KNOWN query idiom (select / db.get / join /
+selectinload / aliased / repo construction) — a tripwire, not a proof.
+Accepted blind spots (plan-gate Arch-I2/Spec-I5): raw SQL and relationship
+loads reached from OTHER entities' queries; anyone adding those for Scenario
+must extend QUERY_RE alongside.
 """
 from __future__ import annotations
 
@@ -320,7 +388,15 @@ AUDITED = {
     "services/reports.py": "run-committed-upstream-gated",
 }
 
-QUERY_RE = re.compile(r"select\(\s*Scenario\b|ScenarioRepo\(")
+QUERY_RE = re.compile(
+    r"select\([^)]*\bScenario\b"      # select(Scenario…), select(func.x(Scenario.…
+    r"|\.get\(\s*Scenario\b"          # db.get(Scenario, id)
+    r"|\bjoin\(\s*Scenario\b"         # .join(Scenario, …)
+    r"|selectinload\(\s*Scenario\."   # selectinload(Scenario.rel)
+    r"|aliased\(\s*Scenario\b"         # aliased(Scenario)
+    r"|ScenarioRepo\(",
+    re.S,
+)
 
 
 def test_every_scenario_query_site_is_audited() -> None:
@@ -341,7 +417,7 @@ def test_audited_files_still_query_scenarios() -> None:
     assert not stale, f"stale AUDITED entries (file gone or no longer queries Scenario): {stale}"
 ```
 
-- [ ] **Step 2: Run it** — expect failure listing every current query site NOT yet in AUDITED; reconcile the real list against the map above (the implementer MUST resolve discrepancies by reading each file and classifying it, not by blind-adding).
+- [ ] **Step 2: Run it** — expect failure listing every current query site NOT yet in AUDITED (the broadened regex WILL surface files beyond the seed map — e.g. anything using `db.get(Scenario…)`, `.join(Scenario…)`, or `selectinload(Scenario.…)`); reconcile by READING each surfaced file and classifying it with one of the three decision values, not by blind-adding.
 
 - [ ] **Step 3: Make it pass**, then run the FULL gate foreground: `uv run python scripts/run_local_gate.py` — all steps green.
 

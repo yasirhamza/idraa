@@ -61,7 +61,8 @@ New tables (UUIDs, `organization_id`, audit-logged like `ScenarioLibraryOverride
 
 Primary source verified 2026-07-18 against the full text of O-RA 2.0.1 (The Open
 Group Standard C20A, November 2021; owner-provided PDF — NOT committed to the
-repo, licensed document; its copyright page explicitly grants implementors fair
+repo, licensed document; section/page numbers verified in-session against that
+PDF 2026-07-18, i.e. owner-attested provenance; its copyright page explicitly grants implementors fair
 use of "the names, labels, etc." contained in the specification):
 
 - **Magnitude band edges are cited:** O-RA Table 1, §6.6, p.33 ("An Example Scale
@@ -133,8 +134,9 @@ and never commit the PDF (licensed-material rule).
 
 `{distribution: "pert", low: band.low, mode: band.mode, high: band.high}` for both
 TEF and PL. Rationale: bands are order-of-magnitude claims; the geometric midpoint
-is the log-symmetric central value, consistent with the multiplicative character of
-both frequency and loss. This mirrors evaluator's BetaPERT-per-label model
+is the log-symmetric central *point* (the mode) — the resulting linear-space PERT
+is intentionally right-skewed, not itself log-symmetric and not a lognormal claim
+— consistent with the multiplicative character of both frequency and loss. This mirrors evaluator's BetaPERT-per-label model
 (`qualitative_mappings.csv`: `type,label,l,ml,h,conf`; MIT-licensed, values
 independently chosen by each org there too).
 
@@ -151,6 +153,14 @@ Per register row, after binding:
 - `vuln_framing = "legacy_residual"` — the shipped F2 banner + confirm/re-frame flow
   is the calibration-review driver. Register likelihood is (almost always) residual;
   this framing says so instead of double-counting controls.
+  **P1b must mint converter-specific review copy + audit action** (plan-gate
+  finding Meth-I1): the F2 flow's prose and `scenario.confirm_vuln_framing`
+  audit action speak about the stored *vulnerability values*, but for a
+  converted row vuln is a neutral pass-through — the genuine residual/inherent
+  question attaches to the frequency band (LEF). Reusing the F2 machinery's
+  *mechanics* (flag, banner slot, confirm flip) is right; reusing its copy and
+  audit action verbatim would record "vuln framing reviewed" for what is
+  actually a frequency-baseline acceptance.
 - `primary_loss` = magnitude band PERT. `secondary_loss = NULL` (engine-safe
   post-#525). Conversion report flags every row: "SL not derivable from a single
   impact score — add during review or anchor to a library entry (P2)."
@@ -171,7 +181,10 @@ Per register row, after binding:
 
 ### 3.1 Re-import / dedup
 
-Same-name dedup as #306 (skip + report) **plus** same-source detection: an incoming
+Same-name dedup as #306 (skip + report) — **against ALL statuses including
+DRAFT** (the shipped `_existing_active_names` is ACTIVE-only; converter dedup
+that ignored drafts would double-create converted rows on re-import; plan-gate
+finding Arch-N3) — **plus** same-source detection: an incoming
 row whose `(source_file_stem, source_row)` — or same title — matches an existing
 scenario's `conversion_metadata` is reported as "already converted" and skipped.
 Quarterly re-uploads with a saved binding profile converge to "only the new rows".
@@ -184,10 +197,15 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
   posture/coverage, PDF/portfolio reports, run executor guard (defense in depth:
   refuse to execute a DRAFT scenario) — all go through it. Scenario list UI shows
   drafts with a DRAFT badge + filter chip (visibility is the point of review).
-- **Contract test enumerates consumers**: a test walks every call site of the query
-  layer (import-graph assertion) and asserts the run-creation, aggregate, dashboard,
-  and report paths reject/omit DRAFT rows — the guardrail must be provably total,
-  or it's theater.
+- **Contract test enumerates consumers**: a totality tripwire spanning every
+  known Scenario query pattern (`select`/`db.get`/`join`/`selectinload`/
+  `aliased`/repo construction) asserts each query site carries an explicit,
+  audited draft-handling decision, and functional tests assert the run-creation,
+  aggregate, and dashboard paths reject/omit DRAFT rows. Report paths are
+  protected transitively (reports render scenarios a run already committed to;
+  the gate is upstream at run creation). A hand-list without the tripwire is
+  theater; the tripwire's residual blind spots (raw SQL, relationship loads
+  from other entities) are accepted and documented in the test docstring.
 - **Promote** (analyst/admin): DRAFT → ACTIVE, audit-logged (`AuditWriter`),
   row-version bump; idempotent like `confirm_vuln_framing`. Edit-in-DRAFT allowed
   (the scenario edit form IS the review surface). No demote — deprecation exists.
