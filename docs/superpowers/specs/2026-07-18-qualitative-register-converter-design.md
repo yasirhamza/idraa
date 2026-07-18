@@ -297,6 +297,13 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## Scope drift log
 
+- 2026-07-18 (P1b execution): Task 3 confirmed the PRIMARY neutral-vuln encoding
+  (1.0, 1.0, 1.0) — fair_cam's low==high point-mass short-circuit; the 0.99
+  fallback was NOT needed. Converter-aware confirm COPY deferred to P1c (audit
+  action `scenario.confirm_frequency_baseline` shipped in P1b); ORM↔DTO
+  field-sync for band models is N/A until P1c's band form DTO exists (ORM
+  snapshots cover structure). Accepted NTH: name-dedup strip asymmetry
+  (same-source branch covers the practical case).
 - 2026-07-18 (P1b plan-gate R1): frequency modes corrected to uniform 2sf
   (0.032/0.32/3.2/32/160 — M1); $1B-cap rationale corrected to the σ≈2.27-cluster
   p99.9 wording (M2, quantitatively verified); P1c explicitly owns band-admin UI
