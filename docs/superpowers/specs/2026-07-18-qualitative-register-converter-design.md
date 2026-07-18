@@ -161,17 +161,25 @@ Per register row, after binding:
 - `vuln_framing = "legacy_residual"` — the shipped F2 banner + confirm/re-frame flow
   is the calibration-review driver. Register likelihood is (almost always) residual;
   this framing says so instead of double-counting controls.
-  **P1b must mint converter-specific review copy + audit action** (plan-gate
-  finding Meth-I1): the F2 flow's prose and `scenario.confirm_vuln_framing`
-  audit action speak about the stored *vulnerability values*, but for a
-  converted row vuln is a neutral pass-through — the genuine residual/inherent
-  question attaches to the frequency band (LEF). Reusing the F2 machinery's
-  *mechanics* (flag, banner slot, confirm flip) is right; reusing its copy and
-  audit action verbatim would record "vuln framing reviewed" for what is
-  actually a frequency-baseline acceptance. P1b's converter-aware copy list
-  includes the P1a promote-refusal string ("confirm vulnerability framing
-  before promoting…") — vuln-centric wording that must gain frequency-framing
-  copy once converted rows exist (plan-gate Meth-R2-NTH).
+  **Meth-I1 split (P1b plan-gate R1/R2):** the F2 flow's prose and
+  `scenario.confirm_vuln_framing` audit action speak about the stored
+  *vulnerability values*, but for a converted row vuln is a neutral
+  pass-through — the genuine residual/inherent question attaches to the
+  frequency band (LEF). Reusing the F2 *mechanics* (flag, banner slot, confirm
+  flip) is right; reusing copy + audit action verbatim would record "vuln
+  framing reviewed" for what is actually a frequency-baseline acceptance.
+  Therefore: **P1b ships the converter-aware AUDIT ACTION** —
+  `confirm_vuln_framing` writes `"scenario.confirm_frequency_baseline"` when
+  `source == QUALITATIVE_REGISTER_IMPORT` (Task 5b) — and **P1c ships the
+  converter-aware COPY** (banner + the P1a promote-refusal string, which stay
+  vuln-centric until then; safe: no converted rows can exist before P1c's UI).
+  Two P1c briefs recorded now: (a) any "was this confirmed?" view must union
+  BOTH action strings (the state gate is `vuln_framing == "inherent"`);
+  (b) `vuln_framing` is deliberately OVERLOADED on converted rows — the stored
+  terminal value "inherent" there means "frequency baseline accepted", not a
+  vuln-values claim (vuln stays neutral (1,1,1)); converted-row confirm copy
+  must warn that clearing the residual flag and then attaching FAIR-CAM
+  controls double-discounts an already-residual register frequency.
 - `primary_loss` = magnitude band PERT. `secondary_loss = NULL` (engine-safe
   post-#525). Conversion report flags every row: "SL not derivable from a single
   impact score — add during review or anchor to a library entry (P2)."
