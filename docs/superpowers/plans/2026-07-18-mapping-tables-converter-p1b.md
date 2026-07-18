@@ -105,8 +105,8 @@ import idraa
 SEED = Path(idraa.__file__).resolve().parent.parent.parent / "data" / "seed_qualitative_bands.json"
 
 EXPECTED_FREQUENCY = {  # label: (low, mode, high)
-    "very_low": (0.01, 0.03, 0.1), "low": (0.1, 0.3, 1), "moderate": (1, 3, 10),
-    "high": (10, 32, 100), "very_high": (100, 158, 250),
+    "very_low": (0.01, 0.032, 0.1), "low": (0.1, 0.32, 1), "moderate": (1, 3.2, 10),
+    "high": (10, 32, 100), "very_high": (100, 160, 250),
 }
 EXPECTED_MAGNITUDE = {
     "very_low": (1_000, 3_200, 10_000), "low": (10_000, 32_000, 100_000),
@@ -141,17 +141,23 @@ def test_magnitude_values_pinned():
 def test_modes_are_2sf_geometric_midpoints():
     for b in _bands():
         gm = math.sqrt(b["low"] * b["high"])
-        # spec §2.3: mode = geometric midpoint rounded to 2 significant figures
-        assert abs(b["mode"] - gm) / gm < 0.35, (b["label"], b["kind"], gm)
+        # spec §2.3: mode = geometric midpoint rounded to EXACTLY 2 significant
+        # figures, uniformly (plan-gate M1). 2sf rounding deviates < 3.2% from
+        # the true midpoint at worst (e.g. 31.62→32).
+        assert abs(b["mode"] - gm) / gm < 0.035, (b["label"], b["kind"], gm)
 
 
 def test_derivations_carry_provenance():
     for b in _bands():
         d = b["derivation"]
         if b["kind"] == "magnitude":
-            assert "O-RA" in d and "Table 1" in d, b["label"]
+            assert "O-RA" in d and "Table 1" in d and "§6.6" in d and "p.33" in d, b["label"]
+            # the two spec-§2.2 honest caveats (M3): example-scale/management
+            # approval + input-ward direction-of-use vs §6.5
+            assert "example" in d.lower() and "§6.5" in d, b["label"]
         else:
             assert "convention" in d and "O-RA" in d, b["label"]  # names the absence
+            assert "priors" in d.lower(), b["label"]  # epistemic label (N1)
 ```
 
 (Note: the 2sf tolerance is loose on purpose for `very_high` magnitude where mode=1e8 vs gm≈1e8 exactly; the exact-value pins above are the real guard — this test documents the RULE.)
@@ -219,6 +225,38 @@ Semantics (spec §3, all mandatory):
 ## Final
 
 Branch `feat/34-p1b-mapping-converter` off current main. PR after 4-reviewer final PR-gate converges 0/0 (epic milestone; methodology persona REQUIRED — this slice ships the band tables + PERT derivations + all conversion copy). Note for the PR body: adapter-surface rule applies (new ORM↔DTO bridge = the converter's ScenarioForm construction + conversion_metadata model) — that is exactly why this plan goes through the full plan-gate before execution.
+
+## Plan-gate round-1 amendments (BINDING — override conflicting text above)
+
+Applied from the 4-reviewer round-1 findings; each delta is part of its named task's contract.
+
+**Task 1**
+- Frequency seed modes are the corrected 2sf values: `0.032 / 0.32 / 3.2 / 32 / 160` (M1; spec §2.2 updated).
+- Magnitude `derivation` strings MUST additionally contain spec §2.2's two honest caveats — (a) O-RA Table 1 is an *example* scale requiring management approval (the org layer implements this), (b) direction-of-use is inverted vs O-RA (§6.5 caution named) — and the $1B rationale uses the corrected σ≈2.27-cluster p99.9 wording from spec §2.2 (M2/M3). Frequency `derivation` strings MUST contain the "priors for calibrated review, not an empirical claim" label (N1).
+- `QualitativeMappingBand` inherits `IdMixin` + `TimestampMixin` (single-column UUID PK — NOT ScenarioLibraryEntry's composite-PK/custom-`__init__` pattern; "mirror" refers to seed/immutability discipline only). Seed INSERT supplies `version = 1` explicitly (ORM default is not visible to raw SQL) and uses BOUND PARAMS (`sa.text("INSERT ... VALUES (:id, :kind, ...)")`, never f-string interpolation) (Arch-N5, Sec-N2).
+- `QualitativeMappingOrgBand`: replace the plain `UniqueConstraint(organization_id, kind, label)` with a PARTIAL unique index active only for live rows — `sa.Index("uq_qual_org_band_org_kind_label", "organization_id", "kind", "label", unique=True, sqlite_where=sa.text("deleted_at IS NULL"), postgresql_where=sa.text("deleted_at IS NULL"))` — so delete-then-recreate of a label works (Arch-I3). Task 4 gains a `delete then re-create same label succeeds` test.
+- Migration imports ONLY the `BandSeed` class from the loader module; `json.loads`, the path anchor, and the INSERT loop live inline in the migration (precedent `c1d2e3f4a5b6`) so later loader refactors cannot break `alembic upgrade` (Arch-N3). Add a seed-migration test (`tests/migrations/`): 10 rows on upgrade, ORM read-back of one band by id (guards the `.hex` id format — recurring foot-gun), downgrade drops (Arch-N4).
+- `models/__init__.py`: add both classes to the import AND `__all__` (registration is load-bearing for autogenerate + `create_all`) (Arch-N6).
+
+**Task 3**
+- The degenerate-PERT check MUST drive the RUN-EXECUTOR mapper path (`_dict_to_fair_distribution` / the code path at `run_executor.py:~128` that lowercases `distribution`), NOT fair_cam's validator with a raw uppercase dict — fair_cam accepts only lowercase `"pert"` (Spec-N4). It must ALSO assert the full `ScenarioService.create()` path accepts the chosen vuln encoding, so the fallback decision is pinned against the real gate (Arch-N1).
+
+**Task 4**
+- `get_org_band(organization_id, band_id)` filters `organization_id` IN THE WHERE (mirror `get_override`) so update AND delete both get repo-level IDOR closure; `delete_org_band` carries the org-ownership guard explicitly; the IDOR test exercises BOTH update and delete cross-org (Sec-I2).
+
+**Task 5**
+- BOTH dedup branches (name, same-source) are org-scoped: `Scenario.organization_id == organization_id` in every WHERE. Add a test: a matching `(source_file_stem, source_row)` and an identical name in a DIFFERENT org do NOT dedup (Sec-I1).
+- Input bounds, fail-closed (Sec-I3): title ≤255 / description ≤4000 rely on ScenarioForm, but the converter additionally enforces BEFORE any write: each `raw` / `carry_along` VALUE ≤ 2000 chars, `carry_along` ≤ 20 keys, key names ≤ 100 chars; violation → RowError for that row (NEVER silent truncation). `ConversionMetadata` gains these as validators.
+- `ConversionMetadata` gains `binding_profile_id: str | None = None` (forward-compat for P1c; Spec-I2).
+- `scenario_type = ScenarioType.CUSTOM` explicitly (Meth-N4).
+- Per-row isolation uses `async with session.begin_nested():` around each row's create+post-create writes; RowError rolls back only that savepoint. Add a poison-path test: force a POST-flush failure on row 2 of 3 (e.g. monkeypatch the second flush or violate a DB constraint) and assert rows 1 and 3 are still created (Arch-I4).
+- Batch audit row: `entity_type="scenario"`, `entity_id=organization_id` (set-level convention per `log_bulk_export`), `user_id=user.id`, `ip_address=ip_address`; `changes["created"]` holds `str(uuid)` ids and the changes dict also records `{"vuln_framing": "legacy_residual", "conversion_metadata": "set"}` markers for provenance (Arch-I2/N2, Sec-N1).
+- **Task 5b (NEW — Meth-M4/Spec-I1):** modify `ScenarioService.confirm_vuln_framing` so that when `scenario.source == ScenarioSource.QUALITATIVE_REGISTER_IMPORT` the audit action written is `"scenario.confirm_frequency_baseline"` (changes dict unchanged shape) — the epistemic act on a converted row is acceptance of the frequency baseline, not a vuln-values review (vuln is a neutral pass-through). Test: converted scenario → confirm → audit row carries the converter-aware action; non-converted scenario keeps `"scenario.confirm_vuln_framing"`. Banner/refusal COPY updates land in P1c (drift-logged).
+- Sweep classification (Arch-I1): add `"services/qualitative_converter.py": "shows-all-by-design",  # dedup reads ALL statuses incl DRAFT (spec §3.1)` to `AUDITED` in `tests/arch/test_draft_exclusion_sweep.py` in the same commit that creates the file, or the gate fails.
+- The N≥3 adapter-iteration test is homed in `tests/contracts/test_qualitative_converter_iteration.py` per the data-contract policy (Spec-N1); the remaining converter tests stay in `tests/unit/`/`tests/integration/`.
+
+**Task 6**
+- Drift-log additions: converter-aware confirm COPY → P1c (audit action landed in P1b, Task 5b); ORM↔DTO field-sync for band models is N/A until P1c's band form DTO exists (no DTO pair in P1b; ORM snapshots cover structure) (Spec-N2).
 
 ## Scope budget
 
