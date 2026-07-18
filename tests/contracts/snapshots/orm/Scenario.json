@@ -16,6 +16,14 @@
       "primary_key": false,
       "type": "VARCHAR(128)"
     },
+    "conversion_metadata": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "JSON"
+    },
     "created_at": {
       "foreign_key": false,
       "has_default": true,
@@ -134,7 +142,7 @@
       "indexed": false,
       "nullable": false,
       "primary_key": false,
-      "type": "VARCHAR(15)"
+      "type": "VARCHAR(27)"
     },
     "status": {
       "foreign_key": false,

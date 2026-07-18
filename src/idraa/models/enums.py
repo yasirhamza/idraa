@@ -85,7 +85,9 @@ class ScenarioSource(StrEnum):
     EXPERT_JUDGMENT = "expert_judgment"
     LIBRARY_DERIVED = "library_derived"  # Phase 1.5a — promoted from comment to value
     FILE_IMPORT = "file_import"  # P1 — CSV/JSON scenario import (source-agnostic name)
-    # Phase 2: QUALITATIVE_REGISTER_IMPORT (tidyrisk register import)
+    QUALITATIVE_REGISTER_IMPORT = (
+        "qualitative_register_import"  # P1b — tidyrisk register import (epic #34)
+    )
 
 
 class ScenarioEffect(StrEnum):

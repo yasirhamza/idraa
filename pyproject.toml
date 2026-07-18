@@ -238,6 +238,7 @@ allowlist = [
     "vuln_framing",                # internal — audit-F2 elicitation-framing provenance, system-managed
     "entry_currency",              # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
     "entry_rate",                  # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
+    "conversion_metadata",         # epic #34 P1b — qualitative converter provenance, set by the converter service, never on ScenarioForm
 ]
 dto_only_allowlist = [
     "library_entry_id",  # user-input flag indicating library origin; consumed during creation; provenance lives in library_pin

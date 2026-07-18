@@ -121,6 +121,13 @@ class Scenario(IdMixin, TimestampMixin, OrgMixin, Base):
     # Phase 1.5a — library reference; NULL for expert-mode scenarios
     library_pin: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
+    # Epic #34 P1b — qualitative register converter provenance. NULL for every
+    # scenario not created via the converter. Validated by the Pydantic
+    # ConversionMetadata model (services/qualitative_converter.py, Task 5)
+    # before assignment; the ORM column itself is unconstrained JSON. Internal
+    # (ORM-only) — never on ScenarioForm; the converter writes it directly.
+    conversion_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
     # Forward-compat
     source: Mapped[ScenarioSource] = mapped_column(
         Enum(ScenarioSource, native_enum=False, values_callable=lambda x: [e.value for e in x]),
