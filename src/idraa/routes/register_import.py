@@ -1,8 +1,8 @@
 """Register import routes — staged multi-step upload (admin-only).
 
-Epic #34 P1c Task 4 (upload / sheet-pick / column-map). Later tasks in the
-same PR extend this module with the value-bind step (Task 5), preview +
-convert (Task 6), and converter-aware copy (Task 8).
+Epic #34 P1c Task 4 (upload / sheet-pick / column-map) + Task 5 (value-bind +
+binding profiles). Later tasks in the same PR extend this module with
+preview + convert (Task 6) and converter-aware copy (Task 8).
 
 Flow (full-page 303 redirects threading the opaque ``token`` in the path —
 the app-wide wizard precedent; no HTMX step-nav precedent exists to mirror,
@@ -13,7 +13,20 @@ per the plan's scope-drift log):
     GET  /register-import/{token}/sheet         xlsx multi-sheet picker
     POST /register-import/{token}/sheet         set_sheet -> 303 columns
     GET  /register-import/{token}/columns       header -> target mapping form
-    POST /register-import/{token}/columns       set_column_map -> 303 bind (Task 5)
+    POST /register-import/{token}/columns       set_column_map -> 303 bind
+    GET  /register-import/{token}/bind          value-bind form (3 fieldsets)
+    POST /register-import/{token}/bind          set_value_bindings (+ optional
+                                                 save_profile) -> 303 preview (Task 6)
+    POST /register-import/{token}/apply-profile apply_profile -> 303 bind
+                                                 (drift warnings flashed via
+                                                 ``?drift=`` query params — this
+                                                 codebase's flash pattern is
+                                                 per-render only, see
+                                                 services/flash.py, so a value
+                                                 that must survive a redirect
+                                                 rides the query string, mirroring
+                                                 the existing ``?saved=1`` /
+                                                 ``?imported=N`` precedents)
 
 RBAC: every route is ``require_role(UserRole.ADMIN)`` (Global Constraints).
 CSRF is enforced by the global CSRFMiddleware on every unsafe method here —
@@ -35,19 +48,26 @@ upload with no, or a lying, Content-Length header).
 
 from __future__ import annotations
 
+import uuid
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.datastructures import FormData
 
 from idraa.app import templates
-from idraa.errors import ValidationError
-from idraa.models.enums import UserRole
+from idraa.errors import NotFoundError, ValidationError
+from idraa.models.enums import ThreatCategory, UserRole
 from idraa.models.user import User
 from idraa.routes.deps import MAX_UPLOAD_BYTES, get_db, require_role
+from idraa.routes.scenario_form_helpers import THREAT_CATEGORY_CHOICES
 from idraa.services.flash import build_flash
+from idraa.services.qualitative_bands import EffectiveBand, QualitativeBandService
 from idraa.services.register_import import (
     PreviewExpiredError,
     RegisterImportService,
+    preselect_bindings,
 )
 from idraa.services.register_import_parsers import list_sheet_names
 
@@ -67,6 +87,85 @@ _TARGET_OPTIONS: list[tuple[str, str]] = [
 ]
 # Kept in sync with `TARGETS` by test_register_import_routes.py's
 # `test_target_options_match_targets` (no runtime assert — S101).
+
+# The three value-bind fieldsets, in render order. Also doubles as the
+# `{group}_value_{i}` / `{group}_target_{i}` form-field prefix set both
+# `_parse_bind_form` (below) and `templates/register_import/bind.html`
+# agree on.
+_BIND_GROUPS: tuple[str, ...] = ("likelihood", "impact", "category")
+
+# The category fieldset's "opt out" choice. Kept in sync with
+# `services.register_import._PARKED_CATEGORY` (a private module constant —
+# duplicated here rather than imported, same posture as `_TARGET_OPTIONS`
+# above) by test_register_import_routes.py's
+# `test_bind_post_park_category_value_accepted`, which round-trips this
+# EXACT value through the live POST endpoint and asserts a 303 (not a 422
+# from the service's `_validate_bindings_group` rejecting an unrecognized
+# target) — a behavioral guard, not a static string-equality one.
+# Grammar pinned verbatim by the plan (Meth-R2-NTH-1 / plan-gate M-2 — OT is
+# IN scope, this label is about non-information/non-OT rows only).
+_PARK_VALUE = "__parked__"
+_PARK_LABEL = "Parked — out of scope (neither information- nor OT-risk; see #39)"
+
+# Category select options: the curated ThreatCategory labels (shared with
+# the scenario form so casing/wording stays consistent across the two
+# scenario-creation paths) plus the park option, with a blank leading
+# placeholder so an unbound value never accidentally shows the first real
+# option as "selected" (form_field's <select> only marks `selected` on an
+# exact value match).
+_CATEGORY_OPTIONS: list[tuple[str, str]] = [
+    ("", "— choose a category —"),
+    *THREAT_CATEGORY_CHOICES,
+    (_PARK_VALUE, _PARK_LABEL),
+]
+
+
+def _band_options(
+    effective: dict[tuple[str, str], EffectiveBand], kind: str
+) -> list[tuple[str, str]]:
+    """Sorted (value, display label) options for one band ``kind``
+    ("frequency" | "magnitude"), plus a blank leading placeholder (same
+    unbound-never-looks-selected rationale as ``_CATEGORY_OPTIONS``).
+    Sorted by ``mode`` ascending — a natural least-to-most severe/frequent
+    reading order; ``EffectiveBand`` carries no ``sort_order`` (that lives
+    only on the canonical ORM row), so this is the best ordering signal
+    available at this layer.
+    """
+    rows = sorted((b for b in effective.values() if b.kind == kind), key=lambda b: b.mode)
+    placeholder = (
+        "— choose a frequency band —" if kind == "frequency" else "— choose a magnitude band —"
+    )
+    return [("", placeholder), *((b.label, b.label.replace("_", " ").title()) for b in rows)]
+
+
+def _parse_bind_form(
+    raw: FormData, distinct: dict[str, list[str]]
+) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
+    """Parse the bind form's ``{group}_value_{i}``/``{group}_target_{i}``
+    pairs (mirrors ``columns_post``'s ``header_i``/``target_i`` convention)
+    into a bindings dict + a per-value field_errors dict (blank/missing
+    target -> "must be bound"). Index order matches ``distinct[group]``'s
+    order 1:1 because both the GET render and this POST parse call the SAME
+    ``distinct_values()`` (sorted, deterministic) — no client-submitted
+    index or value string is trusted as a lookup key on its own.
+
+    This is a LOCAL, route-layer pass so the 422 re-render can attach a
+    per-field error to the exact unbound row (Task 5's own requirement);
+    ``RegisterImportService.set_value_bindings`` still re-validates
+    server-side as the authoritative gate (Sec-I2) — this function only
+    improves what the user sees when that gate would reject the submission
+    for a missing binding.
+    """
+    bindings: dict[str, dict[str, str]] = {g: {} for g in _BIND_GROUPS}
+    field_errors: dict[str, dict[str, str]] = {g: {} for g in _BIND_GROUPS}
+    for group in _BIND_GROUPS:
+        for i, value in enumerate(distinct.get(group, [])):
+            target = str(raw.get(f"{group}_target_{i}", "")).strip()
+            if target:
+                bindings[group][value] = target
+            else:
+                field_errors[group][value] = "This value must be bound before continuing."
+    return bindings, field_errors
 
 
 def _expired_response(request: Request, user: User, exc: PreviewExpiredError) -> HTMLResponse:
@@ -320,3 +419,194 @@ async def register_import_columns_post(
             status_code=422,
         )
     return RedirectResponse(f"/register-import/{token}/bind", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---- step 4: value-bind ---------------------------------------------------
+
+
+async def _bind_context(
+    user: User,
+    svc: RegisterImportService,
+    band_service: QualitativeBandService,
+    *,
+    organization_id: uuid.UUID,
+    token: str,
+    distinct: dict[str, list[str]],
+    bindings: dict[str, dict[str, str]],
+    field_errors: dict[str, dict[str, str]],
+    profile_name: str,
+    flash: dict[str, str | None] | None,
+) -> dict[str, object]:
+    effective = await band_service.effective_bands(organization_id)
+    profiles = await svc.list_profiles(organization_id)
+    return {
+        "current_user": user,
+        "flash": flash,
+        "token": token,
+        "distinct": distinct,
+        "bindings": bindings,
+        "likelihood_options": _band_options(effective, "frequency"),
+        "impact_options": _band_options(effective, "magnitude"),
+        "category_options": _CATEGORY_OPTIONS,
+        "field_errors": field_errors,
+        "profile_name": profile_name,
+        "profile_options": [(str(p.id), p.name) for p in profiles],
+    }
+
+
+@router.get("/register-import/{token}/bind", response_class=HTMLResponse)
+async def register_import_bind_get(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Response:
+    svc = RegisterImportService(db)
+    try:
+        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
+        distinct = await svc.distinct_values(organization_id=user.organization_id, token=token)
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    band_service = QualitativeBandService(db)
+    effective = await band_service.effective_bands(user.organization_id)
+    # Pre-selection ONLY via `preselect_bindings` (exact case-insensitive
+    # label match — spec §5 / Global Constraints, zero heuristics), then
+    # overlaid with whatever this token already has SAVED in `state_json`
+    # (e.g. from a prior POST that 422'd on a different field, or from
+    # `apply_profile`) — saved state wins per value, since it reflects an
+    # actual admin/profile decision rather than a computed guess.
+    preselected = preselect_bindings(distinct, effective, ThreatCategory)
+    saved = (preview.state_json or {}).get("value_bindings") or {}
+    bindings = {
+        group: {**preselected.get(group, {}), **(saved.get(group) or {})} for group in _BIND_GROUPS
+    }
+
+    # `POST /apply-profile` 303-redirects back here with drift warnings
+    # riding `?drift=` query params (this codebase's flash pattern is
+    # per-render-dict only — see services/flash.py — so a value that must
+    # survive a redirect has to travel some other way; the existing
+    # `?saved=1`/`?imported=N` query-flag precedents are the closest fit,
+    # extended here to carry the actual warning text since drift warnings
+    # are informational strings, not just a count).
+    drift_warnings = request.query_params.getlist("drift")
+    flash = build_flash("; ".join(drift_warnings), "warning") if drift_warnings else None
+
+    context = await _bind_context(
+        user,
+        svc,
+        band_service,
+        organization_id=user.organization_id,
+        token=token,
+        distinct=distinct,
+        bindings=bindings,
+        field_errors={g: {} for g in _BIND_GROUPS},
+        profile_name="",
+        flash=flash,
+    )
+    return templates.TemplateResponse(request, "register_import/bind.html", context)
+
+
+@router.post("/register-import/{token}/bind")
+async def register_import_bind_post(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Response:
+    raw = await request.form()
+    svc = RegisterImportService(db)
+    try:
+        distinct = await svc.distinct_values(organization_id=user.organization_id, token=token)
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    bindings, field_errors = _parse_bind_form(raw, distinct)
+    profile_name = str(raw.get("profile_name", "")).strip()
+    band_service = QualitativeBandService(db)
+
+    async def _rerender(flash: dict[str, str | None], status_code: int) -> HTMLResponse:
+        context = await _bind_context(
+            user,
+            svc,
+            band_service,
+            organization_id=user.organization_id,
+            token=token,
+            distinct=distinct,
+            bindings=bindings,
+            field_errors=field_errors,
+            profile_name=profile_name,
+            flash=flash,
+        )
+        return templates.TemplateResponse(
+            request, "register_import/bind.html", context, status_code=status_code
+        )
+
+    # Unbound value(s) -> 422 re-render with per-field errors, WITHOUT a
+    # round-trip through the service (Task 5's own requirement — the
+    # service's own rejection message is a single string, not attributable
+    # to one row; see `_parse_bind_form`'s docstring).
+    if any(field_errors[g] for g in _BIND_GROUPS):
+        return await _rerender(
+            build_flash("some values still need to be bound before you can continue", "error"),
+            422,
+        )
+
+    try:
+        await svc.set_value_bindings(
+            organization_id=user.organization_id, token=token, bindings=bindings
+        )
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except ValidationError as exc:
+        return await _rerender(build_flash(str(exc), "error"), 422)
+
+    if profile_name:
+        try:
+            await svc.save_profile(
+                organization_id=user.organization_id, name=profile_name, token=token, user=user
+            )
+        except ValidationError as exc:
+            # Bindings ARE already persisted at this point (set_value_bindings
+            # above succeeded) — only the profile-save half failed (duplicate
+            # name is the only realistic case reachable from this form; see
+            # save_profile's own name-length/non-empty checks, which the
+            # "profile_name" text input can't violate via normal use).
+            # Re-rendering still shows the just-bound selections, not a
+            # blank form.
+            return await _rerender(build_flash(str(exc), "error"), 422)
+
+    return RedirectResponse(
+        f"/register-import/{token}/preview", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+# ---- binding profiles: apply -----------------------------------------------
+
+
+@router.post("/register-import/{token}/apply-profile")
+async def register_import_apply_profile_post(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+    profile_id: uuid.UUID = Form(...),
+) -> Response:
+    svc = RegisterImportService(db)
+    try:
+        warnings = await svc.apply_profile(
+            organization_id=user.organization_id, token=token, profile_id=profile_id
+        )
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    location = f"/register-import/{token}/bind"
+    if warnings:
+        location = f"{location}?{urlencode([('drift', w) for w in warnings])}"
+    return RedirectResponse(location, status_code=status.HTTP_303_SEE_OTHER)

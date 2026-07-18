@@ -1,28 +1,35 @@
-"""Register import route tests — staged upload / sheet-pick / column-map (Task 4).
+"""Register import route tests — staged upload / sheet-pick / column-map /
+value-bind / binding profiles (Tasks 4 + 5).
 
 Mirrors ``tests/integration/test_scenario_import_routes.py``'s route-test
 patterns and the ``csrf_post`` double-submit helper. RBAC posture: every
 route is ``require_role(ADMIN)`` — the analyst-403 tests pin this.
 
-Epic #34 P1c Task 4. Later tasks (5/6) extend ``routes/register_import.py``
-with the value-bind step and preview/convert/report, so the "successful
-303 chain" tests here only assert the redirect TARGET for the bind step
-(``.../bind`` does not exist until Task 5 lands in the same branch).
+Epic #34 P1c Task 4 shipped upload/sheet-pick/column-map; Task 5 (this
+extension) adds value-bind + binding profiles. Task 6 (preview/convert/
+report) has not landed yet, so the bind-POST happy-path tests here only
+assert the redirect TARGET (``.../preview`` does not exist until Task 6
+lands in the same branch) — same posture Task 4 used for the bind step.
 """
 
 from __future__ import annotations
 
 import io
 import re
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
 import openpyxl
 import pytest
 from httpx import AsyncClient, Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.qualitative_mapping import QualitativeMappingBand, QualitativeMappingOrgBand
+from idraa.models.register_binding_profile import RegisterBindingProfile
 from idraa.routes.deps import MAX_UPLOAD_BYTES
-from idraa.routes.register_import import _TARGET_OPTIONS
+from idraa.routes.register_import import _CATEGORY_OPTIONS, _PARK_VALUE, _TARGET_OPTIONS
 from idraa.services.register_import import TARGETS
 from tests.conftest import csrf_post
 
@@ -47,6 +54,124 @@ _FULL_COLUMN_MAP = {
 def _csv_bytes(headers: str = _CSV_HEADERS, rows: list[str] | None = None) -> bytes:
     body_rows = _CSV_ROWS if rows is None else rows
     return ("\n".join([headers, *body_rows]) + "\n").encode("utf-8")
+
+
+# ---- Task 5 helpers ---------------------------------------------------
+
+
+async def _seed_band(
+    db_session: AsyncSession,
+    *,
+    kind: str,
+    label: str,
+    low: float,
+    mode: float,
+    high: float,
+    sort_order: int = 1,
+) -> QualitativeMappingBand:
+    """Mirrors tests/unit/test_register_import_service.py's helper of the
+    same name — duplicated locally (not cross-imported) per this codebase's
+    per-test-file helper convention (see the `_csv_bytes`/`_xlsx_bytes`
+    duplication between the unit and integration register-import test
+    files)."""
+    band = QualitativeMappingBand(
+        kind=kind,
+        label=label,
+        low=low,
+        mode=mode,
+        high=high,
+        sort_order=sort_order,
+        derivation="unit-test canonical band, not a real citation",
+        version=1,
+    )
+    db_session.add(band)
+    await db_session.flush()
+    await db_session.commit()
+    return band
+
+
+async def _seed_common_bands(db_session: AsyncSession) -> None:
+    """frequency: likely/rare; magnitude: high/low — labels chosen to
+    exact-case-insensitive-match `_CSV_ROWS`' Likelihood/Impact cells
+    ("Likely"/"Rare"/"High"/"Low") so `preselect_bindings` has something to
+    match against."""
+    await _seed_band(db_session, kind="frequency", label="likely", low=1.0, mode=3.2, high=10.0)
+    await _seed_band(
+        db_session, kind="frequency", label="rare", low=0.1, mode=0.3, high=1.0, sort_order=2
+    )
+    await _seed_band(
+        db_session, kind="magnitude", label="high", low=1_000_000, mode=5_000_000, high=10_000_000
+    )
+    await _seed_band(
+        db_session,
+        kind="magnitude",
+        label="low",
+        low=1_000,
+        mode=5_000,
+        high=10_000,
+        sort_order=2,
+    )
+
+
+async def _stage_to_bind(
+    client: AsyncClient,
+    *,
+    headers: str = _CSV_HEADERS,
+    rows: list[str] | None = None,
+    column_map: dict[str, str] | None = None,
+) -> str:
+    """Upload a CSV + submit a valid column map, returning the resulting
+    bind-step token. Reuses `_upload`/`_csv_bytes` (Task 4)."""
+    cm = _FULL_COLUMN_MAP if column_map is None else column_map
+    up = await _upload(client, data=_csv_bytes(headers, rows))
+    assert up.status_code == 303, up.text
+    token = _token_from_location(up)
+
+    header_list = headers.split(",")
+    form: dict[str, str] = {}
+    for i, header in enumerate(header_list):
+        form[f"header_{i}"] = header
+        form[f"target_{i}"] = cm.get(header, "ignore")
+    r = await csrf_post(client, f"/register-import/{token}/columns", form, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    assert r.headers["location"].endswith(f"/register-import/{token}/bind")
+    return token
+
+
+def _bind_form(
+    distinct: dict[str, list[str]], bindings: dict[str, dict[str, str]]
+) -> dict[str, str]:
+    """Build the bind POST body's `{group}_value_{i}`/`{group}_target_{i}`
+    pairs from a known `distinct_values()`-shaped dict + desired bindings
+    (a value absent from `bindings[group]` is submitted with a BLANK target,
+    reproducing the "left unbound" case for 422 tests)."""
+    form: dict[str, str] = {}
+    for group in ("likelihood", "impact", "category"):
+        for i, value in enumerate(distinct.get(group, [])):
+            form[f"{group}_value_{i}"] = value
+            target = bindings.get(group, {}).get(value)
+            if target is not None:
+                form[f"{group}_target_{i}"] = target
+    return form
+
+
+# `_CSV_ROWS`' distinct likelihood/impact/category values, in the SAME
+# sorted order `RegisterImportService.distinct_values()` produces (verified
+# against the shipped implementation: `sorted({...} - {""})`).
+_DISTINCT = {
+    "likelihood": ["Likely", "Rare"],
+    "impact": ["High", "Low"],
+    "category": ["Malware", "Phishing"],
+}
+# The full valid binding set for `_DISTINCT` — "Malware" preselects to
+# "malware" (exact case-insensitive ThreatCategory match) but "Phishing"
+# does not (no ThreatCategory member is spelled "phishing"), so it needs an
+# explicit bind here.
+_FULL_BINDINGS = {
+    "likelihood": {"Likely": "likely", "Rare": "rare"},
+    "impact": {"High": "high", "Low": "low"},
+    "category": {"Malware": "malware", "Phishing": "social_engineering"},
+}
 
 
 def _xlsx_bytes(sheets: dict[str, list[list[object]]]) -> bytes:
@@ -470,3 +595,318 @@ async def test_columns_get_malformed_token_expired_409(
     # A truly empty path segment 404s at the router; a non-UUID string
     # reaches the handler and is rejected as an expired/malformed token.
     assert r.status_code in (404, 409)
+
+
+# ===========================================================================
+# Task 5: value-bind step + binding profiles
+# ===========================================================================
+
+
+# ---- module-level sync guard --------------------------------------------
+
+
+def test_park_option_is_last_category_option() -> None:
+    """`_CATEGORY_OPTIONS` (route rendering) carries the exact park value +
+    grammar the plan pins verbatim (Meth-R2-NTH-1)."""
+    assert _CATEGORY_OPTIONS[-1] == (
+        _PARK_VALUE,
+        "Parked — out of scope (neither information- nor OT-risk; see #39)",
+    )
+
+
+# ---- RBAC -----------------------------------------------------------------
+
+
+async def test_bind_get_analyst_forbidden(analyst_client: AsyncClient) -> None:
+    r = await analyst_client.get(f"/register-import/{_UNKNOWN_TOKEN}/bind")
+    assert r.status_code in (403, 302)
+
+
+async def test_bind_post_analyst_forbidden(analyst_client: AsyncClient) -> None:
+    r = await csrf_post(
+        analyst_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/bind",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code in (403, 302)
+
+
+async def test_apply_profile_analyst_forbidden(analyst_client: AsyncClient) -> None:
+    r = await csrf_post(
+        analyst_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/apply-profile",
+        {"profile_id": _UNKNOWN_TOKEN},
+        follow_redirects=False,
+    )
+    assert r.status_code in (403, 302)
+
+
+# ---- expired / unknown token -----------------------------------------------
+
+
+async def test_bind_get_unknown_token_expired_409(admin_client: AsyncClient) -> None:
+    r = await admin_client.get(f"/register-import/{_UNKNOWN_TOKEN}/bind")
+    assert r.status_code == 409
+
+
+async def test_bind_post_unknown_token_expired_409(admin_client: AsyncClient) -> None:
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/bind",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code == 409
+
+
+async def test_apply_profile_unknown_token_expired_409(admin_client: AsyncClient) -> None:
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/apply-profile",
+        {"profile_id": _UNKNOWN_TOKEN},
+        follow_redirects=False,
+    )
+    assert r.status_code == 409
+
+
+# ---- GET bind: renders distinct values + info callout ----------------------
+
+
+async def test_bind_get_renders_distinct_values_and_park_callout(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+
+    r = await admin_client.get(f"/register-import/{token}/bind")
+    assert r.status_code == 200
+    for value in ("Likely", "Rare", "High", "Low", "Malware", "Phishing"):
+        assert value in r.text
+
+    # D5 park-semantics copy: counted + reported, never errors; link to band mgmt.
+    lowered = r.text.lower()
+    assert "counted" in lowered
+    assert "reported" in lowered
+    assert "never" in lowered
+    assert 'href="/qualitative-bands"' in r.text
+
+
+# ---- pre-selection exactness: "High" matches, "Hi" does NOT ----------------
+
+
+async def test_bind_get_preselects_exact_case_insensitive_match_only(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    headers = "Title,Likelihood,Impact"
+    rows = ["A,Likely,Hi", "B,Rare,High"]
+    token = await _stage_to_bind(
+        admin_client,
+        headers=headers,
+        rows=rows,
+        column_map={"Title": "title", "Likelihood": "likelihood", "Impact": "impact"},
+    )
+
+    r = await admin_client.get(f"/register-import/{token}/bind")
+    assert r.status_code == 200
+
+    # distinct.impact sorts to ["Hi", "High"] (shorter prefix sorts first).
+    hi_select = re.search(r'id="impact_target_0".*?</select>', r.text, re.S)
+    high_select = re.search(r'id="impact_target_1".*?</select>', r.text, re.S)
+    assert hi_select and high_select, r.text
+
+    # "High" exact-case-insensitive-matches the "high" magnitude band label.
+    assert 'value="high" selected' in high_select.group(0)
+    # "Hi" must NOT preselect a real band — no heuristics, no partial match.
+    # Only the blank placeholder option is selected (form_field's <select>
+    # defaults to it when `value` matches no real option — the whole point
+    # of prepending a blank option, otherwise the browser would silently
+    # default to the first real option and LOOK bound when it isn't).
+    assert 'value="" selected' in hi_select.group(0)
+    assert 'value="high" selected' not in hi_select.group(0)
+    assert 'value="low" selected' not in hi_select.group(0)
+
+
+# ---- POST bind: happy path -------------------------------------------------
+
+
+async def test_bind_post_happy_path_redirects_to_preview(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+
+    form = _bind_form(_DISTINCT, _FULL_BINDINGS)
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/bind", form, follow_redirects=False
+    )
+    assert r.status_code == 303, r.text
+    assert r.headers["location"] == f"/register-import/{token}/preview"
+
+
+async def test_bind_post_park_category_value_accepted(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Behavioral sync guard (see the `_PARK_VALUE` docstring in
+    routes/register_import.py): if the route's park value ever drifted from
+    the service's `_PARKED_CATEGORY`, this POST would 422 with "is not a
+    valid target" instead of redirecting."""
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+
+    bindings = {
+        "likelihood": _FULL_BINDINGS["likelihood"],
+        "impact": _FULL_BINDINGS["impact"],
+        "category": {"Malware": "malware", "Phishing": _PARK_VALUE},
+    }
+    form = _bind_form(_DISTINCT, bindings)
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/bind", form, follow_redirects=False
+    )
+    assert r.status_code == 303, r.text
+
+
+# ---- POST bind: unbound value -> 422 with per-field errors ------------------
+
+
+async def test_bind_post_unbound_value_422_per_field_errors(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+
+    # Leave "Low" (impact) unbound; everything else fully bound.
+    bindings = {
+        "likelihood": _FULL_BINDINGS["likelihood"],
+        "impact": {"High": "high"},  # "Low" omitted -> blank target
+        "category": _FULL_BINDINGS["category"],
+    }
+    form = _bind_form(_DISTINCT, bindings)
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/bind", form, follow_redirects=False
+    )
+    assert r.status_code == 422
+    assert "must be bound" in r.text.lower()
+    # Re-render still shows the form (not a redirect) with the other
+    # already-picked values still present.
+    assert "Low" in r.text
+    assert 'value="high" selected' in r.text
+
+
+async def test_bind_post_all_unbound_422(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+    form = _bind_form(_DISTINCT, {})
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/bind", form, follow_redirects=False
+    )
+    assert r.status_code == 422
+
+
+# ---- POST bind: save as profile + duplicate name ----------------------------
+
+
+async def test_bind_post_save_profile_then_duplicate_name_422(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+
+    token_a = await _stage_to_bind(admin_client)
+    form_a = _bind_form(_DISTINCT, _FULL_BINDINGS)
+    form_a["profile_name"] = "Quarterly export"
+    r_a = await csrf_post(
+        admin_client, f"/register-import/{token_a}/bind", form_a, follow_redirects=False
+    )
+    assert r_a.status_code == 303, r_a.text
+
+    profile = (
+        await db_session.execute(
+            select(RegisterBindingProfile).where(RegisterBindingProfile.name == "Quarterly export")
+        )
+    ).scalar_one_or_none()
+    assert profile is not None
+
+    token_b = await _stage_to_bind(admin_client)
+    form_b = _bind_form(_DISTINCT, _FULL_BINDINGS)
+    form_b["profile_name"] = "Quarterly export"
+    r_b = await csrf_post(
+        admin_client, f"/register-import/{token_b}/bind", form_b, follow_redirects=False
+    )
+    assert r_b.status_code == 422
+    assert "already exists" in r_b.text.lower()
+
+
+# ---- apply-profile: drift warning flashed ----------------------------------
+
+
+async def test_apply_profile_drift_warning_flashed(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_admin
+    await _seed_common_bands(db_session)
+
+    # Save a profile with NO org-band overrides in play yet.
+    token_a = await _stage_to_bind(client)
+    form_a = _bind_form(_DISTINCT, _FULL_BINDINGS)
+    form_a["profile_name"] = "Drift export"
+    r_a = await csrf_post(
+        client, f"/register-import/{token_a}/bind", form_a, follow_redirects=False
+    )
+    assert r_a.status_code == 303, r_a.text
+
+    profile = (
+        await db_session.execute(
+            select(RegisterBindingProfile).where(RegisterBindingProfile.name == "Drift export")
+        )
+    ).scalar_one_or_none()
+    assert profile is not None
+
+    # Drift trigger: a NEW org-band override created after the profile was
+    # saved (per _drift_warnings' "present now but absent from snapshot"
+    # branch — services/register_import.py's docstring).
+    db_session.add(
+        QualitativeMappingOrgBand(
+            organization_id=org_id,
+            kind="frequency",
+            label="critical",
+            low=10.0,
+            mode=20.0,
+            high=50.0,
+            reason="test drift trigger",
+            version=1,
+        )
+    )
+    await db_session.commit()
+
+    token_b = await _stage_to_bind(client)
+    apply_resp = await csrf_post(
+        client,
+        f"/register-import/{token_b}/apply-profile",
+        {"profile_id": str(profile.id)},
+        follow_redirects=False,
+    )
+    assert apply_resp.status_code == 303, apply_resp.text
+    location = apply_resp.headers["location"]
+    assert location.startswith(f"/register-import/{token_b}/bind?drift=")
+
+    follow = await client.get(location)
+    assert follow.status_code == 200
+    assert "alert-warning" in follow.text
+    assert "is new since this profile was saved" in follow.text
+
+
+async def test_apply_profile_unknown_profile_404(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/{token}/apply-profile",
+        {"profile_id": str(uuid.uuid4())},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404
