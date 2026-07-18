@@ -14,6 +14,8 @@
 
 ## Global Constraints
 
+- `EntityStatus` is NOT currently imported in `services/runs.py`, `services/run_executor.py`, `services/dashboard.py`, or `services/scenarios.py` — each task adding a snippet that references it must add `from idraa.models.enums import EntityStatus` (`scenario_repo.py` already imports it).
+
 - Scenario list/view/export SHOW drafts (visibility is the point of review); only computation/metrics exclude them.
 - Promote is idempotent, audit-logged (`AuditWriter`), row-version-bumping — exactly the `confirm_vuln_framing` shape (`services/scenarios.py:509-556`).
 - Promote REFUSES while `vuln_framing == "legacy_residual"` (stricter P1a subset of spec's "confirm OR acknowledge"; the acknowledge path arrives with P1c's dialog).
@@ -26,7 +28,7 @@
 
 **Files:**
 - Modify: `src/idraa/services/runs.py` (in `create_and_dispatch`, after the scenario fetch at ~L103-115)
-- Modify: `src/idraa/services/run_executor.py` (~L1852/L1863, after each re-fetch)
+- Modify: `src/idraa/services/run_executor.py` (ONE guard after both branches converge, ~L1887)
 - Test: `tests/integration/test_draft_workflow.py` (new)
 
 **Interfaces:**
@@ -286,7 +288,7 @@ Route: copy the `confirm_vuln_framing` route shape verbatim (`routes/scenarios.p
 
 **Status field (plan-gate B-1 — triple-converged BLOCKER; read carefully).** `ScenarioService.update()` currently writes `scenario.status = form.status` unconditionally (`services/scenarios.py:467`), so a visible select on the EDIT form would be an unguarded second promote/demote path bypassing the legacy_residual refusal and the `scenario.promote` audit action. Therefore:
 
-1. **Harden `update()`:** before the `scenario.status = form.status` assignment, add:
+1. **Harden `update()` — guard at the TOP (plan-gate SEC-R2-1):** the check goes as the FIRST statement after the scenario is loaded — BEFORE `validate_fair_distributions`, BEFORE the vuln_framing auto-flip, BEFORE any field assignment. Rationale: the route catches `ValidationError` and RETURNS a 422 re-render (`routes/scenarios.py:937-948`) — a successful handler exit — and `get_db` auto-commits pending dirty state (the in-code "Sec2-I2" hazard). A later guard would turn "status rejected" into silently-committed, unaudited, non-row-version-bumped edits of every other field. Add:
 
 ```python
         if form.status != scenario.status:
@@ -297,6 +299,15 @@ Route: copy the `confirm_vuln_framing` route shape verbatim (`routes/scenarios.p
 ```
 
 (Match the module's existing validation-error type for update-path 422s — read how `update()` surfaces validation errors today and use that exact type + route mapping.)
+
+1b. **Create-path status domain (plan-gate SEC-R2-2):** in `create()` (before `_stamp_new_scenario` uses `form.status`), add the service-side counterpart of the create-select's template constraint:
+
+```python
+        if form.status not in (EntityStatus.ACTIVE, EntityStatus.DRAFT):
+            raise ValidationError("new scenarios may only be created as active or draft")
+```
+
+plus a test: crafted create payload with `status="deprecated"` → 422, no row created.
 
 2. **Template:** in `form.html`, render the status field as a labeled select (`active` / `draft`) ONLY in create mode; in edit mode keep the existing hidden preserve-mirror at L69 untouched. Determine create-vs-edit the way the template already does (inspect how it branches for the form action/heading; reuse that condition).
 
@@ -314,11 +325,19 @@ async def test_edit_form_cannot_change_status(authed_analyst, db_session: AsyncS
     await db_session.commit()
     # build the full valid edit payload the way the existing update-route test
     # in tests/integration/test_scenario_routes.py does; then set status=active
-    payload = _valid_update_payload_for(d) | {"status": "active"}
+    # co-mutate another field: SEC-R2-1 asserts rejection leaves the session
+    # CLEAN — no silent unaudited commit of the other edits
+    payload = _valid_update_payload_for(d) | {"status": "active", "description": "sneaky edit"}
     r = await csrf_post(client, f"/scenarios/{d.id}", payload, follow_redirects=False)
     assert r.status_code == 422
     await db_session.refresh(d)
     assert d.status == EntityStatus.DRAFT
+    assert d.description != "sneaky edit"          # nothing committed
+    from sqlalchemy import select as _sel
+    from idraa.models.audit import AuditLog
+    upd = (await db_session.execute(_sel(AuditLog).where(
+        AuditLog.action == "scenario.update", AuditLog.entity_id == d.id))).scalars().all()
+    assert upd == []                                # no audit row for the rejected edit
 
 
 @pytest.mark.asyncio
@@ -417,7 +436,7 @@ def test_audited_files_still_query_scenarios() -> None:
     assert not stale, f"stale AUDITED entries (file gone or no longer queries Scenario): {stale}"
 ```
 
-- [ ] **Step 2: Run it** — expect failure listing every current query site NOT yet in AUDITED (the broadened regex WILL surface files beyond the seed map — e.g. anything using `db.get(Scenario…)`, `.join(Scenario…)`, or `selectinload(Scenario.…)`); reconcile by READING each surfaced file and classifying it with one of the three decision values, not by blind-adding.
+- [ ] **Step 2: Run it** — as of plan-gate round 2 the broadened regex matches EXACTLY the 10 files in the seed map (verified against the tree), so expect green-or-near-green; if the tree drifted, reconcile any surfaced file by READING and classifying it with one of the three decision values, not by blind-adding.
 
 - [ ] **Step 3: Make it pass**, then run the FULL gate foreground: `uv run python scripts/run_local_gate.py` — all steps green.
 

@@ -160,7 +160,10 @@ Per register row, after binding:
   question attaches to the frequency band (LEF). Reusing the F2 machinery's
   *mechanics* (flag, banner slot, confirm flip) is right; reusing its copy and
   audit action verbatim would record "vuln framing reviewed" for what is
-  actually a frequency-baseline acceptance.
+  actually a frequency-baseline acceptance. P1b's converter-aware copy list
+  includes the P1a promote-refusal string ("confirm vulnerability framing
+  before promoting…") — vuln-centric wording that must gain frequency-framing
+  copy once converted rows exist (plan-gate Meth-R2-NTH).
 - `primary_loss` = magnitude band PERT. `secondary_loss = NULL` (engine-safe
   post-#525). Conversion report flags every row: "SL not derivable from a single
   impact score — add during review or anchor to a library entry (P2)."
