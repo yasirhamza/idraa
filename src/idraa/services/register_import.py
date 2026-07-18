@@ -337,6 +337,20 @@ class RegisterImportService:
         mag = {label for (kind, label) in effective if kind == "magnitude"}
         return freq, mag
 
+    async def get_headers(self, *, organization_id: uuid.UUID, token: str) -> list[str]:
+        """Parsed file headers for the token's current sheet selection.
+
+        Task 4 addition: the column-map GET route needs the raw headers to
+        render one target ``<select>`` per header BEFORE ``column_map``
+        exists in ``state_json`` — every other read in this module assumes
+        ``column_map`` is already set. Resolves via :meth:`get_staged` like
+        every other step (org+TTL+entity-type enforced uniformly).
+        """
+        preview = await self.get_staged(organization_id=organization_id, token=token)
+        state = preview.state_json or {}
+        parsed = self._parse_staged(preview, state)
+        return parsed.headers
+
     # ------------------------------------------------------------------
     # Step setters — each reassigns the WHOLE state_json dict (Arch-I1)
     # ------------------------------------------------------------------

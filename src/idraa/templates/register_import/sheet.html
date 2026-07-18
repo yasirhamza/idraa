@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% block title %}Register import — choose sheet{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Choose a sheet",
+  breadcrumb=[("Home", "/"), ("Register import", "/register-import"), ("Choose sheet", none)]
+) }}
+
+<div class="max-w-xl mx-auto space-y-6">
+  <p class="text-body text-ink-2">
+    <strong>{{ filename or "This workbook" }}</strong> has more than one sheet.
+    Choose which one to import.
+  </p>
+
+  <form method="post" action="/register-import/{{ token }}/sheet" class="space-y-4">
+    {{ csrf_field() }}
+    {{ form_field(
+      name="sheet_name",
+      label="Sheet",
+      input_type="radio_group",
+      options=sheet_options,
+      required=True
+    ) }}
+    <div class="flex gap-2">
+      <a href="/register-import" class="btn btn-ghost btn-sm">Cancel</a>
+      <button type="submit" class="btn btn-primary btn-sm">Continue</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

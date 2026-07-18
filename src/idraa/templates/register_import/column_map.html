@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% block title %}Register import — map columns{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Map columns",
+  breadcrumb=[("Home", "/"), ("Register import", "/register-import"), ("Map columns", none)]
+) }}
+
+<div class="max-w-3xl mx-auto space-y-6">
+  <p class="text-body text-ink-2">
+    Assign each column from <strong>{{ filename or "the uploaded file" }}</strong> to a
+    target field. <strong>Title</strong>, <strong>likelihood</strong>, and
+    <strong>impact</strong> must each be mapped from exactly one column;
+    everything else is optional.
+  </p>
+
+  <form method="post" action="/register-import/{{ token }}/columns" class="space-y-3">
+    {{ csrf_field() }}
+
+    {% for header in headers %}
+    <div class="p-3 rounded-card border border-border-subtle bg-surface-1 flex items-center gap-4">
+      <input type="hidden" name="header_{{ loop.index0 }}" value="{{ header }}">
+      <span class="text-body text-ink-1 font-medium flex-1 truncate" title="{{ header }}">
+        {{ header if header else "(blank header)" }}
+      </span>
+      <div class="w-64">
+        {{ form_field(
+          name="target_" ~ loop.index0,
+          label="Target",
+          input_type="select",
+          value=column_map.get(header, "ignore"),
+          options=targets
+        ) }}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if not headers %}
+    <p class="text-sm text-ink-2">This file has no columns to map.</p>
+    {% endif %}
+
+    <div class="pb-24" aria-hidden="true"></div>
+    <div class="sticky-action-bar sticky bottom-0 z-20 bg-surface-0/95 backdrop-blur border-t border-border-subtle -mx-6 px-6 py-3 flex gap-3 mt-6">
+      <a href="/register-import" class="btn btn-ghost btn-sm">Cancel</a>
+      <button type="submit" class="btn btn-primary btn-sm">Continue</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
