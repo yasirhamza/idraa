@@ -57,14 +57,39 @@ New tables (UUIDs, `organization_id`, audit-logged like `ScenarioLibraryOverride
   canonical label or **adds** a new label. Effective table = canonical ⊕ org
   (org wins per label), same merge discipline as library overrides.
 
-### 2.2 Canonical values — epistemic status: banding convention, not calibration
+### 2.2 Canonical values — epistemic status: cited edges (magnitude), labeled convention (frequency)
 
-**Explicitly labeled "v3 derivation — log-decade banding convention; priors for
-calibrated review, not an empirical claim."** No source is cited for the numbers
-because none is needed for a stated convention; the feature's entire framing is
-that these are starting envelopes an analyst must review (D3/D4 enforce that
-structurally). This is deliberately NOT presented as O-RA-derived until primary
-verification (below).
+Primary source verified 2026-07-18 against the full text of O-RA 2.0.1 (The Open
+Group Standard C20A, November 2021; owner-provided PDF — NOT committed to the
+repo, licensed document; its copyright page explicitly grants implementors fair
+use of "the names, labels, etc." contained in the specification):
+
+- **Magnitude band edges are cited:** O-RA Table 1, §6.6, p.33 ("An Example Scale
+  Translating Quantitative Values to Qualitative Labels") — Severe > $10M, High
+  $1M–$10M, Moderate $100K–$1M, Low $10K–$100K, Very Low < $10K. Our canonical
+  magnitude bands adopt exactly these log-decade edges, closing the two open ends
+  ($1K floor, $1B cap — both documented v3 choices; cap aligns with the library's
+  catastrophic ceiling). Two honest caveats recorded in `derivation`: (a) O-RA
+  presents Table 1 as an *example* scale that "should be guided by scales that
+  have been approved by management" — which is precisely what the org override
+  layer implements; (b) O-RA's direction of use is output-translation
+  (quantitative → qualitative); we use the same edges input-ward as priors, which
+  is exactly the move §6.5 cautions about — see below.
+- **Frequency bands are a v3 convention:** O-RA 2.0.1 publishes NO frequency
+  scale table (verified against the full text — §5.2 gives estimation guidance
+  only). Our frequency bands are a log-decade convention by analogy with Table
+  1's decade structure, explicitly labeled "v3 derivation, priors for calibrated
+  review, not an empirical claim."
+- **§6.5 (pp.32-33) is the cited guardrail, not an obstacle:** O-RA itself warns
+  that ordinal values "cannot validly be used as inputs into mathematical
+  formulas because they are not ratio values." The converter's entire structure —
+  DRAFT status, dual banners, priors-not-results copy, never-auto-final — exists
+  to satisfy §6.5's objection: bands enter as review-pending priors, never as
+  analysis inputs presented as calibrated. Conversion copy cites this framing.
+- **D3 grounding:** §5.2.1 (p.18) endorses top-down estimation of Loss Event
+  Frequency directly, "only decomposing it into its sub-factors if useful" —
+  primary support for encoding register likelihood as LEF (TEF=band, vuln=1)
+  and deferring the TEF×Vuln decomposition to calibrated review.
 
 Frequency bands (events/year), log-decade edges, PERT mode = geometric midpoint
 √(low·high) of the band:
@@ -95,13 +120,14 @@ Top band mode = √(10M·1B) ≈ $100M; cap $1B aligns with the library's catast
 envelope ceiling. Orgs whose loss capacity differs express it through the org layer
 (that IS the evaluator workshop-calibration step), not a revenue multiplier.
 
-**O-RA upgrade path (owner action, tracked in the epic):** O-RA 2.0.1 (The Open
-Group, C20A) publishes example measurement scales but sits behind a licensed login
-(verified 2026-07-18: pubs.opengroup.org → SSO). When the owner pulls the PDF
-(free individual login), pin section/table numbers; if O-RA's example boundaries
-differ, either adopt them (canonical version bump, migration) or document divergence
-in `derivation`. Until then the convention framing stands on its own. Cite facts and
-boundaries only — never reproduce O-RA prose (licensed-material rule).
+Canonical label slugs stay symmetric across both kinds (`very_low … very_high`);
+the magnitude `derivation` text records the O-RA Table 1 correspondence
+(`very_high` ↔ Severe (SV), `high` ↔ High (H), `moderate` ↔ Moderate (M),
+`low` ↔ Low (L), `very_low` ↔ Very Low (VL)). Org loss-capacity differences are
+expressed through the org layer — grounded in O-RA §6.3 (capacity/tolerance for
+loss is org-specific) and §6.6 (scales require management approval) — never a
+revenue multiplier. Cite facts and boundaries only; never reproduce O-RA prose,
+and never commit the PDF (licensed-material rule).
 
 ### 2.3 Band → PERT derivation rule (methodology-gated)
 
@@ -210,8 +236,11 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
    Mitigated structurally (DRAFT + dual banners + report + never-auto-final); copy
    must present converted numbers as priors, never results. Methodology reviewer
    owns wording.
-2. **O-RA verification** — §2.2 upgrade path; owner pulls C20A; values may shift
-   under a canonical version bump. Does not block P1 (convention framing).
+2. **O-RA verification — RESOLVED 2026-07-18:** owner provided C20A full text.
+   Magnitude edges now cited (Table 1, §6.6, p.33 — exact match to our decade
+   edges); frequency scale confirmed ABSENT from O-RA (stays labeled convention);
+   §6.5 adopted as the cited guardrail motivating never-auto-final; §5.2.1 cited
+   for the D3 LEF encoding. Residual: none.
 3. **Degenerate PERT** — §3 plan-time engine check with pinned fallback.
 4. **DRAFT leak** — §4 contract test must enumerate consumers via import graph,
    not a hand-list.
@@ -241,6 +270,10 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
   convention.
 - 2026-07-18: **cut** persisting parked rows (YAGNI — re-import + binding profile
   covers it).
+- 2026-07-18 (post-spec): **reframed** canonical values after owner provided the
+  O-RA 2.0.1 PDF — magnitude edges upgraded from convention to cited (Table 1,
+  §6.6, p.33); frequency confirmed citation-free in O-RA (stays convention);
+  §6.5/§5.2.1/§6.3 citations added. No numeric value changed.
 
 ## 8. Ceremony
 
