@@ -167,7 +167,7 @@ Plus a template-level dashboard assertion if `build_dashboard` is cheaply invoka
 - Modify: `src/idraa/services/scenarios.py` (new method after `confirm_vuln_framing`, ~L556)
 - Modify: `src/idraa/routes/scenarios.py` (new route after `confirm_vuln_framing` route, ~L1094)
 - Modify: `src/idraa/templates/scenarios/view.html` (banner after the legacy_residual block ~L62; fix `status_pill(..., kind="control")` → `kind="entity"` at L69)
-- Modify: `src/idraa/services/scenarios.py` `update()` ~L467 (reject status transitions — plan-gate B-1)
+- Modify: `src/idraa/services/scenarios.py` `update()` guard at top ~L405 (reject status transitions — plan-gate B-1/SEC-R2-1) + `_stamp_new_scenario` ~L162 (create status domain — SEC-R2-2/SEC-R3-NTH)
 - Modify: `src/idraa/templates/scenarios/form.html:69` (CREATE mode only: labeled select `active`/`draft`; EDIT mode: keep the hidden preserve-mirror EXACTLY as-is)
 - Modify: `src/idraa/templates/scenarios/list.html` (status filter chips — plan-gate Spec-I1)
 - Test: append to `tests/integration/test_draft_workflow.py`
@@ -188,7 +188,7 @@ async def test_promote_flips_draft_to_active_with_audit(authed_analyst, db_sessi
     await db_session.refresh(draft)
     assert draft.status == EntityStatus.ACTIVE
     from sqlalchemy import select
-    from idraa.models.audit import AuditLog
+    from idraa.models.audit_log import AuditLog
     row = (await db_session.execute(
         select(AuditLog).where(AuditLog.action == "scenario.promote"))).scalars().first()
     assert row is not None and row.entity_id == draft.id
@@ -300,14 +300,30 @@ Route: copy the `confirm_vuln_framing` route shape verbatim (`routes/scenarios.p
 
 (Match the module's existing validation-error type for update-path 422s — read how `update()` surfaces validation errors today and use that exact type + route mapping.)
 
-1b. **Create-path status domain (plan-gate SEC-R2-2):** in `create()` (before `_stamp_new_scenario` uses `form.status`), add the service-side counterpart of the create-select's template constraint:
+1b. **Create-path status domain (plan-gate SEC-R2-2, placement per SEC-R3-NTH):** in `_stamp_new_scenario` (services/scenarios.py ~L162, NEXT TO the existing `validate_fair_distributions` call — the shared chokepoint whose docstring says validation happens exactly once regardless of entry path, so `create_from_wizard` is covered too), add the service-side counterpart of the create-select's template constraint:
 
 ```python
         if form.status not in (EntityStatus.ACTIVE, EntityStatus.DRAFT):
             raise ValidationError("new scenarios may only be created as active or draft")
 ```
 
-plus a test: crafted create payload with `status="deprecated"` → 422, no row created.
+with test (add in Step 1):
+
+```python
+@pytest.mark.asyncio
+async def test_create_rejects_non_lifecycle_status(authed_analyst, db_session: AsyncSession):
+    client, org_id = authed_analyst
+    # copy the create payload dict verbatim from
+    # test_create_scenario_persists_and_redirects (test_scenario_routes.py:310-340)
+    # into `payload`, then override status="deprecated"
+    r = await csrf_post(client, "/scenarios", payload, follow_redirects=False)
+    assert r.status_code == 422
+    from sqlalchemy import select as _sel
+    from idraa.models.scenario import Scenario
+    rows = (await db_session.execute(_sel(Scenario).where(
+        Scenario.name == payload["name"]))).scalars().all()
+    assert rows == []                               # no row created
+```
 
 2. **Template:** in `form.html`, render the status field as a labeled select (`active` / `draft`) ONLY in create mode; in edit mode keep the existing hidden preserve-mirror at L69 untouched. Determine create-vs-edit the way the template already does (inspect how it branches for the form action/heading; reuse that condition).
 
@@ -334,7 +350,7 @@ async def test_edit_form_cannot_change_status(authed_analyst, db_session: AsyncS
     assert d.status == EntityStatus.DRAFT
     assert d.description != "sneaky edit"          # nothing committed
     from sqlalchemy import select as _sel
-    from idraa.models.audit import AuditLog
+    from idraa.models.audit_log import AuditLog
     upd = (await db_session.execute(_sel(AuditLog).where(
         AuditLog.action == "scenario.update", AuditLog.entity_id == d.id))).scalars().all()
     assert upd == []                                # no audit row for the rejected edit
