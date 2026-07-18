@@ -1094,6 +1094,34 @@ async def confirm_vuln_framing(
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 
+@router.post("/scenarios/{scenario_id}/promote")
+async def promote_scenario(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """Epic #34 P1a: promote a DRAFT scenario to ACTIVE after review.
+
+    Analyst+ only (reviewer is read-only). CSRF enforced by the global
+    middleware. Cross-org / missing ids surface 404 (NOT 403 — no existence
+    oracle, mirrors confirm_vuln_framing's Sec-F2-I1 precedent). Redirect
+    target is fixed (path-derived UUID) — no open-redirect surface.
+    """
+    try:
+        await ScenarioService(db).promote(
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            current_user=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
 # ---- wizard -----------------------------------------------------------
 
 

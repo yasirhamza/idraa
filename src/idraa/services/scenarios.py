@@ -60,7 +60,7 @@ from idraa.errors import (
     ScenarioInUseError,
     ValidationError,
 )
-from idraa.models.enums import ScenarioSource
+from idraa.models.enums import EntityStatus, ScenarioSource
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
@@ -165,6 +165,15 @@ class ScenarioService:
             primary_loss=form.primary_loss,
             secondary_loss=form.secondary_loss,
         )
+
+        # 2b. Epic #34 P1a (plan-gate SEC-R2-2, placement per SEC-R3-NTH):
+        # create-path status domain. A new scenario may only be created as
+        # ACTIVE (default) or DRAFT (pending review) — DEPRECATED/DELETED are
+        # lifecycle end-states reached only via their own dedicated paths, not
+        # at creation. This chokepoint covers both create() and
+        # create_from_wizard() since both converge here.
+        if form.status not in (EntityStatus.ACTIVE, EntityStatus.DRAFT):
+            raise ValidationError("new scenarios may only be created as active or draft")
 
         # 3. Library entry status re-validation (TOCTOU guard).
         library_source_provenance: str | None = None
@@ -403,6 +412,21 @@ class ScenarioService:
                 f"another user updated this scenario — reload and retry"
             )
 
+        # Epic #34 P1a (plan-gate B-1): status transitions go ONLY through
+        # the audited promote flow — the edit path must not be a second,
+        # unguarded promote/demote surface. This guard MUST be the first
+        # statement after the row_version check and BEFORE any before-dict
+        # capture / FAIRCAM validation / vuln_framing flip / field
+        # assignment: the route catches ValidationError and RETURNS a 422
+        # re-render (a successful handler exit), and get_db auto-commits
+        # pending dirty state on any successful exit (Sec2-I2) — a later
+        # guard would turn "status rejected" into a silently-committed,
+        # unaudited, non-row-version-bumped edit of every other field.
+        if form.status != scenario.status:
+            raise ValidationError(
+                "status cannot be changed here — use Promote on the scenario page"
+            )
+
         # Capture before-state for audit. Enum-valued fields are
         # serialised to .value so the JSON audit payload stays plain.
         # industry/revenue_tier columns are gone (issue #88 Task 12).
@@ -548,6 +572,56 @@ class ScenarioService:
             action="scenario.confirm_vuln_framing",
             changes={
                 "vuln_framing": ["legacy_residual", "inherent"],
+                "row_version": [prev_row_version, scenario.row_version],
+            },
+            user_id=current_user.id,
+            ip_address=ip_address,
+        )
+        return scenario
+
+    async def promote(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        current_user: User,
+        ip_address: str | None = None,
+    ) -> Scenario:
+        """DRAFT → ACTIVE after review (epic #34 P1a). Idempotent on ACTIVE.
+
+        Refuses while vuln_framing == "legacy_residual": the reviewer must
+        confirm inherent framing first (spec §4 — P1a implements the strict
+        subset; the acknowledge-in-dialog path arrives with P1c).
+        """
+        repo = ScenarioRepo(self._db)
+        scenario = await repo.get_for_org(
+            organization_id=organization_id,
+            scenario_id=scenario_id,
+            lock=True,
+        )
+        if scenario is None:
+            raise NotFoundError(f"scenario {scenario_id} not found")
+        if scenario.status == EntityStatus.ACTIVE:
+            return scenario
+        if scenario.status != EntityStatus.DRAFT:
+            raise ValidationError(
+                f"only draft scenarios can be promoted (status={scenario.status.value})"
+            )
+        if scenario.vuln_framing == "legacy_residual":
+            raise ValidationError(
+                "confirm vulnerability framing before promoting — see the banner on this scenario"
+            )
+        prev_row_version = scenario.row_version
+        scenario.status = EntityStatus.ACTIVE
+        scenario.row_version = prev_row_version + 1
+        await self._db.flush()
+        await AuditWriter(self._db).log(
+            organization_id=organization_id,
+            entity_type="scenario",
+            entity_id=scenario.id,
+            action="scenario.promote",
+            changes={
+                "status": ["draft", "active"],
                 "row_version": [prev_row_version, scenario.row_version],
             },
             user_id=current_user.id,

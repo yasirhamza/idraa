@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.enums import EntityStatus
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunType
 from idraa.repositories.run_repo import RunRepo
@@ -256,7 +257,11 @@ async def build_dashboard(db: AsyncSession, org: Organization) -> DashboardData:
             "probability": float(org.loss_tolerance_probability),
         }
 
-    scenario_count = await scenario_repo.count_for_org(organization_id=org.id)
+    # Epic #34 P1a: DRAFT scenarios are review-pending priors, excluded
+    # from the dashboard's scenario_count until promoted.
+    scenario_count = await scenario_repo.count_for_org(
+        organization_id=org.id, status=EntityStatus.ACTIVE
+    )
 
     # --- Task 3 (#478): posture verdict + budget/coverage aggregates -----
 
