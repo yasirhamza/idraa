@@ -113,11 +113,16 @@ async def test_edit_form_shows_banner_text_without_button(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:
     """SC-N2: edit page warns but carries no confirm button — the analyst
-    there is already in the fix-it flow."""
+    there is already in the fix-it flow. Task 8 follow-up: the non-converted
+    branch stays byte-identical — the vuln-centric instruction is still
+    present and the converted-row variant never renders here."""
     client, org_id = authed_analyst
     s = await _seed_legacy_scenario(db_session, org_id)
     body = (await client.get(f"/scenarios/{s.id}/edit")).text
     assert "Vulnerability needs review" in body
+    assert "Re-enter" in body
+    assert "usually" in body  # "...usually HIGHER than the current value"
+    assert "Frequency baseline needs review" not in body
     assert "confirm-vuln-framing" not in body
 
 
@@ -200,6 +205,31 @@ async def test_non_converted_row_keeps_existing_vuln_banner_copy(
 
     assert "Vulnerability needs review." in body
     assert "Confirm — values are already inherent" in body
+
+
+@pytest.mark.asyncio
+async def test_converted_row_edit_page_shows_frequency_baseline_banner(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Task 8 follow-up (reviewer IMPORTANT): the detail page's Path B routes
+    reviewers to the EDIT page to raise the FREQUENCY — so the edit-page
+    banner on a converted row must be the frequency-baseline variant, never
+    the vuln-centric "Re-enter … usually higher" instruction (wrong for the
+    intentionally-neutral (1,1,1) triple, and any vuln-triple edit auto-flips
+    vuln_framing -> inherent, silently satisfying the confirm gate without a
+    frequency review — the banner must warn against exactly that)."""
+    client, org_id = authed_analyst
+    s = await _seed_converted_scenario(db_session, org_id, name="converted edit row")
+    body = (await client.get(f"/scenarios/{s.id}/edit")).text
+
+    assert "Frequency baseline needs review" in body
+    assert "Threat Event Frequency" in body
+    assert "Leave Vulnerability at its neutral values" in body
+
+    # Exclusivity with the vuln-centric variant.
+    assert "Vulnerability needs review" not in body
+    assert "Re-enter" not in body
+    assert "usually" not in body
     assert "Frequency baseline needs review." not in body
     assert "Confirm — accept frequency baseline" not in body
 
