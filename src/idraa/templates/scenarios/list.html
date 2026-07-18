@@ -23,6 +23,25 @@
   ),
 ) }}
 
+{# Status filter chips (epic #34 P1a, plan-gate Spec-I1). Plain links that
+   set ?status=; the active option is highlighted. Mirrors the source
+   provenance filter precedent in controls/list.html. #}
+{% set status_filters = [
+  {"label": "All",    "value": none,     "href": "/scenarios"},
+  {"label": "Active", "value": "active", "href": "/scenarios?status=active"},
+  {"label": "Draft",  "value": "draft",  "href": "/scenarios?status=draft"},
+] %}
+<div class="flex items-center gap-2 mb-3 text-meta">
+  <span class="text-ink-2">Status:</span>
+  {% for f in status_filters %}
+  <a href="{{ f.href }}"
+     class="px-2 py-0.5 rounded-none border
+            {% if (status_filter.value if status_filter else none) == f.value %}border-brand text-brand font-medium{% else %}border-border-subtle text-ink-2 hover:text-ink-1{% endif %}">
+    {{ f.label }}
+  </a>
+  {% endfor %}
+</div>
+
 {% set columns = [
   {"key": "name",           "label": "Name",           "sortable": True, "priority": "primary"},
   {"key": "threat_category","label": "Threat",          "priority": "secondary"},

@@ -118,7 +118,14 @@ async def test_scenario_view_uses_status_pill(
     authed_admin: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,
 ) -> None:
-    """Scenario view must render status_pill (aria-label with 'control:' prefix)."""
+    """Scenario view must render status_pill (aria-label with 'entity:' prefix).
+
+    Epic #34 P1a: the pill kind was fixed from "control" to "entity" —
+    Scenario.status is an EntityStatus (draft/active/deprecated/deleted),
+    and the "control" map lacks the draft/deprecated/deleted keys, so those
+    values silently fell through to the neutral-grey default instead of
+    their proper colour.
+    """
     from tests.integration._dashboard_fixtures import _make_scenario
 
     client, org_id = authed_admin
@@ -131,7 +138,7 @@ async def test_scenario_view_uses_status_pill(
         pytest.skip("Scenario view route not mounted")
     assert resp.status_code == 200
     body = resp.text
-    assert 'aria-label="control:' in body, "Scenario view should use status_pill"
+    assert 'aria-label="entity:' in body, "Scenario view should use status_pill"
 
 
 # ---------------------------------------------------------------------------

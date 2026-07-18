@@ -66,9 +66,27 @@
      source=EXPERT_JUDGMENT) and the update silently clobbers any
      non-default state (E6.a fix). #}
   <input type="hidden" name="scenario_type" value="{{ scenario.scenario_type.value }}">
+  {# Status is intentionally a hidden mirror, NOT an editable select on
+     edit — status transitions go ONLY through the audited Promote flow on
+     the scenario detail page (epic #34 P1a, plan-gate B-1). #}
   <input type="hidden" name="status" value="{{ scenario.status.value }}">
   <input type="hidden" name="version" value="{{ scenario.version }}">
   <input type="hidden" name="source" value="{{ scenario.source.value }}">
+  {% else %}
+  {# Epic #34 P1a: create-mode status choice. New scenarios may be created
+     as active (default) or draft (pending review); _stamp_new_scenario
+     enforces the same domain server-side. #}
+  <div class="max-w-xs">
+    <div class="flex items-center justify-between">
+      <label for="status" class="text-meta text-ink-2">Status</label>
+    </div>
+    <select id="status" name="status"
+            class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+      <option value="active" {% if form.status != "draft" %}selected{% endif %}>Active</option>
+      <option value="draft" {% if form.status == "draft" %}selected{% endif %}>Draft — pending review</option>
+    </select>
+    <p class="text-micro text-ink-2 mt-1">Draft scenarios are excluded from analyses and dashboard metrics until promoted.</p>
+  </div>
   {% endif %}
 
   {{ form_error_summary(errors_dict) }}
