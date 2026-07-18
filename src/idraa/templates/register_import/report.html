@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/import_preview.html" import preview_table %}
+{% from "macros/data_table.html" import data_table %}
+{% block title %}Register import — report{% endblock %}
+{% block content %}
+
+{{ page_header(
+  title="Import report",
+  breadcrumb=[("Home", "/"), ("Register import", "/register-import"), ("Report", none)]
+) }}
+
+<div class="max-w-5xl mx-auto space-y-8">
+  <div class="alert alert-success">
+    <div>
+      <h2 class="font-semibold">
+        {{ report.created|length }} scenario{{ "s" if report.created|length != 1 else "" }}
+        created from {{ report.source_file }}
+      </h2>
+      <p class="text-sm mt-1">
+        Converted scenarios land as <strong>DRAFTS</strong> with starting
+        priors — never results. Review each one before it counts toward
+        your risk posture.
+      </p>
+    </div>
+  </div>
+
+  <section>
+    <h2 class="text-h3 text-ink-1 mb-2">Created</h2>
+    {{ data_table(
+         created_rows,
+         [
+           {"key": "source_row", "label": "Line", "numeric": True},
+           {"key": "title", "label": "Title", "priority": "primary"},
+         ],
+         row_href_template="/scenarios/{scenario_id}",
+         empty={"title": "No scenarios created", "body": "No rows in this batch were eligible to convert."}
+       ) }}
+  </section>
+
+  <section>
+    <h2 class="text-h3 text-ink-1 mb-2">Parked</h2>
+    <p class="text-meta text-ink-2 mb-2">
+      Counted and reported, never treated as errors. A row parks either
+      because its category was bound to "Parked — out of scope", or because
+      its likelihood or impact cell was blank (nothing to score) — both
+      causes land here.
+    </p>
+    {% if parked_rows %}
+    {{ preview_table(parked_rows, [{"label": "Line", "key": "line", "mono": True}]) }}
+    {% else %}
+    <p class="text-sm text-ink-2">No rows parked.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="text-h3 text-ink-1 mb-2">Skipped (duplicate — reason)</h2>
+    {% if skipped_rows %}
+    {{ preview_table(skipped_rows, [
+         {"label": "Line", "key": "line", "mono": True},
+         {"label": "Title", "key": "title"},
+         {"label": "Reason", "key": "reason"},
+       ]) }}
+    {% else %}
+    <p class="text-sm text-ink-2">No rows skipped.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="text-h3 text-ink-1 mb-2">Errors</h2>
+    {% if error_rows %}
+    {{ preview_table(error_rows, [
+         {"label": "Line", "key": "line", "mono": True},
+         {"label": "Message", "key": "message"},
+       ]) }}
+    {% else %}
+    <p class="text-sm text-ink-2">No row errors.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="text-h3 text-ink-1 mb-2">Mapping versions</h2>
+    <p class="text-meta text-ink-2 mb-2">
+      Frequency/magnitude band versions pinned into each converted scenario's
+      provenance at conversion time.
+    </p>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <h3 class="text-body font-medium text-ink-1 mb-1">Canonical</h3>
+        {% if canonical_version_rows %}
+        {{ preview_table(canonical_version_rows, [
+             {"label": "Band", "key": "band"},
+             {"label": "Version", "key": "version", "mono": True},
+           ]) }}
+        {% else %}
+        <p class="text-sm text-ink-2">No canonical bands recorded.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3 class="text-body font-medium text-ink-1 mb-1">Organization overrides</h3>
+        {% if org_version_rows %}
+        {{ preview_table(org_version_rows, [
+             {"label": "Band", "key": "band"},
+             {"label": "Version", "key": "version", "mono": True},
+           ]) }}
+        {% else %}
+        <p class="text-sm text-ink-2">No organization-specific overrides in play.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+    <h2 class="text-h3 text-ink-1 mb-2">What next</h2>
+    <ol class="list-decimal ml-5 text-body text-ink-1 space-y-1">
+      <li>Review each converted scenario's DRAFT priors.</li>
+      <li>
+        Confirm its frequency baseline — the register likelihood was encoded
+        as the loss-event frequency, and is almost certainly residual
+        (post-controls).
+      </li>
+      <li>Promote it once you're satisfied it reflects the real risk.</li>
+    </ol>
+    <a href="/scenarios?status=draft" class="btn btn-primary btn-sm mt-3">Review draft scenarios</a>
+  </div>
+</div>
+{% endblock %}

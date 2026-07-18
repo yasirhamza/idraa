@@ -82,6 +82,22 @@ def test_action_column_not_duplicated_as_dl_pair_on_mobile() -> None:
     assert '<dt class="text-meta text-ink-2">Action</dt>' not in html
 
 
+def test_parked_and_duplicate_actions_map_to_badge_classes() -> None:
+    """Epic #34 P1c Task 6 (plan-gate Spec-R2-NTH): the register-import
+    preview page classifies rows into would_create/parked/duplicates/errors
+    (service-side bucket names), rendered here under the badge keys
+    create/parked/duplicate/error. ``parked`` and ``duplicate`` are new
+    keys added by this task — assert they resolve to a real badge class
+    rather than falling through to the map's empty-string default."""
+    rows = [
+        {"line": 1, "name": "a", "action": "parked"},
+        {"line": 2, "name": "b", "action": "duplicate"},
+    ]
+    html = _render(rows, _preview_cols(), action_key="action")
+    assert "badge-ghost" in html  # parked
+    assert "badge-warning" in html  # duplicate
+
+
 def test_errors_table_without_action_key_has_no_badge() -> None:
     """The validation-errors table passes no action_key, so no badge renders and
     every column (including the free-text Reason) becomes a card field."""

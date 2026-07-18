@@ -910,3 +910,188 @@ async def test_apply_profile_unknown_profile_404(
         follow_redirects=False,
     )
     assert r.status_code == 404
+
+
+# ===========================================================================
+# Task 6: preview, convert, report
+# ===========================================================================
+
+
+async def _stage_to_preview(
+    client: AsyncClient,
+    *,
+    headers: str = _CSV_HEADERS,
+    rows: list[str] | None = None,
+    column_map: dict[str, str] | None = None,
+    distinct: dict[str, list[str]] | None = None,
+    bindings: dict[str, dict[str, str]] | None = None,
+) -> str:
+    """Drive a fixture all the way through stage -> columns -> bind, and
+    return the resulting preview-step token (Task 6 extends the Task 5
+    `_stage_to_bind` helper one step further)."""
+    token = await _stage_to_bind(client, headers=headers, rows=rows, column_map=column_map)
+    form = _bind_form(
+        distinct if distinct is not None else _DISTINCT,
+        bindings if bindings is not None else _FULL_BINDINGS,
+    )
+    r = await csrf_post(client, f"/register-import/{token}/bind", form, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    assert r.headers["location"] == f"/register-import/{token}/preview"
+    return token
+
+
+def _convert_button(html: str) -> str:
+    m = re.search(r'<button type="submit"[^>]*>[\s\S]*?</button>', html)
+    assert m, html
+    return m.group(0)
+
+
+# ---- RBAC -------------------------------------------------------------
+
+
+async def test_preview_get_analyst_forbidden(analyst_client: AsyncClient) -> None:
+    r = await analyst_client.get(f"/register-import/{_UNKNOWN_TOKEN}/preview")
+    assert r.status_code in (403, 302)
+
+
+async def test_convert_post_analyst_forbidden(analyst_client: AsyncClient) -> None:
+    r = await csrf_post(
+        analyst_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/convert",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code in (403, 302)
+
+
+# ---- expired / unknown token -------------------------------------------
+
+
+async def test_preview_get_unknown_token_expired_409(admin_client: AsyncClient) -> None:
+    r = await admin_client.get(f"/register-import/{_UNKNOWN_TOKEN}/preview")
+    assert r.status_code == 409
+
+
+async def test_convert_post_unknown_token_expired_409(admin_client: AsyncClient) -> None:
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/{_UNKNOWN_TOKEN}/convert",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code == 409
+
+
+# ---- GET preview: counts, badges, sl_note, epistemic callout -----------
+
+
+async def test_preview_get_renders_counts_badges_and_callout(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_preview(admin_client)
+
+    r = await admin_client.get(f"/register-import/{token}/preview")
+    assert r.status_code == 200
+    lowered = r.text.lower()
+
+    # _CSV_ROWS has 2 rows, both fully bound to real categories -> 2
+    # would-create, 0 parked/duplicate/error.
+    assert "2" in r.text  # would-create count rendered somewhere
+    assert "badge-success" in r.text  # would_create -> "create" badge key
+
+    # Epistemic callout (methodology-owned copy — DRAFTS, never results).
+    assert "draft" in lowered
+    assert "never" in lowered
+
+    # sl_note (services.qualitative_converter.SL_NOTE) surfaced verbatim.
+    assert "sl not derivable" in lowered
+
+    # Convert button enabled (would_create > 0).
+    assert "disabled" not in _convert_button(r.text)
+
+
+async def test_preview_get_convert_disabled_at_zero_would_create(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    # Both category values parked -> 0 would-create rows.
+    bindings = {
+        "likelihood": _FULL_BINDINGS["likelihood"],
+        "impact": _FULL_BINDINGS["impact"],
+        "category": {"Malware": _PARK_VALUE, "Phishing": _PARK_VALUE},
+    }
+    token = await _stage_to_preview(admin_client, bindings=bindings)
+
+    r = await admin_client.get(f"/register-import/{token}/preview")
+    assert r.status_code == 200
+    assert "disabled" in _convert_button(r.text)
+    assert "badge-ghost" in r.text  # parked rows -> "parked" badge key
+
+
+async def test_preview_get_before_bind_step_422(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """GET preview on a token that has only reached the column-map step (no
+    /bind POST yet) 422s — preview()'s build_bound_rows requires
+    value_bindings to already be set in state_json."""
+    await _seed_common_bands(db_session)
+    token = await _stage_to_bind(admin_client)
+    r = await admin_client.get(f"/register-import/{token}/preview")
+    assert r.status_code == 422
+
+
+# ---- POST convert: happy path + report content --------------------------
+
+
+async def test_convert_post_happy_path_report_content(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_preview(admin_client)
+
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/convert", {}, follow_redirects=False
+    )
+    assert r.status_code == 200, r.text
+    assert "Phishing risk" in r.text
+    assert "Malware risk" in r.text
+    assert "/scenarios/" in r.text  # created rows link to the scenario detail
+    lowered = r.text.lower()
+    assert "what next" in lowered
+    assert "mapping version" in lowered
+
+
+async def test_convert_post_report_shows_parked_and_skipped_sections(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    bindings = {
+        "likelihood": _FULL_BINDINGS["likelihood"],
+        "impact": _FULL_BINDINGS["impact"],
+        "category": {"Malware": "malware", "Phishing": _PARK_VALUE},
+    }
+    token = await _stage_to_preview(admin_client, bindings=bindings)
+    r = await csrf_post(
+        admin_client, f"/register-import/{token}/convert", {}, follow_redirects=False
+    )
+    assert r.status_code == 200, r.text
+    lowered = r.text.lower()
+    assert "parked" in lowered
+
+
+async def test_convert_post_single_use_second_post_409(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_common_bands(db_session)
+    token = await _stage_to_preview(admin_client)
+
+    r1 = await csrf_post(
+        admin_client, f"/register-import/{token}/convert", {}, follow_redirects=False
+    )
+    assert r1.status_code == 200
+
+    r2 = await csrf_post(
+        admin_client, f"/register-import/{token}/convert", {}, follow_redirects=False
+    )
+    assert r2.status_code == 409

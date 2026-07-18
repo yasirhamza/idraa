@@ -1,8 +1,8 @@
 """Register import routes — staged multi-step upload (admin-only).
 
 Epic #34 P1c Task 4 (upload / sheet-pick / column-map) + Task 5 (value-bind +
-binding profiles). Later tasks in the same PR extend this module with
-preview + convert (Task 6) and converter-aware copy (Task 8).
+binding profiles) + Task 6 (preview / convert / report). Task 8 (later, same
+PR) extends this module with converter-aware copy on the report/view pages.
 
 Flow (full-page 303 redirects threading the opaque ``token`` in the path —
 the app-wide wizard precedent; no HTMX step-nav precedent exists to mirror,
@@ -16,7 +16,7 @@ per the plan's scope-drift log):
     POST /register-import/{token}/columns       set_column_map -> 303 bind
     GET  /register-import/{token}/bind          value-bind form (3 fieldsets)
     POST /register-import/{token}/bind          set_value_bindings (+ optional
-                                                 save_profile) -> 303 preview (Task 6)
+                                                 save_profile) -> 303 preview
     POST /register-import/{token}/apply-profile apply_profile -> 303 bind
                                                  (drift warnings flashed via
                                                  ``?drift=`` query params — this
@@ -27,6 +27,19 @@ per the plan's scope-drift log):
                                                  rides the query string, mirroring
                                                  the existing ``?saved=1`` /
                                                  ``?imported=N`` precedents)
+    GET  /register-import/{token}/preview       dry classification (Task 6):
+                                                 preview() = build_bound_rows +
+                                                 classify_rows, would_create /
+                                                 parked / duplicates / errors
+                                                 rendered via preview_table
+    POST /register-import/{token}/convert       apply() -> 200 report.html
+                                                 directly (not a redirect —
+                                                 the token is deleted the
+                                                 moment this succeeds, so
+                                                 there is no page left to
+                                                 redirect BACK to); re-POST
+                                                 on the same (now-deleted)
+                                                 token 409s (single-use)
 
 RBAC: every route is ``require_role(UserRole.ADMIN)`` (Global Constraints).
 CSRF is enforced by the global CSRFMiddleware on every unsafe method here —
@@ -60,10 +73,11 @@ from idraa.app import templates
 from idraa.errors import NotFoundError, ValidationError
 from idraa.models.enums import ThreatCategory, UserRole
 from idraa.models.user import User
-from idraa.routes.deps import MAX_UPLOAD_BYTES, get_db, require_role
+from idraa.routes.deps import MAX_UPLOAD_BYTES, client_ip, get_db, require_role
 from idraa.routes.scenario_form_helpers import THREAT_CATEGORY_CHOICES
 from idraa.services.flash import build_flash
 from idraa.services.qualitative_bands import EffectiveBand, QualitativeBandService
+from idraa.services.qualitative_converter import SL_NOTE, ClassifiedRows, ConversionReport
 from idraa.services.register_import import (
     PreviewExpiredError,
     RegisterImportService,
@@ -610,3 +624,128 @@ async def register_import_apply_profile_post(
     if warnings:
         location = f"{location}?{urlencode([('drift', w) for w in warnings])}"
     return RedirectResponse(location, status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---- step 5: preview + convert (Task 6) -------------------------------
+
+
+def _classification_rows(classified: ClassifiedRows) -> list[dict[str, object]]:
+    """Flatten a :class:`ClassifiedRows` into ``preview_table`` rows, one per
+    source row across all four buckets, sorted by the file's own row order.
+
+    Vocabulary glossary (plan Task 6 amendment, Spec-R2-NTH): the service's
+    bucket names (``would_create``/``parked``/``duplicates``/``errors``)
+    render here under the badge keys ``create``/``parked``/``duplicate``/
+    ``error`` that ``macros/import_preview.html``'s ``_action_badge`` style
+    map understands.
+    """
+    rows: list[dict[str, object]] = []
+    for row in classified.would_create:
+        rows.append({"line": row.source_row, "title": row.title, "note": "", "action": "create"})
+    for source_row in classified.parked:
+        rows.append({"line": source_row, "title": "", "note": "", "action": "parked"})
+    for dup in classified.duplicates:
+        rows.append(
+            {
+                "line": dup.source_row,
+                "title": dup.title,
+                "note": f"duplicate — {dup.reason}",
+                "action": "duplicate",
+            }
+        )
+    for err in classified.errors:
+        rows.append({"line": err.source_row, "title": "", "note": err.message, "action": "error"})
+    rows.sort(key=lambda r: r["line"])  # type: ignore[arg-type,return-value]
+    return rows
+
+
+def _mapping_version_rows(versions: dict[str, object], layer: str) -> list[dict[str, object]]:
+    """``{"kind:label": version, ...}`` -> sorted ``preview_table`` rows for
+    one ``mapping_versions()`` layer ("canonical" | "org")."""
+    layer_versions = versions.get(layer)
+    if not isinstance(layer_versions, dict):
+        return []
+    return [{"band": band, "version": version} for band, version in sorted(layer_versions.items())]
+
+
+@router.get("/register-import/{token}/preview", response_class=HTMLResponse)
+async def register_import_preview_get(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Response:
+    svc = RegisterImportService(db)
+    try:
+        preview_row = await svc.get_staged(organization_id=user.organization_id, token=token)
+        classified = await svc.preview(organization_id=user.organization_id, token=token)
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    filename = (preview_row.state_json or {}).get("filename")
+    return templates.TemplateResponse(
+        request,
+        "register_import/preview.html",
+        {
+            "current_user": user,
+            "flash": None,
+            "token": token,
+            "filename": filename,
+            "rows": _classification_rows(classified),
+            "would_create_count": len(classified.would_create),
+            "parked_count": len(classified.parked),
+            "duplicate_count": len(classified.duplicates),
+            "error_count": len(classified.errors),
+            "sl_note": SL_NOTE,
+        },
+    )
+
+
+@router.post("/register-import/{token}/convert")
+async def register_import_convert_post(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Response:
+    svc = RegisterImportService(db)
+    try:
+        report: ConversionReport = await svc.apply(
+            organization_id=user.organization_id,
+            user=user,
+            token=token,
+            ip_address=client_ip(request),
+        )
+    except PreviewExpiredError as exc:
+        return _expired_response(request, user, exc)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    created_rows = [
+        {"scenario_id": str(c.scenario_id), "source_row": c.source_row, "title": c.title}
+        for c in report.created
+    ]
+    parked_rows = [{"line": n} for n in report.parked]
+    skipped_rows = [
+        {"line": d.source_row, "title": d.title, "reason": f"duplicate — {d.reason}"}
+        for d in report.skipped_duplicates
+    ]
+    error_rows = [{"line": e.source_row, "message": e.message} for e in report.errors]
+
+    return templates.TemplateResponse(
+        request,
+        "register_import/report.html",
+        {
+            "current_user": user,
+            "flash": None,
+            "report": report,
+            "created_rows": created_rows,
+            "parked_rows": parked_rows,
+            "skipped_rows": skipped_rows,
+            "error_rows": error_rows,
+            "canonical_version_rows": _mapping_version_rows(report.mapping_versions, "canonical"),
+            "org_version_rows": _mapping_version_rows(report.mapping_versions, "org"),
+        },
+    )

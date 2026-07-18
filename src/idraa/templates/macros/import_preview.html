@@ -15,10 +15,15 @@
                 mono:  bool optional  — font-mono (numbers / codes); default off
                 align: 'right' optional — right-align the desktop cell; default left
      action_key: str optional — the column key whose value is an import action
-                (create / add / update / skip / error). That cell renders as a
-                DaisyUI badge, and on mobile it is pulled to the card's top-right
-                as the row's visual anchor. Omit for tables with no action column
-                (e.g. the validation-errors table).
+                (create / add / update / skip / parked / duplicate / error).
+                That cell renders as a DaisyUI badge, and on mobile it is
+                pulled to the card's top-right as the row's visual anchor.
+                Omit for tables with no action column (e.g. the
+                validation-errors table). ``parked``/``duplicate`` (epic #34
+                P1c Task 6) are the register-import preview page's
+                classification badges — vocabulary glossary: the service's
+                would_create/parked/duplicates/errors buckets render here
+                under create/parked/duplicate/error.
 
    Row contract: rows are plain dicts. Jinja subscript returns Undefined for a
    missing key, so `row[c.key]|default('')` is safe for optional columns. The
@@ -31,6 +36,8 @@
         'add': 'badge-success',
         'update': 'badge-info',
         'skip': 'badge-ghost',
+        'parked': 'badge-ghost',
+        'duplicate': 'badge-warning',
         'error': 'badge-error',
       } -%}
   <span class="badge badge-sm {{ _styles.get(action|string, '') }}">{{ action }}</span>
