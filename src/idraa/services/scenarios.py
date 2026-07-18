@@ -565,11 +565,25 @@ class ScenarioService:
         scenario.vuln_framing = "inherent"
         scenario.row_version = prev_row_version + 1
         await self._db.flush()
+        # Epic #34 P1b Task 5b (spec §3 Meth-I1): a converted register row's
+        # vulnerability is a fixed neutral pass-through — the genuine
+        # epistemic act being confirmed here is acceptance of the FREQUENCY
+        # baseline (the register-likelihood-derived LEF band), not a review
+        # of stored vulnerability values. The mechanics (flag, confirm flip)
+        # are reused verbatim from the F2 flow; only the recorded audit
+        # action differs, so a converted row's confirm history is never
+        # misread as "vulnerability values were reviewed". Non-converted
+        # scenarios keep the original action string unchanged.
+        action = (
+            "scenario.confirm_frequency_baseline"
+            if scenario.source == ScenarioSource.QUALITATIVE_REGISTER_IMPORT
+            else "scenario.confirm_vuln_framing"
+        )
         await AuditWriter(self._db).log(
             organization_id=organization_id,
             entity_type="scenario",
             entity_id=scenario.id,
-            action="scenario.confirm_vuln_framing",
+            action=action,
             changes={
                 "vuln_framing": ["legacy_residual", "inherent"],
                 "row_version": [prev_row_version, scenario.row_version],

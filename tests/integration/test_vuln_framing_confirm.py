@@ -177,6 +177,104 @@ async def test_confirm_is_idempotent_no_second_audit(
 
 
 @pytest.mark.asyncio
+async def test_confirm_converted_scenario_writes_frequency_baseline_action(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Task 5b (spec §3 Meth-I1): a converted register row's confirm writes
+    the converter-aware audit action — the epistemic act is acceptance of
+    the frequency baseline, not a review of (neutral, pass-through)
+    vulnerability values."""
+    from idraa.models.enums import ScenarioSource
+
+    client, org_id = authed_analyst
+    s = await _seed_legacy_scenario(db_session, org_id, name="converted register row")
+    s.source = ScenarioSource.QUALITATIVE_REGISTER_IMPORT
+    s.conversion_metadata = {
+        "source_file": "register.xlsx",
+        "source_row": 1,
+        "raw": {"likelihood": "Likely", "impact": "High", "category": "Phishing"},
+        "bindings": {
+            "likelihood_label": "moderate",
+            "magnitude_label": "high",
+            "category": "social_engineering",
+        },
+        "mapping_versions": {"canonical": 1, "org": {}},
+        "binding_profile_id": None,
+        "converted_at": "2026-07-18T00:00:00+00:00",
+    }
+    await db_session.commit()
+
+    r = await csrf_post(
+        client, f"/scenarios/{s.id}/confirm-vuln-framing", {}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    await db_session.refresh(s)
+    assert s.vuln_framing == "inherent"
+
+    freq_baseline_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "scenario.confirm_frequency_baseline",
+                    AuditLog.entity_id == s.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(freq_baseline_rows) == 1
+    assert freq_baseline_rows[0].changes["vuln_framing"] == ["legacy_residual", "inherent"]
+
+    old_action_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "scenario.confirm_vuln_framing",
+                    AuditLog.entity_id == s.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert old_action_rows == []
+
+
+@pytest.mark.asyncio
+async def test_confirm_non_converted_scenario_keeps_original_action(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Non-converted scenarios (default EXPERT_JUDGMENT source, or any
+    other non-QUALITATIVE_REGISTER_IMPORT source) are unaffected by Task 5b —
+    same action string as before."""
+    client, org_id = authed_analyst
+    s = await _seed_legacy_scenario(db_session, org_id, name="ordinary scenario")
+    await db_session.commit()
+
+    r = await csrf_post(
+        client, f"/scenarios/{s.id}/confirm-vuln-framing", {}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    await db_session.refresh(s)
+    assert s.vuln_framing == "inherent"
+
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "scenario.confirm_vuln_framing",
+                    AuditLog.entity_id == s.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
 async def test_confirm_reviewer_forbidden(
     authed_reviewer: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:
