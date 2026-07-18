@@ -69,8 +69,9 @@ use of "the names, labels, etc." contained in the specification):
   Translating Quantitative Values to Qualitative Labels") — Severe > $10M, High
   $1M–$10M, Moderate $100K–$1M, Low $10K–$100K, Very Low < $10K. Our canonical
   magnitude bands adopt exactly these log-decade edges, closing the two open ends
-  ($1K floor, $1B cap — both documented v3 choices; cap aligns with the library's
-  catastrophic ceiling). Two honest caveats recorded in `derivation`: (a) O-RA
+  ($1K floor, $1B cap — both documented v3 choices; the cap sits at the order of
+  magnitude of the heaviest catastrophic-entry tails, ≈p99.9 of their uncapped
+  lognormals — the catastrophic class itself is deliberately unbounded). Two honest caveats recorded in `derivation`: (a) O-RA
   presents Table 1 as an *example* scale that "should be guided by scales that
   have been approved by management" — which is precisely what the org override
   layer implements; (b) O-RA's direction of use is output-translation
@@ -117,8 +118,10 @@ Magnitude bands (USD), same rule:
 | high | 1,000,000 | 3,200,000 | 10,000,000 |
 | very_high | 10,000,000 | 100,000,000 | 1,000,000,000 |
 
-Top band mode = √(10M·1B) ≈ $100M; cap $1B aligns with the library's catastrophic
-envelope ceiling. Orgs whose loss capacity differs express it through the org layer
+Top band mode = √(10M·1B) ≈ $100M; the $1B cap sits at the order of magnitude of
+the heaviest catastrophic-entry tails (≈p99.9 of their uncapped lognormals — the
+catastrophic class itself is unbounded; P1b's methodology re-gate revisits before
+the band table becomes code). Orgs whose loss capacity differs express it through the org layer
 (that IS the evaluator workshop-calibration step), not a revenue multiplier.
 
 Canonical label slugs stay symmetric across both kinds (`very_low … very_high`);
@@ -194,9 +197,10 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## 4. DRAFT workflow (P1a)
 
-- **Exclusion is implemented once, centrally**: the scenario listing/selection query
-  layer gains an explicit `include_drafts` (default False); consumers that must
-  exclude drafts — single-run creation selector, AGGREGATE selection, dashboard
+- **Exclusion is per-consumer with a totality tripwire** (P1a shipped it this way;
+  the originally-prescribed central `include_drafts` chokepoint does not exist in
+  the codebase — acknowledged deviation Spec-I4, recorded in the P1a plan header;
+  equivalent guarantee): consumers that must exclude drafts — single-run creation selector, AGGREGATE selection, dashboard
   posture/coverage, PDF/portfolio reports, run executor guard (defense in depth:
   refuse to execute a DRAFT scenario) — all go through it. Scenario list UI shows
   drafts with a DRAFT badge + filter chip (visibility is the point of review).

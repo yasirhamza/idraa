@@ -35,7 +35,7 @@
 - Consumes: `ScenarioRepo.get_for_org_or_raise` / `fetch_by_ids_for_org` (existing, unchanged).
 - Produces: `RunValidationError("scenario '<name>' is a draft — promote it before running an analysis")` raised from `create_and_dispatch` for ANY non-ACTIVE scenario in `scenario_ids`. Task 2's picker and Task 4's contract test rely on this being the authoritative gate.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """tests/integration/test_draft_workflow.py — epic #34 P1a.
@@ -78,9 +78,9 @@ async def test_run_create_rejects_mixed_active_and_draft(authed_analyst, db_sess
     assert r.status_code == 422
 ```
 
-- [ ] **Step 2: Run to verify both FAIL** — `uv run pytest tests/integration/test_draft_workflow.py -q` (expect 200/303-shaped success today, i.e. assertion failures).
+- [x] **Step 2: Run to verify both FAIL** — `uv run pytest tests/integration/test_draft_workflow.py -q` (expect 200/303-shaped success today, i.e. assertion failures).
 
-- [ ] **Step 3: Implement the gate.** In `services/runs.py::create_and_dispatch`, immediately after `scenarios` is populated (both branches):
+- [x] **Step 3: Implement the gate.** In `services/runs.py::create_and_dispatch`, immediately after `scenarios` is populated (both branches):
 
 ```python
         # Epic #34 P1a: DRAFT scenarios are review-pending priors — never
@@ -107,9 +107,9 @@ In `services/run_executor.py`, add ONE defense-in-depth guard AFTER BOTH branche
 
 (`ValueError` is deliberate: the guard sits inside the executor try at ~L1818 whose `except Exception` at ~L2512 terminalizes the run to FAILED with `error_message` + audit — verified failure path, no stuck RUNNING rows.)
 
-- [ ] **Step 4: Run tests to verify both PASS**, plus `uv run pytest tests/integration/test_run_routes.py tests/services/test_runs*.py -q` for regressions.
+- [x] **Step 4: Run tests to verify both PASS**, plus `uv run pytest tests/integration/test_run_routes.py tests/services/test_runs*.py -q` for regressions.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(runs): server-side DRAFT scenario gate at run creation (epic #34 P1a)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(runs): server-side DRAFT scenario gate at run creation (epic #34 P1a)"`
 
 ### Task 2: Picker, dashboard, and coverage exclusions
 
@@ -123,7 +123,7 @@ In `services/run_executor.py`, add ONE defense-in-depth guard AFTER BOTH branche
 - Consumes: `EntityStatus`, existing repo methods.
 - Produces: `list_pinned_library_entry_ids_for_org(organization_id, *, statuses: tuple[EntityStatus, ...] = (EntityStatus.ACTIVE,))` — dashboard/coverage callers use the default; pass explicitly if other statuses are ever wanted.
 
-- [ ] **Step 1: Failing tests** (append):
+- [x] **Step 1: Failing tests** (append):
 
 ```python
 @pytest.mark.asyncio
@@ -153,13 +153,13 @@ async def test_dashboard_counts_exclude_drafts(authed_analyst, db_session: Async
 
 Plus a template-level dashboard assertion if `build_dashboard` is cheaply invokable in tests — read `tests/` for an existing dashboard test to extend (`grep -rl build_dashboard tests/`) and add the ACTIVE-only count assertion there.
 
-- [ ] **Step 2: Verify failure** (picker test fails; count test fails only if dashboard still counts all — the repo-level call with `status=` already works, so the load-bearing edits are the call sites).
+- [x] **Step 2: Verify failure** (picker test fails; count test fails only if dashboard still counts all — the repo-level call with `status=` already works, so the load-bearing edits are the call sites).
 
-- [ ] **Step 3: Implement** — picker: add `.where(Scenario.status == EntityStatus.ACTIVE)` to the `_scenario_stmt` in `get_new_analysis_form`; dashboard: `count_for_org(organization_id=org.id, status=EntityStatus.ACTIVE)`; repo: add `statuses` keyword (default `(EntityStatus.ACTIVE,)`) to `list_pinned_library_entry_ids_for_org` with `.where(Scenario.status.in_(statuses))`. Grep `list_pinned_library_entry_ids_for_org` callers and leave non-dashboard callers (if any) on explicit previous behavior only if a test proves they need drafts — default them to ACTIVE otherwise.
+- [x] **Step 3: Implement** — picker: add `.where(Scenario.status == EntityStatus.ACTIVE)` to the `_scenario_stmt` in `get_new_analysis_form`; dashboard: `count_for_org(organization_id=org.id, status=EntityStatus.ACTIVE)`; repo: add `statuses` keyword (default `(EntityStatus.ACTIVE,)`) to `list_pinned_library_entry_ids_for_org` with `.where(Scenario.status.in_(statuses))`. Grep `list_pinned_library_entry_ids_for_org` callers and leave non-dashboard callers (if any) on explicit previous behavior only if a test proves they need drafts — default them to ACTIVE otherwise.
 
-- [ ] **Step 4: Run** new tests + `uv run pytest tests/integration/test_dashboard* tests/services/test_dashboard* -q`.
+- [x] **Step 4: Run** new tests + `uv run pytest tests/integration/test_dashboard* tests/services/test_dashboard* -q`.
 
-- [ ] **Step 5: Commit** — `feat(dashboard): exclude DRAFT scenarios from picker, counts, coverage (epic #34 P1a)`
+- [x] **Step 5: Commit** — `feat(dashboard): exclude DRAFT scenarios from picker, counts, coverage (epic #34 P1a)`
 
 ### Task 3: Promote flow + UI
 
@@ -175,7 +175,7 @@ Plus a template-level dashboard assertion if `build_dashboard` is cheaply invoka
 **Interfaces:**
 - Produces: `ScenarioService.promote(*, organization_id: uuid.UUID, scenario_id: uuid.UUID, current_user: User, ip_address: str | None = None) -> Scenario`; route `POST /scenarios/{scenario_id}/promote` (ANALYST/ADMIN, 303 → `/scenarios/{id}`). Audit action string: `"scenario.promote"`.
 
-- [ ] **Step 1: Failing tests** (append):
+- [x] **Step 1: Failing tests** (append):
 
 ```python
 @pytest.mark.asyncio
@@ -227,9 +227,9 @@ async def test_promote_forbidden_for_reviewer(authed_reviewer, db_session: Async
     assert r.status_code == 403
 ```
 
-- [ ] **Step 2: Verify all FAIL** (404 on the missing route).
+- [x] **Step 2: Verify all FAIL** (404 on the missing route).
 
-- [ ] **Step 3: Implement.** Service (mirror `confirm_vuln_framing` exactly — lock=True read, NotFoundError, idempotent return, row_version bump, flush, audit):
+- [x] **Step 3: Implement.** Service (mirror `confirm_vuln_framing` exactly — lock=True read, NotFoundError, idempotent return, row_version bump, flush, audit):
 
 ```python
     async def promote(
@@ -377,9 +377,9 @@ async def test_scenario_list_has_draft_filter_chip(authed_analyst, db_session: A
 
 (`_valid_update_payload_for` is a tiny local helper the implementer builds from the existing test's payload dict; the create-as-draft body is payload reuse from the named test, not a design placeholder.)
 
-- [ ] **Step 4: Run** all of `tests/integration/test_draft_workflow.py` + `tests/integration/test_scenario_routes.py -q`.
+- [x] **Step 4: Run** all of `tests/integration/test_draft_workflow.py` + `tests/integration/test_scenario_routes.py -q`.
 
-- [ ] **Step 5: Commit** — `feat(scenarios): DRAFT promote flow with audit + banner (epic #34 P1a)`
+- [x] **Step 5: Commit** — `feat(scenarios): DRAFT promote flow with audit + banner (epic #34 P1a)`
 
 ### Task 4: Exclusion-totality contract test + gate
 
@@ -389,7 +389,7 @@ async def test_scenario_list_has_draft_filter_chip(authed_analyst, db_session: A
 
 **Interfaces:** consumes nothing new; freezes Tasks 1-2.
 
-- [ ] **Step 1: Write the sweep test** — every `select(Scenario` / `ScenarioRepo` query site in `src/idraa/` must be in the audited allowlist, so any FUTURE query surface fails CI until someone decides draft-inclusion explicitly:
+- [x] **Step 1: Write the sweep test** — every `select(Scenario` / `ScenarioRepo` query site in `src/idraa/` must be in the audited allowlist, so any FUTURE query surface fails CI until someone decides draft-inclusion explicitly:
 
 ```python
 """Draft-exclusion totality tripwire (epic #34 P1a, spec §4).
@@ -452,11 +452,11 @@ def test_audited_files_still_query_scenarios() -> None:
     assert not stale, f"stale AUDITED entries (file gone or no longer queries Scenario): {stale}"
 ```
 
-- [ ] **Step 2: Run it** — as of plan-gate round 2 the broadened regex matches EXACTLY the 10 files in the seed map (verified against the tree), so expect green-or-near-green; if the tree drifted, reconcile any surfaced file by READING and classifying it with one of the three decision values, not by blind-adding.
+- [x] **Step 2: Run it** — as of plan-gate round 2 the broadened regex matches EXACTLY the 10 files in the seed map (verified against the tree), so expect green-or-near-green; if the tree drifted, reconcile any surfaced file by READING and classifying it with one of the three decision values, not by blind-adding.
 
-- [ ] **Step 3: Make it pass**, then run the FULL gate foreground: `uv run python scripts/run_local_gate.py` — all steps green.
+- [x] **Step 3: Make it pass**, then run the FULL gate foreground: `uv run python scripts/run_local_gate.py` — all steps green.
 
-- [ ] **Step 4: Commit** — `test(arch): draft-exclusion totality sweep (epic #34 P1a)`
+- [x] **Step 4: Commit** — `test(arch): draft-exclusion totality sweep (epic #34 P1a)`
 
 ---
 
