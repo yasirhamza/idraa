@@ -48,6 +48,7 @@ from idraa.models.control import Control
 from idraa.models.enums import (
     SUB_FUNCTION_UNITS,
     ControlDomain,
+    EntityStatus,
     ScenarioEffect,
     subfunction_to_domain,
 )
@@ -1883,6 +1884,13 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         return
                     _fair_params = _scenario_to_fair_parameters(_scenario)
                     per_scenario_inputs.append((str(_scenario.id), _scenario.name, _fair_params))
+
+            # Epic #34 P1a defense-in-depth: the create-time gate is authoritative;
+            # this guard only fires if a future path enqueues a run for a draft.
+            if any(s.status != EntityStatus.ACTIVE for s in scenarios):
+                raise ValueError(
+                    "run references a non-ACTIVE scenario (draft?) — refusing to execute"
+                )
 
             if not await _check_cancelled_or_continue(session, run_id):
                 return

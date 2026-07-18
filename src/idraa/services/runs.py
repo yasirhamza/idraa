@@ -29,6 +29,7 @@ from idraa.errors import (
     ScenarioNotFoundError,
 )
 from idraa.models._types import now_utc
+from idraa.models.enums import EntityStatus
 from idraa.models.risk_analysis_run import (
     RiskAnalysisRun,
     RunStatus,
@@ -117,6 +118,16 @@ class RunService:
             missing = [sid for sid in scenario_ids if sid not in fetched_ids]
             if missing:
                 raise ScenarioNotFoundError(f"scenario_ids not found in org: {missing}")
+
+        # Epic #34 P1a: DRAFT scenarios are review-pending priors — never
+        # runnable. Server-side gate; the /analyses/new picker filter is
+        # convenience only and trivially bypassed.
+        non_active = [s for s in scenarios if s.status != EntityStatus.ACTIVE]
+        if non_active:
+            names = ", ".join(sorted(s.name for s in non_active))
+            raise RunValidationError(
+                f"scenario '{names}' is a draft — promote it before running an analysis"
+            )
 
         # PR π: explicit mc_iterations is required; the Scenario.mc_iterations
         # fallback was retired (Scenario default removed in F14). The DoS guard
