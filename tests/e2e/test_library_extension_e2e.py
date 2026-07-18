@@ -52,6 +52,8 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 # The 3 ot_integrity entries (from data/seed_library_entries_extension.json) and
 # a non-matching ransomware entry name — used by the filter assertions.
 _OT_INTEGRITY_NAME = "Manipulation-of-View"  # process-view-manipulation
@@ -204,7 +206,7 @@ async def test_user_browses_filters_ot_integrity_and_opens_detail(
             )
         context = await browser.new_context()
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # 1. Bootstrap first admin + login.
         await _bootstrap_admin_and_login(page, base)
@@ -276,7 +278,7 @@ async def test_wizard_offers_ot_integrity_threat_category(
             )
         context = await browser.new_context()
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         await _bootstrap_admin_and_login(page, base)
 

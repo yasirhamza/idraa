@@ -51,6 +51,8 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 # A NEW slug/name that does NOT collide with any seeded entry — so the import
 # resolves to exactly one "add" (not a "skip"). The name is distinctive so the
 # /library search filter (?q=) isolates it for the badge assertion.
@@ -237,7 +239,7 @@ async def test_admin_exports_then_imports_bundle_and_sees_imported_badge(
             )
         context = await browser.new_context()
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # 1. Bootstrap first admin + login.
         await _bootstrap_admin_and_login(page, base)

@@ -52,6 +52,8 @@ import httpx
 import openpyxl
 import pytest
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -210,7 +212,7 @@ async def test_register_import_journey_upload_to_report(migrated_server_url: str
         # (Global Constraints: wrapped in only_on_md() like library_overrides).
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # 1. Bootstrap first admin + login.
         await _bootstrap_admin_and_login(page, base)

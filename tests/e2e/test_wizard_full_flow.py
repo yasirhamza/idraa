@@ -28,6 +28,8 @@ from typing import Any
 import pytest
 from playwright.async_api import async_playwright, expect
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
@@ -54,7 +56,7 @@ async def test_wizard_full_flow_creates_scenario(
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # seed_user_login_e2e is an async callable: await seed_user_login_e2e(page)
         # Phase 1.5b: implement as real login helper.

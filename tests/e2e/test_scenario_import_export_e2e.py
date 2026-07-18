@@ -34,6 +34,8 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+from tests.e2e.conftest import E2E_TIMEOUT_MS
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -174,7 +176,7 @@ async def test_scenario_import_export_round_trip(migrated_server_url: str) -> No
             )
         context = await browser.new_context()
         page = await context.new_page()
-        page.set_default_timeout(15_000)
+        page.set_default_timeout(E2E_TIMEOUT_MS)
 
         # 1. Bootstrap first admin + login.
         await _bootstrap_admin_and_login(page, base)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import socket
 import subprocess
 import sys
@@ -11,6 +12,11 @@ from typing import Any
 
 import httpx
 import pytest
+
+# Shared-runner CI boxes are slow enough that chart hydration / JS-driven UI
+# intermittently exceeds 15s (test_curve_hover_tooltip flaked 3x with zero code
+# cause). CI gets headroom; local stays tight so genuine hangs surface fast.
+E2E_TIMEOUT_MS = 45_000 if os.environ.get("CI") else 15_000
 
 
 def _free_port() -> int:
