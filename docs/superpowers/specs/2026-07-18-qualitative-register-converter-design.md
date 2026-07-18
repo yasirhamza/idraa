@@ -190,7 +190,7 @@ Per register row, after binding:
 - `name` = register title (dedup per §3.1); `description` = register description +
   a "Register provenance" block (owner, raw likelihood/impact/category values, any
   unmapped columns the user chose to carry, source file + row number).
-- `source` = new `ScenarioSource.QUALITATIVE_CONVERTED`.
+- `source` = new `ScenarioSource.QUALITATIVE_REGISTER_IMPORT`.
 - `conversion_metadata` (new nullable JSON on Scenario, validated by a Pydantic
   model): `{source_file, source_row, raw: {likelihood, impact, category}, bindings:
   {likelihood_label, magnitude_label, category}, mapping_versions: {canonical, org},
@@ -297,6 +297,9 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## Scope drift log
 
+- 2026-07-18 (P1b): `ScenarioSource` member is `QUALITATIVE_REGISTER_IMPORT`, not
+  the earlier `QUALITATIVE_CONVERTED` — the enum's own anticipatory placeholder
+  (models/enums.py) predates this spec and governs (PR-gate Spec-I).
 - 2026-07-18 (P1b execution): Task 3 confirmed the PRIMARY neutral-vuln encoding
   (1.0, 1.0, 1.0) — fair_cam's low==high point-mass short-circuit; the 0.99
   fallback was NOT needed. Converter-aware confirm COPY deferred to P1c (audit

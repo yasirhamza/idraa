@@ -352,7 +352,7 @@ class QualitativeConverterService:
                 }
 
                 form = ScenarioForm(
-                    name=row.title,
+                    name=row.title.strip(),
                     description=_compose_description(row, source_file=source_file),
                     scenario_type=ScenarioType.CUSTOM,
                     threat_category=row.category.value,

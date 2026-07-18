@@ -43,7 +43,7 @@
 - `Scenario.conversion_metadata: dict | None` (JSON, nullable).
 - `data/seed_qualitative_bands.json`: 10 objects `{kind, label, low, mode, high, sort_order, derivation}` — values copied EXACTLY from spec §2.2's two tables; `derivation` strings must state: geometric-midpoint rule; for magnitude — O-RA Table 1 §6.6 p.33 edge citation + label correspondence + $1K/$1B closure rationale (p99.9-of-catastrophic-tails wording per spec); for frequency — "v3 log-decade convention by analogy with O-RA Table 1; O-RA publishes no frequency scale" + 250/yr cap rationale.
 
-- [ ] **Step 1: failing model test** — `tests/unit/test_qualitative_mapping_models.py`:
+- [x] **Step 1: failing model test** — `tests/unit/test_qualitative_mapping_models.py`:
 
 ```python
 """Model-shape tests for the qualitative mapping band layer (epic #34 P1b)."""
@@ -72,13 +72,13 @@ async def test_band_tables_roundtrip(db_session):
 
 (plus an OrgBand roundtrip test asserting `organization_id`/`reason`/`deleted_at` columns exist — same shape, seeded org via existing factories.)
 
-- [ ] **Step 2: run, verify ImportError.**
-- [ ] **Step 3: implement models** (mirror `scenario_library.py` column style exactly — `Mapped[...]`/`mapped_column`, `native_enum=False` not needed since `kind` is `str`); enum member replacing the placeholder comment; `conversion_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)` on Scenario; exports.
-- [ ] **Step 4: migration** — `uv run alembic revision --autogenerate -m "qualitative mapping bands"` then EDIT: verify both `create_table`s + `add_column` for scenarios; append the seed phase: load `data/seed_qualitative_bands.json` via `seed_qualitative_bands_loader.load_validated_bands()` (Pydantic `BandSeed`: `kind: Literal["frequency","magnitude"]`, `label: str` pattern `^[a-z_]+$`, `low/mode/high: float` with `@model_validator` asserting `0 <= low <= mode <= high` and `low < high`, `sort_order: int`, `derivation: str min_length=40`, `extra="forbid"`), inserting per-row via `sa.text` with `"id": uuid.uuid4().hex`. Downgrade: drop both tables + `drop_column`. Path anchor: `Path(idraa.__file__).resolve().parent.parent.parent / "data" / ...` (the loader owns this, migration imports the loader).
-- [ ] **Step 5: write the 10-row seed JSON from spec §2.2** (both tables verbatim; floats: use `0.01, 0.032, 0.1` etc. (M1-corrected 2sf modes), magnitude as integers-as-numbers `1000 … 1000000000`).
-- [ ] **Step 6: field_sync allowlist** — add `conversion_metadata` to `[tool.idraa.contracts.field_sync.scenario] allowlist` (it is ORM-only; the form never carries it — the converter writes it directly).
-- [ ] **Step 7: migrate a scratch DB + run tests + snapshot regen** — `uv run alembic upgrade head` (against the dev DB per project convention), `uv run pytest tests/unit/test_qualitative_mapping_models.py tests/contracts/ -q`; run `--snapshot-update` ONLY for `test_schema_snapshots.py`, inspect the diff (expected: Scenario gains conversion_metadata; two new ORM snapshots), include it.
-- [ ] **Step 8: Commit** — `feat(models): qualitative mapping bands + conversion metadata (epic #34 P1b)`
+- [x] **Step 2: run, verify ImportError.**
+- [x] **Step 3: implement models** (mirror `scenario_library.py` column style exactly — `Mapped[...]`/`mapped_column`, `native_enum=False` not needed since `kind` is `str`); enum member replacing the placeholder comment; `conversion_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)` on Scenario; exports.
+- [x] **Step 4: migration** — `uv run alembic revision --autogenerate -m "qualitative mapping bands"` then EDIT: verify both `create_table`s + `add_column` for scenarios; append the seed phase: load `data/seed_qualitative_bands.json` via `seed_qualitative_bands_loader.load_validated_bands()` (Pydantic `BandSeed`: `kind: Literal["frequency","magnitude"]`, `label: str` pattern `^[a-z_]+$`, `low/mode/high: float` with `@model_validator` asserting `0 <= low <= mode <= high` and `low < high`, `sort_order: int`, `derivation: str min_length=40`, `extra="forbid"`), inserting per-row via `sa.text` with `"id": uuid.uuid4().hex`. Downgrade: drop both tables + `drop_column`. Path anchor: `Path(idraa.__file__).resolve().parent.parent.parent / "data" / ...` (the loader owns this, migration imports the loader).
+- [x] **Step 5: write the 10-row seed JSON from spec §2.2** (both tables verbatim; floats: use `0.01, 0.032, 0.1` etc. (M1-corrected 2sf modes), magnitude as integers-as-numbers `1000 … 1000000000`).
+- [x] **Step 6: field_sync allowlist** — add `conversion_metadata` to `[tool.idraa.contracts.field_sync.scenario] allowlist` (it is ORM-only; the form never carries it — the converter writes it directly).
+- [x] **Step 7: migrate a scratch DB + run tests + snapshot regen** — `uv run alembic upgrade head` (against the dev DB per project convention), `uv run pytest tests/unit/test_qualitative_mapping_models.py tests/contracts/ -q`; run `--snapshot-update` ONLY for `test_schema_snapshots.py`, inspect the diff (expected: Scenario gains conversion_metadata; two new ORM snapshots), include it.
+- [x] **Step 8: Commit** — `feat(models): qualitative mapping bands + conversion metadata (epic #34 P1b)`
 
 ### Task 2: Canonical pinning tests
 
@@ -86,7 +86,7 @@ async def test_band_tables_roundtrip(db_session):
 
 Mirrors `test_seed_recuration.py` style: read `data/seed_qualitative_bands.json` directly and pin EVERY value:
 
-- [ ] **Step 1: write pins** —
+- [x] **Step 1: write pins** —
 
 ```python
 """Pin canonical qualitative band values to spec §2.2 (methodology-gated).
@@ -165,15 +165,15 @@ def test_derivations_carry_provenance():
 
 (Note: the 2sf tolerance is loose on purpose for `very_high` magnitude where mode=1e8 vs gm≈1e8 exactly; the exact-value pins above are the real guard — this test documents the RULE.)
 
-- [ ] **Step 2-3: run (pass immediately if Task 1 seed is correct — a failure here means the seed JSON deviated), commit** — `test(unit): pin canonical qualitative band values (epic #34 P1b)`
+- [x] **Step 2-3: run (pass immediately if Task 1 seed is correct — a failure here means the seed JSON deviated), commit** — `test(unit): pin canonical qualitative band values (epic #34 P1b)`
 
 ### Task 3: Engine degenerate-PERT verification (spec §3 plan-time check)
 
 **Files:** Create: `tests/unit/test_degenerate_vuln_pert.py`
 
-- [ ] **Step 1: write the check** — run the actual fair_cam engine path used by runs with `vulnerability={"distribution": "PERT", "low": 1.0, "mode": 1.0, "high": 1.0}` and a normal TEF/PL, assert: no exception, all vulnerability-derived samples finite, LEF ≈ TEF (mean within 2%). Find the engine entry the run executor uses (`grep -rn "FAIREngine\|run_simulation" src/idraa/services/run_executor.py fair_cam/ | head`) and drive the SMALLEST public API that exercises PERT sampling of vulnerability (≥2000 iterations, fixed seed if the API takes one).
-- [ ] **Step 2: run.** If it fails on the degenerate triple: change the converter constant (Task 4) to `{"low": 0.99, "mode": 1.0, "high": 1.0}`, adjust this test to pin THAT encoding (LEF within ~1% of TEF), and record the outcome in the task-report + a one-line spec §3 note (the spec pre-authorizes exactly this fallback).
-- [ ] **Step 3: commit** — `test(unit): verify engine handles neutral vulnerability PERT (epic #34 P1b)`
+- [x] **Step 1: write the check** — run the actual fair_cam engine path used by runs with `vulnerability={"distribution": "PERT", "low": 1.0, "mode": 1.0, "high": 1.0}` and a normal TEF/PL, assert: no exception, all vulnerability-derived samples finite, LEF ≈ TEF (mean within 2%). Find the engine entry the run executor uses (`grep -rn "FAIREngine\|run_simulation" src/idraa/services/run_executor.py fair_cam/ | head`) and drive the SMALLEST public API that exercises PERT sampling of vulnerability (≥2000 iterations, fixed seed if the API takes one).
+- [x] **Step 2: run.** If it fails on the degenerate triple: change the converter constant (Task 4) to `{"low": 0.99, "mode": 1.0, "high": 1.0}`, adjust this test to pin THAT encoding (LEF within ~1% of TEF), and record the outcome in the task-report + a one-line spec §3 note (the spec pre-authorizes exactly this fallback).
+- [x] **Step 3: commit** — `test(unit): verify engine handles neutral vulnerability PERT (epic #34 P1b)`
 
 ### Task 4: Band repo + effective-table + org-band service
 
@@ -192,7 +192,7 @@ def test_derivations_carry_provenance():
   - `update_org_band(*, organization_id, band_id, low, mode, high, reason, expected_row_version, user, ip_address=None)` — org-ownership (IDOR), optimistic lock, bumps `version`+`row_version`, audit `"qualitative_band.update"`.
   - `delete_org_band(*, organization_id, band_id, user, ip_address=None)` — soft-delete, audit `"qualitative_band.delete"`.
 
-- [ ] **Steps 1-5 (TDD):** tests first — effective-table merge (org overrides one label, adds a novel label, soft-deleted org row ignored), create/update/delete each writing rows + audit rows (assert action strings), validation rejections (bad kind, label pattern, ordering violation, duplicate), IDOR (org B cannot touch org A's band), optimistic-lock conflict. Mirror `test_library_override_crud_service.py` fixtures/style. Implement mirroring `ScenarioLibraryService` (typed domain errors reuse `idraa.errors`: `ValidationError`, `NotFoundError`, `IDORError`, and the existing version-conflict error class if generic — else define `QualitativeBandVersionConflictError` beside the library one). Commit — `feat(services): qualitative band layer with org overrides (epic #34 P1b)`
+- [x] **Steps 1-5 (TDD):** tests first — effective-table merge (org overrides one label, adds a novel label, soft-deleted org row ignored), create/update/delete each writing rows + audit rows (assert action strings), validation rejections (bad kind, label pattern, ordering violation, duplicate), IDOR (org B cannot touch org A's band), optimistic-lock conflict. Mirror `test_library_override_crud_service.py` fixtures/style. Implement mirroring `ScenarioLibraryService` (typed domain errors reuse `idraa.errors`: `ValidationError`, `NotFoundError`, `IDORError`, and the existing version-conflict error class if generic — else define `QualitativeBandVersionConflictError` beside the library one). Commit — `feat(services): qualitative band layer with org overrides (epic #34 P1b)`
 
 ### Task 5: Converter service + report
 
@@ -215,13 +215,13 @@ Semantics (spec §3, all mandatory):
 - One batch audit row after the loop: action `"scenario.convert_qualitative"`, `changes={"created": [ids], "parked": n, "skipped": n, "errors": n, "source_file": ...}`.
 - Row isolation: a RowError (e.g. validation failure) must not abort the batch — try/except per row, continue; the report carries it.
 
-- [ ] **Steps 1-6 (TDD):** unit tests: 3-row happy path creates 3 DRAFTs (adapter-iteration contract: N≥3 in → N preserved across create/park/skip buckets), park handling, both dedup reasons, unknown-label RowError isolation (row 2 fails, rows 1+3 still created), provenance block content, conversion_metadata pinned shape + versions, audit batch row. Integration test: converted scenario is EXCLUDED from run creation (POST /analyses → 422 — proving P1a composition end-to-end) and carries both banners' preconditions (`status=DRAFT`, `vuln_framing="legacy_residual"`). Implement. Commit — `feat(services): qualitative register converter core (epic #34 P1b)`
+- [x] **Steps 1-6 (TDD):** unit tests: 3-row happy path creates 3 DRAFTs (adapter-iteration contract: N≥3 in → N preserved across create/park/skip buckets), park handling, both dedup reasons, unknown-label RowError isolation (row 2 fails, rows 1+3 still created), provenance block content, conversion_metadata pinned shape + versions, audit batch row. Integration test: converted scenario is EXCLUDED from run creation (POST /analyses → 422 — proving P1a composition end-to-end) and carries both banners' preconditions (`status=DRAFT`, `vuln_framing="legacy_residual"`). Implement. Commit — `feat(services): qualitative register converter core (epic #34 P1b)`
 
 ### Task 6: Full gate + docs
 
-- [ ] **Step 1:** spec drift-log entry: `QUALITATIVE_CONVERTED` → `QUALITATIVE_REGISTER_IMPORT` (in-code anticipated name); Task 3 outcome (which vuln encoding shipped) noted in spec §3 if the fallback fired.
-- [ ] **Step 2:** `uv run python scripts/run_local_gate.py` FOREGROUND — all steps green (fix only what this branch broke).
-- [ ] **Step 3:** Commit — `docs(design): P1b drift-log + encoding outcome (epic #34)`
+- [x] **Step 1:** spec drift-log entry: `QUALITATIVE_CONVERTED` → `QUALITATIVE_REGISTER_IMPORT` (in-code anticipated name); Task 3 outcome (which vuln encoding shipped) noted in spec §3 if the fallback fired.
+- [x] **Step 2:** `uv run python scripts/run_local_gate.py` FOREGROUND — all steps green (fix only what this branch broke).
+- [x] **Step 3:** Commit — `docs(design): P1b drift-log + encoding outcome (epic #34)`
 
 ---
 

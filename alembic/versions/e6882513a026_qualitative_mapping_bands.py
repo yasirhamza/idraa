@@ -196,12 +196,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("scenarios", "conversion_metadata")
-
-    # Narrow scenarios.source 27 -> 15. Conditionally unsafe: refuses if any
-    # row stores a source longer than 15 chars (would silently truncate) —
-    # the operator must remove/repoint qualitative_register_import rows first
-    # (mirrors the 08358cf073b8 downgrade guard).
+    # GUARD FIRST (PR-gate Arch-I1): on SQLite DDL auto-commits, so any
+    # destructive op before this check would leave a half-migrated schema
+    # when the guard fires. Refuse-then-destroy, never destroy-then-refuse.
+    # Refuses if any row stores a source longer than 15 chars (would silently
+    # truncate on the narrow below) — the operator must remove/repoint
+    # qualitative_register_import rows first (mirrors 08358cf073b8).
     bind = op.get_bind()
     max_len = bind.execute(
         sa.text("SELECT COALESCE(MAX(LENGTH(source)), 0) FROM scenarios")
@@ -212,6 +212,10 @@ def downgrade() -> None:
             f"downgrade to VARCHAR(15) -- would silently truncate. Remove or "
             f"repoint rows with source > 15 chars first."
         )
+
+    op.drop_column("scenarios", "conversion_metadata")
+
+    # Narrow scenarios.source 27 -> 15 (guard above already cleared it).
     if bind.dialect.name == "postgresql":
         op.execute("ALTER TABLE scenarios ALTER COLUMN source TYPE VARCHAR(15)")
     else:
