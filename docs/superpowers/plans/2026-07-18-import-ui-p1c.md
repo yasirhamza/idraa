@@ -94,7 +94,7 @@ Routes (all ADMIN, 303-redirect nav threading `?token=`):
 - Create: `templates/register_import/bind.html`
 - Test: extend `tests/integration/test_register_import_routes.py`
 
-- `GET /register-import/{token}/bind` — three fieldsets (likelihood / impact / category), one row per distinct file value: value text + `<select>` of targets (frequency band labels from `effective_bands` for likelihood; magnitude labels for impact; ThreatCategory members + `"Parked — out of scope (non-information risk)"` for category), pre-selected per `preselect_bindings`; an info callout names the park semantics (spec D5 copy: counted + reported, never errors) and links `/qualitative-bands` for band management; "Save these bindings as a profile" optional name input.
+- `GET /register-import/{token}/bind` — three fieldsets (likelihood / impact / category), one row per distinct file value: value text + `<select>` of targets (frequency band labels from `effective_bands` for likelihood; magnitude labels for impact; ThreatCategory members + `"Parked — out of scope (not information- or OT-risk; see #39)"` (OT is IN scope — plan-gate M-2) for category), pre-selected per `preselect_bindings`; an info callout names the park semantics (spec D5 copy: counted + reported, never errors) and links `/qualitative-bands` for band management; "Save these bindings as a profile" optional name input.
 - `POST /register-import/{token}/bind` → `set_value_bindings` (+ `save_profile` when name given; duplicate name → 422 flash) → 303 preview. Unbound value → 422 re-render with per-field errors.
 - `POST /register-import/{token}/apply-profile` (from upload OR bind page) → `apply_profile` → 303 back with drift warnings flashed (warning level).
 
@@ -131,7 +131,10 @@ Mirror `library_overrides.py` exactly: list page shows the EFFECTIVE table (cano
 - Create: `tests/e2e/test_register_import_journey.py` (Playwright, marked e2e)
 - Test: extend `tests/integration/test_vuln_framing_confirm.py` + `test_draft_workflow.py`
 
-- View banner: when `scenario.source == QUALITATIVE_REGISTER_IMPORT` and `vuln_framing == 'legacy_residual'`, the F2 banner block renders converter-aware copy: heading "Frequency baseline needs review." body explaining the register likelihood was encoded as LEF (TEF=band, vulnerability neutral) and that confirming accepts the frequency baseline; button text "Confirm — accept frequency baseline"; WARNING sentence per spec §3 brief: attaching FAIR-CAM controls after confirming double-discounts an already-residual register frequency unless TEF is re-framed as inherent during review. Non-converted rows keep the existing copy verbatim (assert both variants).
+- View banner (plan-gate M-1 — copy-safety structure is BINDING): when `scenario.source == QUALITATIVE_REGISTER_IMPORT` and `vuln_framing == 'legacy_residual'`, the F2 banner block renders converter-aware copy: heading "Frequency baseline needs review."; body: the register likelihood was encoded as the loss-event frequency (TEF = band, vulnerability neutral) and is almost certainly RESIDUAL (post-controls). Then TWO EXPLICITLY DISTINCT paths, mirroring the existing vuln banner's "To fix… / Only if…" structure:
+  - **Path A — accept the residual baseline:** press "Confirm — accept frequency baseline". Then do NOT attach FAIR-CAM controls to this scenario — their effect is already baked into the register frequency; attaching them would double-discount the risk.
+  - **Path B — model controls explicitly:** FIRST edit the frequency upward to a pre-control (control-naive) level during review, THEN confirm and attach controls.
+  The Confirm button performs Path A's acceptance ONLY — the copy must never imply it performs any re-framing (the word "inherent" is reserved for Path B's edit action and must not describe what Confirm does). Non-converted rows keep the existing copy verbatim (assert both variants). Additionally (M-4): the converted-row DRAFT banner lists the bound band labels from `conversion_metadata.bindings` (e.g. "likelihood 'High' → high band; impact 'Severe' → very_high band") — closing the P1a provenance-display deferral noted in view.html.
 - Promote-refusal string: in `promote()`, converted rows raise "confirm the frequency baseline before promoting — see the banner on this scenario" (non-converted keep the current string). Tests for both.
 - Playwright e2e (desktop viewport): the Task 6 journey through a real browser, asserting the bind step's pre-selection and the report page links resolve.
 - Spec drift-log: P1c copy shipped (closes the Meth-I1 deferral).
@@ -144,6 +147,48 @@ Mirror `library_overrides.py` exactly: list page shows the EFFECTIVE table (cano
 ## Final
 
 Branch `feat/34-p1c-import-ui` off current main. 4-reviewer final PR-gate (epic milestone) before merge; methodology persona owns Task 8 copy + the preview/bind epistemic callouts. After merge: deploy decision goes to the owner (the epic is now end-to-end usable).
+
+## Plan-gate round-1 amendments (BINDING — override conflicting text above)
+
+**Task 1**
+- `parse_register` (not only `list_sheet_names`) runs `_zip_guard` before `load_workbook`; add a security-shaped test asserting entity-expansion safety (openpyxl+defusedxml active — pin the property, Sec-N).
+- `filename` handling: `UploadFile.filename` is `str | None` — None or empty → 422 ValidationError at the route, before staging (Sec-N).
+
+**Task 2**
+- `state_json` write rule (Arch-I1, BINDING): plain `JSON` column does NOT track in-place mutation. Every setter REASSIGNS the whole dict — `preview.state_json = {**(preview.state_json or {}), key: value}` — never `preview.state_json[key] = value`. This mirrors the only in-repo precedent (`wizard_state.py:248`). Do NOT introduce MutableDict. Task 3's cross-request integration tests (set in session A, read via a fresh session) are the regression guard.
+- `stage_upload` sets `expires_at = utcnow + PREVIEW_TTL_SECONDS` explicitly (column is NOT NULL with a CHECK; the #306 constructor shape is the model, Spec-N).
+- Data-contract note: `RegisterBindingProfile` has no DTO pair in P1c (JSON blobs; forms are route-level) — field-sync N/A, ORM snapshot covers structure (Arch-N3; state so in the commit message).
+
+**Task 3**
+- `set_value_bindings` validates EVERY target server-side (Sec-I2): likelihood → key ∈ effective frequency-band labels; impact → key ∈ effective magnitude-band labels; category → value ∈ `ThreatCategory` members ∪ `"__parked__"`. Reject at bind time (422), covering profile-applied bindings too — an invalid category must never reach `build_bound_rows` (which would 500 on enum coercion).
+- `save_profile` validates `name`: non-empty after strip, ≤100 chars (Sec-I4). Profile queries org-scoped; cross-org profile_id → NotFoundError 404 (Sec-N).
+- `get_staged` additionally requires `entity_type LIKE "register:%"` — scenario-import tokens must not be consumable here (Sec-N).
+- Explicit org-scoping (Sec-N): every step method resolves the staging row via `get_staged` (org+TTL+entity-type enforced); no method takes a row directly.
+- **Shared classification seam (Spec-I2, BINDING):** extract the converter's per-row disposition (park / name-dedup / same-source-dedup / band-lookup / bounds) into `QualitativeConverterService.classify_rows(*, organization_id, rows) -> ClassifiedRows` (buckets: `would_create: list[BoundRow]`, `parked: list[int]`, `duplicates: list[SkippedRow]`, `errors: list[RowError]`). `convert()` CALLS `classify_rows` then creates only the `would_create` bucket (single seam — preview and apply cannot drift). `RegisterImportService.preview(...)` = `build_bound_rows` + `classify_rows`. Update P1b converter tests only where the refactor moves code; behavior pins unchanged.
+- `mapping_versions` rewire (Meth-N3): `canonical` map built from `repo.list_canonical()` (ALL canonical rows per (kind,label)), `org` from `list_org_bands` — NOT from the merged `effective_bands()` view (shadowed canonical versions must not drop out). The updated P1b pin must assert per-(kind,label) keys exist (the reproducibility invariant), not merely match observed output. This is a stored-JSON data-contract change under spec §8 — safe solely because NO converted rows exist before P1c ships (state this in the commit message).
+- `convert()` gains `binding_profile_id: uuid.UUID | None = None`, threaded into `ConversionMetadata.binding_profile_id`; `apply()` passes it when a profile drove the bindings (Arch-N2).
+- Band-service finiteness (Sec-I1): `_validate_band_values` in `services/qualitative_bands.py` additionally rejects non-finite low/mode/high (`math.isfinite`) with a test (`float("inf")` high → ValidationError) — first web exposure of this surface is Task 7.
+
+**Task 4**
+- Route-level `Content-Length` pre-check (Sec-I3): mirror `scenario_import.py:88-97` in `POST /register-import` BEFORE reading the body; the service keeps the post-read `len(data)` check (belt-and-suspenders, both stated).
+- Create `templates/register_import/import_expired.html` (Spec-I1): mirror `scenarios/import_expired.html` (28 lines) with register wording + `/register-import` re-upload link — the existing templates are entity-worded and NOT reusable.
+- Add `register_import/upload.html` to the `test_no_raw_markup_outside_macros.py` allowlist (file input has no form_field variant — same justification as the three sibling upload pages) (Arch-I2).
+- Sidebar: the ADMIN section is explicit `<li>` blocks (NOT a tuple loop) — add explicit blocks incl. the collapsed single-letter glyph, mirroring the Users/FX-rates entries (Spec-N).
+
+**Task 5**
+- Token-in-query deviation from #306 accepted with rationale (Sec-N): admin-only, self-hosted assets (zero external Referer targets), 10-min TTL, org-scoped, single-use at apply; it appears in access logs/history — acceptable for this deployment class.
+- Two-tab lost-update window on a shared token accepted (Arch-N1): last-write-wins on step choices over immutable bytes; no CAS. Single-admin scope; staged bytes cannot corrupt.
+
+**Task 6**
+- Preview badges: extend `import_preview.html`'s `_action_badge` style map with `parked` (ghost/info) and `duplicate` (warning) keys rather than leaving unstyled fall-through; `would_create` renders under the existing `create` key (Spec-N).
+- `report.html` result tables route through `preview_table`/`data_table` macros; if any raw table is genuinely needed, allowlist it explicitly with justification (Arch-I2).
+
+**Task 7**
+- Band form fields route through the `form_field` macro (number/money/textarea/select variants exist) — do NOT inherit `library/overrides/form.html`'s allowlisted raw-input PERT grid (Arch-I2). "Mirror library_overrides" = routes/RBAC/error-render/optimistic-lock pattern + `{list,form}` templates only (no `view.html`; bands are single-row simple) (Spec-N).
+
+**Task 8**
+- CSS staleness (Arch-I3, BINDING): after ALL templates land, run `python -m idraa.tasks build-css` and COMMIT the regenerated `tailwind.css` BEFORE the full gate (`build_css --check` is a gate step; new utility classes in 8 new templates WILL trip it). If any template task's own commit trips pre-commit CSS checks earlier, regenerate there too.
+- `pyproject.toml` openpyxl comment (L40-44) is REPLACED (its "DEV-only, no src/ imports" premise inverts), not tweaked (Spec-N).
 
 ## Scope budget
 
