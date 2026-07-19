@@ -69,14 +69,18 @@ def _enum_ok(value: str | None, enum_cls: type[StrEnum]) -> bool:
 
 def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> str | None:
     """Return an error string if ``dist`` is not a valid PERT (or, when allowed,
-    lognormal) structural shape; ``None`` if it is structurally sound.
+    lognormal / lognormal_mixture) structural shape; ``None`` if it is
+    structurally sound.
 
     This is the §2.5 anti-blob-smuggling guard (I2/Meth-I1 + B4/Sec-B2 + Epic B
-    #326). It PRESERVES the exact-key-set property — a distribution dict may
-    carry ONLY its kind's keys, so a giant blob cannot be smuggled into the JSON
-    column alongside the legitimate keys. It does structural + numeric-TYPE
-    gating only; numeric finiteness and the ``0 < sigma <= 10`` bound are
-    enforced downstream by ``validate_fair_distributions`` (Sec-I1/Sec-I2).
+    #326; #27 extends it to lognormal_mixture). It PRESERVES the exact-key-set
+    property — a distribution dict may carry ONLY its kind's keys, so a giant
+    blob cannot be smuggled into the JSON column alongside the legitimate keys
+    (for lognormal_mixture, the top-level dict AND every component dict are
+    each exact-key-set checked). It does structural + numeric-TYPE gating
+    only; numeric finiteness, the ``0 < sigma <= 10`` bound, weight
+    positivity/sum, and the component-count cap are enforced downstream by
+    ``validate_fair_distributions`` (Sec-I1/Sec-I2/Sec-N1).
     """
     if not isinstance(dist, dict):
         return f"{col} must be a distribution object"
@@ -90,6 +94,30 @@ def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> s
             v = dist.get(k)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 return f"{col}.{k} must be numeric"
+        return None
+    if kind == "lognormal_mixture":
+        # #27: same allow_lognormal gate as scalar lognormal reuses (mixture
+        # is a lognormal shape — tef/pl/sl only; vulnerability stays PERT-only).
+        # Numeric finiteness, the 0 < sigma <= 10 bound, weight positivity,
+        # weight-sum-to-1, and the component-count cap are enforced downstream
+        # by _validate_finite (Sec-I1/Sec-I2/Sec-N1) — this is structural +
+        # numeric-TYPE gating only, mirroring the scalar lognormal branch above.
+        if not allow_lognormal:
+            return f"{col}.distribution lognormal_mixture not allowed for {col} (must be PERT)"
+        if set(dist.keys()) != {"distribution", "components"}:
+            return f"{col} lognormal_mixture must have exactly keys {{distribution, components}}"
+        components = dist.get("components")
+        if not isinstance(components, list) or len(components) == 0:
+            return f"{col}.components must be a non-empty list"
+        for i, comp in enumerate(components):
+            if not isinstance(comp, dict):
+                return f"{col}.components[{i}] must be an object"
+            if set(comp.keys()) != {"mean", "sigma", "weight"}:
+                return f"{col}.components[{i}] must have exactly keys {{mean, sigma, weight}}"
+            for k in ("mean", "sigma", "weight"):
+                v = comp.get(k)
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    return f"{col}.components[{i}].{k} must be numeric"
         return None
     # PERT (and legacy uppercase "PERT"); any other kind falls through to error.
     if set(dist.keys()) != {"distribution", "low", "mode", "high"}:

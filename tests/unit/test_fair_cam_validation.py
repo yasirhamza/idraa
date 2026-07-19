@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import pytest
 
+from idraa.config import get_settings
 from idraa.errors import FAIRCAMValidationError
 from idraa.services.fair_cam_validation import (
     FAIRCAMValidationResult,
@@ -199,3 +200,110 @@ def test_negative_mode_rejected():
 def test_zero_low_accepted():
     # Zero is a legitimate bound (e.g. degenerate zero-SL convention).
     _call(primary_loss={"distribution": "PERT", "low": 0.0, "mode": 2.0, "high": 10.0})
+
+
+# ---------------------------------------------------------------------------
+# #27: lognormal_mixture finiteness + sigma/weight bounds + count cap
+# (_validate_finite's semantic gate — the exact-key-set / numeric-type
+# structural shape is a SEPARATE gate at scenario_import._structural_dist_problem,
+# covered in tests/unit/test_scenario_import_validate.py).
+# ---------------------------------------------------------------------------
+
+
+def _mixture(components: list[dict[str, object]]) -> dict[str, object]:
+    return {"distribution": "lognormal_mixture", "components": components}
+
+
+def _good_component(
+    mean: float = 10.0, sigma: float = 1.0, weight: float = 0.5
+) -> dict[str, object]:
+    return {"mean": mean, "sigma": sigma, "weight": weight}
+
+
+def test_finite_mixture_two_component_accepted():
+    _call(
+        primary_loss=_mixture(
+            [
+                _good_component(mean=8.06, sigma=0.70, weight=0.5),
+                _good_component(mean=15.77, sigma=1.19, weight=0.5),
+            ]
+        )
+    )
+
+
+def test_mixture_empty_components_rejected():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture([]))
+
+
+def test_mixture_component_count_over_cap_rejected():
+    # Sec-N1: component count is coupled to Settings.max_smes_per_fieldset —
+    # derive the cap from settings rather than hardcoding it.
+    cap = get_settings().max_smes_per_fieldset
+    n = cap + 1
+    w = 1.0 / n
+    components = [_good_component(mean=10.0, sigma=1.0, weight=w) for _ in range(n)]
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture(components))
+
+
+def _three_components_with_last_bad(bad: dict[str, object]) -> list[dict[str, object]]:
+    """3-component mixture with the malformed component at the LAST index —
+    proves per-component iteration (not a components[0]-only check)."""
+    return [
+        _good_component(mean=8.0, sigma=0.7, weight=1 / 3),
+        _good_component(mean=12.0, sigma=0.9, weight=1 / 3),
+        bad,
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        # Non-finite mean.
+        {"mean": float("inf"), "sigma": 1.0, "weight": 1 / 3},
+        {"mean": float("nan"), "sigma": 1.0, "weight": 1 / 3},
+        # Non-finite sigma — NaN specifically (Sec-B1 BLOCKER: NaN <= 0 and
+        # NaN > 10 are both False, so a NaN sigma must be caught by the
+        # finiteness check BEFORE any range comparison, or it silently passes).
+        {"mean": 10.0, "sigma": float("inf"), "weight": 1 / 3},
+        {"mean": 10.0, "sigma": float("nan"), "weight": 1 / 3},
+        # sigma <= 0.
+        {"mean": 10.0, "sigma": 0.0, "weight": 1 / 3},
+        {"mean": 10.0, "sigma": -1.0, "weight": 1 / 3},
+        # sigma > _SIGMA_MAX (10).
+        {"mean": 10.0, "sigma": 10.0001, "weight": 1 / 3},
+        {"mean": 10.0, "sigma": 50.0, "weight": 1 / 3},
+        # weight <= 0.
+        {"mean": 10.0, "sigma": 1.0, "weight": 0.0},
+        {"mean": 10.0, "sigma": 1.0, "weight": -0.1},
+        # weight non-finite.
+        {"mean": 10.0, "sigma": 1.0, "weight": float("inf")},
+        {"mean": 10.0, "sigma": 1.0, "weight": float("nan")},
+    ],
+)
+def test_mixture_malformed_last_component_rejected(bad):
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture(_three_components_with_last_bad(bad)))
+
+
+def test_mixture_bad_weight_sum_rejected():
+    # Individually valid weights that don't sum to 1 (±1e-9).
+    components = [
+        _good_component(mean=8.0, sigma=0.7, weight=0.3),
+        _good_component(mean=12.0, sigma=0.9, weight=0.3),
+        _good_component(mean=16.0, sigma=1.1, weight=0.3),
+    ]
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture(components))
+
+
+def test_mixture_sigma_at_bound_accepted():
+    _call(
+        primary_loss=_mixture(
+            [
+                _good_component(mean=10.0, sigma=10.0, weight=0.5),
+                _good_component(mean=12.0, sigma=1.0, weight=0.5),
+            ]
+        )
+    )
