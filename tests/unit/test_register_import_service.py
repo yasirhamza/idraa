@@ -1254,3 +1254,27 @@ async def test_apply_profile_with_incomplete_column_map_does_not_clobber(
     row = await svc.get_staged(organization_id=org.id, token=staged.token)
     cm = (row.state_json or {}).get("column_map") or {}
     assert "category" in cm.values()  # the manual mapping SURVIVED
+
+
+def test_category_keyword_preselection_word_boundary_and_ambiguity() -> None:
+    """Owner-approved category keyword pre-selection (UAT round 3): word-boundary
+    containment, category group only; absent/ambiguous stays unselected."""
+    from idraa.services.register_import import _category_keyword_match
+
+    assert _category_keyword_match("Cyber – Ransomware") == "ransomware"
+    assert _category_keyword_match("Insider Threat") == "insider_misuse"
+    assert _category_keyword_match("Third Party") == "supply_chain"
+    assert _category_keyword_match("Cyber – Availability") == "denial_of_service"
+    assert _category_keyword_match("Compliance – Data Privacy") == "data_disclosure"
+    assert _category_keyword_match("Cyber – Social Engineering") == "social_engineering"
+    # deliberately UNMAPPED: HSE / generic OT / commercial supplier / park
+    assert _category_keyword_match("HSE") is None
+    assert _category_keyword_match("Process Safety") is None
+    assert _category_keyword_match("OT Security") is None
+    assert _category_keyword_match("Supplier / Commercial") is None
+    assert _category_keyword_match("Market / Financial") is None
+    # word boundary: 'sis' must not fire inside other words
+    assert _category_keyword_match("Analysis backlog") is None
+    assert _category_keyword_match("SIS bypass") == "ot_safety_tampering"
+    # ambiguity (two different categories) -> None
+    assert _category_keyword_match("Phishing then Ransomware") is None

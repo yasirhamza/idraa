@@ -35,6 +35,7 @@ Plan: docs/superpowers/plans/2026-07-18-import-ui-p1c.md Task 3
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -192,13 +193,60 @@ def _header_by_single_target(column_map: dict[str, str]) -> dict[str, str]:
     return result
 
 
+# Category keyword pre-selection (owner-approved 2026-07-19, UAT round 3):
+# deterministic WORD-BOUNDARY containment for the CATEGORY group ONLY —
+# bands keep the spec-§5 exact-match-only rule. Pre-selection is a visible,
+# admin-confirmable default, never auto-final. Table rules:
+#   * longest/most-specific phrases first; first match wins, but if TWO
+#     DIFFERENT categories match the same value, no pre-selection (ambiguous).
+#   * deliberately ABSENT: bare "safety" (HSE workplace safety must not map
+#     to ot_safety_tampering), bare "supplier" (commercial/insolvency risk
+#     must stay parkable), generic "ot security" (ambiguous across the three
+#     OT members), and the park target itself (a wrong park HIDES rows —
+#     parking is always an explicit human act).
+_CATEGORY_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("safety instrumented", "ot_safety_tampering"),
+    ("denial of service", "denial_of_service"),
+    ("social engineering", "social_engineering"),
+    ("data disclosure", "data_disclosure"),
+    ("data privacy", "data_disclosure"),
+    ("data breach", "data_disclosure"),
+    ("supply chain", "supply_chain"),
+    ("third party", "supply_chain"),
+    ("exfiltration", "data_disclosure"),
+    ("availability", "denial_of_service"),
+    ("ransomware", "ransomware"),
+    ("phishing", "social_engineering"),
+    ("tampering", "data_tampering"),
+    ("insider", "insider_misuse"),
+    ("malware", "malware"),
+    ("vendor", "supply_chain"),
+    ("scada", "ot_availability"),
+    ("ddos", "denial_of_service"),
+    ("sis", "ot_safety_tampering"),
+    ("bec", "social_engineering"),
+)
+
+
+def _category_keyword_match(value: str) -> str | None:
+    """First word-boundary keyword hit, or None when absent/ambiguous."""
+    hay = value.strip().lower()
+    hits: list[str] = []
+    for phrase, target in _CATEGORY_KEYWORDS:
+        if re.search(rf"\b{re.escape(phrase)}\b", hay) and target not in hits:
+            hits.append(target)
+    return hits[0] if len(hits) == 1 else None
+
+
 def preselect_bindings(
     distinct: dict[str, list[str]],
     effective_bands: dict[tuple[str, str], Any],
     categories: type[ThreatCategory] = ThreatCategory,
 ) -> dict[str, dict[str, str]]:
-    """Pre-select value bindings on EXACT case-insensitive label match ONLY
-    (spec §5 / Global Constraints — zero heuristics, zero fuzzy matching).
+    """Pre-select value bindings on EXACT case-insensitive label match for
+    the band groups (spec §5 — zero heuristics for NUMBERS semantics), plus
+    deterministic keyword containment for the CATEGORY group only (metadata,
+    not math; owner-approved relaxation 2026-07-19 — see _CATEGORY_KEYWORDS).
 
     Pure function — no I/O. ``effective_bands`` is the
     ``QualitativeBandService.effective_bands()`` return shape
@@ -221,6 +269,8 @@ def preselect_bindings(
             result["impact"][value] = match
     for value in distinct.get("category", []):
         match = cat_by_ci.get(value.strip().lower())
+        if match is None:
+            match = _category_keyword_match(value)
         if match is not None:
             result["category"][value] = match
     return result
