@@ -1,6 +1,6 @@
 # CI — mirrors the local pre-push gate EXACTLY by running it verbatim, plus the
 # layers the gate cannot run locally (full-history secret scan, Docker build,
-# Playwright e2e, notebook smoke, Windows platform coverage).
+# notebook smoke, Windows platform coverage).
 #
 # The local gate (scripts/run_local_gate.py) is the merge authority; this
 # workflow is its drift-proof mirror. Never re-implement a gate step here with
@@ -124,23 +124,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  e2e:
-    name: e2e (Playwright)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-      - run: uv sync --frozen --extra dev
-      - run: uv run playwright install chromium --with-deps
-      - run: uv run --extra dev python -m pytest -m e2e -q --no-cov tests/e2e/
-        env:
-          SESSION_SECRET: insecure-ci-only-dummy-session-secret
-
   notebook-smoke:
     name: notebook-smoke
     runs-on: ubuntu-latest
@@ -180,8 +163,11 @@ jobs:
           path: idraa-sbom.cdx.json
 
   # Aggregator over the DETERMINISTIC core only (gate, test-windows, secrets,
-  # sast). e2e / docker-build / notebook-smoke stay visible-but-advisory so a
-  # flaky browser or kernel can never wedge merges (plan-gate A-I5).
+  # sast). docker-build / notebook-smoke stay visible-but-advisory so a flaky
+  # kernel can never wedge merges (plan-gate A-I5). The advisory Playwright
+  # e2e job was REMOVED 2026-07-19 (owner call): its only failures were a
+  # login-bootstrap race (#45), red-X noise on otherwise-green runs. The e2e
+  # suite remains local-only: uv run python -m pytest -m e2e tests/e2e/.
   ci-success:
     name: ci-success
     if: always()
