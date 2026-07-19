@@ -689,8 +689,14 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
                 )
         except (ScenarioVersionConflictError, NotFoundError) as exc:
             await db.rollback()  # unwind advance_step's token bump; draft survives
+            message = (
+                str(exc)
+                if isinstance(exc, ScenarioVersionConflictError)
+                else "This scenario no longer exists — it was deleted while "
+                "you were estimating. Cancel to discard this draft."
+            )  # amendment 5 / Sec-R2-N1: never surface the raw NotFoundError
             return await _render_review_with_flash(
-                request, db, user, tx, message=str(exc)
+                request, db, user, tx, message=message
             )
         except ValidationError as exc:
             ... existing handler unchanged ...
