@@ -19,6 +19,67 @@
 - Commit messages: `feat(...): ... (#56)` with the session trailers used on this branch.
 - All tests run as `uv run pytest <path> -q --no-cov` from the worktree root.
 
+## Plan-gate round-1 amendments (BINDING — override base task text on conflict)
+
+1. **Meth-B1 (was BLOCKER):** `seed_wizard_state_from_scenario` must EXCLUDE
+   the `vuln` fieldset from rehydration when
+   `scenario.vuln_framing == "legacy_residual"` (tef/pl/sl still rehydrate).
+   The seed fixture carries `vuln_framing` and Task 1 gains two tests:
+   legacy_residual → no "vuln" key in `sme_estimates` (others present);
+   "inherent" → all fieldsets rehydrated. Simplest implementation: the seed
+   function filters the passed dict:
+   `if getattr(scenario, "vuln_framing", None) == "legacy_residual": sme_estimates = {k: v for k, v in sme_estimates.items() if k != "vuln"}`.
+2. **Arch-I1:** the re-estimate finalize branch passes
+   `eligible_control_ids` to `set_mitigating_controls`, mirroring the #217
+   edit-path scoping (routes/scenarios.py:~955-968): compute the ACTIVE
+   control-id set the step-4 picker rendered (`ControlRepo.list_for_org`)
+   and scope removals to it, so links to DRAFT/DEPRECATED controls survive.
+   Task 4 gains a test: a scenario linked to a DEPRECATED control keeps
+   that link through re-estimation.
+3. **Arch-I2 / Spec-N1:** drop `tags` everywhere — no `tags=` line in the
+   seed function, no `tags` in the SimpleNamespace fixture, no tags
+   assertion. Fixtures must not invent columns the ORM lacks.
+4. **Spec-I1:** Task 4 requires three import additions in
+   `routes/scenarios.py`: `delete` (extend the existing
+   `from sqlalchemy import select` line), `ScenarioSMEEstimate`
+   (`from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate`),
+   and `ScenarioVersionConflictError`
+   (`from idraa.services.scenarios import ScenarioVersionConflictError` —
+   or extend the module's existing services.scenarios import).
+5. **Spec-I2 + Arch-N2:** the conflict path uses
+   `_render_review_with_flash` (HTTP **422**, the finalize-error idiom) —
+   NOT 409. The dispatch's except clause catches
+   `(ScenarioVersionConflictError, NotFoundError)` and routes both to the
+   flash (rollback first; draft survives). Task 4 test renamed to
+   `test_finalize_conflict_renders_review_flash_and_preserves_draft`,
+   asserting status 422 + message + draft row still present + scenario
+   unchanged. Import `NotFoundError` from `idraa.errors`.
+6. **Spec-I3:** Task 4 gains `test_cancel_targeted_draft_is_noop`: POST the
+   wizard cancel on a targeted draft → scenario row_version unchanged,
+   draft row deleted.
+7. **Meth-N2:** `update_from_wizard` also clears
+   `scenario.conversion_metadata` (set to `None`) and includes it in the
+   audit extras when it changed.
+8. **Arch-N1 (prescribed, not optional):** implement the extras variant
+   that keeps `_audit_diff` generic: capture the standard `before` dict
+   only; hold `source`/`library_pin`/`vuln_framing`/`conversion_metadata`
+   before-values in separate locals; append their `[before, after]` pairs
+   in the explicit loop. Do NOT extend the `before` dict.
+9. **Arch-N4 / Sec-N2:** no `or 0` coalesce — the route dispatch guards:
+   `if state.target_expected_row_version is None: raise HTTPException(500, "re-estimate draft missing its row-version capture")`
+   (impossible state, fail loud).
+10. **Sec-N1:** the Task 3 button uses the literal `{{ csrf_field() }}`
+    global (the Promote form idiom) — `csrf_input` does not exist.
+11. **Arch-N3:** Task 3 gains a direct `load_sme_rows` contract test
+    (db-backed): 2 fieldsets, ≥3 rows each, mixed `sme_id`/`sme_name`
+    identities — asserts grouping, ordering, and full row survival.
+12. **Refuted at gate (do not "fix"):** `Scenario.mitigating_controls` is
+    `lazy="selectin"` — the entry route's attribute access is eager-loaded
+    and safe; ignore the plan's "may need eager-load variant" caution.
+13. **Meth-N3:** Task 5's step-6 targeted copy adds: "Estimation math may
+    have been updated since this scenario was last estimated — pooled
+    distributions can shift even if you keep every value."
+
 ---
 
 ### Task 1: WizardState targeting fields + seed function + SME read path
@@ -61,7 +122,7 @@ def _scenario(**over):
         threat_actor_type=SimpleNamespace(value="organized_crime"),
         asset_class=SimpleNamespace(value="ot_systems"),
         attack_vector="phishing",
-        tags=["ot"],
+        vuln_framing="inherent",
         primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0},
     )
     base.update(over)
@@ -94,7 +155,6 @@ def test_seed_copies_descriptive_fields_and_controls():
     assert st.threat_actor_type == "organized_crime"
     assert st.asset_class == "ot_systems"
     assert st.attack_vector == "phishing"
-    assert st.tags == ["ot"]
     assert st.mitigating_control_ids == [str(cid)]
 
 
@@ -126,6 +186,30 @@ def test_seed_preserves_all_sme_rows_per_fieldset():
             {"sme_name": "Bob", "low": 0.3, "high": 4.0},
         ]
     }
+    st = seed_wizard_state_from_scenario(
+        _scenario(), sme_estimates=rows, mitigating_control_ids=[], tx_id="t"
+    )
+    assert st.sme_estimates == rows
+
+
+def test_legacy_residual_scenario_never_rehydrates_vuln_rows():
+    # Meth-B1: pre-#339 vuln rows embed a control discount; rehydrating them
+    # would make the finalize "inherent" stamp a lie. tef/pl/sl unaffected.
+    rows = {
+        "tef": [{"sme_name": "A", "low": 0.1, "high": 2.0}],
+        "vuln": [{"sme_name": "A", "low": 0.05, "high": 0.4}],
+        "pl": [{"sme_name": "A", "low": 1e4, "high": 1e6}],
+    }
+    st = seed_wizard_state_from_scenario(
+        _scenario(vuln_framing="legacy_residual"),
+        sme_estimates=rows, mitigating_control_ids=[], tx_id="t",
+    )
+    assert "vuln" not in st.sme_estimates
+    assert set(st.sme_estimates) == {"tef", "pl"}
+
+
+def test_inherent_scenario_rehydrates_all_fieldsets():
+    rows = {"vuln": [{"sme_name": "A", "low": 0.05, "high": 0.4}]}
     st = seed_wizard_state_from_scenario(
         _scenario(), sme_estimates=rows, mitigating_control_ids=[], tx_id="t"
     )
@@ -222,6 +306,12 @@ def seed_wizard_state_from_scenario(
     pl = scenario.primary_loss or {}
     kind = str(pl.get("distribution", "")).lower()
     loss_shape = "catastrophic" if kind in ("lognormal", "lognormal_mixture") else "capped"
+    if getattr(scenario, "vuln_framing", None) == "legacy_residual":
+        # Meth-B1: pre-#339 vuln rows were elicited under the residual
+        # wording (control discount baked in). Never rehydrate them — the
+        # operator re-enters vuln under the inherent copy, which is what
+        # makes finalize's vuln_framing="inherent" stamp truthful.
+        sme_estimates = {k: v for k, v in sme_estimates.items() if k != "vuln"}
 
     def _enum_val(v: Any) -> str | None:
         return getattr(v, "value", v) if v is not None else None
@@ -237,14 +327,13 @@ def seed_wizard_state_from_scenario(
         threat_actor_type=_enum_val(scenario.threat_actor_type),
         asset_class=_enum_val(scenario.asset_class),
         attack_vector=scenario.attack_vector,
-        tags=list(scenario.tags or []),
         mitigating_control_ids=list(mitigating_control_ids),
         loss_shape=loss_shape,
         sme_estimates=sme_estimates,
     )
 ```
 
-NOTE for implementer: check whether `Scenario` actually has a `tags` attribute (grep the model). If scenarios don't carry tags, drop the `tags` line from both the seed function and the seed test — do NOT invent a column. Disclose in the report.
+(Plan-gate resolved: `Scenario` has NO tags column — the seed function and tests above already omit it.)
 
 - [ ] **Step 4: Run tests**
 
