@@ -2361,13 +2361,22 @@ async def finalize_wizard(
         is_reestimate = state.target_scenario_id is not None
         target: Scenario | None = None
         if is_reestimate:
+            # lock=True at the FIRST read (PR-gate Arch finding): the later
+            # update_from_wizard re-resolve returns this same identity-mapped
+            # instance WITHOUT refreshing row_version, so the optimistic-lock
+            # check compares against the value captured here. Locking here
+            # closes the stale-read window on multi-worker/Postgres deploys.
             target = await ScenarioRepo(db).get_for_org(
                 organization_id=user.organization_id,
                 scenario_id=uuid.UUID(state.target_scenario_id),
+                lock=True,
             )
             if target is None:
                 # Deleted while the wizard was in flight: keep the draft so
                 # the operator can see their entered data, surface a flash.
+                # Rollback first so the advance_step token bump doesn't
+                # commit (symmetry with the conflict path below).
+                await db.rollback()
                 return await _render_review_with_flash(
                     request,
                     db,

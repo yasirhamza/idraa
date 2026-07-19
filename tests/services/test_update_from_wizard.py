@@ -245,6 +245,7 @@ async def test_audit_row_carries_diff_and_pooling_summary(
     s.source = ScenarioSource.LIBRARY_DERIVED
     s.conversion_metadata = {"register_row_id": "abc-123", "likelihood_band": "high"}
     s.entry_currency = "EUR"
+    s.entry_rate = 1.08
     await db_session.flush()
     assert s.row_version == 1
 
@@ -274,6 +275,7 @@ async def test_audit_row_carries_diff_and_pooling_summary(
     assert changes["conversion_metadata"][0] is not None
     assert changes["conversion_metadata"][1] is None
     assert changes["entry_currency"] == ["EUR", "USD"]
+    assert changes["entry_rate"] == [1.08, None]
     assert changes["per_fieldset_pooling_summary"]["tef"]["n_smes"] == 2
     assert changes["row_version"] == [1, 2]
 

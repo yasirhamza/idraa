@@ -24,6 +24,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.attack import AttackTechnique, ScenarioAttackMapping
 from idraa.models.enums import (
     AssetClass,
     EntityStatus,
@@ -237,6 +238,28 @@ async def test_finalize_updates_target_in_place(
         recorded_at=now,
         recorded_by=user_id,
     )
+    # PR-gate spec NTH: pin the ATT&CK-mappings-untouched absence property —
+    # re-estimation must retain curated technique mappings (they describe the
+    # attack method, not the estimates).
+    technique = AttackTechnique(
+        domain="enterprise",
+        technique_id="T1566",
+        name="Phishing",
+        tactics=["initial-access"],
+        catalog_version="18.0",
+        url="https://attack.mitre.org/techniques/T1566/",
+        citation={"source": "MITRE ATT&CK"},
+    )
+    db_session.add(technique)
+    await db_session.flush()
+    db_session.add(
+        ScenarioAttackMapping(
+            organization_id=org_id,
+            scenario_id=s.id,
+            technique_id=technique.id,
+            source="user",
+        )
+    )
     await db_session.commit()
 
     tx = await _post_re_estimate(client, s.id)
@@ -270,6 +293,18 @@ async def test_finalize_updates_target_in_place(
     # never on the hand-seeded literal dict above.
     assert "distribution_fit_metadata" in updated.threat_event_frequency
     assert "distribution_fit_metadata" in updated.primary_loss
+    # ATT&CK mappings retained (absence property: the update path never
+    # touches them; the copy-from-library call is create-path-only).
+    mappings = (
+        (
+            await db_session.execute(
+                select(ScenarioAttackMapping).where(ScenarioAttackMapping.scenario_id == s.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(mappings) == 1
 
 
 # ---- 2: SME rows replaced, not merged --------------------------------------

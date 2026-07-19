@@ -600,6 +600,7 @@ class ScenarioService:
             "vuln_framing": scenario.vuln_framing,
             "conversion_metadata": scenario.conversion_metadata,
             "entry_currency": scenario.entry_currency,
+            "entry_rate": scenario.entry_rate,
         }
         validate_fair_distributions(
             threat_event_frequency=form.threat_event_frequency,
