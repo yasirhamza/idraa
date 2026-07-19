@@ -191,7 +191,25 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
 - 2026-07-19: equivalence goldens verified mixture-free (grep 0 hits) — no
   re-baseline; single-component identity keeps existing sampling byte-identical.
 - Meth-N3 follow-up (legacy divergent multi-SME scenarios lack a user-facing
-  provenance banner) filed as a tracked issue at T9.
+  provenance banner) filed as a tracked issue at T9 (idraa#53).
+- 2026-07-19 final PR-gate round 1: 3 lanes (spec/architect/security) converged
+  0/0; methodology found 1 IMPORTANT — the scenario EDIT form's `dist_to_form`
+  had no `lognormal_mixture` branch, so a stored mixture fell through to blank
+  PERT fields (fail-loud 422 on save, but the surface was unusable). Fixed as
+  informed replacement, NOT the reviewer's suggested plain flatten: flatten to
+  the TRUE mixture's p5/p95 (fair_cam bisection, same convention as the CSV
+  export) under the lognormal selector PLUS a `{prefix}_from_mixture` flag that
+  renders a visible "saving replaces the pooled estimate" warning — a plain
+  flatten would have made any save silently swap the mixture for a single
+  lognormal, reintroducing the silent-degradation class this epic kills.
+  Accepted NICE-TO-HAVEs, with rationale: display-mean inline in
+  `lognormal_mixture_display_rows` (dominant codebase convention, numerically
+  identical); workbook methodology-sheet params cell empty for mixture nodes
+  (cosmetic; LET sampling path correct; `verification_workbook.py` deliberately
+  unchanged this epic); validator delegating component numeric-type enforcement
+  to the structural gate (documented intentional, mirrors scalar precedent).
+  The gate-excluded `@pytest.mark.slow` MC mean/variance pin was run explicitly
+  pre-merge and passed (1%/7% bounds hold).
 
 ## Scope budget
 

@@ -177,6 +177,70 @@ def test_dist_to_form_none_is_pert_blank() -> None:
     assert out["sl_low"] == ""
 
 
+# ── dist_to_form mixture flatten (#27 — edit form, informed replacement) ──
+
+# The epic's worked pair: SME A (meanlog 8.06, σ 0.70) + B (15.77, 1.19),
+# equal weights. Exact-identity hand-math anchor: with w_A = 0.5,
+# 0.5·F_A(x) = 0.05 ⇔ F_A(x) = 0.10 (B's mass is negligible down there), so
+# Q_mix(0.05) = Q_A(0.10) = exp(8.06 + 0.70·Φ⁻¹(0.10)) ≈ $1,290.666.
+_MIXTURE_DIST = {
+    "distribution": "lognormal_mixture",
+    "components": [
+        {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+        {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+    ],
+}
+
+
+def test_dist_to_form_mixture_flattens_to_true_mixture_quantiles() -> None:
+    """#27: a stored mixture renders as lognormal p5/p95 of the TRUE mixture
+    (fair_cam bisection oracle — same convention as the CSV export flatten),
+    never blank PERT fields (the pre-fix fall-through)."""
+    from fair_cam.quantile_pooling import (
+        LogNormalTruncFit,
+        LognormMixture,
+        mixture_quantile_lognorm,
+    )
+
+    out = dist_to_form(_MIXTURE_DIST, "pl")
+    assert out["pl_dist"] == "lognormal"
+    assert out["pl_mode"] == ""  # no mode under the lognormal selector
+    mix = LognormMixture(
+        components=tuple(
+            LogNormalTruncFit(
+                meanlog=c["mean"], sdlog=c["sigma"], min_support=0.0, max_support=math.inf
+            )
+            for c in _MIXTURE_DIST["components"]
+        ),
+        weights=(0.5, 0.5),
+    )
+    # Side-by-side: fair_cam oracle AND the epic's hand-math identity pin.
+    assert float(out["pl_low"]) == pytest.approx(mixture_quantile_lognorm(mix, 0.05), rel=1e-12)
+    assert float(out["pl_low"]) == pytest.approx(1290.666, rel=1e-6)
+    assert float(out["pl_high"]) == pytest.approx(mixture_quantile_lognorm(mix, 0.95), rel=1e-12)
+    assert float(out["pl_high"]) == pytest.approx(32444657.93, rel=1e-6)
+
+
+def test_dist_to_form_mixture_sets_from_mixture_flag_with_component_count() -> None:
+    """The {prefix}_from_mixture flag drives the template's informed-replacement
+    warning; it carries the component count for the warning copy."""
+    out = dist_to_form(_MIXTURE_DIST, "sl")
+    assert out["sl_from_mixture"] == "2"
+
+
+def test_dist_to_form_non_mixture_branches_carry_no_from_mixture_flag() -> None:
+    """Absence contract: plain lognormal / PERT / None never emit the flag —
+    a stray truthy value would render the replacement warning spuriously."""
+    plain = dist_from_raw({"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000"}, "pl")
+    for dist, prefix in (
+        (plain, "pl"),
+        ({"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0}, "tef"),
+        (None, "sl"),
+    ):
+        out = dist_to_form(dist, prefix)
+        assert f"{prefix}_from_mixture" not in out
+
+
 # ── form_defaults carries the *_dist selectors ────────────────────────────
 
 

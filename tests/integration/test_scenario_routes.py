@@ -607,6 +607,38 @@ async def test_edit_form_lognormal_primary_loss_round_trips(
     assert "{ dist: 'lognormal' }" in r.text
 
 
+async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """#27: a stored lognormal_mixture primary_loss renders the edit form as
+    lognormal with the TRUE mixture's p5/p95 populated (not the pre-fix blank
+    PERT fall-through), plus the informed-replacement warning — saving this
+    form discards the pooled mixture, and that must never be silent."""
+    client, org_id = authed_analyst
+    s = _seed_scenario(db_session, org_id=org_id, name="MixtureEdit")
+    s.primary_loss = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}/edit")
+    assert r.status_code == 200
+    # Rendered under the lognormal selector with the mixture's true p5/p95
+    # (exact-identity anchor Q_mix(0.05) = Q_A(0.10) ≈ $1,290.666; the money
+    # input filter renders 2-decimal fixed).
+    assert 'value="lognormal" selected' in r.text
+    assert 'value="1290.67"' in r.text
+    assert 'value="32444657.93"' in r.text
+    # Informed-replacement warning names the pooled provenance.
+    assert "pooled from 2 expert estimates" in r.text
+    # Non-mixture nodes (tef here is PERT) do not render the warning.
+    assert r.text.count("pooled from") == 1
+
+
 # ---- update ----------------------------------------------------------
 
 

@@ -443,19 +443,63 @@ def dist_to_form(dist: dict[str, Any] | None, prefix: str) -> dict[str, str]:
     - lognormal: re-derive the p5/p95 quantiles from native ``{mean, sigma}``
       (so the operator edits the same real-space low/high they entered) and
       blank out ``{prefix}_mode`` (no mode in lognormal mode).
+    - lognormal_mixture (#27): flatten to the TRUE mixture's p5/p95 (fair_cam
+      bisection on an untruncated rebuild — the exact convention of
+      ``scenario_export._dist_cells``) under the ``"lognormal"`` selector, and
+      additionally emit ``{prefix}_from_mixture`` = component count. The form
+      has no mixture editor, so saving REPLACES the pooled multi-expert
+      mixture with a single lognormal anchored at the shown p5/p95 — that is
+      lossy by design, and the ``_from_mixture`` flag drives a visible
+      template warning so the replacement is informed, never silent (the
+      silent-degradation class #27 exists to kill). On a 422 re-render the
+      flag is absent (raw POST fields don't carry it) — correct, because by
+      then the submitted values ARE plain-lognormal inputs.
     - PERT (or ``None`` / missing): delegate to :func:`pert_dist_to_form` and
       stamp ``{prefix}_dist = "pert"`` so the select renders the PERT option.
 
     Used for tef / pl / sl in :func:`form_from_scenario`. Vulnerability keeps
-    :func:`pert_dist_to_form` directly (no selector).
+    :func:`pert_dist_to_form` directly (no selector; mixtures are barred from
+    vulnerability at both the wizard and import gates).
     """
-    if dist and str(dist.get("distribution", "")).lower() == "lognormal":
+    kind = str((dist or {}).get("distribution", "")).lower()
+    if dist and kind == "lognormal":
         lo, hi = lognormal_quantiles(dist["mean"], dist["sigma"], (0.05, 0.95))
         return {
             f"{prefix}_dist": "lognormal",
             f"{prefix}_low": str(lo),
             f"{prefix}_mode": "",
             f"{prefix}_high": str(hi),
+        }
+    if dist and kind == "lognormal_mixture":
+        import math
+
+        from fair_cam.quantile_pooling import (
+            LogNormalTruncFit,
+            LognormMixture,
+            mixture_quantile_lognorm,
+        )
+
+        components = dist["components"]
+        mixture = LognormMixture(
+            components=tuple(
+                LogNormalTruncFit(
+                    meanlog=c["mean"],
+                    sdlog=c["sigma"],
+                    min_support=0.0,
+                    max_support=math.inf,
+                )
+                for c in components
+            ),
+            weights=tuple(c["weight"] for c in components),
+        )
+        lo = mixture_quantile_lognorm(mixture, 0.05)
+        hi = mixture_quantile_lognorm(mixture, 0.95)
+        return {
+            f"{prefix}_dist": "lognormal",
+            f"{prefix}_low": str(lo),
+            f"{prefix}_mode": "",
+            f"{prefix}_high": str(hi),
+            f"{prefix}_from_mixture": str(len(components)),
         }
     out = pert_dist_to_form(dist or {}, prefix)
     out[f"{prefix}_dist"] = "pert"

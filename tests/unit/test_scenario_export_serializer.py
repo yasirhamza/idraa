@@ -392,10 +392,11 @@ def test_json_normalize_dist_passes_mixture_through_verbatim() -> None:
 
 
 def test_json_obj_emits_mixture_verbatim_for_all_three_allowed_nodes() -> None:
-    # N>=3 adapter-iteration contract (CLAUDE.md data-contract rule): the
-    # 2-component _MIXTURE_AB dict's "components" list must survive
-    # end-to-end through scenario_to_json_obj with all entries intact for
-    # each of the three nodes lognormal_mixture is allowed on.
+    # Component-iteration check on the 2-component _MIXTURE_AB fixture:
+    # the "components" list must survive scenario_to_json_obj verbatim for
+    # each of the three nodes lognormal_mixture is allowed on. (The N>=3
+    # adapter-iteration contract required by CLAUDE.md lives in the
+    # export->import round-trip test, which uses a 3-component mixture.)
     for field in ("threat_event_frequency", "primary_loss", "secondary_loss"):
         s = _scenario(**{field: _MIXTURE_AB})
         obj = scenario_to_json_obj(s)
