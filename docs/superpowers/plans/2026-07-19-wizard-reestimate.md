@@ -508,7 +508,7 @@ New method (after `update()`):
         return scenario
 ```
 
-NOTE for implementer: `_audit_diff` iterates `before`'s keys — the three extra keys added to `before` above would make it try `getattr(scenario, "library_pin")` etc. If the verbatim `_audit_diff` handles them incorrectly (enum handling list), compute the diff from the UNEXTENDED before-dict and handle the three extras purely in the explicit loop shown — i.e., call `_capture_audit_before` FIRST, hold the extras in separate locals, don't put them in `before`. Choose whichever variant keeps `_audit_diff` verbatim; disclose which in the report.
+NOTE for implementer: amendment 8 is PRESCRIPTIVE — `before` holds the standard keys only; the five extras (`source`, `library_pin`, `vuln_framing`, `conversion_metadata`, `entry_currency`) live in `extras_before` and are diffed solely by the explicit loop, exactly as the code block above shows. Do not extend `before`.
 
 - [ ] **Step 4: Run tests**
 
@@ -602,7 +602,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 
 ```html
 <form method="post" action="/scenarios/{{ scenario.id }}/re-estimate" class="inline">
-  {{ csrf_input }}  {# use the exact CSRF idiom of the Promote form in this template #}
+  {{ csrf_field() }}
   <button type="submit" class="btn btn-sm">Re-estimate</button>
 </form>
 ```
@@ -629,6 +629,8 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 3. `test_finalize_conflict_renders_review_flash_and_preserves_draft` (asserts 422) — after seeding, bump the scenario via the edit form (row_version 2); finalize → response contains the conflict message, NOT a redirect; the `wizard_drafts` row still exists; the scenario is unchanged.
 4. `test_finalize_register_import_upgrade` — scenario with `source=qualitative_register_import`, `vuln_framing="legacy_residual"`, a populated `conversion_metadata`, no SME rows: POST re-estimate (empty rehydration), enter estimates, finalize → source flips, `vuln_framing == "inherent"`, `conversion_metadata is None` (amendment 14), estimates replaced.
 5. `test_create_path_unchanged` — the plain `POST /scenarios/new/wizard/...` flow (no target) still creates a new scenario (guard against regression: run one existing wizard-create integration test module and reference it here rather than duplicating).
+6. `test_deprecated_control_link_survives_reestimate` (amendment 2) — scenario linked to a control that is then DEPRECATED; re-estimate keeping the ACTIVE selection; finalize → the DEPRECATED link still exists, the ACTIVE selection applied.
+7. `test_cancel_targeted_draft_is_noop` (amendment 6) — POST the wizard cancel on a targeted draft → scenario row_version unchanged, draft row deleted.
 
 - [ ] **Step 2: Run to verify failure.**
 
@@ -696,7 +698,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 
 Post-dispatch block adjustments:
 - `scenario.entry_currency = "USD"` / `entry_rate = None` — the existing route-level stamp stays on the CREATE path only; the update path stamps inside `update_from_wizard` so the flip is audited (amendment 15).
-- Mitigating controls: on the re-estimate path call `set_mitigating_controls` UNCONDITIONALLY (empty list must clear); on the create path keep the existing `if state.mitigating_control_ids:` guard byte-identical.
+- Mitigating controls: on the re-estimate path call `set_mitigating_controls` UNCONDITIONALLY (empty list must clear) AND pass `eligible_control_ids={c.id for c in await ControlRepo(db).list_for_org(user.organization_id)}` per amendment 2 — the #217 scoping that keeps DRAFT/DEPRECATED links alive (mirror routes/scenarios.py:~955-968). On the create path keep the existing `if state.mitigating_control_ids:` guard byte-identical (no eligible_control_ids).
 - ATT&CK copy: keep guarded by `library_pin is not None` AND `not is_reestimate` (seeding never sets library fields, so this is defensive only — assert seeding leaves them None in Task 1's tests).
 - SME rows: before `persist_estimates`, on the re-estimate path only:
 
@@ -728,7 +730,7 @@ Post-dispatch block adjustments:
 
 - [ ] **Step 1: Failing tests** —
 1. `test_shell_shows_reestimating_title` — mid-flow GET of step 2 with a targeted draft: body contains `Re-estimating:` and the scenario name; an untargeted draft does NOT contain it.
-2. `test_review_step_states_update_semantics` — step-6 GET with targeted draft contains "replaces the estimates" (and the create-path wording is unchanged for untargeted).
+2. `test_review_step_states_update_semantics` — step-6 GET with targeted draft contains "replaces the estimates" AND "math may have been updated" (amendment 13); the create-path wording is unchanged for untargeted.
 3. `test_edit_form_mixture_warning_points_to_reestimate` — extend the existing `test_edit_form_mixture_primary_loss_flattens_with_replacement_warning` in `tests/integration/test_scenario_routes.py`: body also contains "Re-estimate".
 
 - [ ] **Step 2: Implement.** Shell header (inside whatever heading block exists — mirror the local markup):
@@ -746,7 +748,9 @@ Step-6 review, adjacent to the finalize button:
   <div class="alert alert-warning" role="alert"><span class="text-sm">
     Finalize <strong>replaces the estimates</strong> of scenario
     &ldquo;{{ state.name }}&rdquo; in place &mdash; its run history and
-    status are unchanged. Provenance becomes expert judgment.
+    status are unchanged. Provenance becomes expert judgment. Estimation
+    math may have been updated since this scenario was last estimated
+    &mdash; pooled distributions can shift even if you keep every value.
   </span></div>
 {% endif %}
 ```
