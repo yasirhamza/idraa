@@ -637,6 +637,9 @@ async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
     assert "pooled from 2 expert estimates" in r.text
     # Non-mixture nodes (tef here is PERT) do not render the warning.
     assert r.text.count("pooled from") == 1
+    # #56: the warning points the operator at the wizard re-estimate path
+    # as the way to re-elicit from experts instead of flattening the pool.
+    assert "Re-estimate" in r.text
 
 
 # ---- update ----------------------------------------------------------

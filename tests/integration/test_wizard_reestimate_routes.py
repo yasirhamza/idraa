@@ -362,3 +362,69 @@ async def test_load_sme_rows_contract_grouping_ordering_and_row_survival(
     assert [r["sme_name"] for r in result["pl"]] == ["PL Carol", "PL Dave", "PL Eve"]
     assert [r["low"] for r in result["pl"]] == [1_000.0, 2_000.0, 3_000.0]
     assert [r["high"] for r in result["pl"]] == [5_000.0, 6_000.0, 7_000.0]
+
+
+# ---- Task 5: UI copy (shell + review step) ---------------------------------
+#
+# Both tests below need only the entry route + a direct GET of a step page —
+# no full step-walk to finalize is required to assert on rendered copy, so
+# they land here (alongside test_wizard_step_renders_seeded_rows, which is
+# the same "POST re-estimate then GET a step" idiom) rather than in
+# test_wizard_reestimate_finalize.py, whose helpers are built around walking
+# a draft all the way to finalize.
+
+
+async def test_shell_shows_reestimating_title(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_analyst
+    s = _seed_scenario(db_session, org_id=org_id, name="Reestimate Title Target")
+    await db_session.commit()
+
+    r = await csrf_post(client, f"/scenarios/{s.id}/re-estimate", {}, follow_redirects=False)
+    assert r.status_code == 303
+    tx = _tx_from_location(r.headers["location"])
+
+    step2 = await client.get(f"/scenarios/new/wizard/step/2?tx={tx}")
+    assert step2.status_code == 200
+    assert "Re-estimating:" in step2.text
+    assert "Reestimate Title Target" in step2.text
+
+    # A fresh, untargeted draft must never show the re-estimating banner.
+    fresh = await client.get("/scenarios/new/wizard")
+    assert fresh.status_code == 200
+    assert "Re-estimating:" not in fresh.text
+
+
+async def test_review_step_states_update_semantics(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_analyst
+    s = _seed_scenario(db_session, org_id=org_id, name="Review Semantics Target")
+    await db_session.commit()
+    user_id = await _resolve_user_id(db_session, "analyst@test.local")
+
+    r = await csrf_post(client, f"/scenarios/{s.id}/re-estimate", {}, follow_redirects=False)
+    assert r.status_code == 303
+    tx = _tx_from_location(r.headers["location"])
+
+    step6 = await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")
+    assert step6.status_code == 200
+    assert "replaces the estimates" in step6.text
+    assert "math may have been updated" in step6.text
+
+    # Untargeted (create-path) draft: the update-semantics warning is absent.
+    fresh = await client.get("/scenarios/new/wizard")
+    assert fresh.status_code == 200
+    fresh_draft = (
+        await db_session.execute(
+            select(WizardDraft)
+            .where(WizardDraft.user_id == user_id)
+            .order_by(WizardDraft.updated_at.desc())
+            .limit(1)
+        )
+    ).scalar_one()
+    fresh_step6 = await client.get(f"/scenarios/new/wizard/step/6?tx={fresh_draft.tx_id}")
+    assert fresh_step6.status_code == 200
+    assert "replaces the estimates" not in fresh_step6.text
+    assert "math may have been updated" not in fresh_step6.text
