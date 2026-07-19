@@ -1276,5 +1276,11 @@ def test_category_keyword_preselection_word_boundary_and_ambiguity() -> None:
     # word boundary: 'sis' must not fire inside other words
     assert _category_keyword_match("Analysis backlog") is None
     assert _category_keyword_match("SIS bypass") == "ot_safety_tampering"
+    # review round: bare tampering/scada dropped (OT-ambiguous); explicit
+    # two-word forms map, single-signal generic forms stay manual
+    assert _category_keyword_match("Physical Tampering") == "physical_tampering"
+    assert _category_keyword_match("Data Tampering") == "data_tampering"
+    assert _category_keyword_match("Equipment tampering") is None
+    assert _category_keyword_match("SCADA outage") is None
     # ambiguity (two different categories) -> None
     assert _category_keyword_match("Phishing then Ransomware") is None

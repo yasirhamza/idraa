@@ -200,7 +200,9 @@ def _header_by_single_target(column_map: dict[str, str]) -> dict[str, str]:
 #   * longest/most-specific phrases first; first match wins, but if TWO
 #     DIFFERENT categories match the same value, no pre-selection (ambiguous).
 #   * deliberately ABSENT: bare "safety" (HSE workplace safety must not map
-#     to ot_safety_tampering), bare "supplier" (commercial/insolvency risk
+#     to ot_safety_tampering), bare "tampering" and "scada" (ambiguous across
+#     the tampering/OT members — review round: only two-word explicit forms
+#     map), bare "supplier" (commercial/insolvency risk
 #     must stay parkable), generic "ot security" (ambiguous across the three
 #     OT members), and the park target itself (a wrong park HIDES rows —
 #     parking is always an explicit human act).
@@ -211,17 +213,17 @@ _CATEGORY_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("data disclosure", "data_disclosure"),
     ("data privacy", "data_disclosure"),
     ("data breach", "data_disclosure"),
+    ("physical tampering", "physical_tampering"),
+    ("data tampering", "data_tampering"),
     ("supply chain", "supply_chain"),
     ("third party", "supply_chain"),
     ("exfiltration", "data_disclosure"),
     ("availability", "denial_of_service"),
     ("ransomware", "ransomware"),
     ("phishing", "social_engineering"),
-    ("tampering", "data_tampering"),
     ("insider", "insider_misuse"),
     ("malware", "malware"),
     ("vendor", "supply_chain"),
-    ("scada", "ot_availability"),
     ("ddos", "denial_of_service"),
     ("sis", "ot_safety_tampering"),
     ("bec", "social_engineering"),
