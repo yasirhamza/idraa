@@ -61,7 +61,15 @@ RUN --mount=type=cache,target=/app/.tailwind-bin \
 # unpinned action). Dependabot's docker ecosystem keeps this current.
 FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS runtime
 
+# PYTHONHASHSEED=0 (issue #33): set/frozenset iteration order in the scalar
+# compose path (fair_cam group_composition / composition) is hash-seed
+# dependent, and float accumulation is not associative — an unpinned seed
+# makes the reproducibility-pinned weight_robustness blob differ ~1e-13
+# across process launches. Pinning at the interpreter level (must be set
+# BEFORE Python starts; os.environ at runtime is too late) makes re-runs
+# byte-identical. No displayed value changes.
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=0 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN useradd --create-home --shell /bin/bash idraa
