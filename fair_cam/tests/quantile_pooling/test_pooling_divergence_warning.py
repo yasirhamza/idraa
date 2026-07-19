@@ -85,9 +85,13 @@ def test_combine_norm_divergent_logs_info(caplog: pytest.LogCaptureFixture) -> N
 
 def test_divergence_log_carries_actionable_context(caplog: pytest.LogCaptureFixture) -> None:
     """The message must name that divergence is now represented by the
-    mixture (not distorted by averaging) and point at the issue."""
+    mixture (not distorted by averaging) and point at the issue, AND the
+    demoted level must actually be INFO (T1-review NTH) -- not just
+    "some record exists at INFO-or-above" as the other tests in this file
+    check via caplog.at_level."""
     with caplog.at_level(logging.INFO, logger=_LOGGER):
         combine_lognorm_trunc([_lnfit(8.06, 0.70), _lnfit(15.77, 1.19)])
-    msg = next(rec.message for rec in caplog.records if "divergent" in rec.message.lower())
-    assert "mixture" in msg.lower()
-    assert "#27" in msg
+    rec = next(r for r in caplog.records if "divergent" in r.message.lower())
+    assert rec.levelno == logging.INFO
+    assert "mixture" in rec.message.lower()
+    assert "#27" in rec.message

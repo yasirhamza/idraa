@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -222,6 +223,115 @@ def _warn_if_divergent_fits(
                     loc_j,
                 )
                 return  # one log record per pooling call is enough
+
+
+# ----------------------------------------------------------------------------
+# Mixture quantile / PERT-collapse shared math (issue #27 Task 2). Family-
+# agnostic helpers reused by BOTH _lognormal.py and _normal.py so a
+# single-component mixture is byte-identical to the pre-mixture scalar
+# functions by construction (same code path, not a parallel
+# reimplementation) -- see the Task 2 binding amendment in
+# docs/superpowers/plans/2026-07-19-mixture-pooling.md.
+# ----------------------------------------------------------------------------
+
+#: HARD CAP on geometric bracket-widening doublings in mixture_quantile_*
+#: (binding amendment). A finite-but-huge meanlog/mean must not spin the
+#: render path -- non-convergence raises ArithmeticError with the component
+#: params rather than looping indefinitely. In practice the initial bracket
+#: (built from each component's own quantile function) is self-satisfying
+#: for any finite, well-formed component set -- see mixture_quantile_
+#: lognorm's docstring for the argument -- so this cap is a defensive
+#: circuit breaker, not something well-formed production inputs hit.
+MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS = 200
+
+#: Bisection iteration cap once a valid bracket is established. 200
+#: iterations comfortably reaches MIXTURE_BISECT_REL_TOL even across the
+#: multi-order-of-magnitude ranges lognormal mixtures span.
+MIXTURE_BISECT_MAX_ITER = 200
+
+#: Relative convergence tolerance for the mixture-quantile bisection
+#: (binding amendment: "tolerance 1e-10 relative, deterministic").
+MIXTURE_BISECT_REL_TOL = 1e-10
+
+#: Grid resolution for the unconstrained mixture-density mode search
+#: (binding amendment: "256-point log grid").
+MIXTURE_MODE_GRID_POINTS = 256
+
+
+def _clamp_mode(
+    raw_mode: float,
+    min_support: float,
+    max_support: float,
+    low: float,
+    high: float,
+) -> tuple[float, ModeClampReason | None]:
+    """Shared 4-branch clamp-precedence machinery for PERT-collapse mode
+    computation. Used by ``lognormal_to_pert_approx``, ``normal_to_pert_
+    approx``, and their mixture counterparts (``lognormal_mixture_to_pert_
+    approx`` / ``normal_mixture_to_pert_approx``, issue #27 Task 2) -- this
+    is the SAME code path for all four call sites, not a parallel
+    reimplementation, so a single-component mixture's mode (and
+    ``mode_clamp_reason``) is byte-identical to the pre-mixture scalar
+    function by construction.
+
+    Precedence (support-boundary wins over PERT-boundary; see
+    ``lognormal_to_pert_approx``'s module docstring for the full
+    rationale, including why ``MODE_ABOVE_PERT_HIGH`` is unreachable for
+    lognormal fits):
+      1. raw_mode < min_support -> UNTRUNCATED_MODE_BELOW_MIN_SUPPORT
+      2. raw_mode > max_support -> UNTRUNCATED_MODE_ABOVE_MAX_SUPPORT
+      3. ELSE raw_mode > high   -> MODE_ABOVE_PERT_HIGH
+      4. ELSE raw_mode < low    -> MODE_BELOW_PERT_LOW
+    """
+    reason: ModeClampReason | None = None
+    lo_bound = max(min_support, low)
+    hi_bound = min(max_support, high)
+    if raw_mode < min_support:
+        mode, reason = lo_bound, ModeClampReason.UNTRUNCATED_MODE_BELOW_MIN_SUPPORT
+    elif raw_mode > max_support:
+        mode, reason = hi_bound, ModeClampReason.UNTRUNCATED_MODE_ABOVE_MAX_SUPPORT
+    elif raw_mode > high:
+        mode, reason = high, ModeClampReason.MODE_ABOVE_PERT_HIGH
+    elif raw_mode < low:
+        mode, reason = low, ModeClampReason.MODE_BELOW_PERT_LOW
+    else:
+        mode = raw_mode
+    return mode, reason
+
+
+def _golden_section_max(
+    f: Any,
+    a: float,
+    b: float,
+    *,
+    rel_tol: float = 1e-9,
+    max_iter: int = 200,
+) -> float:
+    """Maximize a (locally) unimodal callable ``f`` over ``[a, b]`` via
+    golden-section search (issue #27 Task 2: refines the coarse-grid
+    mixture-density mode candidate to ``rel_tol`` relative precision).
+    Family-agnostic -- shared by the lognormal and normal mixture mode
+    searches (``_mixture_mode_lognorm`` / ``_mixture_mode_norm``)."""
+    if a > b:
+        a, b = b, a
+    if a == b:
+        return a
+    invphi = (math.sqrt(5.0) - 1.0) / 2.0  # 1 / golden ratio
+    c = b - invphi * (b - a)
+    d = a + invphi * (b - a)
+    fc, fd = f(c), f(d)
+    for _ in range(max_iter):
+        if abs(b - a) <= rel_tol * max(abs(a), abs(b), 1.0):
+            break
+        if fc > fd:
+            b, d, fd = d, c, fc
+            c = b - invphi * (b - a)
+            fc = f(c)
+        else:
+            a, c, fc = c, d, fd
+            d = a + invphi * (b - a)
+            fd = f(d)
+    return (a + b) / 2.0
 
 
 def _normalize_weights(

@@ -10,12 +10,18 @@ from scipy.optimize import minimize
 from scipy.stats import truncnorm
 
 from ._types import (
+    MIXTURE_BISECT_MAX_ITER,
+    MIXTURE_BISECT_REL_TOL,
+    MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS,
+    MIXTURE_MODE_GRID_POINTS,
     DeadlineCallback,
     ModeClampReason,
     NormalTruncFit,
     NormMixture,
     PertTriple,
     QuantilePoolingError,
+    _clamp_mode,
+    _golden_section_max,
     _normalize_weights,
     _warn_if_divergent_fits,
 )
@@ -129,21 +135,178 @@ def normal_to_pert_approx(
     q_high: float = 0.95,
 ) -> tuple[PertTriple, ModeClampReason | None]:
     """Same 4-branch precedence as lognormal_to_pert_approx; mode = mean
-    for untruncated normal, clamped to support + PERT bounds."""
+    for untruncated normal, clamped to support + PERT bounds.
+
+    Issue #27 Task 2: the clamp precedence runs through the shared
+    ``_clamp_mode`` helper (also used by ``lognormal_to_pert_approx`` and
+    both mixture collapsers) -- same code path, not a parallel
+    reimplementation, so ``normal_mixture_to_pert_approx``'s
+    single-component branch is byte-identical to this function by
+    construction."""
     low = _qnormtrunc(q_low, fit.mean, fit.sd, fit.min_support, fit.max_support)
     high = _qnormtrunc(q_high, fit.mean, fit.sd, fit.min_support, fit.max_support)
     raw_mode = fit.mean
-    reason: ModeClampReason | None = None
-    lo_bound = max(fit.min_support, low)
-    hi_bound = min(fit.max_support, high)
-    if raw_mode < fit.min_support:
-        mode, reason = lo_bound, ModeClampReason.UNTRUNCATED_MODE_BELOW_MIN_SUPPORT
-    elif raw_mode > fit.max_support:
-        mode, reason = hi_bound, ModeClampReason.UNTRUNCATED_MODE_ABOVE_MAX_SUPPORT
-    elif raw_mode > high:
-        mode, reason = high, ModeClampReason.MODE_ABOVE_PERT_HIGH
-    elif raw_mode < low:
-        mode, reason = low, ModeClampReason.MODE_BELOW_PERT_LOW
+    mode, reason = _clamp_mode(raw_mode, fit.min_support, fit.max_support, low, high)
+    return PertTriple(low=low, mode=mode, high=high), reason
+
+
+def _pnormtrunc(x: float, mean: float, sd: float, min_support: float, max_support: float) -> float:
+    """CDF of a truncated normal at value x. Companion to ``_qnormtrunc``
+    (issue #27 Task 2). ``x`` outside ``[min_support, max_support]``
+    returns the saturated 0.0 / 1.0 rather than raising, since mixture
+    bisection probes arbitrary x during bracket search."""
+    if sd <= 0:
+        raise ValueError(f"sd must be > 0, got {sd}")
+    if x <= min_support:
+        return 0.0
+    if math.isfinite(max_support) and x >= max_support:
+        return 1.0
+    a = (min_support - mean) / sd if math.isfinite(min_support) else -math.inf
+    b = (max_support - mean) / sd if math.isfinite(max_support) else math.inf
+    rv = truncnorm(a, b, loc=mean, scale=sd)
+    return float(rv.cdf(x))
+
+
+def _norm_trunc_pdf(
+    x: float, mean: float, sd: float, min_support: float, max_support: float
+) -> float:
+    """PDF of a truncated normal at x. Used only by the mixture mode
+    search (issue #27 Task 2), never for quantile inversion."""
+    if x < min_support or (math.isfinite(max_support) and x > max_support):
+        return 0.0
+    a = (min_support - mean) / sd if math.isfinite(min_support) else -math.inf
+    b = (max_support - mean) / sd if math.isfinite(max_support) else math.inf
+    rv = truncnorm(a, b, loc=mean, scale=sd)
+    return float(rv.pdf(x))
+
+
+def mixture_quantile_norm(mix: NormMixture, p: float) -> float:
+    """Quantile of the mixture CDF at probability ``p``, solved by
+    bisection (issue #27 Task 2) -- normal counterpart to
+    ``mixture_quantile_lognorm``. Bisects in LINEAR space (not log-space):
+    normal support can include zero/negative values, so a log transform is
+    not generally valid here.
+
+    Single component delegates to ``_qnormtrunc`` EXACTLY -- byte-identity
+    for single-SME pooling. Bracket-widening / bisection tuning constants
+    and the ``ArithmeticError`` circuit breaker mirror
+    ``mixture_quantile_lognorm`` exactly; see that docstring for the
+    self-bracketing argument (widening is additive here, doubling the
+    current bracket width, rather than multiplicative on the value
+    itself)."""
+    if not 0.0 < p < 1.0:
+        raise ValueError(f"p must be in (0, 1), got {p}")
+    if len(mix.components) == 1:
+        c = mix.components[0]
+        return _qnormtrunc(p, c.mean, c.sd, c.min_support, c.max_support)
+
+    def mix_cdf(x: float) -> float:
+        return sum(
+            w * _pnormtrunc(x, c.mean, c.sd, c.min_support, c.max_support)
+            for c, w in zip(mix.components, mix.weights, strict=True)
+        )
+
+    lo = min(
+        _qnormtrunc(p * 0.5, c.mean, c.sd, c.min_support, c.max_support) for c in mix.components
+    )
+    hi = max(
+        _qnormtrunc(1.0 - (1.0 - p) * 0.5, c.mean, c.sd, c.min_support, c.max_support)
+        for c in mix.components
+    )
+
+    doublings = 0
+    while mix_cdf(lo) > p:
+        if doublings >= MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS:
+            raise ArithmeticError(
+                f"mixture_quantile_norm: lower bracket failed to converge "
+                f"after {MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS} doublings "
+                f"(p={p}, components={mix.components}, weights={mix.weights})"
+            )
+        width = max(hi - lo, 1e-9)
+        lo -= width
+        doublings += 1
+
+    doublings = 0
+    while mix_cdf(hi) < p:
+        if doublings >= MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS:
+            raise ArithmeticError(
+                f"mixture_quantile_norm: upper bracket failed to converge "
+                f"after {MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS} doublings "
+                f"(p={p}, components={mix.components}, weights={mix.weights})"
+            )
+        width = max(hi - lo, 1e-9)
+        hi += width
+        doublings += 1
+
+    for _ in range(MIXTURE_BISECT_MAX_ITER):
+        if (hi - lo) < MIXTURE_BISECT_REL_TOL * max(abs(lo), abs(hi), 1.0):
+            break
+        mid = (lo + hi) / 2.0
+        if mix_cdf(mid) < p:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+def _mixture_density_norm(mix: NormMixture, x: float) -> float:
+    return sum(
+        w * _norm_trunc_pdf(x, c.mean, c.sd, c.min_support, c.max_support)
+        for c, w in zip(mix.components, mix.weights, strict=True)
+    )
+
+
+def _mixture_mode_norm(mix: NormMixture, low: float, high: float) -> float:
+    """UNCONSTRAINED global argmax of the mixture density (issue #27 Task
+    2, normal counterpart to ``_mixture_mode_lognorm``). Component modes =
+    means (a truncated normal's untruncated mode is its mean). Grid is
+    LINEAR-spaced (per the binding amendment's "mode grid linear-spaced")
+    over ``[min_i meanᵢ, max_i meanᵢ] ∪ [low, high]``, padded slightly so a
+    degenerate single-valued bracket (e.g. identical means) still has a
+    search window."""
+    component_modes = [c.mean for c in mix.components]
+    bracket_lo = min(min(component_modes), low)
+    bracket_hi = max(max(component_modes), high)
+    pad = max((bracket_hi - bracket_lo) * 0.01, 1e-9)
+    bracket_lo -= pad
+    bracket_hi += pad
+
+    def density(x: float) -> float:
+        return _mixture_density_norm(mix, x)
+
+    grid = np.linspace(bracket_lo, bracket_hi, MIXTURE_MODE_GRID_POINTS)
+    candidates = sorted(set(grid.tolist()) | set(component_modes))
+    densities = [density(x) for x in candidates]
+    best_i = max(range(len(candidates)), key=lambda i: densities[i])
+    win_lo = candidates[best_i - 1] if best_i > 0 else candidates[0]
+    win_hi = candidates[best_i + 1] if best_i < len(candidates) - 1 else candidates[-1]
+    if win_lo >= win_hi:
+        return candidates[best_i]
+    return _golden_section_max(density, win_lo, win_hi)
+
+
+def normal_mixture_to_pert_approx(
+    mix: NormMixture,
+    q_low: float = 0.05,
+    q_high: float = 0.95,
+) -> tuple[PertTriple, ModeClampReason | None]:
+    """PERT-collapse a normal mixture (issue #27 Task 2) -- normal
+    counterpart to ``lognormal_mixture_to_pert_approx``; same dedicated
+    single-component branch / shared ``_clamp_mode`` / multi-component
+    unconstrained-argmax structure. See that docstring for the full
+    rationale (range-coverage restored, bimodal-collapse limitation
+    documented for the lognormal path -- the normal path shares the same
+    structural limitation for divergent vuln estimates)."""
+    low = mixture_quantile_norm(mix, q_low)
+    high = mixture_quantile_norm(mix, q_high)
+    min_support = min(c.min_support for c in mix.components)
+    max_support = max(c.max_support for c in mix.components)
+
+    if len(mix.components) == 1:
+        c = mix.components[0]
+        raw_mode = c.mean
     else:
-        mode = raw_mode
+        raw_mode = _mixture_mode_norm(mix, low, high)
+
+    mode, reason = _clamp_mode(raw_mode, min_support, max_support, low, high)
     return PertTriple(low=low, mode=mode, high=high), reason
