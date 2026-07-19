@@ -47,7 +47,7 @@
       causes land here.
     </p>
     {% if parked_rows %}
-    {{ preview_table(parked_rows, [{"label": "Line", "key": "line", "mono": True}]) }}
+    {{ preview_table(parked_rows, [{"label": "Line", "key": "line", "mono": True}, {"label": "Title", "key": "title"}, {"label": "Why", "key": "note"}]) }}
     {% else %}
     <p class="text-sm text-ink-2">No rows parked.</p>
     {% endif %}

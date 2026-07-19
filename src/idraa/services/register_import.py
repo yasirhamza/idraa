@@ -95,10 +95,13 @@ TARGETS: frozenset[str] = frozenset(
         "ignore",
     }
 )
-# title/likelihood/impact: exactly one header must map to each (base plan
-# Task 3 interface — required for any row to be scoreable at all).
-_REQUIRED_EXACTLY_ONE: frozenset[str] = frozenset({"title", "likelihood", "impact"})
-# description/category/owner: single-valued, but optional — mapping more
+# title/likelihood/impact/category: exactly one header must map to each.
+# category joined the required set after prod UAT 2026-07-19: an unmapped
+# category silently parked EVERY row (category=None parks by design), an
+# outcome-inverting omission that sailed through three screens. Registers
+# genuinely lacking a category column are deliberately blocked (owner call).
+_REQUIRED_EXACTLY_ONE: frozenset[str] = frozenset({"title", "likelihood", "impact", "category"})
+# description/owner: single-valued, but optional — mapping more
 # than one header to any of these would make BoundRow's single field
 # ambiguous (which header wins?), so it is rejected rather than silently
 # picking one.
@@ -534,9 +537,14 @@ class RegisterImportService:
         title_header = header_by_target.get("title")
         likelihood_header = header_by_target.get("likelihood")
         impact_header = header_by_target.get("impact")
-        if title_header is None or likelihood_header is None or impact_header is None:
+        if (
+            title_header is None
+            or likelihood_header is None
+            or impact_header is None
+            or header_by_target.get("category") is None
+        ):
             raise ValidationError(
-                "column map is missing a required title/likelihood/impact binding"
+                "column map is missing a required title/likelihood/impact/category binding"
             )
         description_header = header_by_target.get("description")
         owner_header = header_by_target.get("owner")
@@ -575,6 +583,7 @@ class RegisterImportService:
                             "category": raw_category,
                         },
                         carry_along=self._carry_along(r, carry_headers),
+                        park_reason="blank_cells",
                     )
                 )
                 continue
@@ -605,6 +614,7 @@ class RegisterImportService:
                 category = (
                     None if category_target == _PARKED_CATEGORY else ThreatCategory(category_target)
                 )
+            park_reason = "category" if category is None else None
 
             bound_rows.append(
                 BoundRow(
@@ -621,6 +631,7 @@ class RegisterImportService:
                         "category": raw_category,
                     },
                     carry_along=self._carry_along(r, carry_headers),
+                    park_reason=park_reason,
                 )
             )
         return bound_rows

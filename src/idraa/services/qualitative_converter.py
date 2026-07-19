@@ -122,6 +122,10 @@ def _check_bounded_dict(
 class BoundRow:
     """One qualitative register row after column-map + value-bind (P1c).
 
+    ``park_reason`` (UAT fix): why ``category`` is None — ``"category"``
+    (bound to the parked target) or ``"blank_cells"`` (blank likelihood/
+    impact cell auto-park). None for scoreable rows.
+
     ``raw`` is EXACTLY the 3 bound cells (Sec-I3) — the fixed subset the
     conversion_metadata provenance pins to, NOT a full-row capture.
     ``carry_along`` is whatever additional columns the user chose to keep
@@ -138,6 +142,7 @@ class BoundRow:
     category: ThreatCategory | None  # None == PARKED (D5)
     raw: dict[str, str]  # {"likelihood": ..., "impact": ..., "category": ...}
     carry_along: dict[str, str] = field(default_factory=dict)
+    park_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -197,10 +202,20 @@ class RowError:
     message: str
 
 
+@dataclass(frozen=True)
+class ParkedRow:
+    """Parked disposition with enough context to render a readable report
+    (UAT fix — a parked-only preview previously showed blank titles)."""
+
+    source_row: int
+    title: str
+    reason: str  # "category" | "blank_cells"
+
+
 @dataclass
 class ConversionReport:
     created: list[ConvertedRow]
-    parked: list[int]
+    parked: list[ParkedRow]
     skipped_duplicates: list[SkippedRow]
     errors: list[RowError]
     sl_note: str
@@ -224,7 +239,7 @@ class ClassifiedRows:
     """
 
     would_create: list[BoundRow]
-    parked: list[int]
+    parked: list[ParkedRow]
     duplicates: list[SkippedRow]
     errors: list[RowError]
 
@@ -344,14 +359,20 @@ class QualitativeConverterService:
         seen_sources: set[tuple[str, int]] = set()
 
         would_create: list[BoundRow] = []
-        parked: list[int] = []
+        parked: list[ParkedRow] = []
         duplicates: list[SkippedRow] = []
         errors: list[RowError] = []
 
         for row in rows:
             try:
                 if row.category is None:
-                    parked.append(row.source_row)
+                    parked.append(
+                        ParkedRow(
+                            source_row=row.source_row,
+                            title=row.title.strip(),
+                            reason=row.park_reason or "category",
+                        )
+                    )
                     continue
 
                 name_key = row.title.strip().casefold()

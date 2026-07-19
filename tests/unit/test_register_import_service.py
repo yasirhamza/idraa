@@ -502,7 +502,9 @@ async def test_set_column_map_ambiguous_single_valued_target_rejected(
     )
     bad_map = dict(_FULL_COLUMN_MAP)
     bad_map["Notes"] = "category"  # now TWO headers map to "category"
-    with pytest.raises(ValidationError, match="at most one column may map to 'category'"):
+    # category joined _REQUIRED_EXACTLY_ONE (UAT fix): duplicates now trip the
+    # exactly-one check rather than the optional at-most-one check.
+    with pytest.raises(ValidationError, match="exactly one column must map to 'category'"):
         await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=bad_map)
 
 
@@ -836,6 +838,7 @@ async def test_build_bound_rows_blank_likelihood_auto_parks(
     rows = await svc.build_bound_rows(organization_id=org.id, token=token)
     assert len(rows) == 1
     assert rows[0].category is None
+    assert rows[0].park_reason == "blank_cells"  # UAT fix: reason pinned for report labels
     assert rows[0].raw == {"likelihood": "", "impact": "High", "category": "Phishing"}
 
 
@@ -912,7 +915,7 @@ async def test_preview_classifies_without_writing(
     classified = await svc.preview(organization_id=org.id, token=token)
 
     assert [r.source_row for r in classified.would_create] == [2, 3]
-    assert classified.parked == [4]
+    assert [(p.source_row, p.reason) for p in classified.parked] == [(4, "category")]
     assert classified.duplicates == []
     assert classified.errors == []
 
@@ -937,7 +940,7 @@ async def test_apply_creates_scenarios_and_deletes_token(
     report = await svc.apply(organization_id=org.id, user=user, token=token)
 
     assert len(report.created) == 2
-    assert report.parked == [4]
+    assert [(p.source_row, p.reason) for p in report.parked] == [(4, "category")]
     assert report.source_file == "q3_register.csv"
 
     scenarios = (

@@ -12,9 +12,11 @@
 <div class="max-w-3xl mx-auto space-y-6">
   <p class="text-body text-ink-2">
     Assign each column from <strong>{{ filename or "the uploaded file" }}</strong> to a
-    target field. <strong>Title</strong>, <strong>likelihood</strong>, and
-    <strong>impact</strong> must each be mapped from exactly one column;
-    everything else is optional.
+    target field. <strong>Title</strong>, <strong>likelihood</strong>,
+    <strong>impact</strong>, and <strong>category</strong> must each be mapped
+    from exactly one column; everything else is optional. (Category is
+    required so rows can be classified — an unmapped category would park
+    every row.)
   </p>
 
   <form method="post" action="/register-import/{{ token }}/columns" class="space-y-3">
