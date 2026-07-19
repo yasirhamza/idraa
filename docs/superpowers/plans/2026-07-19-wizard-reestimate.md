@@ -12,7 +12,7 @@
 
 - Worktree `wt-reestimate`, branch `feat/wizard-reestimate`; NEVER background the test/gate commands — run them foreground and wait.
 - Eligibility: ALL scenarios, any source/status. Provenance on finalize: `source = ScenarioSource.EXPERT_JUDGMENT`, `library_pin = None`, `vuln_framing = "inherent"`, `status` untouched, `scenario.effect`/`scenario_type`/`version` (descriptive) preserved.
-- Optimistic lock: `target_expected_row_version` captured at seed; conflict → 409 review re-render, draft PRESERVED.
+- Optimistic lock: `target_expected_row_version` captured at seed; conflict → 422 review-flash re-render (amendment 5), draft PRESERVED.
 - Runs never stale-marked. ATT&CK mappings untouched on the update path.
 - SME rows: replace-all in the finalize transaction (delete + `persist_estimates`).
 - Legacy drafts (no target keys in `state_json`) must deserialize to `None` defaults (the whitelist loader in `wizard_state.py:get_or_create` already tolerates missing keys — dataclass defaults apply).
@@ -604,7 +604,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 
 1. `test_finalize_updates_target_in_place` — seed wizard-born-style scenario (row_version 1, source `library_derived`, non-None library_pin, 1 SME row per fieldset), POST re-estimate, walk steps 2–6 keeping seeded values, finalize. Assert: redirect to `/scenarios/{s.id}`; SAME scenario id; `row_version == 2`; `source == expert_judgment`; `library_pin is None`; `vuln_framing == "inherent"`; distributions replaced (fit metadata `fitted_at` newer); status unchanged; NO new Scenario row created (count unchanged).
 2. `test_finalize_replaces_sme_rows` — target starts with 2 old rows on "tef"; finalize a re-estimation entering 3 different rows → exactly the 3 new rows remain for the scenario (old gone), N=3 intact.
-3. `test_finalize_conflict_renders_409_and_preserves_draft` — after seeding, bump the scenario via the edit form (row_version 2); finalize → response contains the conflict message, NOT a redirect; the `wizard_drafts` row still exists; the scenario is unchanged.
+3. `test_finalize_conflict_renders_review_flash_and_preserves_draft` (asserts 422) — after seeding, bump the scenario via the edit form (row_version 2); finalize → response contains the conflict message, NOT a redirect; the `wizard_drafts` row still exists; the scenario is unchanged.
 4. `test_finalize_register_import_upgrade` — scenario with `source=qualitative_register_import`, `vuln_framing="legacy_residual"`, no SME rows: POST re-estimate (empty rehydration), enter estimates, finalize → source flips, `vuln_framing == "inherent"`, estimates replaced.
 5. `test_create_path_unchanged` — the plain `POST /scenarios/new/wizard/...` flow (no target) still creates a new scenario (guard against regression: run one existing wizard-create integration test module and reference it here rather than duplicating).
 
@@ -659,7 +659,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
                 scenario = await ScenarioService(db).create_from_wizard(
                     ... existing kwargs unchanged ...
                 )
-        except ScenarioVersionConflictError as exc:
+        except (ScenarioVersionConflictError, NotFoundError) as exc:
             await db.rollback()  # unwind advance_step's token bump; draft survives
             return await _render_review_with_flash(
                 request, db, user, tx, message=str(exc)
