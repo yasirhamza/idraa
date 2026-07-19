@@ -372,6 +372,75 @@ class ScenarioService:
             per_fieldset_pooling_summary=per_fieldset_pooling_summary,
         )
 
+    # ------------------------------------------------------------------
+    # #56: shared before/apply/diff primitives — extracted verbatim from
+    # ``update()`` (no semantic change) so ``update_from_wizard`` can reuse
+    # them without re-deriving the audit-diff shape. The vuln-triple
+    # conditional flip is NOT part of this extraction — it stays inline in
+    # ``update()`` (Arch-N1 amendment); ``update_from_wizard`` forces
+    # vuln_framing unconditionally instead.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_audit_before(scenario: Scenario) -> dict[str, Any]:
+        # Capture before-state for audit. Enum-valued fields are
+        # serialised to .value so the JSON audit payload stays plain.
+        # industry/revenue_tier columns are gone (issue #88 Task 12).
+        return {
+            "name": scenario.name,
+            "description": scenario.description,
+            "scenario_type": scenario.scenario_type.value,
+            "threat_category": getattr(scenario.threat_category, "value", scenario.threat_category),
+            "threat_actor_type": getattr(
+                scenario.threat_actor_type, "value", scenario.threat_actor_type
+            ),
+            "attack_vector": scenario.attack_vector,
+            "asset_class": getattr(scenario.asset_class, "value", scenario.asset_class),
+            "effect": getattr(scenario.effect, "value", scenario.effect),
+            "threat_event_frequency": scenario.threat_event_frequency,
+            "vulnerability": scenario.vulnerability,
+            "primary_loss": scenario.primary_loss,
+            "secondary_loss": scenario.secondary_loss,
+            "status": scenario.status.value,
+            "version": scenario.version,
+        }
+
+    @staticmethod
+    def _apply_form_fields(scenario: Scenario, form: ScenarioForm) -> None:
+        # Apply descriptive-only changes (pin columns untouched per F12).
+        scenario.name = form.name
+        scenario.description = form.description
+        scenario.scenario_type = form.scenario_type
+        scenario.threat_category = form.threat_category  # type: ignore[assignment]
+        scenario.threat_actor_type = form.threat_actor_type  # type: ignore[assignment]
+        scenario.attack_vector = form.attack_vector
+        scenario.asset_class = form.asset_class  # type: ignore[assignment]
+        scenario.effect = form.effect  # type: ignore[assignment]
+        scenario.threat_event_frequency = form.threat_event_frequency
+        scenario.vulnerability = form.vulnerability
+        scenario.primary_loss = form.primary_loss
+        scenario.secondary_loss = form.secondary_loss
+        scenario.status = form.status
+        scenario.version = form.version
+
+    @staticmethod
+    def _audit_diff(before: dict[str, Any], scenario: Scenario) -> dict[str, list[Any]]:
+        def _val(k: str) -> Any:
+            v = getattr(scenario, k)
+            if k in (
+                "scenario_type",
+                "status",
+                "threat_category",
+                "threat_actor_type",
+                "asset_class",
+                "effect",
+            ):
+                return getattr(v, "value", v)
+            return v
+
+        after = {k: _val(k) for k in before}
+        return {k: [before[k], after[k]] for k in before if before[k] != after[k]}
+
     async def update(
         self,
         *,
@@ -428,27 +497,7 @@ class ScenarioService:
                 "status cannot be changed here — use Promote on the scenario page"
             )
 
-        # Capture before-state for audit. Enum-valued fields are
-        # serialised to .value so the JSON audit payload stays plain.
-        # industry/revenue_tier columns are gone (issue #88 Task 12).
-        before: dict[str, Any] = {
-            "name": scenario.name,
-            "description": scenario.description,
-            "scenario_type": scenario.scenario_type.value,
-            "threat_category": getattr(scenario.threat_category, "value", scenario.threat_category),
-            "threat_actor_type": getattr(
-                scenario.threat_actor_type, "value", scenario.threat_actor_type
-            ),
-            "attack_vector": scenario.attack_vector,
-            "asset_class": getattr(scenario.asset_class, "value", scenario.asset_class),
-            "effect": getattr(scenario.effect, "value", scenario.effect),
-            "threat_event_frequency": scenario.threat_event_frequency,
-            "vulnerability": scenario.vulnerability,
-            "primary_loss": scenario.primary_loss,
-            "secondary_loss": scenario.secondary_loss,
-            "status": scenario.status.value,
-            "version": scenario.version,
-        }
+        before = self._capture_audit_before(scenario)
 
         # Sec-1: FAIRCAM validation before any FAIR-distribution write —
         # the create / _stamp_new_scenario paths already gate this, but the
@@ -476,39 +525,9 @@ class ScenarioService:
         if _vuln_triple(scenario.vulnerability) != _vuln_triple(form.vulnerability):
             scenario.vuln_framing = "inherent"
 
-        # Apply descriptive-only changes (pin columns untouched per F12).
-        scenario.name = form.name
-        scenario.description = form.description
-        scenario.scenario_type = form.scenario_type
-        scenario.threat_category = form.threat_category  # type: ignore[assignment]
-        scenario.threat_actor_type = form.threat_actor_type  # type: ignore[assignment]
-        scenario.attack_vector = form.attack_vector
-        scenario.asset_class = form.asset_class  # type: ignore[assignment]
-        scenario.effect = form.effect  # type: ignore[assignment]
-        scenario.threat_event_frequency = form.threat_event_frequency
-        scenario.vulnerability = form.vulnerability
-        scenario.primary_loss = form.primary_loss
-        scenario.secondary_loss = form.secondary_loss
-        scenario.status = form.status
-        scenario.version = form.version
+        self._apply_form_fields(scenario, form)
 
-        def _val(k: str) -> Any:
-            v = getattr(scenario, k)
-            if k in (
-                "scenario_type",
-                "status",
-                "threat_category",
-                "threat_actor_type",
-                "asset_class",
-                "effect",
-            ):
-                return getattr(v, "value", v)
-            return v
-
-        after = {k: _val(k) for k in before}
-        changes: dict[str, list[Any]] = {
-            k: [before[k], after[k]] for k in before if before[k] != after[k]
-        }
+        changes = self._audit_diff(before, scenario)
 
         if not changes:
             # No-op edit: don't bump row_version, don't emit audit.
@@ -527,6 +546,93 @@ class ScenarioService:
             action="scenario.update",
             changes=changes,
             user_id=current_user.id,
+            ip_address=ip_address,
+        )
+        return scenario
+
+    async def update_from_wizard(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        form: ScenarioForm,
+        expected_row_version: int,
+        actor: User,
+        ip_address: str | None = None,
+        per_fieldset_pooling_summary: dict[str, Any] | None = None,
+    ) -> Scenario:
+        """#56 wizard re-elicitation finalize delegate.
+
+        Shares update()'s primitives (lock, conflict, FAIRCAM validation,
+        before/after audit diff) and layers the wizard semantics on top:
+        source -> EXPERT_JUDGMENT, library_pin cleared, vuln_framing forced
+        "inherent" BY CONSTRUCTION (the wizard elicits vulnerability under
+        the inherent wording — unlike update()'s changed-triple-only flip),
+        pooling summary embedded in the audit changes. status / effect /
+        scenario_type / descriptive version are the CALLER's responsibility
+        to preserve on the form (the route builds the form from the loaded
+        scenario); the status-immutability guard still enforces it.
+        Never a silent no-op: fitted_at in the metadata sidecar changes on
+        every re-elicitation, so the diff is always non-empty — but the
+        row_version bump is unconditional anyway for belt-and-braces.
+        """
+        repo = ScenarioRepo(self._db)
+        scenario = await repo.get_for_org(
+            organization_id=organization_id, scenario_id=scenario_id, lock=True
+        )
+        if scenario is None:
+            raise NotFoundError(f"scenario_id={scenario_id} not found")
+        if scenario.row_version != expected_row_version:
+            raise ScenarioVersionConflictError(
+                f"scenario row_version conflict: expected_row_version="
+                f"{expected_row_version} but actual row_version={scenario.row_version}; "
+                f"this scenario was edited while you were estimating — "
+                f"start a fresh re-estimate from the scenario page"
+            )
+        if form.status != scenario.status:
+            raise ValidationError(
+                "status cannot be changed here — use Promote on the scenario page"
+            )
+        before = self._capture_audit_before(scenario)  # standard keys ONLY (amendment 8)
+        extras_before = {
+            "source": scenario.source.value,
+            "library_pin": scenario.library_pin,
+            "vuln_framing": scenario.vuln_framing,
+            "conversion_metadata": scenario.conversion_metadata,
+            "entry_currency": scenario.entry_currency,
+        }
+        validate_fair_distributions(
+            threat_event_frequency=form.threat_event_frequency,
+            vulnerability=form.vulnerability,
+            primary_loss=form.primary_loss,
+            secondary_loss=form.secondary_loss,
+        )
+        self._apply_form_fields(scenario, form)
+        scenario.source = ScenarioSource.EXPERT_JUDGMENT
+        scenario.library_pin = None
+        scenario.vuln_framing = "inherent"
+        scenario.conversion_metadata = None  # amendment 7: provenance sidecar
+        scenario.entry_currency = "USD"  # amendment 15: wizard elicits USD
+        scenario.entry_rate = None
+        changes: dict[str, Any] = self._audit_diff(before, scenario)
+        for extra, prev in extras_before.items():
+            cur = getattr(scenario, extra)
+            cur = getattr(cur, "value", cur)
+            if prev != cur:
+                changes[extra] = [prev, cur]
+        prev_row_version = scenario.row_version
+        scenario.row_version = prev_row_version + 1
+        changes["row_version"] = [prev_row_version, scenario.row_version]
+        if per_fieldset_pooling_summary is not None:
+            changes["per_fieldset_pooling_summary"] = per_fieldset_pooling_summary
+        await self._db.flush()
+        await AuditWriter(self._db).log(
+            organization_id=organization_id,
+            entity_type="scenario",
+            entity_id=scenario.id,
+            action="scenario.update",
+            changes=changes,
+            user_id=actor.id,
             ip_address=ip_address,
         )
         return scenario
