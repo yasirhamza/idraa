@@ -765,3 +765,24 @@ async def register_import_convert_post(
             "org_version_rows": _mapping_version_rows(report.mapping_versions, "org"),
         },
     )
+
+
+@router.post("/register-import/profiles/{profile_id}/delete")
+async def delete_profile(
+    request: Request,
+    profile_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Response:
+    """Delete a saved binding profile (mirror of the band-CRUD delete shape)."""
+    svc = RegisterImportService(db)
+    try:
+        await svc.delete_profile(
+            organization_id=user.organization_id,
+            profile_id=profile_id,
+            user=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url="/register-import", status_code=303)

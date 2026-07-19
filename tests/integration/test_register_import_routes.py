@@ -1100,3 +1100,82 @@ async def test_convert_post_single_use_second_post_409(
         admin_client, f"/register-import/{token}/convert", {}, follow_redirects=False
     )
     assert r2.status_code == 409
+
+
+async def _seed_profile(db_session: AsyncSession, *, org_id, name: str):
+    from idraa.models.register_binding_profile import RegisterBindingProfile
+
+    profile = RegisterBindingProfile(
+        organization_id=org_id,
+        name=name,
+        column_map={"T": "title"},
+        value_bindings={"likelihood": {}, "impact": {}, "category": {}},
+        mapping_versions_snapshot={"canonical": {}, "org": {}},
+    )
+    db_session.add(profile)
+    await db_session.commit()
+    return profile
+
+
+@pytest.mark.asyncio
+async def test_delete_profile_removes_row_and_audits(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    admin_client, org_id = authed_admin
+    profile = await _seed_profile(db_session, org_id=org_id, name="stale")
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/profiles/{profile.id}/delete",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    from sqlalchemy import select as _sel
+
+    from idraa.models.audit_log import AuditLog
+    from idraa.models.register_binding_profile import RegisterBindingProfile
+
+    db_session.expire_all()
+    rows = (await db_session.execute(_sel(RegisterBindingProfile))).scalars().all()
+    assert rows == []
+    audit = (
+        (
+            await db_session.execute(
+                _sel(AuditLog).where(AuditLog.action == "register_binding_profile.delete")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audit) == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_profile_cross_org_404(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    from tests.factories import create_org
+
+    admin_client, _admin_org = authed_admin
+    other_org = await create_org(db_session, name="Other Org For Profile")
+    other_profile = await _seed_profile(db_session, org_id=other_org.id, name="other-org")
+    r = await csrf_post(
+        admin_client,
+        f"/register-import/profiles/{other_profile.id}/delete",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_profile_rbac_analyst_403(authed_analyst, db_session: AsyncSession) -> None:
+    analyst_client, org_id = authed_analyst
+    profile = await _seed_profile(db_session, org_id=org_id, name="rbac-check")
+    r = await csrf_post(
+        analyst_client,
+        f"/register-import/profiles/{profile.id}/delete",
+        {},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403

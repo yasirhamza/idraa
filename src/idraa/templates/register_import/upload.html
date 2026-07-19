@@ -45,7 +45,14 @@
     </p>
     <ul class="text-sm text-ink-1 list-disc ml-5 space-y-1">
       {% for p in profiles %}
-      <li>{{ p.name }}</li>
+      <li class="flex items-center gap-3">
+        <span>{{ p.name }}</span>
+        <form method="post" action="/register-import/profiles/{{ p.id }}/delete"
+              onsubmit="return window.confirm('Delete profile {{ p.name }}?');">
+          {{ csrf_field() }}
+          <button type="submit" class="btn btn-xs btn-ghost text-status-critical">Delete</button>
+        </form>
+      </li>
       {% endfor %}
     </ul>
   </div>

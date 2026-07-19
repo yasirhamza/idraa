@@ -817,6 +817,32 @@ class RegisterImportService:
         )
         return list(rows)
 
+    async def delete_profile(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        profile_id: uuid.UUID,
+        user: User,
+        ip_address: str | None = None,
+    ) -> None:
+        """Hard-delete a binding profile (UAT follow-up 2026-07-19 — the GUI
+        shipped save/apply/list with no delete, stranding stale profiles).
+        Hard delete is deliberate: profiles are conveniences, not
+        audit-bearing artifacts — the audit row below records the removal."""
+        profile = await self._get_profile(organization_id=organization_id, profile_id=profile_id)
+        name = profile.name
+        await self._db.delete(profile)
+        await self._db.flush()
+        await AuditWriter(self._db).log(
+            organization_id=organization_id,
+            entity_type="register_binding_profile",
+            entity_id=profile_id,
+            action="register_binding_profile.delete",
+            changes={"name": [name, None]},
+            user_id=user.id,
+            ip_address=ip_address,
+        )
+
     async def _get_profile(
         self, *, organization_id: uuid.UUID, profile_id: uuid.UUID
     ) -> RegisterBindingProfile:
