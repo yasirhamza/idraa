@@ -94,7 +94,7 @@
       A reason is required and will be recorded in the audit log.
     </p>
     <form method="post" action="/overlays/{{ overlay.id }}/deactivate" class="space-y-2"
-          onsubmit="return confirm('Deactivate {{ overlay.tag }}?');">
+          onsubmit='return confirm("Deactivate " + {{ overlay.tag | tojson }} + "?");'>
       {{ csrf_field() }}
       <label class="form-control">
         <span class="text-meta text-ink-2">Reason</span>
