@@ -62,6 +62,20 @@
     {% else %}<p>No controls selected.</p>{% endif %}
   </section>
 
+  {% if state.target_scenario_id %}
+    {# #56: targeted finalize updates the existing scenario in place — spell
+       out the replace semantics (amendment 13: pooled distributions can
+       shift even on an unchanged re-entry, since calibration/pooling math
+       may have moved on since the scenario was last estimated). #}
+    <div class="alert alert-warning" role="alert"><span class="text-sm">
+      Finalize <strong>replaces the estimates</strong> of scenario
+      &ldquo;{{ state.name }}&rdquo; in place &mdash; its run history and
+      status are unchanged. Provenance becomes expert judgment. Estimation
+      math may have been updated since this scenario was last estimated
+      &mdash; pooled distributions can shift even if you keep every value.
+    </span></div>
+  {% endif %}
+
   <form method="post" action="/scenarios/new/wizard/finalize?tx={{ state.tx_id }}">
     {{ csrf_field() }}
     {# Plan-gate S-N1: the optimistic-lock CAS token. finalize_wizard reads

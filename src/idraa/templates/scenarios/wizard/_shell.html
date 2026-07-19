@@ -13,6 +13,14 @@
                actions=[]) }}
 {{ help_trigger('build-a-scenario') }}
 
+{# #56: targeted drafts (state.target_scenario_id set by the re-estimate
+   entry route) replace an existing scenario's estimates in place rather
+   than creating a new one — surface that on every step so the operator
+   never mistakes this for a fresh scenario. #}
+{% if state.target_scenario_id %}
+  <p class="text-meta text-ink-2">Re-estimating: {{ state.name }}</p>
+{% endif %}
+
 {# Mobile tranche 2d: the scenario wizard is no longer device-gated. The shell
    already reflows (the left progress rail is `hidden md:block` and the step
    content is `flex-1`), and the dense step bodies were made phone-friendly:

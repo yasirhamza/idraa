@@ -18,6 +18,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
 from idraa.models.wizard_draft import WizardDraft
 
 
@@ -56,6 +57,15 @@ class WizardState:
     # step-3 submits by T11 (the finalize route handler). Landed early at T5
     # so the finalize pipeline + its tests can construct WizardState directly.
     sme_estimates: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # #56 wizard re-elicitation: when set, finalize UPDATES this existing
+    # scenario in place instead of creating a new one. target_scenario_id is
+    # the hex UUID; target_expected_row_version is the scenario's row_version
+    # captured at seed time (the edit form's optimistic-lock primitive,
+    # carried through the wizard's lifetime — finalize raises
+    # ScenarioVersionConflictError on mismatch). Legacy drafts lack both keys
+    # in state_json and fall to None on load (create path, unchanged).
+    target_scenario_id: str | None = None
+    target_expected_row_version: int | None = None
     # Arch-25 R3 optimistic-lock counter. Sec-18 R2: the step-3 finalize POST
     # echoes this value back via a hidden form field; `advance_step` requires
     # the caller's value to match the row's current `version_token` before
@@ -317,6 +327,91 @@ class WizardStateService:
         # rowcount is dialect-dependent; SQLite returns -1 sometimes. Best
         # effort.
         return result.rowcount if result.rowcount is not None else 0
+
+
+async def load_sme_rows(
+    db: AsyncSession,
+    scenario_id: uuid.UUID,
+    organization_id: uuid.UUID,
+) -> dict[str, list[dict[str, Any]]]:
+    """#56: rehydrate persisted per-SME elicitation rows for re-estimation.
+
+    First-ever read path for scenario_sme_estimates (written by
+    wizard_finalize.persist_estimates, previously write-only). Returns the
+    exact shape WizardState.sme_estimates carries and
+    process_sme_estimates consumes: {fieldset: [{sme_id|sme_name, low,
+    high}]}. Row order follows recorded_at then id for determinism.
+    """
+    rows = (
+        (
+            await db.execute(
+                select(ScenarioSMEEstimate)
+                .where(
+                    ScenarioSMEEstimate.scenario_id == scenario_id,
+                    ScenarioSMEEstimate.organization_id == organization_id,
+                )
+                .order_by(ScenarioSMEEstimate.recorded_at, ScenarioSMEEstimate.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        entry: dict[str, Any] = {"low": r.low, "high": r.high}
+        if r.sme_id is not None:
+            entry["sme_id"] = str(r.sme_id)
+        else:
+            entry["sme_name"] = r.sme_name
+        out.setdefault(r.fieldset.value, []).append(entry)
+    return out
+
+
+def seed_wizard_state_from_scenario(
+    scenario: Any,
+    *,
+    sme_estimates: dict[str, list[dict[str, Any]]],
+    mitigating_control_ids: list[str],
+    tx_id: str,
+) -> WizardState:
+    """#56: build a re-estimation WizardState from a loaded Scenario.
+
+    Pure mapping — callers load the scenario (IDOR-safe, org-scoped), its
+    SME rows (load_sme_rows) and control ids, then persist the returned
+    state via WizardStateService. current_step=2 skips the library pick:
+    provenance flips to EXPERT_JUDGMENT on finalize regardless, so a pin
+    would be dead weight. loss_shape derives from the stored primary-loss
+    node (storage invariant since #326/#27: catastrophic <=> native
+    lognormal family on pl).
+    """
+    pl = scenario.primary_loss or {}
+    kind = str(pl.get("distribution", "")).lower()
+    loss_shape = "catastrophic" if kind in ("lognormal", "lognormal_mixture") else "capped"
+    if getattr(scenario, "vuln_framing", None) == "legacy_residual":
+        # Meth-B1: pre-#339 vuln rows were elicited under the residual
+        # wording (control discount baked in). Never rehydrate them — the
+        # operator re-enters vuln under the inherent copy, which is what
+        # makes finalize's vuln_framing="inherent" stamp truthful.
+        sme_estimates = {k: v for k, v in sme_estimates.items() if k != "vuln"}
+
+    def _enum_val(v: Any) -> str | None:
+        return getattr(v, "value", v) if v is not None else None
+
+    return WizardState(
+        tx_id=tx_id,
+        current_step=2,
+        target_scenario_id=scenario.id.hex,
+        target_expected_row_version=scenario.row_version,
+        name=scenario.name,
+        description=scenario.description,
+        threat_category=_enum_val(scenario.threat_category),
+        threat_actor_type=_enum_val(scenario.threat_actor_type),
+        asset_class=_enum_val(scenario.asset_class),
+        attack_vector=scenario.attack_vector,
+        mitigating_control_ids=list(mitigating_control_ids),
+        loss_shape=loss_shape,
+        sme_estimates=sme_estimates,
+    )
 
 
 # NOTE: build_create_form() was removed 2026-07-07 (#wizard-library-prefill).

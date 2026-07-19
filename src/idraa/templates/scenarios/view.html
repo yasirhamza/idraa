@@ -23,6 +23,21 @@
     )
 ) }}
 
+{# #56: Re-estimate — re-runs the SME estimation wizard against this
+   scenario and replaces its estimates in place. page_header's `actions`
+   list only renders `<a href>` links (macros/page_header.html), so a POST
+   form can't live inside it next to Edit/Run simulation; placed here
+   instead, right-aligned immediately under the header, analyst/admin-gated
+   like every other write action on this page. #}
+{% if current_user and current_user.role.value in ("analyst", "admin") %}
+<div class="flex justify-end -mt-2 mb-4">
+  <form method="post" action="/scenarios/{{ scenario.id }}/re-estimate">
+    {{ csrf_field() }}
+    <button type="submit" class="btn btn-sm btn-outline">Re-estimate</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="max-w-4xl mx-auto">
 
   {# Audit-F2 (plan-gate Meth-B1): legacy-framing review banner. Inline

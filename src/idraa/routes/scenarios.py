@@ -52,7 +52,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, sta
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -71,6 +71,7 @@ from idraa.models.enums import AssetClass, EntityStatus, ThreatActorType, UserRo
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
 from idraa.models.user import User
 from idraa.models.wizard_draft import WizardDraft
 from idraa.repositories.control_repo import ControlRepo
@@ -123,7 +124,7 @@ from idraa.services.scenario_library import (
     ScenarioLibraryService,
     available_facets,
 )
-from idraa.services.scenarios import ScenarioService
+from idraa.services.scenarios import ScenarioService, ScenarioVersionConflictError
 from idraa.services.wizard_finalize import (
     _FINALIZE_SEMAPHORE,
     FinalizationError,
@@ -149,6 +150,8 @@ from idraa.services.wizard_state import (
     WizardDraftConflictError,
     WizardState,
     WizardStateService,
+    load_sme_rows,
+    seed_wizard_state_from_scenario,
 )
 
 router = APIRouter()
@@ -1121,6 +1124,51 @@ async def promote_scenario(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/re-estimate")
+async def start_reestimate_wizard(
+    scenario_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> RedirectResponse:
+    """#56: seed a re-estimation wizard draft from an existing scenario.
+
+    Eligibility is universal (any source/status — owner decision): imports
+    seed with empty SME rows; wizard-born scenarios rehydrate theirs from
+    scenario_sme_estimates. The scenario itself is untouched until
+    finalize; Cancel abandons the draft with no effect.
+
+    CSRF enforced by the global CSRFMiddleware (preamble P4) — no
+    per-route dependency, matching every sibling POST in this module.
+    Cross-org / missing ids surface 404 (NOT 403 — no existence oracle,
+    mirrors confirm_vuln_framing's Sec-F2-I1 precedent). Amendment 12:
+    ``Scenario.mitigating_controls`` is ``lazy="selectin"`` so the
+    attribute access below is already eager-loaded — no extra eager-load
+    variant needed.
+    """
+    scenario = await ScenarioRepo(db).get_for_org(
+        organization_id=user.organization_id, scenario_id=scenario_id
+    )
+    if scenario is None:
+        raise HTTPException(404, "scenario not found")
+    sme_rows = await load_sme_rows(db, scenario.id, user.organization_id)
+    control_ids = [str(c.id) for c in (scenario.mitigating_controls or [])]
+    wizard_svc = WizardStateService(db)
+    state = await wizard_svc.get_or_create(user_id=user.id, organization_id=user.organization_id)
+    seeded = seed_wizard_state_from_scenario(
+        scenario,
+        sme_estimates=sme_rows,
+        mitigating_control_ids=control_ids,
+        tx_id=state.tx_id,
+    )
+    seeded.version_token = state.version_token
+    await wizard_svc.advance_step(
+        user_id=user.id, organization_id=user.organization_id, state=seeded
+    )
+    await db.commit()
+    return RedirectResponse(url=f"/scenarios/new/wizard/step/2?tx={seeded.tx_id}", status_code=303)
 
 
 # ---- wizard -----------------------------------------------------------
@@ -2305,7 +2353,48 @@ async def finalize_wizard(
         # T5: state.basic_fields() exposes step-2 fields (name, threat_*,
         # asset_class, attack_vector, library_entry_id) as a ScenarioForm-
         # splattable dict.
-        form = ScenarioForm(**form_kwargs, **state.basic_fields())
+        # #56: a targeted draft (target_scenario_id set) finalizes into an
+        # UPDATE of that scenario instead of a CREATE. The wizard never
+        # collects status / effect / scenario_type / the descriptive version
+        # label, so those are pulled from the live row and spliced onto the
+        # form the wizard DID collect.
+        is_reestimate = state.target_scenario_id is not None
+        target: Scenario | None = None
+        if is_reestimate:
+            # lock=True at the FIRST read (PR-gate Arch finding): the later
+            # update_from_wizard re-resolve returns this same identity-mapped
+            # instance WITHOUT refreshing row_version, so the optimistic-lock
+            # check compares against the value captured here. Locking here
+            # closes the stale-read window on multi-worker/Postgres deploys.
+            target = await ScenarioRepo(db).get_for_org(
+                organization_id=user.organization_id,
+                scenario_id=uuid.UUID(state.target_scenario_id),
+                lock=True,
+            )
+            if target is None:
+                # Deleted while the wizard was in flight: keep the draft so
+                # the operator can see their entered data, surface a flash.
+                # Rollback first so the advance_step token bump doesn't
+                # commit (symmetry with the conflict path below).
+                await db.rollback()
+                return await _render_review_with_flash(
+                    request,
+                    db,
+                    user,
+                    tx,
+                    message="This scenario no longer exists — it was deleted "
+                    "while you were estimating. Cancel to discard this draft.",
+                )
+            form = ScenarioForm(
+                **form_kwargs,
+                **state.basic_fields(),
+                status=target.status,
+                version=target.version,
+                effect=getattr(target.effect, "value", target.effect),
+                scenario_type=getattr(target.scenario_type, "value", target.scenario_type),
+            )
+        else:
+            form = ScenarioForm(**form_kwargs, **state.basic_fields())
         # issue #27 Task 5 (routes/scenarios.py:2311-2314 fix): r.pooled is now
         # always a LognormMixture/NormMixture (T1), never a bare fit with a
         # scalar .meanlog/.sdlog/.mean/.sd attribute — the old
@@ -2332,14 +2421,44 @@ async def finalize_wizard(
                 "override_version": state.override_version,
             }
         try:
-            scenario = await ScenarioService(db).create_from_wizard(
-                organization_id=user.organization_id,
-                form=form,
-                library_pin=library_pin,
-                actor=user,
-                ip_address=client_ip(request),
-                per_fieldset_pooling_summary=summary,
-            )
+            if is_reestimate:
+                if state.target_expected_row_version is None:
+                    # Impossible state (amendment 9 / Arch-N4 / Sec-N2): the
+                    # seed function always captures row_version. Fail loud
+                    # rather than silently coalescing to a value that could
+                    # forge an optimistic-lock pass.
+                    raise HTTPException(500, "re-estimate draft missing its row-version capture")
+                scenario = await ScenarioService(db).update_from_wizard(
+                    organization_id=user.organization_id,
+                    scenario_id=uuid.UUID(state.target_scenario_id),
+                    form=form,
+                    expected_row_version=state.target_expected_row_version,
+                    actor=user,
+                    ip_address=client_ip(request),
+                    per_fieldset_pooling_summary=summary,
+                )
+            else:
+                scenario = await ScenarioService(db).create_from_wizard(
+                    organization_id=user.organization_id,
+                    form=form,
+                    library_pin=library_pin,
+                    actor=user,
+                    ip_address=client_ip(request),
+                    per_fieldset_pooling_summary=summary,
+                )
+        except (ScenarioVersionConflictError, NotFoundError) as exc:
+            # amendment 5 / Spec-I2 + Arch-N2: the conflict path uses the
+            # finalize-error 422 flash idiom (NOT 409 — 409 is reserved for
+            # the version_token CAS above). Roll back first so advance_step's
+            # token bump is unwound and the draft survives untouched.
+            await db.rollback()
+            message = (
+                str(exc)
+                if isinstance(exc, ScenarioVersionConflictError)
+                else "This scenario no longer exists — it was deleted while "
+                "you were estimating. Cancel to discard this draft."
+            )  # Sec-R2-N1: never surface the raw NotFoundError message.
+            return await _render_review_with_flash(request, db, user, tx, message=message)
         except ValidationError as exc:
             # FAIR-distribution validation (validate_fair_distributions, via
             # _stamp_new_scenario) rejects unstorable distributions: non-finite
@@ -2360,15 +2479,36 @@ async def finalize_wizard(
             return await _render_review_with_flash(
                 request, db, user, tx, message=_step3_flash_message(exc)
             )
-        # Wizard authors in USD only (P2); native-currency entry is the expert
-        # form's path. Explicit stamp (not just the column default) so a future
-        # wizard change can't silently inherit a non-USD value.
-        # Tracked follow-up: wizard native entry.
-        scenario.entry_currency = "USD"
-        scenario.entry_rate = None
+        if not is_reestimate:
+            # Wizard authors in USD only (P2); native-currency entry is the
+            # expert form's path. Explicit stamp (not just the column
+            # default) so a future wizard change can't silently inherit a
+            # non-USD value. Tracked follow-up: wizard native entry.
+            # #56 amendment 15: the re-estimate path stamps USD INSIDE
+            # update_from_wizard instead, so a non-USD scenario's currency
+            # flip lands in that call's audit diff — stamping here too would
+            # double-stamp with no audit trail for the flip.
+            scenario.entry_currency = "USD"
+            scenario.entry_rate = None
         # UAT 2026-05-21 carryover: persist the mitigating controls picked
         # in wizard step 4 alongside the new evaluator-style finalize.
-        if state.mitigating_control_ids:
+        if is_reestimate:
+            # #56 amendment 2 / Arch-I1: unconditional (an empty selection
+            # must clear existing links) AND scoped to the ACTIVE set the
+            # step-5 picker actually rendered, mirroring the #217 edit-path
+            # fix — links to DRAFT/DEPRECATED controls the picker never
+            # showed a checkbox for survive re-estimation.
+            mitigating_uuids = [uuid.UUID(s) for s in state.mitigating_control_ids]
+            eligible_control_ids = {
+                c.id for c in await ControlRepo(db).list_for_org(user.organization_id)
+            }
+            await ScenarioRepo(db).set_mitigating_controls(
+                scenario_id=scenario.id,
+                organization_id=user.organization_id,
+                control_ids=mitigating_uuids,
+                eligible_control_ids=eligible_control_ids,
+            )
+        elif state.mitigating_control_ids:
             mitigating_uuids = [uuid.UUID(s) for s in state.mitigating_control_ids]
             await ScenarioRepo(db).set_mitigating_controls(
                 scenario_id=scenario.id,
@@ -2378,13 +2518,27 @@ async def finalize_wizard(
         # Issue #475: copy the pinned library entry's curated ATT&CK technique
         # mappings onto the new scenario (copy-on-clone, same convention as
         # distributions — the org rows are independent of the canonical layer).
-        if library_pin is not None:
+        # #56: re-estimation never copies ATT&CK mappings (existing mappings
+        # on the target are untouched by design). seed_wizard_state_from_scenario
+        # never sets library fields, so library_pin is always None on this
+        # path in practice — the is_reestimate guard is defensive.
+        if library_pin is not None and not is_reestimate:
             await copy_library_attack_mappings(
                 db,
                 scenario_id=scenario.id,
                 organization_id=user.organization_id,
                 entry_id=uuid.UUID(str(library_pin["entry_id"])),
                 entry_version=int(library_pin.get("version") or 1),
+            )
+        if is_reestimate:
+            # #56: SME rows are replace-all on re-estimation — the target's
+            # prior estimates no longer reflect the re-elicited values. Scoped
+            # to this org (defense in depth; scenario is already org-checked).
+            await db.execute(
+                delete(ScenarioSMEEstimate).where(
+                    ScenarioSMEEstimate.scenario_id == scenario.id,
+                    ScenarioSMEEstimate.organization_id == user.organization_id,
+                )
             )
         await persist_estimates(
             db,
