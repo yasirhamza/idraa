@@ -24,6 +24,7 @@ class DistributionType(Enum):
     UNIFORM = "uniform"
     NORMAL = "normal"
     LOGNORMAL = "lognormal"
+    LOGNORMAL_MIXTURE = "lognormal_mixture"
     BETA = "beta"
     TRIANGULAR = "triangular"
     PERT = "pert"
@@ -36,7 +37,10 @@ class FAIRDistribution:
     """Represents a probability distribution for FAIR parameters"""
 
     distribution_type: DistributionType
-    parameters: dict[str, float]
+    # dict[str, Any] (not dict[str, float]): LOGNORMAL_MIXTURE stores a nested
+    # shape, ``{"components": [{"mean", "sigma", "weight"}, ...]}`` (issue #27
+    # Task 3) -- every other DistributionType still stores flat float params.
+    parameters: dict[str, Any]
 
     def sample(
         self,
@@ -74,15 +78,58 @@ class FAIRDistribution:
             # without a broader refactor of caller contracts.
             return rng.lognormal(self.parameters["mean"], self.parameters["sigma"], size)
 
+        elif self.distribution_type == DistributionType.LOGNORMAL_MIXTURE:
+            # Linear-opinion-pool mixture of lognormal components (issue #27
+            # Task 3). Wire shape: parameters["components"] is a list of
+            # {"mean" (log-space meanlog), "sigma", "weight"} dicts -- one
+            # per pooled SME fit. Mirrors fair_cam.quantile_pooling's
+            # LognormMixture one-for-one (no import dependency; the engine
+            # layer does not depend on quantile_pooling).
+            components = self.parameters["components"]
+            n_components = len(components)
+            if n_components == 0:
+                raise ValueError("lognormal_mixture: parameters['components'] must be non-empty")
+
+            if n_components == 1:
+                # DEDICATED single-component branch that bypasses rng.choice
+                # entirely (binding amendment). rng.choice ALWAYS advances
+                # the generator's state to pick an index -- even with only
+                # one possible outcome, it still consumes `size` draws worth
+                # of randomness -- so routing a 1-component mixture through
+                # rng.choice would desync its sample stream from a plain
+                # DistributionType.LOGNORMAL draw at the same seed. This
+                # branch keeps that stream byte-identical (pinned by
+                # test_single_component_stream_identical_to_plain_lognormal),
+                # which is what makes single-SME pooling an exact identity
+                # end-to-end, not just at the quantile-math layer.
+                c = components[0]
+                return rng.lognormal(c["mean"], c["sigma"], size)
+
+            # Multi-component: one rng.choice call to pick the component
+            # index per draw (weighted by the pool weights), then a single
+            # VECTORIZED rng.lognormal call over the per-draw parameter
+            # arrays gathered via that index -- one draw pass, no python
+            # loop over components or samples.
+            mean_arr = np.array([c["mean"] for c in components], dtype=float)
+            sigma_arr = np.array([c["sigma"] for c in components], dtype=float)
+            weight_arr = np.array([c["weight"] for c in components], dtype=float)
+            idx = rng.choice(n_components, size=size, p=weight_arr)
+            return rng.lognormal(mean_arr[idx], sigma_arr[idx], size=size)
+
         elif self.distribution_type == DistributionType.TRIANGULAR:
             return rng.triangular(
                 self.parameters["low"], self.parameters["mode"], self.parameters["high"], size
             )
 
         elif self.distribution_type == DistributionType.PERT:
-            low = self.parameters["low"]
-            mode = self.parameters["mode"]
-            high = self.parameters["high"]
+            # Explicit float() casts: `parameters` widened to dict[str, Any]
+            # for the LOGNORMAL_MIXTURE nested shape (issue #27 Task 3) --
+            # without these, `low`/`mode`/`high` infer as Any here and the
+            # arithmetic below (`low + beta_samples * (high - low)`) leaks
+            # Any into a declared ndarray return (mypy no-any-return).
+            low = float(self.parameters["low"])
+            mode = float(self.parameters["mode"])
+            high = float(self.parameters["high"])
 
             # A3 fix: mirror the validation in aggregation_engine._generate_pert_samples.
             if low > high:
@@ -282,7 +329,9 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
     log-space LOGNORMAL parameters get the additive log-shift; everything
     else gets a simple multiplicative scale on the magnitude parameters.
     """
-    new_params: dict[str, float] = {}
+    # dict[str, Any] (not dict[str, float]): the LOGNORMAL_MIXTURE branch
+    # below assigns a nested {"components": [...]} value (issue #27 Task 3).
+    new_params: dict[str, Any] = {}
     if (
         dist.distribution_type == DistributionType.TRIANGULAR
         or dist.distribution_type == DistributionType.PERT
@@ -308,6 +357,23 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
         new_params = {
             "mean": dist.parameters["mean"] + math.log(multiplier),
             "sigma": dist.parameters["sigma"],
+        }
+    elif dist.distribution_type == DistributionType.LOGNORMAL_MIXTURE:
+        # Same log-space additive shift as plain LOGNORMAL, applied to
+        # EVERY component -- each component's meanlog shifts by +ln(k);
+        # sigma and weight are untouched (component identity and pooling
+        # weights are shape, not scale). This makes the mixture's overall
+        # real-space mean scale by exactly `multiplier` (pinned by
+        # test_scale_distribution_shifts_every_component_mean_by_ln_multiplier).
+        new_params = {
+            "components": [
+                {
+                    "mean": c["mean"] + math.log(multiplier),
+                    "sigma": c["sigma"],
+                    "weight": c["weight"],
+                }
+                for c in dist.parameters["components"]
+            ]
         }
     elif dist.distribution_type == DistributionType.BETA:
         raise ValueError(
