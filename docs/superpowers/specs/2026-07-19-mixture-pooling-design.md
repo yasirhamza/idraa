@@ -176,6 +176,23 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
 - **Contract**: adapter iteration (N≥3 components preserved), ORM/DTO snapshot
   updates, validator rejection matrix (bad weights, sigma cap, component cap).
 
+## Execution drift log (T9)
+
+- 2026-07-19: T8 took the TWO-UNIFORM workbook path (no blocker; `u_pl_sel`/`u_sl_sel`
+  RANDARRAY bindings per mixture node; CRN parity via shared u + u_sel; builder
+  unchanged). The asserted-gap fallback was never exercised.
+- 2026-07-19: T5 metadata — scalar `pooled_meanlog`/`pooled_sdlog` keys DROPPED
+  (grep: zero application readers); vuln sidecar uses `component_means`/
+  `component_sds` by field-name symmetry; supports from `components[0]` with a
+  fail-loud uniformity guard.
+- 2026-07-19: T6 PDF purity invariant forced a LOCAL erf-based mixture-quantile
+  mirror; drift detector `test_mixture_quantile_mirror_parity_with_fair_cam_oracle`
+  (rel ≤1e-8 full PDF grid; reconcile mirror→fair_cam, never reverse).
+- 2026-07-19: equivalence goldens verified mixture-free (grep 0 hits) — no
+  re-baseline; single-component identity keeps existing sampling byte-identical.
+- Meth-N3 follow-up (legacy divergent multi-SME scenarios lack a user-facing
+  provenance banner) filed as a tracked issue at T9.
+
 ## Scope budget
 
 - target_task_count: 9 (single PR: fair_cam mixture types + collapse math /
