@@ -1179,3 +1179,22 @@ async def test_delete_profile_rbac_analyst_403(authed_analyst, db_session: Async
         follow_redirects=False,
     )
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_profile_delete_confirm_is_js_safe(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """JS-context XSS regression (PR #49 review BLOCKER): a profile name with
+    quotes must render via | tojson, never as a bare Jinja interpolation
+    inside the onsubmit JS string (HTML autoescape entity-decodes BEFORE the
+    JS engine parses, so &#39; breaks out)."""
+    admin_client, org_id = authed_admin
+    await _seed_profile(db_session, org_id=org_id, name='O\'Brien "Q3" profile')
+    r = await admin_client.get("/register-import")
+    assert r.status_code == 200
+    # tojson renders the name as a JSON string literal concatenated into the
+    # confirm() call — the raw single-quote interpolation must be gone.
+    assert "Delete profile {{" not in r.text
+    assert '+ "?");' in r.text
+    assert "O\\u0027Brien" in r.text or 'O\'Brien \\"Q3\\"' in r.text or "\\u0022" in r.text

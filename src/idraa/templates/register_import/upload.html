@@ -48,7 +48,7 @@
       <li class="flex items-center gap-3">
         <span>{{ p.name }}</span>
         <form method="post" action="/register-import/profiles/{{ p.id }}/delete"
-              onsubmit="return window.confirm('Delete profile {{ p.name }}?');">
+              onsubmit='return window.confirm("Delete profile " + {{ p.name | tojson }} + "?");'>
           {{ csrf_field() }}
           <button type="submit" class="btn btn-xs btn-ghost text-status-critical">Delete</button>
         </form>
