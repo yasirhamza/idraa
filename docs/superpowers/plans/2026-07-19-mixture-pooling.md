@@ -51,13 +51,13 @@
 - `mixture_quantile_lognorm(mix: LognormMixture, p: float) -> float` — solves `Σ wᵢ Fᵢ(x) = p` by bisection on x; bracket = `[min_i Qᵢ(p·0.5), max_i Qᵢ(1-(1-p)·0.5)]` widened geometrically until it brackets; tolerance 1e-10 relative, deterministic (no sampling). Single component ⇒ delegates to `_qlnormtrunc` exactly.
 - `lognormal_mixture_to_pert_approx(mix, q_low=0.05, q_high=0.95) -> tuple[PertTriple, ModeClampReason | None]`:
   - `low = mixture_quantile_lognorm(mix, q_low)`, `high = ...(mix, q_high)`.
-  - `raw_mode` = argmax of the mixture density `Σ wᵢ fᵢ(x)` — evaluate each component's closed-form mode `exp(μᵢ - σᵢ²)` plus a 256-point log-spaced grid over `[low, high]`, take the best, then golden-section refine (±1e-9 relative). Single component ⇒ reduces to the existing closed-form `exp(meanlog - sdlog²)` EXACTLY (assert byte-equality in tests).
+  - `raw_mode` = UNCONSTRAINED argmax of the mixture density `Σ wᵢ fᵢ(x)` — candidates: each component's closed-form mode `exp(μᵢ - σᵢ²)` (including out-of-range ones) plus a 256-point log-spaced grid over the widened bracket (see binding amendment), then golden-section refine (±1e-9 relative), THEN the clamp machinery. Single component ⇒ reduces to the existing closed-form `exp(meanlog - sdlog²)` EXACTLY (assert byte-equality in tests).
   - Clamp precedence machinery identical to `lognormal_to_pert_approx:165-196` (support bounds = min/max over component supports).
 - Normal counterparts: `_pnormtrunc`? (exists as scipy call — add if absent), `mixture_quantile_norm`, `normal_mixture_to_pert_approx` (mode grid linear-spaced; component modes = means).
 
 - [ ] Steps (TDD), key vectors:
   - **Worked A/B pair pin** (spec §6): equal-weight mixture of (8.06, 0.70) and (15.77, 1.19) on [0, inf) — assert `Q_mix(0.05) < 1.1e3·1.05` (covers SME A's low anchor) and `Q_mix(0.95) > 16e6·0.95` (covers B's high anchor), each printed expected-vs-actual; assert the OLD averaged fit's [31k, 710k] range is NOT what we produce.
-  - Quantile inversion vs brute force: 1e6-sample empirical quantiles at fixed seed within 1e-3 relative.
+  - Quantile inversion vs brute force: 1e6-sample empirical quantiles at fixed seed within 1e-2 relative (per the binding amendment + spec §6 — 1e-3 is MC-flaky on tails).
   - Monotonicity: Q_mix strictly increasing over p grid.
   - Single-component byte-identity vs `_qlnormtrunc`/closed-form mode.
   - Bimodal mode: mixture with well-separated components picks the heavier component's peak.
