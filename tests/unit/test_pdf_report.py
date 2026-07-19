@@ -3203,6 +3203,106 @@ def test_lognormal_mixture_percentile_hand_check() -> None:
     assert vals["p95"] != "$710.00k"
 
 
+def test_mixture_quantile_mirror_parity_with_fair_cam_oracle() -> None:
+    """DRIFT DETECTOR (#27): pin pdf_report's local mixture-quantile mirror
+    to fair_cam.quantile_pooling.mixture_quantile_lognorm.
+
+    pdf_report._mixture_lognorm_quantile is a DELIBERATE purity-driven
+    reimplementation: services/pdf_report.py itself must never import
+    fair_cam (see the module docstring and
+    test_pdf_report_purity_no_db_or_routes_or_fair_cam_imports), so it
+    mirrors the bisection locally via math.erf. That purity invariant
+    constrains ONLY the pdf_report module — test modules MAY import
+    fair_cam, which is exactly what makes this cross-implementation
+    comparison possible.
+
+    Without this test nothing imports BOTH implementations and compares:
+    if fair_cam's quantile math ever changes, the web view
+    (app.lognormal_mixture_display_rows calls fair_cam directly) would
+    follow while the PDF silently drifted. This test is the committed
+    tripwire for that failure mode.
+
+    IF THIS TEST FAILS: reconcile the pdf_report mirror to fair_cam,
+    NEVER the reverse — fair_cam is the source of truth for FAIR math
+    (CLAUDE.md architectural rule); the mirror exists only to satisfy the
+    renderer's purity boundary.
+
+    Grid: the FULL p5/p25/p50/p75/p95 set the PDF renders (p25/p75 are
+    PDF-only — the web view renders p5/median/p95, so parity at p25/p75
+    is checkable ONLY here). Tolerance rel<=1e-8: both implementations
+    bisect to 1e-10 log-space tolerance; observed worst rel diff at
+    authoring time was ~5.7e-11, so 1e-8 catches any algorithmic change
+    while ignoring bisection noise.
+    """
+    import math
+
+    from fair_cam.quantile_pooling import (
+        LogNormalTruncFit,
+        LognormMixture,
+        mixture_quantile_lognorm,
+    )
+
+    from idraa.services.pdf_report import _mixture_lognorm_quantile
+
+    fixtures: dict[str, list[dict[str, float]]] = {
+        # (a) the worked A/B pair from the mixture-pooling spec (equal weight).
+        "worked A/B pair": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+        # (b) single-component: fair_cam delegates to scipy truncnorm.ppf
+        # (closed form) while the mirror still bisects — parity here proves
+        # the mirror agrees with the exact inverse, not just with another
+        # bisection.
+        "single-component": [
+            {"mean": 12.0, "sigma": 1.5, "weight": 1.0},
+        ],
+        # (c) 3-component divergent mixture: widely separated meanlogs +
+        # unequal weights exercise the multi-plateau CDF where bisection
+        # bracket/tolerance bugs would surface.
+        "3-component divergent": [
+            {"mean": 6.5, "sigma": 0.4, "weight": 0.2},
+            {"mean": 11.0, "sigma": 0.9, "weight": 0.5},
+            {"mean": 17.2, "sigma": 1.6, "weight": 0.3},
+        ],
+    }
+    grid = (0.05, 0.25, 0.50, 0.75, 0.95)
+
+    worst_rel = 0.0
+    worst_at = ""
+    for name, comps in fixtures.items():
+        mix = LognormMixture(
+            components=tuple(
+                LogNormalTruncFit(
+                    meanlog=c["mean"],
+                    sdlog=c["sigma"],
+                    min_support=0.0,
+                    max_support=math.inf,
+                )
+                for c in comps
+            ),
+            weights=tuple(c["weight"] for c in comps),
+        )
+        for p in grid:
+            oracle = mixture_quantile_lognorm(mix, p)
+            mirror = _mixture_lognorm_quantile(p, comps)
+            rel = abs(mirror - oracle) / oracle
+            print(
+                f"{name:24s} p={p:4.2f}  expected(fair_cam)={oracle!r:24s} "
+                f"actual(pdf-mirror)={mirror!r:24s} rel={rel:.3e}"
+            )
+            if rel > worst_rel:
+                worst_rel = rel
+                worst_at = f"{name} p={p}"
+            assert rel <= 1e-8, (
+                f"PDF mixture-quantile mirror drifted from the fair_cam oracle at "
+                f"{name} p={p}: fair_cam={oracle!r} vs pdf_report={mirror!r} "
+                f"(rel={rel:.3e} > 1e-8). Reconcile the mirror in "
+                f"services/pdf_report.py to fair_cam — never the reverse."
+            )
+    print(f"worst rel diff: {worst_rel:.3e} at {worst_at}")
+
+
 def test_lognormal_mixture_table_label_pooled_mixture() -> None:
     """T6 (#27): lognormal_mixture table label distinguishes itself from the
     plain-lognormal 'parametric' label with 'pooled mixture'."""
