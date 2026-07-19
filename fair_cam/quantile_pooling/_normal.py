@@ -13,10 +13,11 @@ from ._types import (
     DeadlineCallback,
     ModeClampReason,
     NormalTruncFit,
+    NormMixture,
     PertTriple,
     QuantilePoolingError,
+    _normalize_weights,
     _warn_if_divergent_fits,
-    _weighted_mean_fields,
 )
 
 
@@ -89,24 +90,37 @@ def fit_norm_trunc(
 def combine_norm(
     fits: Sequence[NormalTruncFit],
     weights: Sequence[float] | None = None,
-) -> NormalTruncFit:
-    """Port of R/fit_distributions.R:124-128. Per MD-1 + MD-4a: pooled.mean
-    can land outside [min_support, max_support] when individual fits
-    diverged; ACCEPTABLE because normal_to_pert_approx clamps the mode.
+) -> NormMixture:
+    """Pool SME normal (vuln, MD-4a) fits into a linear-opinion-pool
+    mixture (issue #27 via #25) -- each ``fits[i]`` survives verbatim as
+    its own ``NormMixture`` component, including a ``mean`` outside
+    ``[min_support, max_support]`` (unclamped here; ``normal_mixture_to_
+    pert_approx`` owns the clamp, same responsibility split as before).
+    ``weights`` are normalized to sum to 1 (``weights=None`` == equal
+    weights). A single fit collapses to a single-component mixture --
+    EXACT identity with every downstream path that only ever pools one
+    SME.
 
-    #343 caveat: parameter averaging is NOT a mixture — divergent fits
-    pool to a distribution concentrating mass between the experts. A
-    divergent pooling call logs a WARNING (see
-    ``_warn_if_divergent_fits``); true mixture pooling is tracked at #243.
-    ``weights=None`` == equal weights.
+    Methodology: the linear opinion pool is the standard combination rule
+    for expert probability distributions -- Clemen, R.T. & Winkler, R.L.
+    (1999), "Combining Probability Distributions From Experts in Risk
+    Analysis", Risk Analysis 19(2), pp. 187-203 (lineage to Stone 1961).
+
+    R-oracle departure (explicit, not silent): this function used to be a
+    faithful port of R/fit_distributions.R:124-128 (MD-1) -- a weighted
+    arithmetic mean of (mean, sd, min_support, max_support). For
+    DIVERGENT fits that average concentrated mass BETWEEN the experts,
+    covering neither stated range (issue #343). The mixture replaces
+    that averaging: it is an intentional, methodology-justified break
+    from the R oracle for multi-component pooling, not a bug -- see
+    docs/superpowers/specs/2026-07-19-mixture-pooling-design.md
+    "Decision record" (2026-07-19). A divergent pooling call still logs
+    (now INFO, not WARNING -- see ``_warn_if_divergent_fits``): divergence
+    is represented by the mixture, no longer distorted by averaging.
     """
+    normalized = _normalize_weights(fits, weights, NormMixture.__name__)
     _warn_if_divergent_fits(fits, "mean", "sd", "combine_norm")
-    return _weighted_mean_fields(
-        fits,
-        weights,
-        ("mean", "sd", "min_support", "max_support"),
-        NormalTruncFit,
-    )
+    return NormMixture(components=tuple(fits), weights=normalized)
 
 
 def normal_to_pert_approx(

@@ -13,11 +13,12 @@ from scipy.stats import truncnorm
 from ._types import (
     DeadlineCallback,
     LogNormalTruncFit,
+    LognormMixture,
     ModeClampReason,
     PertTriple,
     QuantilePoolingError,
+    _normalize_weights,
     _warn_if_divergent_fits,
-    _weighted_mean_fields,
 )
 
 # smallest positive float64 mantissa avoiding log underflow
@@ -127,26 +128,35 @@ def fit_lognorm_trunc(
 def combine_lognorm_trunc(
     fits: Sequence[LogNormalTruncFit],
     weights: Sequence[float] | None = None,
-) -> LogNormalTruncFit:
-    """Port of R/fit_distributions.R:67-79. Weighted arithmetic mean of
-    (meanlog, sdlog, min, max). Per MD-1: engineering approximation,
-    NOT a true lognormal mixture.
+) -> LognormMixture:
+    """Pool SME lognormal fits into a linear-opinion-pool mixture (issue
+    #27 via #25) -- each ``fits[i]`` survives verbatim as its own
+    ``LognormMixture`` component; ``weights`` are normalized to sum to 1
+    (``weights=None`` == equal weights). A single fit collapses to a
+    single-component mixture -- EXACT identity with every downstream path
+    that only ever pools one SME (the dominant production case).
 
-    #343 caveat: for DIVERGENT fits the parameter average concentrates
-    mass between the experts — the pooled distribution can cover neither
-    stated range (risk-understating bias). Since Epic B (#326) the pooled
-    {meanlog, sdlog} is stored natively and drives Monte Carlo directly,
-    so the approximation is load-bearing. A divergent pooling call logs a
-    WARNING (see ``_warn_if_divergent_fits``); the true mixture fix is
-    tracked at #243. ``weights=None`` == equal weights.
+    Methodology: the linear opinion pool is the standard combination rule
+    for expert probability distributions -- Clemen, R.T. & Winkler, R.L.
+    (1999), "Combining Probability Distributions From Experts in Risk
+    Analysis", Risk Analysis 19(2), pp. 187-203 (lineage to Stone 1961).
+
+    R-oracle departure (explicit, not silent): this function used to be a
+    faithful port of R/fit_distributions.R:67-79 (MD-1) -- a weighted
+    arithmetic mean of (meanlog, sdlog, min_support, max_support). For
+    DIVERGENT fits that average concentrated mass BETWEEN the experts,
+    covering neither stated range (issue #343's worked example: $1k-$10k
+    pooled with $1M-$50M gave a 90% range of ~$31k-$710k). The mixture
+    replaces that averaging: it is an intentional, methodology-justified
+    break from the R oracle for multi-component pooling, not a bug --
+    see docs/superpowers/specs/2026-07-19-mixture-pooling-design.md
+    "Decision record" (2026-07-19). A divergent pooling call still logs
+    (now INFO, not WARNING -- see ``_warn_if_divergent_fits``): divergence
+    is represented by the mixture, no longer distorted by averaging.
     """
+    normalized = _normalize_weights(fits, weights, LognormMixture.__name__)
     _warn_if_divergent_fits(fits, "meanlog", "sdlog", "combine_lognorm_trunc")
-    return _weighted_mean_fields(
-        fits,
-        weights,
-        ("meanlog", "sdlog", "min_support", "max_support"),
-        LogNormalTruncFit,
-    )
+    return LognormMixture(components=tuple(fits), weights=normalized)
 
 
 def lognormal_to_pert_approx(
