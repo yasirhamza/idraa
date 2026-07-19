@@ -24,6 +24,9 @@ primary_region = "fra"
 
 [env]
   ENVIRONMENT = "prod"
+  # Belt-and-suspenders with the Dockerfile ENV (issue #33): byte-reproducible
+  # weight_robustness blobs require a pinned interpreter hash seed.
+  PYTHONHASHSEED = "0"
   # Physical DB filename deliberately unchanged: the volume is restored from the
   # old app's snapshot, the DB runs WAL mode (renaming only the main file drops
   # committed-but-uncheckpointed -wal frames), and the filename is invisible to
