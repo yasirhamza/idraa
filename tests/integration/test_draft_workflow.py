@@ -287,3 +287,17 @@ async def test_scenario_list_has_draft_filter_chip(authed_analyst, db_session: A
     assert "?status=draft" in r.text  # chip present
     r2 = await client.get("/scenarios?status=draft")
     assert "Chip Draft" in r2.text
+
+
+@pytest.mark.asyncio
+async def test_import_dedup_includes_draft_names(authed_analyst, db_session: AsyncSession):
+    # P1a-review dedup-parity fix: the #306 import path's name set must see
+    # DRAFTs (converter parity, spec §3.1) — else import + later promote
+    # yields two ACTIVE scenarios sharing one name.
+    from idraa.services.scenario_import import _existing_scenario_names
+
+    _, org_id = authed_analyst
+    _seed_scenario(db_session, org_id=org_id, name="Queued Draft", status=EntityStatus.DRAFT)
+    await db_session.commit()
+    names = await _existing_scenario_names(db_session, org_id=org_id)
+    assert "queued draft" in names

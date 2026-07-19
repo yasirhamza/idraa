@@ -252,8 +252,9 @@ class ClassifiedRows:
 async def _all_scenario_names(db: AsyncSession, organization_id: uuid.UUID) -> set[str]:
     """casefold()-ed names of ALL scenarios in the org, any status.
 
-    Deliberately NOT ``services/scenario_import.py``'s ACTIVE-only
-    ``_existing_active_names`` — spec §3.1 requires dedup against DRAFT
+    Same semantics as ``services/scenario_import.py``'s
+    ``_existing_scenario_names`` (the import path was aligned to this rule in
+    the P1a-review dedup-parity fix) — spec §3.1 requires dedup against DRAFT
     rows too, or re-importing a register would double-create converted
     scenarios on every re-upload (plan-gate finding Arch-N3).
     """

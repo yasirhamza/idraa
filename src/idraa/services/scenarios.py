@@ -169,8 +169,9 @@ class ScenarioService:
         # 2b. Epic #34 P1a (plan-gate SEC-R2-2, placement per SEC-R3-NTH):
         # create-path status domain. A new scenario may only be created as
         # ACTIVE (default) or DRAFT (pending review) — DEPRECATED/DELETED are
-        # lifecycle end-states reached only via their own dedicated paths, not
-        # at creation. This chokepoint covers both create() and
+        # not creatable and today no Scenario lifecycle path produces them at
+        # all (delete() is a hard delete; those enum values are exercised by
+        # Control). This chokepoint covers both create() and
         # create_from_wizard() since both converge here.
         if form.status not in (EntityStatus.ACTIVE, EntityStatus.DRAFT):
             raise ValidationError("new scenarios may only be created as active or draft")

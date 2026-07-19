@@ -319,9 +319,7 @@ def _csv_pipeline(pl_dist: str, pl_low: str, pl_high: str, pl_mode: str = "") ->
     w.writerow([cells[h] for h in CSV_HEADERS])
     pairs, errs = parse_csv_flat(buf.getvalue().encode())
     assert errs == [] and pairs is not None
-    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
-        pairs, existing_active_names=set()
-    )
+    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(pairs, existing_names=set())
     return preview
 
 
@@ -341,9 +339,7 @@ def _json_pipeline(primary_loss: dict) -> list[dict]:
     }
     pairs, errs = parse_json_nested(json.dumps([obj]).encode())
     assert errs == [] and pairs is not None
-    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
-        pairs, existing_active_names=set()
-    )
+    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(pairs, existing_names=set())
     return preview
 
 
