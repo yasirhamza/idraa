@@ -244,6 +244,19 @@ mirrors `ScenarioService.update`'s concurrency/audit conventions:
   narrowed to wizard-born invariant; step-6 legacy pooling-upgrade note.
   Refuted at gate: the mitigating_controls lazy-load worry (relationship
   is lazy="selectin" — eager).
+- 2026-07-20 execution drift (all tasks 0/0-reviewed; full gate 4445 green):
+  T1-T5 shipped per plan + amendments with only disclosed mechanical
+  deviations (formatter reflows; mypy annotations; C408 dict literal).
+  Substantive execution notes: the page_header actions macro is link-only,
+  so the Re-estimate button is a sibling POST form below the header
+  (template-convention inline role gate); Task-5 copy tests both live in
+  the routes module; Task-4 test 1 uses distribution_fit_metadata PRESENCE
+  as the replacement discriminator (hand-seeded fixtures carry no
+  sidecar); update-regression suite path is tests/unit/ not
+  tests/services/; test-3 of Task 2 seeds legacy_residual so the inherent
+  flip assertion is non-trivial. T4 review NTH accepted (no direct pin on
+  effect/scenario_type/version preservation — mechanism round-trips from
+  the live row and status is pinned; one-line rationale, deferred).
 - 2026-07-19 plan-gate R2: spec+security converged 0/0; architect raised 1
   IMPORTANT (conversion_metadata clear untested + illustrative code
   contradicting amendments 7/8) — fixed: sketches reconciled, tests pinned
