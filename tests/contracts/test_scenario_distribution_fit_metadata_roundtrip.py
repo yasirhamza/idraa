@@ -2,19 +2,24 @@
 """Sidecar roundtrip: ScenarioForm -> DB -> reload preserves all
 distribution_fit_metadata keys (spec §9.2 / §7.3 Spec-2 / Spec-23 PR1/PR2).
 
-schema_version 2, post-Milestone-B (#loss-pert-overhaul): the native-lognormal
-node (CATASTROPHIC pl/sl) stores native {distribution, mean, sigma} (13
-sidecar keys — mode_clamp fields dropped); the vuln/PERT node keeps the 15-key
-sidecar; collapsed-lognormal->PERT nodes (tef #tef-pert-revert + CAPPED pl/sl,
-the default) keep the log params AND carry the two mode_clamp fields (15 keys).
+schema_version 3 (issue #27 Task 5, true mixture pooling): the
+native-lognormal node (CATASTROPHIC pl/sl) stores native {distribution, mean,
+sigma} (14 sidecar keys — mode_clamp fields dropped); the vuln/PERT node
+keeps the 16-key sidecar; collapsed-lognormal->PERT nodes (tef
+#tef-pert-revert + CAPPED pl/sl, the default) keep the per-component log
+params AND carry the two mode_clamp fields (16 keys). ``PerFieldsetResult.
+pooled`` is now a ``LognormMixture``/``NormMixture`` (single-component for
+every case here, since this test's job is the DB roundtrip, not pooling
+math) — see ``tests/services/test_wizard_finalize.py`` for the mixture-shape
+and multi-component tests.
 
 The sidecar payload lives INSIDE the JSON column (threat_event_frequency /
 vulnerability / etc.) so this test exercises the JSON serializer +
 deserializer paths around build_scenario_payload's nested dict.
 
 Parametrized over four cases (lognorm_native -> tef collapsed to PERT;
-lognorm_native_loss -> catastrophic pl, 13-key; lognorm_collapsed_loss ->
-capped pl, 15-key; norm_trunc -> vuln). Per Spec-11 PR1 the assertion uses
+lognorm_native_loss -> catastrophic pl, 14-key; lognorm_collapsed_loss ->
+capped pl, 16-key; norm_trunc -> vuln). Per Spec-11 PR1 the assertion uses
 key-set equality so future additions / drops are loud.
 """
 
@@ -26,7 +31,9 @@ from typing import Any
 import pytest
 from fair_cam.quantile_pooling import (
     LogNormalTruncFit,
+    LognormMixture,
     NormalTruncFit,
+    NormMixture,
     PertTriple,
 )
 from sqlalchemy import select
@@ -44,18 +51,22 @@ from idraa.models.scenario import Scenario
 from idraa.services.wizard_finalize import PerFieldsetResult, build_scenario_payload
 from idraa.services.wizard_state import WizardState
 
-# schema_version 2: the NATIVE lognormal node (pl/sl) DROPS the mode_clamp
+# schema_version 3: the NATIVE lognormal node (pl/sl) DROPS the mode_clamp
 # fields (no PERT collapse on this path); vuln (PERT) keeps them; tef
-# (#tef-pert-revert) collapses its lognormal fit to PERT so it keeps the log
-# params AND regains the two mode_clamp fields (15 keys).
+# (#tef-pert-revert) collapses its lognormal fit to PERT so it keeps the
+# per-component log params AND regains the two mode_clamp fields (16 keys).
+# The retired scalar pooled_meanlog/pooled_sdlog keys are replaced 1:1 by
+# component_meanlogs/component_sdlogs LISTS (issue #27 Task 5); pooling_method
+# is a new key (net +1 vs the pre-mixture schema_version 2 sidecar).
 _LOGNORM_EXPECTED_KEYS = {
     "source",
     "schema_version",
+    "pooling_method",
     "fitter",
     "q_low_quantile",
     "q_high_quantile",
-    "pooled_meanlog",
-    "pooled_sdlog",
+    "component_meanlogs",
+    "component_sdlogs",
     "pooled_min_support",
     "pooled_max_support",
     "n_smes",
@@ -71,11 +82,12 @@ _TEF_PERT_EXPECTED_KEYS = _LOGNORM_EXPECTED_KEYS | {
 _NORMAL_EXPECTED_KEYS = {
     "source",
     "schema_version",
+    "pooling_method",
     "fitter",
     "q_low_quantile",
     "q_high_quantile",
-    "pooled_mean",
-    "pooled_sd",
+    "component_means",
+    "component_sds",
     "pooled_min_support",
     "pooled_max_support",
     "n_smes",
@@ -88,17 +100,27 @@ _NORMAL_EXPECTED_KEYS = {
 
 
 def _make_result(fitter: str, sme_id: str) -> tuple[str, PerFieldsetResult, set[str], str]:
-    """Build a (fieldset, result, expected_key_set, column_name) bundle."""
+    """Build a (fieldset, result, expected_key_set, column_name) bundle.
+
+    issue #27 Task 5 (binding amendment, deliberate rewrite): ``pooled`` is
+    now a single-component ``LognormMixture``/``NormMixture`` wrapping the
+    fit, not the bare fit itself.
+    """
     rows = [{"sme_id": sme_id, "low": 1.0, "high": 2.0}]
     if fitter == "lognorm_native":
         return (
             "tef",
             PerFieldsetResult(
-                pooled=LogNormalTruncFit(
-                    meanlog=0.5,
-                    sdlog=0.5,
-                    min_support=0.0,
-                    max_support=math.inf,
+                pooled=LognormMixture(
+                    components=(
+                        LogNormalTruncFit(
+                            meanlog=0.5,
+                            sdlog=0.5,
+                            min_support=0.0,
+                            max_support=math.inf,
+                        ),
+                    ),
+                    weights=(1.0,),
                 ),
                 pert=PertTriple(low=1.0, mode=1.5, high=2.0),
                 mode_clamp_reason=None,
@@ -111,16 +133,21 @@ def _make_result(fitter: str, sme_id: str) -> tuple[str, PerFieldsetResult, set[
         )
     if fitter == "lognorm_native_loss":
         # CATASTROPHIC pl/sl native-lognormal path (collapser=None,
-        # collapsed=False): 13-key sidecar, native {distribution, mean, sigma}
+        # collapsed=False): 14-key sidecar, native {distribution, mean, sigma}
         # node, NO PERT collapse. Guards the native-lognormal DB roundtrip.
         return (
             "pl",
             PerFieldsetResult(
-                pooled=LogNormalTruncFit(
-                    meanlog=11.0,
-                    sdlog=0.9,
-                    min_support=0.0,
-                    max_support=math.inf,
+                pooled=LognormMixture(
+                    components=(
+                        LogNormalTruncFit(
+                            meanlog=11.0,
+                            sdlog=0.9,
+                            min_support=0.0,
+                            max_support=math.inf,
+                        ),
+                    ),
+                    weights=(1.0,),
                 ),
                 pert=PertTriple(low=1000.0, mode=20000.0, high=100000.0),
                 mode_clamp_reason=None,
@@ -133,15 +160,20 @@ def _make_result(fitter: str, sme_id: str) -> tuple[str, PerFieldsetResult, set[
         )
     if fitter == "lognorm_collapsed_loss":
         # CAPPED pl/sl (Milestone B #loss-pert-overhaul, the default):
-        # lognormal fit collapsed to PERT — 15-key hybrid sidecar, PERT node.
+        # lognormal fit collapsed to PERT — 16-key hybrid sidecar, PERT node.
         return (
             "pl",
             PerFieldsetResult(
-                pooled=LogNormalTruncFit(
-                    meanlog=11.0,
-                    sdlog=0.9,
-                    min_support=0.0,
-                    max_support=math.inf,
+                pooled=LognormMixture(
+                    components=(
+                        LogNormalTruncFit(
+                            meanlog=11.0,
+                            sdlog=0.9,
+                            min_support=0.0,
+                            max_support=math.inf,
+                        ),
+                    ),
+                    weights=(1.0,),
                 ),
                 pert=PertTriple(low=13650.0, mode=26580.0, high=263000.0),
                 mode_clamp_reason=None,
@@ -156,7 +188,10 @@ def _make_result(fitter: str, sme_id: str) -> tuple[str, PerFieldsetResult, set[
     return (
         "vuln",
         PerFieldsetResult(
-            pooled=NormalTruncFit(mean=0.3, sd=0.1, min_support=0.0, max_support=1.0),
+            pooled=NormMixture(
+                components=(NormalTruncFit(mean=0.3, sd=0.1, min_support=0.0, max_support=1.0),),
+                weights=(1.0,),
+            ),
             pert=PertTriple(low=0.1, mode=0.3, high=0.5),
             mode_clamp_reason=None,
             rows=rows,
@@ -238,7 +273,8 @@ async def test_distribution_fit_metadata_15_fields_round_trip_through_db(
     # case label (which distinguishes the tef-collapsed-PERT case from the
     # native-lognormal pl case that share the same fitter).
     expected_fitter = "norm_trunc" if fitter == "norm_trunc" else "lognorm_native"
-    assert sidecar["schema_version"] == 2
+    assert sidecar["schema_version"] == 3
+    assert sidecar["pooling_method"] == "linear_opinion_pool_v1"
     assert sidecar["fitter"] == expected_fitter
     assert sidecar["n_smes"] == 1
     assert isinstance(sidecar["sme_ids"], list)
