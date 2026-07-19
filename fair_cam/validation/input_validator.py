@@ -636,13 +636,30 @@ class FAIRCAMValidator:
         # (normal, lognormal, etc.) based on selected distribution type
         distribution_type = risk_data.get("distribution_type", "pert")
 
-        if distribution_type not in ["pert", "normal", "lognormal", "uniform", "poisson", "pareto"]:
+        # #27: "lognormal_mixture" added for defense-in-depth ONLY — this
+        # allowlist gates the "distribution_type" key at the risk_data TOP
+        # LEVEL (not the per-node "distribution" key inside the TEF/PL/SL
+        # sub-dicts v3 actually sends), so it is not the real enforcement
+        # point for mixtures. The enforcing gate is v3-side:
+        # idraa.services.fair_cam_validation._validate_finite (finiteness +
+        # sigma/weight bounds + weight-sum + component-count cap) and
+        # idraa.services.scenario_import._structural_dist_problem
+        # (exact-key-set + numeric-type shape on the import path).
+        if distribution_type not in [
+            "pert",
+            "normal",
+            "lognormal",
+            "lognormal_mixture",
+            "uniform",
+            "poisson",
+            "pareto",
+        ]:
             results.append(
                 ValidationResult(
                     field_name="distribution_type",
                     severity=ValidationSeverity.ERROR,
                     message=f"Unsupported distribution type: {distribution_type}",
-                    help_text="Use: pert, normal, lognormal, uniform, poisson, or pareto",
+                    help_text="Use: pert, normal, lognormal, lognormal_mixture, uniform, poisson, or pareto",
                 )
             )
 

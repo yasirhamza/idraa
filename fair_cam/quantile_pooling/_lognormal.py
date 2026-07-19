@@ -11,13 +11,20 @@ from scipy.optimize import minimize
 from scipy.stats import truncnorm
 
 from ._types import (
+    MIXTURE_BISECT_MAX_ITER,
+    MIXTURE_BISECT_REL_TOL,
+    MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS,
+    MIXTURE_MODE_GRID_POINTS,
     DeadlineCallback,
     LogNormalTruncFit,
+    LognormMixture,
     ModeClampReason,
     PertTriple,
     QuantilePoolingError,
+    _clamp_mode,
+    _golden_section_max,
+    _normalize_weights,
     _warn_if_divergent_fits,
-    _weighted_mean_fields,
 )
 
 # smallest positive float64 mantissa avoiding log underflow
@@ -127,26 +134,35 @@ def fit_lognorm_trunc(
 def combine_lognorm_trunc(
     fits: Sequence[LogNormalTruncFit],
     weights: Sequence[float] | None = None,
-) -> LogNormalTruncFit:
-    """Port of R/fit_distributions.R:67-79. Weighted arithmetic mean of
-    (meanlog, sdlog, min, max). Per MD-1: engineering approximation,
-    NOT a true lognormal mixture.
+) -> LognormMixture:
+    """Pool SME lognormal fits into a linear-opinion-pool mixture (issue
+    #27 via #25) -- each ``fits[i]`` survives verbatim as its own
+    ``LognormMixture`` component; ``weights`` are normalized to sum to 1
+    (``weights=None`` == equal weights). A single fit collapses to a
+    single-component mixture -- EXACT identity with every downstream path
+    that only ever pools one SME (the dominant production case).
 
-    #343 caveat: for DIVERGENT fits the parameter average concentrates
-    mass between the experts — the pooled distribution can cover neither
-    stated range (risk-understating bias). Since Epic B (#326) the pooled
-    {meanlog, sdlog} is stored natively and drives Monte Carlo directly,
-    so the approximation is load-bearing. A divergent pooling call logs a
-    WARNING (see ``_warn_if_divergent_fits``); the true mixture fix is
-    tracked at #243. ``weights=None`` == equal weights.
+    Methodology: the linear opinion pool is the standard combination rule
+    for expert probability distributions -- Clemen, R.T. & Winkler, R.L.
+    (1999), "Combining Probability Distributions From Experts in Risk
+    Analysis", Risk Analysis 19(2), pp. 187-203 (lineage to Stone 1961).
+
+    R-oracle departure (explicit, not silent): this function used to be a
+    faithful port of R/fit_distributions.R:67-79 (MD-1) -- a weighted
+    arithmetic mean of (meanlog, sdlog, min_support, max_support). For
+    DIVERGENT fits that average concentrated mass BETWEEN the experts,
+    covering neither stated range (issue #343's worked example: $1k-$10k
+    pooled with $1M-$50M gave a 90% range of ~$31k-$710k). The mixture
+    replaces that averaging: it is an intentional, methodology-justified
+    break from the R oracle for multi-component pooling, not a bug --
+    see docs/superpowers/specs/2026-07-19-mixture-pooling-design.md
+    "Decision record" (2026-07-19). A divergent pooling call still logs
+    (now INFO, not WARNING -- see ``_warn_if_divergent_fits``): divergence
+    is represented by the mixture, no longer distorted by averaging.
     """
+    normalized = _normalize_weights(fits, weights, LognormMixture.__name__)
     _warn_if_divergent_fits(fits, "meanlog", "sdlog", "combine_lognorm_trunc")
-    return _weighted_mean_fields(
-        fits,
-        weights,
-        ("meanlog", "sdlog", "min_support", "max_support"),
-        LogNormalTruncFit,
-    )
+    return LognormMixture(components=tuple(fits), weights=normalized)
 
 
 def lognormal_to_pert_approx(
@@ -175,22 +191,230 @@ def lognormal_to_pert_approx(
     raw_mode, which triggers step 2 first (precedence rule). The branch
     + enum value are kept for symmetry with normal_to_pert_approx (where
     the mode = mean, so right-skewed PERT bounds can leave mode > high)
-    and as a stable wire-format enum value."""
+    and as a stable wire-format enum value.
+
+    Issue #27 Task 2: the clamp precedence itself now runs through the
+    shared ``_clamp_mode`` helper (also used by ``normal_to_pert_approx``
+    and both mixture collapsers) -- same code path, not a parallel
+    reimplementation, so ``lognormal_mixture_to_pert_approx``'s
+    single-component branch is byte-identical to this function by
+    construction."""
     low = _qlnormtrunc(q_low, fit.meanlog, fit.sdlog, fit.min_support, fit.max_support)
     high = _qlnormtrunc(q_high, fit.meanlog, fit.sdlog, fit.min_support, fit.max_support)
     raw_mode = math.exp(fit.meanlog - fit.sdlog**2)
-    reason: ModeClampReason | None = None
-    lo_bound = max(fit.min_support, low)
-    hi_bound = min(fit.max_support, high)
-    if raw_mode < fit.min_support:
-        mode, reason = lo_bound, ModeClampReason.UNTRUNCATED_MODE_BELOW_MIN_SUPPORT
-    elif raw_mode > fit.max_support:
-        mode, reason = hi_bound, ModeClampReason.UNTRUNCATED_MODE_ABOVE_MAX_SUPPORT
-    elif raw_mode > high:  # unreachable for lognormal -- see ModeClampReason docstring
-        # kept for symmetry with normal_to_pert_approx + wire-format stability
-        mode, reason = high, ModeClampReason.MODE_ABOVE_PERT_HIGH
-    elif raw_mode < low:
-        mode, reason = low, ModeClampReason.MODE_BELOW_PERT_LOW
+    mode, reason = _clamp_mode(raw_mode, fit.min_support, fit.max_support, low, high)
+    return PertTriple(low=low, mode=mode, high=high), reason
+
+
+def _plnormtrunc(
+    x: float, meanlog: float, sdlog: float, min_support: float, max_support: float
+) -> float:
+    """CDF of a truncated lognormal at value x. Companion to
+    ``_qlnormtrunc`` (issue #27 Task 2) -- identical truncnorm plumbing,
+    evaluated at a log-transformed value rather than inverted at a
+    probability. ``x`` outside ``[min_support, max_support]`` returns the
+    saturated 0.0 / 1.0 rather than raising, since mixture bisection probes
+    arbitrary x during bracket search."""
+    if sdlog <= 0:
+        raise ValueError(f"sdlog must be > 0, got {sdlog}")
+    if x <= max(min_support, 0.0):
+        return 0.0
+    if math.isfinite(max_support) and x >= max_support:
+        return 1.0
+    a = (math.log(max(min_support, _LOG_FLOOR)) - meanlog) / sdlog
+    b = (math.log(max_support) - meanlog) / sdlog if math.isfinite(max_support) else math.inf
+    rv = truncnorm(a, b, loc=meanlog, scale=sdlog)
+    return float(rv.cdf(math.log(x)))
+
+
+def _lognorm_trunc_pdf(
+    x: float, meanlog: float, sdlog: float, min_support: float, max_support: float
+) -> float:
+    """PDF of a truncated lognormal at x -- density-transform of the
+    truncated-normal pdf on ln(x): f_X(x) = f_Y(ln x) / x. Used only by the
+    mixture mode search (issue #27 Task 2), never for quantile inversion."""
+    if x <= max(min_support, 0.0):
+        return 0.0
+    if math.isfinite(max_support) and x >= max_support:
+        return 0.0
+    a = (math.log(max(min_support, _LOG_FLOOR)) - meanlog) / sdlog
+    b = (math.log(max_support) - meanlog) / sdlog if math.isfinite(max_support) else math.inf
+    rv = truncnorm(a, b, loc=meanlog, scale=sdlog)
+    return float(rv.pdf(math.log(x)) / x)
+
+
+def mixture_quantile_lognorm(mix: LognormMixture, p: float) -> float:
+    """Quantile of the mixture CDF ``F(x) = Σ wᵢ Fᵢ(x)`` at probability
+    ``p``, solved by bisection (issue #27 Task 2) -- deterministic, no
+    sampling.
+
+    Single component delegates to ``_qlnormtrunc`` EXACTLY (the same call,
+    not a reimplementation) -- the byte-identity guarantee for the
+    dominant single-SME production path.
+
+    Bracket: ``[min_i Qᵢ(p·0.5), max_i Qᵢ(1-(1-p)·0.5)]``, widened
+    geometrically (log-space doubling) until it brackets ``p``. This
+    bracket is self-satisfying in practice for any finite, well-formed
+    component set: at ``x = max_i Qᵢ(1-(1-p)·0.5)``, every OTHER
+    component's CDF is already ≈1 there (x sits far into that component's
+    own tail once the components diverge, and coincides with its own
+    quantile when they don't) -- so ``mix_cdf(hi) >= p`` holds from the
+    first candidate, and symmetrically for the lower bound. Widening is
+    therefore a defensive circuit breaker for a malformed/mis-seeded
+    bracket, not something well-formed inputs are expected to hit (see
+    ``test_bracket_widening_hard_cap_raises_arithmetic_error``, which
+    exercises the cap via a deliberately mis-seeded bracket). HARD CAP
+    ``MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS`` doublings per side raises
+    ``ArithmeticError`` with the component params -- a finite-but-huge
+    meanlog must not spin the render path.
+
+    Bisection runs in log-space (natural for a distribution spanning many
+    orders of magnitude) to ``MIXTURE_BISECT_REL_TOL`` relative
+    tolerance."""
+    if not 0.0 < p < 1.0:
+        raise ValueError(f"p must be in (0, 1), got {p}")
+    if len(mix.components) == 1:
+        c = mix.components[0]
+        return _qlnormtrunc(p, c.meanlog, c.sdlog, c.min_support, c.max_support)
+
+    def mix_cdf(x: float) -> float:
+        return sum(
+            w * _plnormtrunc(x, c.meanlog, c.sdlog, c.min_support, c.max_support)
+            for c, w in zip(mix.components, mix.weights, strict=True)
+        )
+
+    lo = min(
+        _qlnormtrunc(p * 0.5, c.meanlog, c.sdlog, c.min_support, c.max_support)
+        for c in mix.components
+    )
+    hi = max(
+        _qlnormtrunc(1.0 - (1.0 - p) * 0.5, c.meanlog, c.sdlog, c.min_support, c.max_support)
+        for c in mix.components
+    )
+
+    doublings = 0
+    while mix_cdf(lo) > p:
+        if doublings >= MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS:
+            raise ArithmeticError(
+                f"mixture_quantile_lognorm: lower bracket failed to converge "
+                f"after {MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS} doublings "
+                f"(p={p}, components={mix.components}, weights={mix.weights})"
+            )
+        lo = lo / 2.0
+        doublings += 1
+
+    doublings = 0
+    while mix_cdf(hi) < p:
+        if doublings >= MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS:
+            raise ArithmeticError(
+                f"mixture_quantile_lognorm: upper bracket failed to converge "
+                f"after {MIXTURE_BRACKET_WIDEN_MAX_DOUBLINGS} doublings "
+                f"(p={p}, components={mix.components}, weights={mix.weights})"
+            )
+        hi = hi * 2.0
+        doublings += 1
+
+    lo_log, hi_log = math.log(lo), math.log(hi)
+    for _ in range(MIXTURE_BISECT_MAX_ITER):
+        if (hi_log - lo_log) < MIXTURE_BISECT_REL_TOL:
+            break
+        mid_log = (lo_log + hi_log) / 2.0
+        mid = math.exp(mid_log)
+        if mix_cdf(mid) < p:
+            lo_log = mid_log
+        else:
+            hi_log = mid_log
+    return math.exp((lo_log + hi_log) / 2.0)
+
+
+def _mixture_density_lognorm(mix: LognormMixture, x: float) -> float:
+    return sum(
+        w * _lognorm_trunc_pdf(x, c.meanlog, c.sdlog, c.min_support, c.max_support)
+        for c, w in zip(mix.components, mix.weights, strict=True)
+    )
+
+
+def _mixture_mode_lognorm(mix: LognormMixture, low: float, high: float) -> float:
+    """UNCONSTRAINED global argmax of the mixture density ``Σ wᵢ fᵢ(x)``
+    (issue #27 Task 2 binding amendment, multi-component branch).
+
+    Candidates: every component's own closed-form mode
+    ``exp(meanlogᵢ - sdlogᵢ²)`` -- INCLUDING modes that fall outside
+    ``[low, high]`` or even the component's own support, since bounding is
+    the caller's job (``_clamp_mode``), not this function's -- plus a
+    ``MIXTURE_MODE_GRID_POINTS``-point log-spaced grid over the widened
+    bracket ``[min_i modeᵢ/4, max_i modeᵢ·4] ∪ [low, high]``. The best
+    candidate seeds a golden-section refine (±1e-9 relative) over its
+    immediate neighbors in the candidate set.
+
+    Returns the RAW (unclamped) mode -- callers apply ``_clamp_mode``."""
+    component_modes = [math.exp(c.meanlog - c.sdlog**2) for c in mix.components]
+    bracket_lo = max(min(min(component_modes) / 4.0, low), _LOG_FLOOR)
+    bracket_hi = max(max(component_modes) * 4.0, high)
+
+    def density(x: float) -> float:
+        return _mixture_density_lognorm(mix, x)
+
+    grid = np.geomspace(bracket_lo, bracket_hi, MIXTURE_MODE_GRID_POINTS)
+    candidates = sorted(set(grid.tolist()) | set(component_modes))
+    densities = [density(x) for x in candidates]
+    best_i = max(range(len(candidates)), key=lambda i: densities[i])
+    win_lo = candidates[best_i - 1] if best_i > 0 else candidates[0]
+    win_hi = candidates[best_i + 1] if best_i < len(candidates) - 1 else candidates[-1]
+    if win_lo >= win_hi:
+        return candidates[best_i]
+    return _golden_section_max(density, win_lo, win_hi)
+
+
+def lognormal_mixture_to_pert_approx(
+    mix: LognormMixture,
+    q_low: float = 0.05,
+    q_high: float = 0.95,
+) -> tuple[PertTriple, ModeClampReason | None]:
+    """PERT-collapse a lognormal mixture (issue #27 Task 2).
+
+    ``low = mixture_quantile_lognorm(mix, q_low)``,
+    ``high = mixture_quantile_lognorm(mix, q_high)``.
+
+    Mode:
+      ``len(components) == 1`` -- DEDICATED branch: ``raw_mode`` is the
+        SAME closed-form ``exp(meanlog - sdlog**2)`` as
+        ``lognormal_to_pert_approx``, clamped via the SAME ``_clamp_mode``
+        helper -- byte-identical result (incl. ``mode_clamp_reason``) by
+        construction, not by coincidence.
+      ``len(components) > 1`` -- ``raw_mode`` is the UNCONSTRAINED global
+        mixture-density argmax (``_mixture_mode_lognorm``), THEN
+        ``_clamp_mode`` applies unchanged -- clamp-reason semantics are
+        preserved for mixtures too.
+
+    Support bounds for the clamp = min/max over component supports (Task 2
+    binding amendment); supports are per-fieldset-uniform by construction
+    in production, so this reduces to the single shared support in
+    practice.
+
+    Scope limitation (Meth-I1, spec §2 "PERT-collapse paths"): this
+    restores RANGE coverage (low/high span the experts' union) -- the
+    headline #27 defect -- but a unimodal PERT cannot represent a bimodal
+    mixture: for the worked A/B pair (spec §6) the collapse places ~13% of
+    mass in the inter-expert valley where the true mixture places <1%, and
+    the collapsed median is ~66x the true mixture median (the Beta-PERT
+    shape pulls its median toward the higher-loss expert). See
+    ``test_divergent_pert_collapse_documented_limitation`` for the pinned
+    values. That residual is a documented, TESTED limitation of the
+    summary shape -- not a regression -- and is why the native mixture
+    storage path (``services/wizard_finalize``, catastrophic losses only)
+    exists: it is exact on ranges, moments, AND multimodality
+    simultaneously, where the PERT collapse is not."""
+    low = mixture_quantile_lognorm(mix, q_low)
+    high = mixture_quantile_lognorm(mix, q_high)
+    min_support = min(c.min_support for c in mix.components)
+    max_support = max(c.max_support for c in mix.components)
+
+    if len(mix.components) == 1:
+        c = mix.components[0]
+        raw_mode = math.exp(c.meanlog - c.sdlog**2)
     else:
-        mode = raw_mode
+        raw_mode = _mixture_mode_lognorm(mix, low, high)
+
+    mode, reason = _clamp_mode(raw_mode, min_support, max_support, low, high)
     return PertTriple(low=low, mode=mode, high=high), reason

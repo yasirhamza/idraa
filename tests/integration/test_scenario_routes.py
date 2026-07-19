@@ -607,6 +607,38 @@ async def test_edit_form_lognormal_primary_loss_round_trips(
     assert "{ dist: 'lognormal' }" in r.text
 
 
+async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """#27: a stored lognormal_mixture primary_loss renders the edit form as
+    lognormal with the TRUE mixture's p5/p95 populated (not the pre-fix blank
+    PERT fall-through), plus the informed-replacement warning — saving this
+    form discards the pooled mixture, and that must never be silent."""
+    client, org_id = authed_analyst
+    s = _seed_scenario(db_session, org_id=org_id, name="MixtureEdit")
+    s.primary_loss = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}/edit")
+    assert r.status_code == 200
+    # Rendered under the lognormal selector with the mixture's true p5/p95
+    # (exact-identity anchor Q_mix(0.05) = Q_A(0.10) ≈ $1,290.666; the money
+    # input filter renders 2-decimal fixed).
+    assert 'value="lognormal" selected' in r.text
+    assert 'value="1290.67"' in r.text
+    assert 'value="32444657.93"' in r.text
+    # Informed-replacement warning names the pooled provenance.
+    assert "pooled from 2 expert estimates" in r.text
+    # Non-mixture nodes (tef here is PERT) do not render the warning.
+    assert r.text.count("pooled from") == 1
+
+
 # ---- update ----------------------------------------------------------
 
 
@@ -1139,3 +1171,105 @@ async def test_view_pure_pert_scenario_unregressed(
     # No lognormal-specific labels should appear for a PERT scenario.
     assert "Lognormal" not in r.text
     assert "Median" not in r.text
+
+
+# ---- lognormal_mixture detail view (issue #27 Task 6) ---------------------
+
+
+def _seed_lognormal_mixture_scenario(
+    db: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    name: str,
+) -> Scenario:
+    """Seed a scenario with a catastrophic multi-SME lognormal_mixture
+    primary_loss (the worked A/B pair, equal weight)."""
+    s = Scenario(
+        organization_id=org_id,
+        name=name,
+        scenario_type=ScenarioType.CUSTOM,
+        threat_category=ThreatCategory.RANSOMWARE,
+        threat_event_frequency={
+            "distribution": "PERT",
+            "low": 0.1,
+            "mode": 0.5,
+            "high": 2.0,
+        },
+        vulnerability={
+            "distribution": "PERT",
+            "low": 0.2,
+            "mode": 0.4,
+            "high": 0.6,
+        },
+        primary_loss={
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+                {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+            ],
+        },
+        status=EntityStatus.ACTIVE,
+    )
+    db.add(s)
+    return s
+
+
+async def test_view_renders_lognormal_mixture_percentiles(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Detail view renders component count + p5/p95 for a seeded mixture
+    scenario (issue #27 Task 6).
+
+    Worked A/B pair (meanlog 8.06/sigma 0.70 vs 15.77/sigma 1.19, equal
+    weight): fair_cam.quantile_pooling.mixture_quantile_lognorm gives
+    p5=1,290.67 and p95=32,444,657.93 -- rendered via format_dist_value
+    (format_money_input: f"{v:.2f}", no $ / no thousands separator, matching
+    the plain-lognormal branch's cell formatting exactly) as "1290.67" and
+    "32444657.93".
+    """
+    client, org_id = authed_analyst
+    s = _seed_lognormal_mixture_scenario(db_session, org_id=org_id, name="MixtureDetail")
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+
+    # Distribution-type label with component count.
+    assert "Lognormal mixture" in r.text
+    assert "2 expert opinions" in r.text
+    # Mixture percentile rows (same 5th pct / Median / Mean / 95th pct shape
+    # as the plain-lognormal branch).
+    assert "5th pct" in r.text
+    assert "95th pct" in r.text
+    assert "Median" in r.text
+    assert "Mean" in r.text
+    # Numeric-only display pin: the rendered p5/p95 cells are formatted
+    # numbers derived from fair_cam's mixture quantile math, not raw stored
+    # text -- hand-checked against the fair_cam oracle above.
+    assert "1290.67" in r.text, f"p5 cell not found in rendered page: {r.text!r}"
+    assert "32444657.93" in r.text, f"p95 cell not found in rendered page: {r.text!r}"
+    # PERT "Mode" cell must NOT appear in the primary-loss mixture context
+    # (only TEF + Vuln are PERT here) -- exactly 2 "Mode" header cells.
+    assert r.text.count("<th>Mode</th>") == 2
+
+
+async def test_view_pure_lognormal_scenario_unregressed_by_mixture_branch(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Adding the lognormal_mixture branch must not change a plain
+    single-component lognormal scenario's rendering (byte-unchanged
+    regression pin, issue #27 Task 6)."""
+    client, org_id = authed_analyst
+    s = _seed_lognormal_scenario(db_session, org_id=org_id, name="LognormalUnregressed")
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+    assert "Lognormal" in r.text
+    assert "Median" in r.text
+    assert "Mean" in r.text
+    # No mixture-specific text should appear for a plain single-component
+    # lognormal scenario.
+    assert "Lognormal mixture" not in r.text
+    assert "expert opinions" not in r.text
+    assert "pooled mixture" not in r.text

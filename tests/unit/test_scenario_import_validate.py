@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from idraa.services.scenario_import import _validate_rows
 
 
@@ -385,6 +387,194 @@ def test_unknown_distribution_kind_is_error() -> None:
         [(2, _fd(primary_loss=bad))], existing_names=set()
     )
     assert preview[0]["action"] == "error"
+
+
+# --- #27 mixture-pooling: lognormal_mixture structural + finiteness guard ----
+# Full pipeline (_validate_rows) exercises BOTH gates together: exact-key-set +
+# numeric-TYPE shape (scenario_import._structural_dist_problem) THEN
+# finiteness/sigma-bound/weight-bound/weight-sum/count-cap
+# (fair_cam_validation._validate_finite) — mirrors the lognormal block above.
+
+
+def _mix_component(
+    mean: object = 8.0, sigma: object = 0.7, weight: object = 0.5
+) -> dict[str, object]:
+    return {"mean": mean, "sigma": sigma, "weight": weight}
+
+
+def _mixture(components: list[object]) -> dict[str, object]:
+    return {"distribution": "lognormal_mixture", "components": components}
+
+
+def test_valid_two_component_mixture_becomes_create() -> None:
+    mix = _mixture(
+        [
+            _mix_component(mean=8.06, sigma=0.70, weight=0.5),
+            _mix_component(mean=15.77, sigma=1.19, weight=0.5),
+        ]
+    )
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=mix))], existing_names=set()
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+    assert forms[0] is not None
+
+
+def test_mixture_vulnerability_is_rejected() -> None:
+    # vuln must always be PERT — lognormal_mixture not allowed for vulnerability.
+    mix = _mixture([_mix_component(), _mix_component(mean=12.0, weight=0.5)])
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(vulnerability=mix))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+    assert errors and "vulnerability" in errors[0]["column"]
+
+
+def test_mixture_missing_components_key_is_error() -> None:  # exact-key-set (top level)
+    bad = {"distribution": "lognormal_mixture"}
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=bad))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+
+
+def test_mixture_extra_top_level_key_is_error() -> None:  # anti-blob-smuggling
+    bad = _mixture([_mix_component(), _mix_component(mean=12.0, weight=0.5)])
+    bad["junk"] = "x" * 100
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=bad))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+
+
+def test_mixture_empty_components_is_error() -> None:
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture([])))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+
+
+def test_mixture_component_missing_key_is_error() -> None:  # exact-key-set (component)
+    bad_component = {"mean": 8.0, "sigma": 0.7}  # missing "weight"
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
+        existing_names=set(),
+    )
+    assert preview[0]["action"] == "error"
+
+
+def test_mixture_component_extra_key_is_error() -> None:  # anti-blob-smuggling (component)
+    bad_component = _mix_component(mean=12.0, weight=0.5)
+    bad_component["junk"] = "x" * 100
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
+        existing_names=set(),
+    )
+    assert preview[0]["action"] == "error"
+
+
+def test_mixture_component_non_numeric_mean_is_error() -> None:  # numeric-type guard
+    bad_component = _mix_component(mean="abc", weight=0.5)
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
+        existing_names=set(),
+    )
+    assert preview[0]["action"] == "error"
+
+
+def _three_components_with_last_bad(bad: dict[str, object]) -> list[object]:
+    """3-component mixture with the malformed component at the LAST index —
+    proves per-component iteration (not a components[0]-only check)."""
+    return [
+        _mix_component(mean=8.0, sigma=0.7, weight=1 / 3),
+        _mix_component(mean=12.0, sigma=0.9, weight=1 / 3),
+        bad,
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"mean": float("inf"), "sigma": 1.0, "weight": 1 / 3},
+        {"mean": 10.0, "sigma": float("inf"), "weight": 1 / 3},
+        {"mean": 10.0, "sigma": float("nan"), "weight": 1 / 3},  # NaN sigma (Sec-B1)
+        {"mean": 10.0, "sigma": 0.0, "weight": 1 / 3},
+        {"mean": 10.0, "sigma": 50.0, "weight": 1 / 3},
+        {"mean": 10.0, "sigma": 1.0, "weight": 0.0},
+    ],
+)
+def test_mixture_malformed_last_component_is_error(bad: dict[str, object]) -> None:
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture(_three_components_with_last_bad(bad))))],
+        existing_names=set(),
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+
+
+def test_mixture_bad_weight_sum_is_error() -> None:
+    components = [
+        _mix_component(mean=8.0, sigma=0.7, weight=0.3),
+        _mix_component(mean=12.0, sigma=0.9, weight=0.3),
+        _mix_component(mean=16.0, sigma=1.1, weight=0.3),
+    ]
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture(components)))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+
+
+def test_mixture_component_count_over_cap_is_error() -> None:  # Sec-N1
+    from idraa.config import get_settings
+
+    cap = get_settings().max_smes_per_fieldset
+    n = cap + 1
+    w = 1.0 / n
+    components = [_mix_component(mean=10.0, sigma=1.0, weight=w) for _ in range(n)]
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(primary_loss=_mixture(components)))], existing_names=set()
+    )
+    assert preview[0]["action"] == "error"
+
+
+# --- #27 Task 7: allow_lognormal node-set coverage — tef/pl/sl accept a
+# mixture, vuln rejects it (test_mixture_vulnerability_is_rejected above).
+# test_valid_two_component_mixture_becomes_create above already covers pl;
+# these close out tef + sl so all three allowed nodes have direct coverage
+# (not just inferred from the shared allow_ln wiring in _validate_rows).
+
+
+def test_mixture_tef_is_accepted() -> None:
+    mix = _mixture(
+        [
+            _mix_component(mean=8.06, sigma=0.70, weight=0.5),
+            _mix_component(mean=15.77, sigma=1.19, weight=0.5),
+        ]
+    )
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(threat_event_frequency=mix))], existing_names=set()
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+    assert forms[0] is not None
+
+
+def test_mixture_secondary_loss_is_accepted() -> None:
+    mix = _mixture(
+        [
+            _mix_component(mean=8.06, sigma=0.70, weight=0.5),
+            _mix_component(mean=15.77, sigma=1.19, weight=0.5),
+        ]
+    )
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(secondary_loss=mix))], existing_names=set()
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+    assert forms[0] is not None
 
 
 # --- Slice 1: effect (C/I/A) enum validation ---------------------------------

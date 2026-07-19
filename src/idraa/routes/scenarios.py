@@ -130,6 +130,7 @@ from idraa.services.wizard_finalize import (
     FinalizeBudgetExceededError,
     build_scenario_payload,
     persist_estimates,
+    pooling_component_fields,
     process_sme_estimates,
 )
 from idraa.services.wizard_helpers import (
@@ -2305,13 +2306,19 @@ async def finalize_wizard(
         # asset_class, attack_vector, library_entry_id) as a ScenarioForm-
         # splattable dict.
         form = ScenarioForm(**form_kwargs, **state.basic_fields())
+        # issue #27 Task 5 (routes/scenarios.py:2311-2314 fix): r.pooled is now
+        # always a LognormMixture/NormMixture (T1), never a bare fit with a
+        # scalar .meanlog/.sdlog/.mean/.sd attribute — the old
+        # getattr(r.pooled, "meanlog", None) style silently returned None for
+        # every fieldset, degrading the audit trail exactly when it matters
+        # most (multi-SME pooling). pooling_component_fields is the SAME
+        # helper build_scenario_payload uses for its sidecar, so the audit
+        # summary and the stored sidecar report identical component shapes.
         summary = {
             fs: {
                 "n_smes": len(r.rows),
-                "pooled_meanlog": getattr(r.pooled, "meanlog", None),
-                "pooled_sdlog": getattr(r.pooled, "sdlog", None),
-                "pooled_mean": getattr(r.pooled, "mean", None),
-                "pooled_sd": getattr(r.pooled, "sd", None),
+                "weights": list(r.pooled.weights),
+                **pooling_component_fields(r),
                 "mode_boundary_clamped": r.mode_clamp_reason is not None,
             }
             for fs, r in results.items()

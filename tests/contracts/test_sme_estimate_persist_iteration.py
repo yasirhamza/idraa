@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 
 import pytest
-from fair_cam.quantile_pooling import LogNormalTruncFit, PertTriple
+from fair_cam.quantile_pooling import LogNormalTruncFit, LognormMixture, PertTriple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,13 +83,22 @@ async def test_persist_estimates_round_trips_n5_rows(
     await db_session.flush()
 
     rows = [{"sme_id": sme_id, "low": 1.0 + i, "high": 2.0 + i} for i, sme_id in enumerate(sme_ids)]
+    # issue #27 Task 5: PerFieldsetResult.pooled is now a mixture; wrap the
+    # single fit in a single-component LognormMixture. persist_estimates
+    # never reads .pooled (only .rows/.clamp_events), so this is a
+    # construction-shape fix for the type, not a behavioral change.
     results: dict[str, PerFieldsetResult] = {
         "tef": PerFieldsetResult(
-            pooled=LogNormalTruncFit(
-                meanlog=0.5,
-                sdlog=0.5,
-                min_support=0.0,
-                max_support=float("inf"),
+            pooled=LognormMixture(
+                components=(
+                    LogNormalTruncFit(
+                        meanlog=0.5,
+                        sdlog=0.5,
+                        min_support=0.0,
+                        max_support=float("inf"),
+                    ),
+                ),
+                weights=(1.0,),
             ),
             pert=PertTriple(low=1.0, mode=2.0, high=3.0),
             mode_clamp_reason=None,

@@ -294,7 +294,11 @@ async def test_finalize_wide_loss_range_saves_not_500(
     )
     assert s.primary_loss["distribution"] == "PERT"
     assert s.primary_loss["low"] <= s.primary_loss["mode"] < s.primary_loss["high"]
-    assert 0 < s.primary_loss["distribution_fit_metadata"]["pooled_sdlog"] < 10.0
+    # issue #27 Task 5: the retired scalar pooled_sdlog sidecar key is now a
+    # single-element component_sdlogs list (single-SME pooling).
+    component_sdlogs = s.primary_loss["distribution_fit_metadata"]["component_sdlogs"]
+    assert len(component_sdlogs) == 1
+    assert 0 < component_sdlogs[0] < 10.0
 
 
 @pytest.mark.asyncio
@@ -460,3 +464,60 @@ async def test_finalize_validation_flash_leaves_token_resubmittable(
     await db_session.close()
     token_after = await _current_version_token(db_session, tx)
     assert token_after == token_before  # CAS token NOT consumed
+
+
+@pytest.mark.asyncio
+async def test_finalize_multi_sme_audit_row_carries_pooling_summary(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """routes/scenarios.py:2311-2314 fix (issue #27 Task 5): the finalize
+    route's per_fieldset_pooling_summary used to build ``getattr(r.pooled,
+    "meanlog", None)`` etc, which silently returned None for every fieldset
+    once r.pooled became a mixture (T1) -- degrading the audit trail exactly
+    for the multi-SME case the audit log exists to explain. A 2-SME pl
+    fieldset must produce a non-null, component-aware summary in the
+    ``scenario.create`` audit row."""
+    client, org_id = authed_analyst
+    user_id = await _resolve_analyst_user_id(db_session)
+    sme_id = await _seed_one_sme(db_session, org_id=org_id, created_by=user_id)
+    await db_session.close()
+
+    tx, _user_id = await _bootstrap_past_step2(client, db_session)
+    await _persist_fair_rows_via_steps_3_and_4(
+        client,
+        db_session,
+        tx,
+        tef=[(str(sme_id), 1.0, 12.0)],
+        vuln=[(str(sme_id), 0.05, 0.5)],
+        # Two experts on pl -- one directory SME, one free-text -- so the
+        # audit summary must carry a genuine 2-component pooling result.
+        pl=[
+            (str(sme_id), 100_000.0, 5_000_000.0),
+            ("Second Expert", 1_000_000.0, 50_000_000.0),
+        ],
+    )
+    await db_session.close()
+    vt = await _current_version_token(db_session, tx)
+    r = await csrf_post(
+        client,
+        f"/scenarios/new/wizard/finalize?tx={tx}",
+        data={"version_token": str(vt)},
+    )
+    assert r.status_code == 303, r.text
+
+    rows = (
+        (await db_session.execute(select(AuditLog).where(AuditLog.action == "scenario.create")))
+        .scalars()
+        .all()
+    )
+    assert len(rows) >= 1
+    last = rows[-1]
+    pl_summary = last.changes["per_fieldset_pooling_summary"][1]["pl"]
+    print(f"pl pooling summary (multi-SME, audit row): {pl_summary}")
+    assert pl_summary is not None
+    assert pl_summary["n_smes"] == 2
+    assert pl_summary["component_meanlogs"] is not None
+    assert len(pl_summary["component_meanlogs"]) == 2
+    assert len(pl_summary["component_sdlogs"]) == 2
+    assert pl_summary["weights"] == pytest.approx([0.5, 0.5])

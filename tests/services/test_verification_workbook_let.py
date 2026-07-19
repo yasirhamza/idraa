@@ -369,3 +369,296 @@ def test_scenario_let_missing_secondary_loss_key_also_emits() -> None:
     f_missing = scenario_let_formula(dict(base), mults, n=500)
     f_null = scenario_let_formula({**base, "secondary_loss": None}, mults, n=500)
     assert f_missing == f_null
+
+
+# --- Task 8: mixture parity (two-uniform path) --------------------------------
+# BINDING decision rule (plan Task 8 amendment): the LET binds RANDARRAY({n},1)
+# columns without a budget, so the mixture inversion gets a SECOND independent
+# uniform (u_sel) for component selection rather than reusing the inversion
+# uniform (comonotonic coupling != a linear-opinion-pool draw). Only pl/sl can
+# carry the native lognormal_mixture shape in production (catastrophic multi-SME
+# losses; tef/vuln always PERT-collapse — wizard_finalize.build_scenario_payload).
+
+
+def test_invcdf_lognormal_mixture_two_component_formula_pin() -> None:
+    """Exact string pin for a 2-component mixture (precedent:
+    test_invcdf_lognormal_logspace) — nested cumulative-weight IF on the
+    INDEPENDENT u_sel selects which EXP(NORM.INV(u, mean_i, sigma_i)) applies.
+    Uses the spec's canonical worked A/B pair (meanlog 8.06/sigma 0.70 vs
+    15.77/1.19, equal-weighted)."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    expr = _invcdf(dist, "u", u_sel="usel")
+    assert expr.replace(" ", "") == (
+        "IF(usel<0.5,EXP(NORM.INV(u,8.06,0.7)),EXP(NORM.INV(u,15.77,1.19)))"
+    )
+
+
+def test_invcdf_lognormal_mixture_three_component_nests_if_by_cumulative_weight() -> None:
+    """3 unequal-weight components: component i owns u_sel in [cum_{i-1}, cum_i);
+    the LAST component is the unconditional else (no < test emitted for it)."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 1.0, "sigma": 0.1, "weight": 0.2},
+            {"mean": 2.0, "sigma": 0.2, "weight": 0.3},
+            {"mean": 3.0, "sigma": 0.3, "weight": 0.5},
+        ],
+    }
+    expr = _invcdf(dist, "u", u_sel="usel").replace(" ", "")
+    assert expr == (
+        "IF(usel<0.2,EXP(NORM.INV(u,1.0,0.1)),"
+        "IF(usel<0.5,EXP(NORM.INV(u,2.0,0.2)),"
+        "EXP(NORM.INV(u,3.0,0.3))))"
+    )
+
+
+def test_invcdf_lognormal_mixture_without_u_sel_raises() -> None:
+    """The decision rule's core invariant: a mixture must NOT silently fall back
+    to reusing the inversion uniform for component selection — omitting u_sel
+    must raise, not degrade to a comonotonic coupling."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    with pytest.raises(ValueError):
+        _invcdf(dist, "u")
+
+
+def test_invcdf_lognormal_mixture_empty_components_raises() -> None:
+    dist = {"distribution": "lognormal_mixture", "components": []}
+    with pytest.raises(ValueError):
+        _invcdf(dist, "u", u_sel="usel")
+
+
+def test_scaled_params_lognormal_mixture_shifts_every_component_mean() -> None:
+    """Task 8 amendment #3: scaled_params shifts EVERY component's mean by
+    ln(mult); sigma/weight unchanged (mirrors the plain-lognormal shift,
+    extended elementwise). Hand-math: ln(2.0) = 0.6931471805599453."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    out = scaled_params(dist, 2.0)
+    expected_mean0 = round(8.06 + math.log(2.0), 10)
+    expected_mean1 = round(15.77 + math.log(2.0), 10)
+    assert expected_mean0 == 8.7531471806  # hand-math side-by-side
+    assert expected_mean1 == 16.4631471806
+    assert out == {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": expected_mean0, "sigma": 0.70, "weight": 0.5},
+            {"mean": expected_mean1, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+
+
+def test_scaled_params_lognormal_mixture_mult_zero_collapses_to_constant_zero() -> None:
+    """mult == 0 collapses a mixture node to the SAME degenerate constant-0
+    UNIFORM as every other kind (fair_core.py:274-275 perfect-control path) —
+    the generic collapse fires BEFORE the kind dispatch, so no mixture-specific
+    branch is reached."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    out = scaled_params(dist, 0.0)
+    assert out == {"distribution": "uniform", "low": 0.0, "high": 0.0}
+
+
+def _mixture_scen_and_mults() -> tuple[dict[str, Any], dict[str, Any]]:
+    """A valid (scen, mults) pair with primary_loss as a 3-component mixture,
+    for mutating in the recursion-guard fail-loud tests."""
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": 8.0, "sigma": 0.5, "weight": 0.3},
+                {"mean": 10.0, "sigma": 0.6, "weight": 0.3},
+                {"mean": 12.0, "sigma": 0.7, "weight": 0.4},
+            ],
+        },
+        "secondary_loss": {"low": 500.0, "mode": 2000.0, "high": 8000.0},
+    }
+    mults = {
+        "threat_event_frequency": 1.0,
+        "vulnerability": 1.0,
+        "primary_loss": 1.0,
+        "secondary_loss": 1.0,
+        "currency_subtractor_total": 0.0,
+    }
+    return scen, mults
+
+
+def test_mixture_well_formed_three_component_scenario_does_not_raise() -> None:
+    # Positive control for the two negative tests below: a clean 3-component
+    # mixture must emit without raising.
+    scen, mults = _mixture_scen_and_mults()
+    f = scenario_let_formula(scen, mults, n=1000)
+    assert f.startswith("=LET(")
+
+
+def test_assert_numeric_dist_recurses_into_mixture_component_string_sigma_raises() -> None:
+    """Sec-N1 extended to mixtures (Task 8): exempting the "components"
+    CONTAINER key outright (rather than recursing into it) would blind the
+    formula-injection guard to a string/bool smuggled INSIDE a component. The
+    malformed component sits at the LAST index of 3 (mirrors the Task 4
+    rejection-matrix convention — proves per-component iteration, not
+    components[0]-only)."""
+    scen, mults = _mixture_scen_and_mults()
+    scen["primary_loss"]["components"][2]["sigma"] = "NOT_A_NUMBER"
+    with pytest.raises(TypeError):
+        scenario_let_formula(scen, mults, n=1000)
+
+
+def test_assert_numeric_dist_recurses_into_mixture_component_bool_weight_raises() -> None:
+    """bool is a `int` subclass in Python — `isinstance(True, int)` is True — so
+    the guard must explicitly reject bool, not just non-numeric types, on a
+    NESTED component param too (mirrors the top-level numeric-param guard)."""
+    scen, mults = _mixture_scen_and_mults()
+    scen["primary_loss"]["components"][2]["weight"] = True
+    with pytest.raises(TypeError):
+        scenario_let_formula(scen, mults, n=1000)
+
+
+def test_scenario_let_mixture_binds_independent_u_sel_and_reuses_for_residual() -> None:
+    """Task 8 binding decision rule: a mixture node binds a SECOND independent
+    RANDARRAY column (u_pl_sel) — never reusing u_pl for component selection —
+    and the SAME u_pl_sel feeds BOTH the base and residual pl inversion (CRN
+    parity, exactly like u_pl itself is reused). secondary_loss is NOT a
+    mixture in this scenario, so no u_sl_sel column is bound at all (no budget
+    spent on a non-mixture node)."""
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+                {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+            ],
+        },
+        "secondary_loss": {"low": 500.0, "mode": 2000.0, "high": 8000.0},
+    }
+    mults = {
+        "threat_event_frequency": 0.8,
+        "vulnerability": 0.7,
+        "primary_loss": 1.0,
+        "secondary_loss": 0.9,
+        "currency_subtractor_total": 1000.0,
+    }
+    f = scenario_let_formula(scen, mults, n=10000)
+    assert f.startswith("=LET(")
+    assert "_xlpm.u_pl_sel" in f
+    # bound as its own independent RANDARRAY(n,1) column, not derived from u_pl.
+    assert "_xlpm.u_pl_sel,RANDARRAY(10000,1)" in f.replace(" ", "")
+    # CRN parity: definition + base use + residual use == 3 occurrences.
+    assert f.count("_xlpm.u_pl_sel") == 3
+    # secondary_loss is not a mixture here -> zero u_sl_sel bindings.
+    assert "u_sl_sel" not in f
+
+
+def test_scenario_let_mixture_both_pl_and_sl_bind_independent_sel_columns() -> None:
+    """Both pl AND sl as mixtures: each gets its OWN independent u_*_sel column
+    (not a shared one) — pl's selection must not leak into sl's."""
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+                {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+            ],
+        },
+        "secondary_loss": {
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": 5.0, "sigma": 0.4, "weight": 0.6},
+                {"mean": 9.0, "sigma": 0.9, "weight": 0.4},
+            ],
+        },
+    }
+    mults = {
+        "threat_event_frequency": 1.0,
+        "vulnerability": 1.0,
+        "primary_loss": 1.0,
+        "secondary_loss": 1.0,
+        "currency_subtractor_total": 0.0,
+    }
+    f = scenario_let_formula(scen, mults, n=2000)
+    assert "_xlpm.u_pl_sel" in f and "_xlpm.u_sl_sel" in f
+    assert f.count("_xlpm.u_pl_sel") == 3
+    assert f.count("_xlpm.u_sl_sel") == 3
+
+
+def test_scenario_let_non_mixture_scenario_binds_no_sel_columns() -> None:
+    """Regression: a fully non-mixture scenario must emit ZERO u_*_sel columns
+    (no budget spent when no node is a mixture) — byte-identical name-surface
+    to pre-Task-8 output."""
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {"low": 1000.0, "mode": 5000.0, "high": 20000.0},
+        "secondary_loss": {"low": 500.0, "mode": 2000.0, "high": 8000.0},
+    }
+    mults = {
+        "threat_event_frequency": 0.8,
+        "vulnerability": 0.7,
+        "primary_loss": 1.0,
+        "secondary_loss": 0.9,
+        "currency_subtractor_total": 1000.0,
+    }
+    f = scenario_let_formula(scen, mults, n=10000)
+    assert "u_sel" not in f
+
+
+def test_scenario_let_mixture_residual_applies_log_shift_via_scaled_params() -> None:
+    """End-to-end wiring check: the residual pl expression uses the mult-shifted
+    component means (scaled_params), not the base means — proves scaled_params
+    is actually threaded into the residual _invcdf call for a mixture node."""
+    mean0, mean1, sigma0, sigma1, weight0 = 8.06, 15.77, 0.70, 1.19, 0.5
+    mult = 0.5
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {
+            "distribution": "lognormal_mixture",
+            "components": [
+                {"mean": mean0, "sigma": sigma0, "weight": weight0},
+                {"mean": mean1, "sigma": sigma1, "weight": 1 - weight0},
+            ],
+        },
+        "secondary_loss": {"low": 500.0, "mode": 2000.0, "high": 8000.0},
+    }
+    mults = {
+        "threat_event_frequency": 1.0,
+        "vulnerability": 1.0,
+        "primary_loss": mult,
+        "secondary_loss": 1.0,
+        "currency_subtractor_total": 0.0,
+    }
+    f = scenario_let_formula(scen, mults, n=1000).replace(" ", "")
+    shifted_mean0 = round(mean0 + math.log(mult), 10)
+    shifted_mean1 = round(mean1 + math.log(mult), 10)
+    assert f"NORM.INV(_xlpm.u_pl,{shifted_mean0},{sigma0})" in f
+    assert f"NORM.INV(_xlpm.u_pl,{shifted_mean1},{sigma1})" in f
+    # the UNSHIFTED base means are also present (base draw uses raw params).
+    assert f"NORM.INV(_xlpm.u_pl,{mean0},{sigma0})" in f
+    assert f"NORM.INV(_xlpm.u_pl,{mean1},{sigma1})" in f

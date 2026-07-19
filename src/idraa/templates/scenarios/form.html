@@ -341,9 +341,25 @@
        are the triangular endpoints; under lognormal they are the 5th / 95th
        percentiles the closed form converts to native {mean, sigma}. #}
 
+    {# #27: a stored lognormal_mixture (pooled multi-expert estimate) has no
+       form editor — dist_to_form flattens it to the mixture's true p5/p95
+       under the lognormal selector and sets {prefix}_from_mixture, so we warn
+       that saving replaces the pooled mixture (informed, never silent). #}
+    {%- macro mixture_replace_warning(count, node_label) -%}
+    <div class="alert alert-warning" role="alert">
+      <span class="text-sm">
+        <strong>Pooled estimate:</strong> this {{ node_label }} is a mixture
+        pooled from {{ count }} expert estimates. Saving this form replaces it
+        with a single lognormal fitted to the shown 5th&ndash;95th percentile
+        range &mdash; the individual expert opinions are discarded.
+      </span>
+    </div>
+    {%- endmacro -%}
+
     {# TEF — frequency. #}
     <div x-data="{ dist: '{{ form.tef_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("tef", form.tef_dist) }}
+      {% if form.tef_from_mixture %}{{ mixture_replace_warning(form.tef_from_mixture, "threat event frequency") }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {{ pert_input("tef_low", "TEF low (5th pct)", fmt="rate") }}
         <template x-if="dist === 'pert'">{{ pert_input("tef_mode", "TEF mode", fmt="rate") }}</template>
@@ -368,6 +384,7 @@
     {# Primary loss — dollar magnitude. #}
     <div x-data="{ dist: '{{ form.pl_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("pl", form.pl_dist) }}
+      {% if form.pl_from_mixture %}{{ mixture_replace_warning(form.pl_from_mixture, "primary loss estimate") }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {{ pert_input("pl_low", "Primary loss low (5th pct)", fmt="money") }}
         <template x-if="dist === 'pert'">{{ pert_input("pl_mode", "Primary loss mode", fmt="money") }}</template>
@@ -378,6 +395,7 @@
     {# Secondary loss — optional. #}
     <div x-data="{ dist: '{{ form.sl_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("sl", form.sl_dist) }}
+      {% if form.sl_from_mixture %}{{ mixture_replace_warning(form.sl_from_mixture, "secondary loss estimate") }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {{ pert_input("sl_low", "Secondary loss low (5th pct)", req=False, fmt="money") }}
         <template x-if="dist === 'pert'">{{ pert_input("sl_mode", "Secondary loss mode", req=False, fmt="money") }}</template>

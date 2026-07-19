@@ -129,6 +129,9 @@ def _dict_to_fair_distribution(payload: dict[str, Any]) -> FAIRDistribution:
     except ValueError as exc:
         raise ValueError(f"Unsupported distribution kind: {kind_raw!r}") from exc
 
+    # dict[str, Any]: LOGNORMAL_MIXTURE's params nest a components list
+    # (below) -- every other branch still assigns a flat dict[str, float].
+    params: dict[str, Any]
     if kind in (DistributionType.PERT, DistributionType.TRIANGULAR):
         params = {
             "low": float(payload["low"]),
@@ -143,6 +146,26 @@ def _dict_to_fair_distribution(payload: dict[str, Any]) -> FAIRDistribution:
         # upstream by services/fair_cam_validation._validate_finite at
         # store time; this adapter coerces types only.
         params = {"mean": float(payload["mean"]), "sigma": float(payload["sigma"])}
+    elif kind == DistributionType.LOGNORMAL_MIXTURE:
+        # Issue #27 Task 5/6: catastrophic multi-SME pl/sl stores a linear-
+        # opinion-pool mixture, {"components": [{"mean" (log-space meanlog),
+        # "sigma", "weight"}, ...]} -- one dict per pooled SME fit, mirroring
+        # fair_cam.risk_engine.fair_core.FAIRDistribution.sample's
+        # LOGNORMAL_MIXTURE branch one-for-one. Shape/finiteness/weight-sum
+        # validation is enforced upstream by
+        # services/fair_cam_validation._validate_finite at store time; this
+        # adapter coerces types only, same contract as the plain LOGNORMAL
+        # branch above.
+        params = {
+            "components": [
+                {
+                    "mean": float(component["mean"]),
+                    "sigma": float(component["sigma"]),
+                    "weight": float(component["weight"]),
+                }
+                for component in payload["components"]
+            ]
+        }
     else:
         raise ValueError(
             f"Wizard does not produce {kind.value} distributions; got payload={payload!r}"

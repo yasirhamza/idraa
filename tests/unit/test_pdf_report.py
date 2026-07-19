@@ -2873,6 +2873,23 @@ def _t6_pert_vuln() -> dict[str, Any]:
     return {"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6}
 
 
+def _t6_lognormal_mixture_inputs() -> dict[str, Any]:
+    """Lognormal-mixture distribution dict for T6 tests (issue #27 Task 6).
+
+    The worked A/B pair from the mixture-pooling spec (meanlog 8.06/sigma
+    0.70 vs meanlog 15.77/sigma 1.19), equal-weighted. Production shape:
+    lowercase "lognormal_mixture", components keyed "mean" (meanlog, not
+    "mu")/"sigma"/"weight" — see wizard_finalize.build_scenario_payload.
+    """
+    return {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+
+
 def _t6_single_data_with_inputs(**overrides: Any) -> RunReportData:
     """SINGLE run fixture with scenario_inputs snapshot (lognormal distributions)."""
     scenario_inputs = {
@@ -2936,6 +2953,29 @@ def _t6_single_data_with_inputs(**overrides: Any) -> RunReportData:
         scenario_inputs=scenario_inputs,
         controls_snapshot=controls_snapshot,
     )
+    if overrides:
+        return replace(base, **overrides)
+    return base
+
+
+def _t6_single_data_with_mixture(**overrides: Any) -> RunReportData:
+    """SINGLE run fixture with a lognormal_mixture primary_loss (issue #27
+    Task 6 PDF smoke test) — mirrors _t6_single_data_with_inputs but swaps
+    primary_loss for the worked A/B mixture pair."""
+    scenario_inputs = {
+        "label": "as-executed",
+        "scenarios": [
+            {
+                "scenario_id": "sc1",
+                "scenario_name": "Ransomware OT",
+                "threat_event_frequency": _t6_lognormal_inputs(),
+                "vulnerability": _t6_pert_vuln(),
+                "primary_loss": _t6_lognormal_mixture_inputs(),
+                "secondary_loss": _t6_pert_inputs(),
+            }
+        ],
+    }
+    base = _single_run_data(scenario_inputs=scenario_inputs)
     if overrides:
         return replace(base, **overrides)
     return base
@@ -3096,6 +3136,194 @@ def test_lognormal_table_label_parametric() -> None:
     assert "parametric" in all_text, (
         "Lognormal table must be labeled '…parametric' to distinguish from §4 empirical output table"
     )
+
+
+# ---- lognormal_mixture PDF branch (issue #27 Task 6) ----------------------
+
+
+def test_lognormal_mixture_table_renders_component_count_and_percentiles() -> None:
+    """T6 (#27): lognormal_mixture branch renders the component count and
+    the p5/p25/p50/p75/p95 + Mean percentile table (same row shape as the
+    plain lognormal branch)."""
+    pdf = render_executive_pdf(_t6_single_data_with_mixture())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "Lognormal mixture (2 expert opinions)" in all_text, (
+        "lognormal_mixture distribution-type label with component count must be present"
+    )
+    assert "p50 (median)" in all_text
+    assert "p5" in all_text
+    assert "p95" in all_text
+    assert "Mean (expected loss)" in all_text
+
+
+def test_lognormal_mixture_percentile_hand_check() -> None:
+    """T6 numeric verification (issue #27): mixture percentiles are the
+    inverse of the POOLED CDF, not a per-component average or a re-averaged
+    single fit.
+
+    Worked A/B pair (meanlog 8.06/sigma 0.70 vs 15.77/sigma 1.19, equal
+    weight) -- fair_cam.quantile_pooling.mixture_quantile_lognorm (the
+    ground truth this module's local bisection mirrors) gives:
+      p5     = 1,290.67   -> "$1.29k"
+      p50    = 55,025.70  -> "$55.03k"
+      p95    = 32,444,657.93 -> "$32.44M"
+      mean   = analytic Sigma w_i*exp(mean_i+sigma_i^2/2) = 7,168,341.94 -> "$7.17M"
+
+    This also regression-pins the collapsed-PERT/averaged-fit OLD behavior
+    is NOT what renders: the pre-mixture averaged fit's ~90% range was
+    [$31k, $710k] (issue #343's divergent-pooling example) -- the p95 here
+    ($32.44M) is two orders of magnitude past that, proving the mixture
+    (not an average) drives the render.
+    """
+    from idraa.services.pdf_report import _lognormal_mixture_percentiles
+
+    components = [
+        {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+        {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+    ]
+    rows = _lognormal_mixture_percentiles(components)
+    labels = [r[0] for r in rows]
+    vals = dict(rows)
+
+    assert len(rows) == 6, f"Expected 6 rows, got {len(rows)}: {labels}"
+    assert labels[2] == "p50 (median)"
+    assert labels[5] == "Mean (expected loss)"
+
+    print(f"p5:   expected(fair_cam-oracle)=$1.29k  vs actual(rendered)={vals['p5']!r}")
+    print(f"p50:  expected(fair_cam-oracle)=$55.03k vs actual(rendered)={vals['p50 (median)']!r}")
+    print(f"p95:  expected(fair_cam-oracle)=$32.44M vs actual(rendered)={vals['p95']!r}")
+    print(f"mean: expected(analytic)=$7.17M vs actual(rendered)={vals['Mean (expected loss)']!r}")
+    assert vals["p5"] == "$1.29k"
+    assert vals["p50 (median)"] == "$55.03k"
+    assert vals["p95"] == "$32.44M"
+    assert vals["Mean (expected loss)"] == "$7.17M"
+
+    # NOT the retired averaged-fit range (issue #343): [$31k, $710k].
+    assert vals["p5"] != "$31.00k"
+    assert vals["p95"] != "$710.00k"
+
+
+def test_mixture_quantile_mirror_parity_with_fair_cam_oracle() -> None:
+    """DRIFT DETECTOR (#27): pin pdf_report's local mixture-quantile mirror
+    to fair_cam.quantile_pooling.mixture_quantile_lognorm.
+
+    pdf_report._mixture_lognorm_quantile is a DELIBERATE purity-driven
+    reimplementation: services/pdf_report.py itself must never import
+    fair_cam (see the module docstring and
+    test_pdf_report_purity_no_db_or_routes_or_fair_cam_imports), so it
+    mirrors the bisection locally via math.erf. That purity invariant
+    constrains ONLY the pdf_report module — test modules MAY import
+    fair_cam, which is exactly what makes this cross-implementation
+    comparison possible.
+
+    Without this test nothing imports BOTH implementations and compares:
+    if fair_cam's quantile math ever changes, the web view
+    (app.lognormal_mixture_display_rows calls fair_cam directly) would
+    follow while the PDF silently drifted. This test is the committed
+    tripwire for that failure mode.
+
+    IF THIS TEST FAILS: reconcile the pdf_report mirror to fair_cam,
+    NEVER the reverse — fair_cam is the source of truth for FAIR math
+    (CLAUDE.md architectural rule); the mirror exists only to satisfy the
+    renderer's purity boundary.
+
+    Grid: the FULL p5/p25/p50/p75/p95 set the PDF renders (p25/p75 are
+    PDF-only — the web view renders p5/median/p95, so parity at p25/p75
+    is checkable ONLY here). Tolerance rel<=1e-8: both implementations
+    bisect to 1e-10 log-space tolerance; observed worst rel diff at
+    authoring time was ~5.7e-11, so 1e-8 catches any algorithmic change
+    while ignoring bisection noise.
+    """
+    import math
+
+    from fair_cam.quantile_pooling import (
+        LogNormalTruncFit,
+        LognormMixture,
+        mixture_quantile_lognorm,
+    )
+
+    from idraa.services.pdf_report import _mixture_lognorm_quantile
+
+    fixtures: dict[str, list[dict[str, float]]] = {
+        # (a) the worked A/B pair from the mixture-pooling spec (equal weight).
+        "worked A/B pair": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+        # (b) single-component: fair_cam delegates to scipy truncnorm.ppf
+        # (closed form) while the mirror still bisects — parity here proves
+        # the mirror agrees with the exact inverse, not just with another
+        # bisection.
+        "single-component": [
+            {"mean": 12.0, "sigma": 1.5, "weight": 1.0},
+        ],
+        # (c) 3-component divergent mixture: widely separated meanlogs +
+        # unequal weights exercise the multi-plateau CDF where bisection
+        # bracket/tolerance bugs would surface.
+        "3-component divergent": [
+            {"mean": 6.5, "sigma": 0.4, "weight": 0.2},
+            {"mean": 11.0, "sigma": 0.9, "weight": 0.5},
+            {"mean": 17.2, "sigma": 1.6, "weight": 0.3},
+        ],
+    }
+    grid = (0.05, 0.25, 0.50, 0.75, 0.95)
+
+    worst_rel = 0.0
+    worst_at = ""
+    for name, comps in fixtures.items():
+        mix = LognormMixture(
+            components=tuple(
+                LogNormalTruncFit(
+                    meanlog=c["mean"],
+                    sdlog=c["sigma"],
+                    min_support=0.0,
+                    max_support=math.inf,
+                )
+                for c in comps
+            ),
+            weights=tuple(c["weight"] for c in comps),
+        )
+        for p in grid:
+            oracle = mixture_quantile_lognorm(mix, p)
+            mirror = _mixture_lognorm_quantile(p, comps)
+            rel = abs(mirror - oracle) / oracle
+            print(
+                f"{name:24s} p={p:4.2f}  expected(fair_cam)={oracle!r:24s} "
+                f"actual(pdf-mirror)={mirror!r:24s} rel={rel:.3e}"
+            )
+            if rel > worst_rel:
+                worst_rel = rel
+                worst_at = f"{name} p={p}"
+            assert rel <= 1e-8, (
+                f"PDF mixture-quantile mirror drifted from the fair_cam oracle at "
+                f"{name} p={p}: fair_cam={oracle!r} vs pdf_report={mirror!r} "
+                f"(rel={rel:.3e} > 1e-8). Reconcile the mirror in "
+                f"services/pdf_report.py to fair_cam — never the reverse."
+            )
+    print(f"worst rel diff: {worst_rel:.3e} at {worst_at}")
+
+
+def test_lognormal_mixture_table_label_pooled_mixture() -> None:
+    """T6 (#27): lognormal_mixture table label distinguishes itself from the
+    plain-lognormal 'parametric' label with 'pooled mixture'."""
+    pdf = render_executive_pdf(_t6_single_data_with_mixture())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "pooled mixture" in all_text
+
+
+def test_plain_lognormal_rendering_byte_unchanged_regression() -> None:
+    """T6 regression pin (issue #27): adding the lognormal_mixture branch
+    must not alter a single line of the plain-lognormal branch's output.
+    Renders the pre-existing lognormal fixture and re-asserts the exact
+    hand-checked values from test_lognormal_percentile_hand_check /
+    test_lognormal_renderer_reads_mean_key_not_mu."""
+    pdf = render_executive_pdf(_t6_single_data_with_inputs())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "$162" in all_text
+    assert "$501" in all_text
+    assert "parametric" in all_text
+    assert "pooled mixture" not in all_text
+    assert "Lognormal mixture" not in all_text
 
 
 def test_pert_distribution_elicited_values_label() -> None:
