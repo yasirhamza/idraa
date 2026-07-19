@@ -50,7 +50,10 @@
    `_render_review_with_flash` (HTTP **422**, the finalize-error idiom) —
    NOT 409. The dispatch's except clause catches
    `(ScenarioVersionConflictError, NotFoundError)` and routes both to the
-   flash (rollback first; draft survives). Task 4 test renamed to
+   flash (rollback first; draft survives). For the `NotFoundError` branch
+   use the fixed friendly message ("This scenario no longer exists — it was
+   deleted while you were estimating. Cancel to discard this draft."), not
+   `str(exc)` (Sec-R2-N1). Task 4 test renamed to
    `test_finalize_conflict_renders_review_flash_and_preserves_draft`,
    asserting status 422 + message + draft row still present + scenario
    unchanged. Import `NotFoundError` from `idraa.errors`.
@@ -79,6 +82,18 @@
 13. **Meth-N3:** Task 5's step-6 targeted copy adds: "Estimation math may
     have been updated since this scenario was last estimated — pooled
     distributions can shift even if you keep every value."
+14. **Arch-R2-I1:** the `conversion_metadata = None` clear (amendment 7) is
+    PINNED BY TESTS: Task 4 test 4 asserts `scenario.conversion_metadata is
+    None` after the register-import upgrade; Task 2 test 5 asserts the
+    audit extras carry `changes["conversion_metadata"] == [<before>, None]`
+    when the scenario had one.
+15. **Arch-R2-N2:** the USD stamp moves INSIDE `update_from_wizard`
+    (`scenario.entry_currency = "USD"`, `scenario.entry_rate = None`) so a
+    non-USD scenario's currency flip lands in the audit extras
+    (`entry_currency` before/after when changed). The route-level stamp
+    remains ONLY on the create path. Task 2 gains a test: an EUR-entry
+    scenario re-estimated → `entry_currency == "USD"` and
+    `changes["entry_currency"] == ["EUR", "USD"]`.
 
 ---
 
@@ -374,7 +389,7 @@ Contract to pin (one test each; write real bodies against the local fixture idio
 2. `test_row_version_conflict_raises` — `expected_row_version=99` → `pytest.raises(ScenarioVersionConflictError)`; scenario unchanged.
 3. `test_provenance_flip` — seed with `source=ScenarioSource.LIBRARY_DERIVED` and a non-None `library_pin`; after the call `scenario.source is ScenarioSource.EXPERT_JUDGMENT`, `scenario.library_pin is None`, and `vuln_framing == "inherent"` even when the vuln numeric triple is UNCHANGED (the by-construction flip, stronger than `update()`'s changed-only flip).
 4. `test_status_and_effect_and_descriptive_version_preserved` — seed ACTIVE with `effect=...`; after call: status/effect/scenario_type/`version` (str label) all unchanged.
-5. `test_audit_row_carries_diff_and_pooling_summary` — pass `per_fieldset_pooling_summary={"tef": {"n_smes": 2}}`; fetch the latest `audit_logs` row: `action == "scenario.update"`, `changes["source"] == ["library_derived", "expert_judgment"]`, `changes["per_fieldset_pooling_summary"]["tef"]["n_smes"] == 2`, `changes["row_version"] == [1, 2]`.
+5. `test_audit_row_carries_diff_and_pooling_summary` — seed with a populated `conversion_metadata` and `entry_currency="EUR"`; pass `per_fieldset_pooling_summary={"tef": {"n_smes": 2}}`; fetch the latest `audit_logs` row: `action == "scenario.update"`, `changes["source"] == ["library_derived", "expert_judgment"]`, `changes["conversion_metadata"][1] is None` with a non-None before (amendment 14), `changes["entry_currency"] == ["EUR", "USD"]` and `scenario.entry_currency == "USD"` (amendment 15), `changes["per_fieldset_pooling_summary"]["tef"]["n_smes"] == 2`, `changes["row_version"] == [1, 2]`.
 6. `test_update_regression_suite_green` — not a new test: existing `tests/services/test_scenario_service.py` (or wherever `update()` is covered — locate via `grep -rn "def test.*update" tests/services/`) passes unchanged after the refactor.
 
 - [ ] **Step 2: Run to verify failure**
@@ -448,10 +463,14 @@ New method (after `update()`):
             raise ValidationError(
                 "status cannot be changed here — use Promote on the scenario page"
             )
-        before = self._capture_audit_before(scenario)
-        before["source"] = scenario.source.value
-        before["library_pin"] = scenario.library_pin
-        before["vuln_framing"] = scenario.vuln_framing
+        before = self._capture_audit_before(scenario)  # standard keys ONLY (amendment 8)
+        extras_before = {
+            "source": scenario.source.value,
+            "library_pin": scenario.library_pin,
+            "vuln_framing": scenario.vuln_framing,
+            "conversion_metadata": scenario.conversion_metadata,
+            "entry_currency": scenario.entry_currency,
+        }
         validate_fair_distributions(
             threat_event_frequency=form.threat_event_frequency,
             vulnerability=form.vulnerability,
@@ -462,12 +481,15 @@ New method (after `update()`):
         scenario.source = ScenarioSource.EXPERT_JUDGMENT
         scenario.library_pin = None
         scenario.vuln_framing = "inherent"
+        scenario.conversion_metadata = None  # amendment 7: provenance sidecar
+        scenario.entry_currency = "USD"  # amendment 15: wizard elicits USD
+        scenario.entry_rate = None
         changes = self._audit_diff(before, scenario)
-        for extra in ("source", "library_pin", "vuln_framing"):
+        for extra, prev in extras_before.items():
             cur = getattr(scenario, extra)
             cur = getattr(cur, "value", cur)
-            if before[extra] != cur:
-                changes[extra] = [before[extra], cur]
+            if prev != cur:
+                changes[extra] = [prev, cur]
         prev_row_version = scenario.row_version
         scenario.row_version = prev_row_version + 1
         changes["row_version"] = [prev_row_version, scenario.row_version]
@@ -605,7 +627,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 1. `test_finalize_updates_target_in_place` — seed wizard-born-style scenario (row_version 1, source `library_derived`, non-None library_pin, 1 SME row per fieldset), POST re-estimate, walk steps 2–6 keeping seeded values, finalize. Assert: redirect to `/scenarios/{s.id}`; SAME scenario id; `row_version == 2`; `source == expert_judgment`; `library_pin is None`; `vuln_framing == "inherent"`; distributions replaced (fit metadata `fitted_at` newer); status unchanged; NO new Scenario row created (count unchanged).
 2. `test_finalize_replaces_sme_rows` — target starts with 2 old rows on "tef"; finalize a re-estimation entering 3 different rows → exactly the 3 new rows remain for the scenario (old gone), N=3 intact.
 3. `test_finalize_conflict_renders_review_flash_and_preserves_draft` (asserts 422) — after seeding, bump the scenario via the edit form (row_version 2); finalize → response contains the conflict message, NOT a redirect; the `wizard_drafts` row still exists; the scenario is unchanged.
-4. `test_finalize_register_import_upgrade` — scenario with `source=qualitative_register_import`, `vuln_framing="legacy_residual"`, no SME rows: POST re-estimate (empty rehydration), enter estimates, finalize → source flips, `vuln_framing == "inherent"`, estimates replaced.
+4. `test_finalize_register_import_upgrade` — scenario with `source=qualitative_register_import`, `vuln_framing="legacy_residual"`, a populated `conversion_metadata`, no SME rows: POST re-estimate (empty rehydration), enter estimates, finalize → source flips, `vuln_framing == "inherent"`, `conversion_metadata is None` (amendment 14), estimates replaced.
 5. `test_create_path_unchanged` — the plain `POST /scenarios/new/wizard/...` flow (no target) still creates a new scenario (guard against regression: run one existing wizard-create integration test module and reference it here rather than duplicating).
 
 - [ ] **Step 2: Run to verify failure.**
@@ -646,11 +668,15 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 ```python
         try:
             if is_reestimate:
+                if state.target_expected_row_version is None:  # amendment 9
+                    raise HTTPException(
+                        500, "re-estimate draft missing its row-version capture"
+                    )
                 scenario = await ScenarioService(db).update_from_wizard(
                     organization_id=user.organization_id,
                     scenario_id=uuid.UUID(state.target_scenario_id),
                     form=form,
-                    expected_row_version=state.target_expected_row_version or 0,
+                    expected_row_version=state.target_expected_row_version,
                     actor=user,
                     ip_address=client_ip(request),
                     per_fieldset_pooling_summary=summary,
@@ -669,7 +695,7 @@ Mirror the module's actual CSRF handling for POST routes (if sibling POSTs take 
 ```
 
 Post-dispatch block adjustments:
-- `scenario.entry_currency = "USD"` / `entry_rate = None` — keep for BOTH paths (spec: wizard elicits USD).
+- `scenario.entry_currency = "USD"` / `entry_rate = None` — the existing route-level stamp stays on the CREATE path only; the update path stamps inside `update_from_wizard` so the flip is audited (amendment 15).
 - Mitigating controls: on the re-estimate path call `set_mitigating_controls` UNCONDITIONALLY (empty list must clear); on the create path keep the existing `if state.mitigating_control_ids:` guard byte-identical.
 - ATT&CK copy: keep guarded by `library_pin is not None` AND `not is_reestimate` (seeding never sets library fields, so this is defensive only — assert seeding leaves them None in Task 1's tests).
 - SME rows: before `persist_estimates`, on the re-estimate path only:

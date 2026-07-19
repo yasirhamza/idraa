@@ -131,9 +131,10 @@ mirrors `ScenarioService.update`'s concurrency/audit conventions:
   every vuln value that reaches this finalize was elicited under the
   inherent wording — either freshly, or rehydrated from an
   already-inherent scenario.
-- `entry_currency = "USD"` stamp, matching the wizard's create-path
-  convention (the wizard elicits USD quantiles; non-USD elicitation is out
-  of scope).
+- `entry_currency = "USD"` stamp applied INSIDE `update_from_wizard` so a
+  non-USD scenario's currency flip appears in the audit diff
+  (plan-gate Arch-R2-N2); matches the wizard's create-path convention (the
+  wizard elicits USD quantiles; non-USD elicitation is out of scope).
 - `status`: untouched (status is immutable outside `promote` — existing
   convention).
 - `row_version += 1`; ONE `scenario.update` audit row with per-field
@@ -243,6 +244,11 @@ mirrors `ScenarioService.update`'s concurrency/audit conventions:
   narrowed to wizard-born invariant; step-6 legacy pooling-upgrade note.
   Refuted at gate: the mitigating_controls lazy-load worry (relationship
   is lazy="selectin" — eager).
+- 2026-07-19 plan-gate R2: spec+security converged 0/0; architect raised 1
+  IMPORTANT (conversion_metadata clear untested + illustrative code
+  contradicting amendments 7/8) — fixed: sketches reconciled, tests pinned
+  (amendment 14), and the USD stamp moved into update_from_wizard so the
+  currency flip is audited (amendment 15).
 
 ## Review tier
 
