@@ -151,6 +151,8 @@ def _band_options(
     )
 
     def _fmt_money(v: float) -> str:
+        if v >= 1_000_000_000:
+            return f"${v / 1_000_000_000:g}B"
         if v >= 1_000_000:
             return f"${v / 1_000_000:g}M"
         if v >= 1_000:
