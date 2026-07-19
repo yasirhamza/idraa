@@ -149,7 +149,24 @@ def _band_options(
     placeholder = (
         "— choose a frequency band —" if kind == "frequency" else "— choose a magnitude band —"
     )
-    return [("", placeholder), *((b.label, b.label.replace("_", " ").title()) for b in rows)]
+
+    def _fmt_money(v: float) -> str:
+        if v >= 1_000_000:
+            return f"${v / 1_000_000:g}M"
+        if v >= 1_000:
+            return f"${v / 1_000:g}K"
+        return f"${v:g}"
+
+    def _display(b: EffectiveBand) -> str:
+        name = b.label.replace("_", " ").title()
+        if kind == "frequency":
+            # UAT feedback 2026-07-19: show the events/yr semantics at
+            # decision time so a probability-worded register label ("Likely")
+            # is not bound positionally onto a hot frequency band.
+            return f"{name} — {b.low:g} to {b.high:g} events/yr"
+        return f"{name} — {_fmt_money(b.low)} to {_fmt_money(b.high)}"
+
+    return [("", placeholder), *((b.label, _display(b)) for b in rows)]
 
 
 def _parse_bind_form(
