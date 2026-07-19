@@ -181,7 +181,8 @@ async def test_parked_row_counted_not_errored_and_no_scenario_created(
         organization_id=org.id, user=user, source_file="register.xlsx", rows=rows
     )
 
-    assert report.parked == [1]
+    assert [(p.source_row, p.reason) for p in report.parked] == [(1, "category")]
+    assert report.parked[0].title  # title carried for readable reports (UAT fix)
     assert report.created == []
     assert report.errors == []
     count = (
@@ -704,7 +705,7 @@ async def test_classify_rows_is_pure_and_matches_convert_disposition(
     )
 
     assert [r.source_row for r in classified.would_create] == [1]
-    assert classified.parked == [2]
+    assert [(p.source_row, p.reason) for p in classified.parked] == [(2, "category")]
     assert classified.duplicates == []
     assert len(classified.errors) == 1
     assert classified.errors[0].source_row == 3
@@ -719,7 +720,7 @@ async def test_classify_rows_is_pure_and_matches_convert_disposition(
         organization_id=org.id, user=user, source_file="register.xlsx", rows=rows
     )
     assert len(report.created) == 1
-    assert report.parked == [2]
+    assert [(p.source_row, p.reason) for p in report.parked] == [(2, "category")]
     assert report.skipped_duplicates == []
     assert len(report.errors) == 1
     assert report.errors[0].source_row == 3

@@ -642,8 +642,13 @@ def _classification_rows(classified: ClassifiedRows) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for row in classified.would_create:
         rows.append({"line": row.source_row, "title": row.title, "note": "", "action": "create"})
-    for source_row in classified.parked:
-        rows.append({"line": source_row, "title": "", "note": "", "action": "parked"})
+    for pr in classified.parked:
+        note = (
+            "blank likelihood/impact cell"
+            if pr.reason == "blank_cells"
+            else "category parked / out of scope"
+        )
+        rows.append({"line": pr.source_row, "title": pr.title, "note": note, "action": "parked"})
     for dup in classified.duplicates:
         rows.append(
             {
@@ -727,7 +732,18 @@ async def register_import_convert_post(
         {"scenario_id": str(c.scenario_id), "source_row": c.source_row, "title": c.title}
         for c in report.created
     ]
-    parked_rows = [{"line": n} for n in report.parked]
+    parked_rows = [
+        {
+            "line": pr.source_row,
+            "title": pr.title,
+            "note": (
+                "blank likelihood/impact cell"
+                if pr.reason == "blank_cells"
+                else "category parked / out of scope"
+            ),
+        }
+        for pr in report.parked
+    ]
     skipped_rows = [
         {"line": d.source_row, "title": d.title, "reason": f"duplicate — {d.reason}"}
         for d in report.skipped_duplicates

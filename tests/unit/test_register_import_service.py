@@ -502,7 +502,9 @@ async def test_set_column_map_ambiguous_single_valued_target_rejected(
     )
     bad_map = dict(_FULL_COLUMN_MAP)
     bad_map["Notes"] = "category"  # now TWO headers map to "category"
-    with pytest.raises(ValidationError, match="at most one column may map to 'category'"):
+    # category joined _REQUIRED_EXACTLY_ONE (UAT fix): duplicates now trip the
+    # exactly-one check rather than the optional at-most-one check.
+    with pytest.raises(ValidationError, match="exactly one column must map to 'category'"):
         await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=bad_map)
 
 
@@ -836,6 +838,7 @@ async def test_build_bound_rows_blank_likelihood_auto_parks(
     rows = await svc.build_bound_rows(organization_id=org.id, token=token)
     assert len(rows) == 1
     assert rows[0].category is None
+    assert rows[0].park_reason == "blank_cells"  # UAT fix: reason pinned for report labels
     assert rows[0].raw == {"likelihood": "", "impact": "High", "category": "Phishing"}
 
 
@@ -912,7 +915,7 @@ async def test_preview_classifies_without_writing(
     classified = await svc.preview(organization_id=org.id, token=token)
 
     assert [r.source_row for r in classified.would_create] == [2, 3]
-    assert classified.parked == [4]
+    assert [(p.source_row, p.reason) for p in classified.parked] == [(4, "category")]
     assert classified.duplicates == []
     assert classified.errors == []
 
@@ -937,7 +940,7 @@ async def test_apply_creates_scenarios_and_deletes_token(
     report = await svc.apply(organization_id=org.id, user=user, token=token)
 
     assert len(report.created) == 2
-    assert report.parked == [4]
+    assert [(p.source_row, p.reason) for p in report.parked] == [(4, "category")]
     assert report.source_file == "q3_register.csv"
 
     scenarios = (
@@ -1211,3 +1214,73 @@ async def test_state_json_reassignment_persists_across_fresh_session(
             assert row.state_json["filename"] == "r.csv"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_apply_profile_with_incomplete_column_map_does_not_clobber(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    """UAT regression 2026-07-19: a legacy profile saved WITHOUT a category
+    mapping must not silently replay its broken column_map over the admin's
+    manually-set one — the column map is left alone and a warning names the
+    missing required target. Value bindings still pre-fill."""
+    org, user = await seed_org_user(db_session)
+    await _seed_bands(db_session)
+    svc = RegisterImportService(db_session)
+    staged = await svc.stage_upload(
+        organization_id=org.id,
+        filename="r.csv",
+        content_type="text/csv",
+        data=_csv_bytes(),
+        user=user,
+    )
+    await svc.set_column_map(
+        organization_id=org.id, token=staged.token, column_map=dict(_FULL_COLUMN_MAP)
+    )
+    await svc.set_value_bindings(
+        organization_id=org.id, token=staged.token, bindings=_FULL_VALUE_BINDINGS
+    )
+    legacy_cm = {k: ("carry_along" if v == "category" else v) for k, v in _FULL_COLUMN_MAP.items()}
+    profile = await svc.save_profile(
+        organization_id=org.id, name="legacy", token=staged.token, user=user
+    )
+    profile.column_map = legacy_cm  # simulate a pre-fix saved profile
+    await db_session.flush()
+
+    warnings = await svc.apply_profile(
+        organization_id=org.id, token=staged.token, profile_id=profile.id
+    )
+    assert any("'category'" in w and "NOT applied" in w for w in warnings)
+    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    cm = (row.state_json or {}).get("column_map") or {}
+    assert "category" in cm.values()  # the manual mapping SURVIVED
+
+
+def test_category_keyword_preselection_word_boundary_and_ambiguity() -> None:
+    """Owner-approved category keyword pre-selection (UAT round 3): word-boundary
+    containment, category group only; absent/ambiguous stays unselected."""
+    from idraa.services.register_import import _category_keyword_match
+
+    assert _category_keyword_match("Cyber – Ransomware") == "ransomware"
+    assert _category_keyword_match("Insider Threat") == "insider_misuse"
+    assert _category_keyword_match("Third Party") == "supply_chain"
+    assert _category_keyword_match("Cyber – Availability") == "denial_of_service"
+    assert _category_keyword_match("Compliance – Data Privacy") == "data_disclosure"
+    assert _category_keyword_match("Cyber – Social Engineering") == "social_engineering"
+    # deliberately UNMAPPED: HSE / generic OT / commercial supplier / park
+    assert _category_keyword_match("HSE") is None
+    assert _category_keyword_match("Process Safety") is None
+    assert _category_keyword_match("OT Security") is None
+    assert _category_keyword_match("Supplier / Commercial") is None
+    assert _category_keyword_match("Market / Financial") is None
+    # word boundary: 'sis' must not fire inside other words
+    assert _category_keyword_match("Analysis backlog") is None
+    assert _category_keyword_match("SIS bypass") == "ot_safety_tampering"
+    # review round: bare tampering/scada dropped (OT-ambiguous); explicit
+    # two-word forms map, single-signal generic forms stay manual
+    assert _category_keyword_match("Physical Tampering") == "physical_tampering"
+    assert _category_keyword_match("Data Tampering") == "data_tampering"
+    assert _category_keyword_match("Equipment tampering") is None
+    assert _category_keyword_match("SCADA outage") is None
+    # ambiguity (two different categories) -> None
+    assert _category_keyword_match("Phishing then Ransomware") is None

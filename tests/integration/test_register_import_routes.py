@@ -699,13 +699,18 @@ async def test_bind_get_preselects_exact_case_insensitive_match_only(
     admin_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await _seed_common_bands(db_session)
-    headers = "Title,Likelihood,Impact"
-    rows = ["A,Likely,Hi", "B,Rare,High"]
+    headers = "Title,Likelihood,Impact,Category"
+    rows = ["A,Likely,Hi,Phishing", "B,Rare,High,Phishing"]
     token = await _stage_to_bind(
         admin_client,
         headers=headers,
         rows=rows,
-        column_map={"Title": "title", "Likelihood": "likelihood", "Impact": "impact"},
+        column_map={
+            "Title": "title",
+            "Likelihood": "likelihood",
+            "Impact": "impact",
+            "Category": "category",
+        },
     )
 
     r = await admin_client.get(f"/register-import/{token}/bind")

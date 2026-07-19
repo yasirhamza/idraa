@@ -35,6 +35,7 @@ Plan: docs/superpowers/plans/2026-07-18-import-ui-p1c.md Task 3
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -95,10 +96,13 @@ TARGETS: frozenset[str] = frozenset(
         "ignore",
     }
 )
-# title/likelihood/impact: exactly one header must map to each (base plan
-# Task 3 interface — required for any row to be scoreable at all).
-_REQUIRED_EXACTLY_ONE: frozenset[str] = frozenset({"title", "likelihood", "impact"})
-# description/category/owner: single-valued, but optional — mapping more
+# title/likelihood/impact/category: exactly one header must map to each.
+# category joined the required set after prod UAT 2026-07-19: an unmapped
+# category silently parked EVERY row (category=None parks by design), an
+# outcome-inverting omission that sailed through three screens. Registers
+# genuinely lacking a category column are deliberately blocked (owner call).
+_REQUIRED_EXACTLY_ONE: frozenset[str] = frozenset({"title", "likelihood", "impact", "category"})
+# description/owner: single-valued, but optional — mapping more
 # than one header to any of these would make BoundRow's single field
 # ambiguous (which header wins?), so it is rejected rather than silently
 # picking one.
@@ -189,13 +193,62 @@ def _header_by_single_target(column_map: dict[str, str]) -> dict[str, str]:
     return result
 
 
+# Category keyword pre-selection (owner-approved 2026-07-19, UAT round 3):
+# deterministic WORD-BOUNDARY containment for the CATEGORY group ONLY —
+# bands keep the spec-§5 exact-match-only rule. Pre-selection is a visible,
+# admin-confirmable default, never auto-final. Table rules:
+#   * longest/most-specific phrases first; first match wins, but if TWO
+#     DIFFERENT categories match the same value, no pre-selection (ambiguous).
+#   * deliberately ABSENT: bare "safety" (HSE workplace safety must not map
+#     to ot_safety_tampering), bare "tampering" and "scada" (ambiguous across
+#     the tampering/OT members — review round: only two-word explicit forms
+#     map), bare "supplier" (commercial/insolvency risk
+#     must stay parkable), generic "ot security" (ambiguous across the three
+#     OT members), and the park target itself (a wrong park HIDES rows —
+#     parking is always an explicit human act).
+_CATEGORY_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("safety instrumented", "ot_safety_tampering"),
+    ("denial of service", "denial_of_service"),
+    ("social engineering", "social_engineering"),
+    ("data disclosure", "data_disclosure"),
+    ("data privacy", "data_disclosure"),
+    ("data breach", "data_disclosure"),
+    ("physical tampering", "physical_tampering"),
+    ("data tampering", "data_tampering"),
+    ("supply chain", "supply_chain"),
+    ("third party", "supply_chain"),
+    ("exfiltration", "data_disclosure"),
+    ("availability", "denial_of_service"),
+    ("ransomware", "ransomware"),
+    ("phishing", "social_engineering"),
+    ("insider", "insider_misuse"),
+    ("malware", "malware"),
+    ("vendor", "supply_chain"),
+    ("ddos", "denial_of_service"),
+    ("sis", "ot_safety_tampering"),
+    ("bec", "social_engineering"),
+)
+
+
+def _category_keyword_match(value: str) -> str | None:
+    """First word-boundary keyword hit, or None when absent/ambiguous."""
+    hay = value.strip().lower()
+    hits: list[str] = []
+    for phrase, target in _CATEGORY_KEYWORDS:
+        if re.search(rf"\b{re.escape(phrase)}\b", hay) and target not in hits:
+            hits.append(target)
+    return hits[0] if len(hits) == 1 else None
+
+
 def preselect_bindings(
     distinct: dict[str, list[str]],
     effective_bands: dict[tuple[str, str], Any],
     categories: type[ThreatCategory] = ThreatCategory,
 ) -> dict[str, dict[str, str]]:
-    """Pre-select value bindings on EXACT case-insensitive label match ONLY
-    (spec §5 / Global Constraints — zero heuristics, zero fuzzy matching).
+    """Pre-select value bindings on EXACT case-insensitive label match for
+    the band groups (spec §5 — zero heuristics for NUMBERS semantics), plus
+    deterministic keyword containment for the CATEGORY group only (metadata,
+    not math; owner-approved relaxation 2026-07-19 — see _CATEGORY_KEYWORDS).
 
     Pure function — no I/O. ``effective_bands`` is the
     ``QualitativeBandService.effective_bands()`` return shape
@@ -218,6 +271,8 @@ def preselect_bindings(
             result["impact"][value] = match
     for value in distinct.get("category", []):
         match = cat_by_ci.get(value.strip().lower())
+        if match is None:
+            match = _category_keyword_match(value)
         if match is not None:
             result["category"][value] = match
     return result
@@ -534,9 +589,14 @@ class RegisterImportService:
         title_header = header_by_target.get("title")
         likelihood_header = header_by_target.get("likelihood")
         impact_header = header_by_target.get("impact")
-        if title_header is None or likelihood_header is None or impact_header is None:
+        if (
+            title_header is None
+            or likelihood_header is None
+            or impact_header is None
+            or header_by_target.get("category") is None
+        ):
             raise ValidationError(
-                "column map is missing a required title/likelihood/impact binding"
+                "column map is missing a required title/likelihood/impact/category binding"
             )
         description_header = header_by_target.get("description")
         owner_header = header_by_target.get("owner")
@@ -575,6 +635,7 @@ class RegisterImportService:
                             "category": raw_category,
                         },
                         carry_along=self._carry_along(r, carry_headers),
+                        park_reason="blank_cells",
                     )
                 )
                 continue
@@ -605,6 +666,7 @@ class RegisterImportService:
                 category = (
                     None if category_target == _PARKED_CATEGORY else ThreatCategory(category_target)
                 )
+            park_reason = "category" if category is None else None
 
             bound_rows.append(
                 BoundRow(
@@ -621,6 +683,7 @@ class RegisterImportService:
                         "category": raw_category,
                     },
                     carry_along=self._carry_along(r, carry_headers),
+                    park_reason=park_reason,
                 )
             )
         return bound_rows
@@ -822,11 +885,31 @@ class RegisterImportService:
                     f"category binding {file_value!r} -> {cat!r} is no longer valid; left unbound"
                 )
 
-        preview.state_json = {
-            **(preview.state_json or {}),
-            "column_map": dict(profile.column_map or {}),
+        # UAT fix 2026-07-19: a profile's column_map must pass the SAME
+        # required-target validation as set_column_map, or applying a legacy
+        # profile (saved before category became required) silently replays a
+        # broken mapping OVER the admin's manual one — the exact prod failure.
+        # An invalid profile column_map is NOT applied (the staged one, if
+        # any, survives); value bindings still pre-fill.
+        profile_cm = dict(profile.column_map or {})
+        state_update: dict[str, Any] = {
             "value_bindings": validated,
             "applied_profile_id": str(profile.id),
         }
+        missing = sorted(
+            target
+            for target in _REQUIRED_EXACTLY_ONE
+            if sum(1 for t_ in profile_cm.values() if t_ == target) != 1
+        )
+        if missing:
+            warnings.append(
+                "profile's column mapping does not map required target(s) "
+                f"{', '.join(repr(m) for m in missing)} (saved before they became "
+                "required?) — column mapping NOT applied; map columns manually "
+                "and consider re-saving the profile"
+            )
+        else:
+            state_update["column_map"] = profile_cm
+        preview.state_json = {**(preview.state_json or {}), **state_update}
         await self._db.flush()
         return warnings

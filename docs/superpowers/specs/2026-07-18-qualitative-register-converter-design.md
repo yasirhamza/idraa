@@ -297,6 +297,21 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
 
 ## Scope drift log
 
+- 2026-07-19 (prod UAT round 3): **category keyword pre-selection** — owner
+  relaxed the §5 exact-match-only pre-selection rule for the CATEGORY group
+  ONLY (metadata, not math; bands stay exact-match): deterministic
+  word-boundary containment against a documented keyword table
+  (`_CATEGORY_KEYWORDS`), ambiguous/absent → unselected, park never
+  pre-selected. Pre-selection remains a visible admin-confirmable default.
+- 2026-07-19 (prod UAT): **category promoted to a REQUIRED column mapping**
+  (owner decision after first real UAT — an unmapped category silently parked
+  all 15 rows through three screens; registers lacking a category column are
+  now deliberately blocked). Parked rows carry title + reason
+  ("category"|"blank_cells") for readable previews/reports; preview warns when
+  everything parks. **Mobile access accepted**: the §5 desktop-gate
+  (only_on_md) requirement is retro-dropped for the import flow — the phone
+  UAT proved it works; deviation accepted rather than gated.
+
 - 2026-07-19 (P1c final PR-gate): converter-aware copy additionally shipped on
   the scenario EDIT page (form.html frequency-baseline banner variant,
   c8e59b4) — a final-gate reviewer IMPORTANT: Path B routes reviewers to the

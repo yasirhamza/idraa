@@ -140,6 +140,6 @@ async def test_five_rows_across_all_four_buckets_all_preserved(
     assert total == 5, "every input row must land in exactly one output bucket"
 
     assert {c.source_row for c in report.created} == {1, 2}
-    assert report.parked == [3]
+    assert [(p.source_row, p.reason) for p in report.parked] == [(3, "category")]
     assert {s.source_row for s in report.skipped_duplicates} == {4}
     assert {e.source_row for e in report.errors} == {5}
