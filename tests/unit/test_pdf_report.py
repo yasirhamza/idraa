@@ -2873,6 +2873,23 @@ def _t6_pert_vuln() -> dict[str, Any]:
     return {"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6}
 
 
+def _t6_lognormal_mixture_inputs() -> dict[str, Any]:
+    """Lognormal-mixture distribution dict for T6 tests (issue #27 Task 6).
+
+    The worked A/B pair from the mixture-pooling spec (meanlog 8.06/sigma
+    0.70 vs meanlog 15.77/sigma 1.19), equal-weighted. Production shape:
+    lowercase "lognormal_mixture", components keyed "mean" (meanlog, not
+    "mu")/"sigma"/"weight" — see wizard_finalize.build_scenario_payload.
+    """
+    return {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+
+
 def _t6_single_data_with_inputs(**overrides: Any) -> RunReportData:
     """SINGLE run fixture with scenario_inputs snapshot (lognormal distributions)."""
     scenario_inputs = {
@@ -2936,6 +2953,29 @@ def _t6_single_data_with_inputs(**overrides: Any) -> RunReportData:
         scenario_inputs=scenario_inputs,
         controls_snapshot=controls_snapshot,
     )
+    if overrides:
+        return replace(base, **overrides)
+    return base
+
+
+def _t6_single_data_with_mixture(**overrides: Any) -> RunReportData:
+    """SINGLE run fixture with a lognormal_mixture primary_loss (issue #27
+    Task 6 PDF smoke test) — mirrors _t6_single_data_with_inputs but swaps
+    primary_loss for the worked A/B mixture pair."""
+    scenario_inputs = {
+        "label": "as-executed",
+        "scenarios": [
+            {
+                "scenario_id": "sc1",
+                "scenario_name": "Ransomware OT",
+                "threat_event_frequency": _t6_lognormal_inputs(),
+                "vulnerability": _t6_pert_vuln(),
+                "primary_loss": _t6_lognormal_mixture_inputs(),
+                "secondary_loss": _t6_pert_inputs(),
+            }
+        ],
+    }
+    base = _single_run_data(scenario_inputs=scenario_inputs)
     if overrides:
         return replace(base, **overrides)
     return base
@@ -3096,6 +3136,94 @@ def test_lognormal_table_label_parametric() -> None:
     assert "parametric" in all_text, (
         "Lognormal table must be labeled '…parametric' to distinguish from §4 empirical output table"
     )
+
+
+# ---- lognormal_mixture PDF branch (issue #27 Task 6) ----------------------
+
+
+def test_lognormal_mixture_table_renders_component_count_and_percentiles() -> None:
+    """T6 (#27): lognormal_mixture branch renders the component count and
+    the p5/p25/p50/p75/p95 + Mean percentile table (same row shape as the
+    plain lognormal branch)."""
+    pdf = render_executive_pdf(_t6_single_data_with_mixture())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "Lognormal mixture (2 expert opinions)" in all_text, (
+        "lognormal_mixture distribution-type label with component count must be present"
+    )
+    assert "p50 (median)" in all_text
+    assert "p5" in all_text
+    assert "p95" in all_text
+    assert "Mean (expected loss)" in all_text
+
+
+def test_lognormal_mixture_percentile_hand_check() -> None:
+    """T6 numeric verification (issue #27): mixture percentiles are the
+    inverse of the POOLED CDF, not a per-component average or a re-averaged
+    single fit.
+
+    Worked A/B pair (meanlog 8.06/sigma 0.70 vs 15.77/sigma 1.19, equal
+    weight) -- fair_cam.quantile_pooling.mixture_quantile_lognorm (the
+    ground truth this module's local bisection mirrors) gives:
+      p5     = 1,290.67   -> "$1.29k"
+      p50    = 55,025.70  -> "$55.03k"
+      p95    = 32,444,657.93 -> "$32.44M"
+      mean   = analytic Sigma w_i*exp(mean_i+sigma_i^2/2) = 7,168,341.94 -> "$7.17M"
+
+    This also regression-pins the collapsed-PERT/averaged-fit OLD behavior
+    is NOT what renders: the pre-mixture averaged fit's ~90% range was
+    [$31k, $710k] (issue #343's divergent-pooling example) -- the p95 here
+    ($32.44M) is two orders of magnitude past that, proving the mixture
+    (not an average) drives the render.
+    """
+    from idraa.services.pdf_report import _lognormal_mixture_percentiles
+
+    components = [
+        {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+        {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+    ]
+    rows = _lognormal_mixture_percentiles(components)
+    labels = [r[0] for r in rows]
+    vals = dict(rows)
+
+    assert len(rows) == 6, f"Expected 6 rows, got {len(rows)}: {labels}"
+    assert labels[2] == "p50 (median)"
+    assert labels[5] == "Mean (expected loss)"
+
+    print(f"p5:   expected(fair_cam-oracle)=$1.29k  vs actual(rendered)={vals['p5']!r}")
+    print(f"p50:  expected(fair_cam-oracle)=$55.03k vs actual(rendered)={vals['p50 (median)']!r}")
+    print(f"p95:  expected(fair_cam-oracle)=$32.44M vs actual(rendered)={vals['p95']!r}")
+    print(f"mean: expected(analytic)=$7.17M vs actual(rendered)={vals['Mean (expected loss)']!r}")
+    assert vals["p5"] == "$1.29k"
+    assert vals["p50 (median)"] == "$55.03k"
+    assert vals["p95"] == "$32.44M"
+    assert vals["Mean (expected loss)"] == "$7.17M"
+
+    # NOT the retired averaged-fit range (issue #343): [$31k, $710k].
+    assert vals["p5"] != "$31.00k"
+    assert vals["p95"] != "$710.00k"
+
+
+def test_lognormal_mixture_table_label_pooled_mixture() -> None:
+    """T6 (#27): lognormal_mixture table label distinguishes itself from the
+    plain-lognormal 'parametric' label with 'pooled mixture'."""
+    pdf = render_executive_pdf(_t6_single_data_with_mixture())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "pooled mixture" in all_text
+
+
+def test_plain_lognormal_rendering_byte_unchanged_regression() -> None:
+    """T6 regression pin (issue #27): adding the lognormal_mixture branch
+    must not alter a single line of the plain-lognormal branch's output.
+    Renders the pre-existing lognormal fixture and re-asserts the exact
+    hand-checked values from test_lognormal_percentile_hand_check /
+    test_lognormal_renderer_reads_mean_key_not_mu."""
+    pdf = render_executive_pdf(_t6_single_data_with_inputs())
+    all_text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "$162" in all_text
+    assert "$501" in all_text
+    assert "parametric" in all_text
+    assert "pooled mixture" not in all_text
+    assert "Lognormal mixture" not in all_text
 
 
 def test_pert_distribution_elicited_values_label() -> None:

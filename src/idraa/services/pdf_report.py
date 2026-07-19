@@ -2160,6 +2160,120 @@ def _lognormal_freq_percentiles(mu: float, sigma: float) -> list[tuple[str, str]
     return rows
 
 
+# ---- lognormal_mixture percentiles (issue #27 Task 6) ----
+#
+# Catastrophic multi-SME pl/sl stores a linear-opinion-pool MIXTURE
+# ({"components": [{"mean", "sigma", "weight"}, ...]}), not a single
+# {mean, sigma} pair — see wizard_finalize.build_scenario_payload. Mixture
+# percentiles have NO closed form (unlike the single-lognormal z-constant
+# rows above): they are the inverse of the pooled CDF Sigma w_i F_i(x),
+# solved by bisection.
+#
+# fair_cam.quantile_pooling.mixture_quantile_lognorm already implements this
+# exact bisection (scipy.stats.truncnorm-based, since fair_cam's mixture
+# components carry min_support/max_support). This module CANNOT import it:
+# services/pdf_report.py is a fair_cam-free/DB-free/HTTP-free pure renderer
+# by module convention (see the module docstring and
+# test_pdf_report_purity_no_db_or_routes_or_fair_cam_imports) — a
+# function-local/deferred fair_cam import would dodge that specific test
+# (which only inspects sys.modules after a plain `import
+# idraa.services.pdf_report`, not after a render call) without honoring the
+# invariant it exists to enforce, so the algorithm is mirrored locally
+# instead. Catastrophic mixture components are stored NATIVE/UNTRUNCATED
+# (see lognormal_mixture_display_rows' storage note in app.py: "non-binding
+# [0, inf] truncation ... each component's (meanlog, sdlog) IS its native
+# untruncated {mean, sigma}"), so the per-component CDF has a closed form
+# via math.erf — no scipy dependency needed either.
+_SQRT_2: float = math.sqrt(2.0)
+
+# Bisection bracket + tolerance mirror fair_cam's
+# MIXTURE_BISECT_MAX_ITER/MIXTURE_BISECT_REL_TOL (quantile_pooling/_types.py)
+# in magnitude, but as a FIXED wide log-space range rather than geometric
+# widening from component quantiles (this module has no scipy norm.ppf to
+# seed a per-component bracket). [-100, 300] safely brackets any
+# store-validated component: fair_cam_validation._SIGMA_MAX caps sigma at
+# 10, and realistic USD catastrophic-loss meanlog stays well under 100 —
+# worst case (sigma=10, meanlog=30) gives z ~= -13 at the low bound and
+# z ~= 27 at the high bound, both already CDF-saturated at 0/1.
+_MIXTURE_BISECT_LOG_LO: float = -100.0
+_MIXTURE_BISECT_LOG_HI: float = 300.0
+_MIXTURE_BISECT_MAX_ITER: int = 200
+_MIXTURE_BISECT_LOG_TOL: float = 1e-10
+
+
+def _mixture_lognorm_cdf(x: float, components: Sequence[dict[str, float]]) -> float:
+    """CDF of an untruncated lognormal MIXTURE, Sigma w_i F_i(x), at x.
+
+    F_i(x) = Phi((ln x - mean_i) / sigma_i), Phi(z) = 0.5*(1 + erf(z/sqrt2))
+    — the closed-form untruncated-lognormal CDF (no scipy needed)."""
+    if x <= 0.0:
+        return 0.0
+    return sum(
+        c["weight"] * 0.5 * (1.0 + math.erf(((math.log(x) - c["mean"]) / c["sigma"]) / _SQRT_2))
+        for c in components
+    )
+
+
+def _mixture_lognorm_quantile(p: float, components: Sequence[dict[str, float]]) -> float:
+    """Quantile of the lognormal mixture at probability p — log-space
+    bisection on the pooled CDF (see the module-comment block above for why
+    this mirrors fair_cam.quantile_pooling.mixture_quantile_lognorm's
+    algorithm rather than importing it)."""
+    if not 0.0 < p < 1.0:
+        raise ValueError(f"p must be in (0, 1), got {p}")
+    lo_log, hi_log = _MIXTURE_BISECT_LOG_LO, _MIXTURE_BISECT_LOG_HI
+    for _ in range(_MIXTURE_BISECT_MAX_ITER):
+        if (hi_log - lo_log) < _MIXTURE_BISECT_LOG_TOL:
+            break
+        mid_log = (lo_log + hi_log) / 2.0
+        if _mixture_lognorm_cdf(math.exp(mid_log), components) < p:
+            lo_log = mid_log
+        else:
+            hi_log = mid_log
+    return math.exp((lo_log + hi_log) / 2.0)
+
+
+def _lognormal_mixture_percentiles(
+    components: Sequence[dict[str, float]],
+    reporting_code: str = "USD",
+    fx_rate: float = 1.0,
+) -> list[tuple[str, str]]:
+    """Return (label, formatted_value) rows for a lognormal_mixture INPUT
+    distribution (issue #27 Task 6) — MIXTURE percentiles (the inverse of
+    the pooled CDF), NOT a per-component average.
+
+    Currency conversion: same post-exponentiation multiply-by-fx_rate
+    convention as _lognormal_input_percentiles above — lognormal_mixture is
+    confined to catastrophic pl/sl (always a loss-magnitude/dollar node,
+    never vuln/frequency; see wizard_finalize.build_scenario_payload), so
+    this mirrors the loss-magnitude branch's conversion, not the vuln/freq
+    currency-invariant ones.
+
+    Mean row: analytic Sigma w_i * exp(mean_i + sigma_i**2/2) — exact, no
+    bisection needed (same formula lognormal_mixture_display_rows uses in
+    app.py, and the same standard lognormal-expectation formula as the
+    single-component Mean rows above).
+    """
+
+    def _fmt(usd_val: float) -> str:
+        return safe_money_format(usd_val * fx_rate, reporting_code, compact=True)
+
+    rows: list[tuple[str, str]] = [
+        ("p5", _fmt(_mixture_lognorm_quantile(0.05, components))),
+        ("p25", _fmt(_mixture_lognorm_quantile(0.25, components))),
+        ("p50 (median)", _fmt(_mixture_lognorm_quantile(0.50, components))),
+        ("p75", _fmt(_mixture_lognorm_quantile(0.75, components))),
+        ("p95", _fmt(_mixture_lognorm_quantile(0.95, components))),
+        (
+            "Mean (expected loss)",
+            _fmt(
+                sum(c["weight"] * math.exp(c["mean"] + c["sigma"] ** 2 / 2.0) for c in components)
+            ),
+        ),
+    ]
+    return rows
+
+
 def _draw_distribution_table(
     node_name: str,
     dist_dict: dict[str, Any] | None,
@@ -2174,6 +2288,8 @@ def _draw_distribution_table(
 
     T6 (#351): Per Epic B display decision:
     - lognormal → p5/p25/p50/p75/p95 + Mean (expected loss) row
+    - lognormal_mixture (issue #27 Task 6) → same row shape, but MIXTURE
+      percentiles (bisection on the pooled CDF), not a per-component average
     - PERT → low / most-likely / high labeled "(elicited values: low / most-likely / high)"
 
     Table heading: "Input distribution percentiles (parametric)" for lognormal
@@ -2216,6 +2332,34 @@ def _draw_distribution_table(
             # LOSS-MAGNITUDE: dollar amounts — convert POST-exponentiation (B1).
             # fx_rate=1.0 for USD (identity); non-1 for non-USD reporting currencies.
             rows = _lognormal_input_percentiles(mu_val, sigma_val, reporting_code, fx_rate)
+        table_data = [["Percentile", "Value"]] + [[label, val] for label, val in rows]
+        flowables_out.append(Table(table_data, colWidths=[130, 120], style=dist_table_style))
+    elif dist_type == "LOGNORMAL_MIXTURE":
+        # Issue #27 Task 6: catastrophic multi-SME pl/sl — a linear-opinion-
+        # pool mixture, NOT a single {mean, sigma} pair. Coerce to float here
+        # (same type-coercion-only contract as run_executor._dict_to_fair_distribution;
+        # shape/finiteness validation already happened at store time).
+        components: list[dict[str, float]] = [
+            {
+                "mean": float(c["mean"]),
+                "sigma": float(c["sigma"]),
+                "weight": float(c["weight"]),
+            }
+            for c in dist_dict.get("components") or []
+        ]
+        dist_label = f"Lognormal mixture ({len(components)} expert opinions)"
+        flowables_out.append(
+            Paragraph(
+                f"Distribution type: {rl_escape(dist_label)} — "
+                "Input distribution percentiles (parametric, pooled mixture)",
+                note_style,
+            )
+        )
+        # is_vulnerability/is_frequency are not passed for this branch —
+        # lognormal_mixture is confined to catastrophic pl/sl (always
+        # loss-magnitude), so this always converts via fx_rate, mirroring
+        # the LOGNORMAL branch's "else" (loss-magnitude) arm above.
+        rows = _lognormal_mixture_percentiles(components, reporting_code, fx_rate)
         table_data = [["Percentile", "Value"]] + [[label, val] for label, val in rows]
         flowables_out.append(Table(table_data, colWidths=[130, 120], style=dist_table_style))
     elif dist_type == "PERT":

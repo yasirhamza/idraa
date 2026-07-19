@@ -79,6 +79,38 @@
           </tbody>
         </table>
         <p class="text-xs text-base-content/60 mt-1">Distribution: Lognormal</p>
+      {% elif distribution.distribution == "lognormal_mixture" %}
+        {# Issue #27 Task 6: catastrophic multi-SME loss pooled as a linear-
+           opinion-pool mixture (not averaged into one distribution). Rows
+           are MIXTURE percentiles (fair_cam.mixture_quantile_lognorm),
+           NOT a per-component average — see lognormal_mixture_display_rows.
+           Numeric-only display: every value below is a formatted float
+           derived from the stored components, never raw stored text. #}
+        {% set rows = lognormal_mixture_display_rows(distribution) %}
+        <table class="table table-xs w-full">
+          <tbody>
+            <tr>
+              <td>5th pct</td>
+              <td class="text-right font-mono">{{ rows.p5 | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>Median</td>
+              <td class="text-right font-mono">{{ rows.median | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>Mean</td>
+              <td class="text-right font-mono">{{ rows.mean | format_dist_value(fmt) }}</td>
+            </tr>
+            <tr>
+              <td>95th pct</td>
+              <td class="text-right font-mono">{{ rows.p95 | format_dist_value(fmt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="text-xs text-base-content/60 mt-1">
+          Distribution: Lognormal mixture — {{ rows.n_components }} expert opinions,
+          weights {{ rows.weights_display }}
+        </p>
       {% else %}
         <p class="text-sm text-base-content/60">
           Distribution: {{ distribution.distribution }}

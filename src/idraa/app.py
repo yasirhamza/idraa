@@ -6,12 +6,13 @@ import contextlib
 import contextvars
 import datetime
 import logging
+import math
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -569,6 +570,77 @@ def lognormal_display_rows(dist: dict[str, object] | None) -> dict[str, float] |
 
 
 templates.env.globals["lognormal_display_rows"] = lognormal_display_rows
+
+
+def lognormal_mixture_display_rows(dist: dict[str, object] | None) -> dict[str, Any] | None:
+    """Compute real-space percentile display rows for a lognormal_mixture
+    distribution (issue #27 Task 6, true mixture pooling).
+
+    Returns None for non-lognormal_mixture dicts (callers use this to branch
+    the Jinja template), mirroring ``lognormal_display_rows`` above.
+
+    For lognormal_mixture dicts returns a dict with keys:
+      p5, median, p95 — MIXTURE percentiles (NOT a per-component average) via
+        fair_cam's deterministic ``mixture_quantile_lognorm`` (bisection on
+        the pooled CDF Sigma w_i F_i(x) — no sampling).
+      mean — analytic mixture mean Sigma w_i * exp(mean_i + sigma_i**2/2).
+      n_components — component count.
+      components — per-component [{"weight", "mean", "sigma"}, ...] for the
+        "n expert opinions, weights ..." sub-list.
+      weights_display — pre-formatted "50.0%, 50.0%" string (Python-built,
+        not Jinja loop concatenation) for the template's numeric-only
+        weights sub-list — every value is a rounded float, no raw stored
+        text passes through.
+
+    Storage note: catastrophic pl/sl mixture components are stored as native,
+    UNTRUNCATED {mean, sigma} pairs (wizard_finalize.build_scenario_payload:
+    "non-binding [0, inf] truncation ... each component's (meanlog, sdlog) IS
+    its native untruncated {mean, sigma}"). This rebuilds a
+    ``LognormMixture`` of ``LogNormalTruncFit``s with
+    min_support=0.0/max_support=inf to match that untruncated support before
+    calling the fair_cam quantile math — the SAME support convention as the
+    native single-lognormal path above (``lognormal_quantiles``, which is
+    also unbounded).
+    """
+    if not dist or str(dist.get("distribution", "")).lower() != "lognormal_mixture":
+        return None
+    from fair_cam.quantile_pooling import (
+        LogNormalTruncFit,
+        LognormMixture,
+        mixture_quantile_lognorm,
+    )
+
+    components_raw = cast(list[dict[str, object]], dist["components"])
+    fits = tuple(
+        LogNormalTruncFit(
+            meanlog=cast(float, c["mean"]),
+            sdlog=cast(float, c["sigma"]),
+            min_support=0.0,
+            max_support=math.inf,
+        )
+        for c in components_raw
+    )
+    weights = tuple(cast(float, c["weight"]) for c in components_raw)
+    mix = LognormMixture(components=fits, weights=weights)
+
+    analytic_mean = sum(
+        w * math.exp(f.meanlog + f.sdlog**2 / 2.0) for f, w in zip(fits, weights, strict=True)
+    )
+    return {
+        "p5": mixture_quantile_lognorm(mix, 0.05),
+        "median": mixture_quantile_lognorm(mix, 0.5),
+        "mean": analytic_mean,
+        "p95": mixture_quantile_lognorm(mix, 0.95),
+        "n_components": len(fits),
+        "components": [
+            {"weight": w, "mean": f.meanlog, "sigma": f.sdlog}
+            for f, w in zip(fits, weights, strict=True)
+        ],
+        "weights_display": ", ".join(f"{w * 100:.1f}%" for w in weights),
+    }
+
+
+templates.env.globals["lognormal_mixture_display_rows"] = lognormal_mixture_display_rows
 
 
 def _format_dist_value(value: float | None, fmt: str) -> str:
