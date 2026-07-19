@@ -149,6 +149,8 @@ from idraa.services.wizard_state import (
     WizardDraftConflictError,
     WizardState,
     WizardStateService,
+    load_sme_rows,
+    seed_wizard_state_from_scenario,
 )
 
 router = APIRouter()
@@ -1121,6 +1123,51 @@ async def promote_scenario(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/re-estimate")
+async def start_reestimate_wizard(
+    scenario_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> RedirectResponse:
+    """#56: seed a re-estimation wizard draft from an existing scenario.
+
+    Eligibility is universal (any source/status — owner decision): imports
+    seed with empty SME rows; wizard-born scenarios rehydrate theirs from
+    scenario_sme_estimates. The scenario itself is untouched until
+    finalize; Cancel abandons the draft with no effect.
+
+    CSRF enforced by the global CSRFMiddleware (preamble P4) — no
+    per-route dependency, matching every sibling POST in this module.
+    Cross-org / missing ids surface 404 (NOT 403 — no existence oracle,
+    mirrors confirm_vuln_framing's Sec-F2-I1 precedent). Amendment 12:
+    ``Scenario.mitigating_controls`` is ``lazy="selectin"`` so the
+    attribute access below is already eager-loaded — no extra eager-load
+    variant needed.
+    """
+    scenario = await ScenarioRepo(db).get_for_org(
+        organization_id=user.organization_id, scenario_id=scenario_id
+    )
+    if scenario is None:
+        raise HTTPException(404, "scenario not found")
+    sme_rows = await load_sme_rows(db, scenario.id, user.organization_id)
+    control_ids = [str(c.id) for c in (scenario.mitigating_controls or [])]
+    wizard_svc = WizardStateService(db)
+    state = await wizard_svc.get_or_create(user_id=user.id, organization_id=user.organization_id)
+    seeded = seed_wizard_state_from_scenario(
+        scenario,
+        sme_estimates=sme_rows,
+        mitigating_control_ids=control_ids,
+        tx_id=state.tx_id,
+    )
+    seeded.version_token = state.version_token
+    await wizard_svc.advance_step(
+        user_id=user.id, organization_id=user.organization_id, state=seeded
+    )
+    await db.commit()
+    return RedirectResponse(url=f"/scenarios/new/wizard/step/2?tx={seeded.tx_id}", status_code=303)
 
 
 # ---- wizard -----------------------------------------------------------
