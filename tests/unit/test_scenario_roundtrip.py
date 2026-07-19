@@ -84,7 +84,7 @@ def test_json_roundtrip() -> None:
     blob = json.dumps([scenario_to_json_obj(s) for s in _SCENARIOS]).encode()
     pairs, errors = parse_json_nested(blob)
     assert errors == []
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_active_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
     assert verrors == []
     assert [p["action"] for p in preview] == ["create", "create", "create"]
     for form, src in zip([f for f in forms if f], _SCENARIOS, strict=True):
@@ -102,7 +102,7 @@ def test_csv_roundtrip() -> None:
         w.writerow(scenario_to_flat_row(s))
     pairs, errors = parse_csv_flat(buf.getvalue().encode())
     assert errors == []
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_active_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
     assert verrors == []
     for form, src in zip([f for f in forms if f], _SCENARIOS, strict=True):
         _assert_authored_equal(form, src)
@@ -117,14 +117,14 @@ def test_csv_and_json_export_store_identical_distributions() -> None:
     s = _SCENARIOS[0]
     # JSON path
     jpairs, _ = parse_json_nested(json.dumps([scenario_to_json_obj(s)]).encode())
-    _, _, jforms, _, _am = _validate_rows(jpairs, existing_active_names=set())
+    _, _, jforms, _, _am = _validate_rows(jpairs, existing_names=set())
     # CSV path
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(CSV_EXPORT_HEADERS)
     w.writerow(scenario_to_flat_row(s))
     cpairs, _ = parse_csv_flat(buf.getvalue().encode())
-    _, _, cforms, _, _am2 = _validate_rows(cpairs, existing_active_names=set())
+    _, _, cforms, _, _am2 = _validate_rows(cpairs, existing_names=set())
     assert jforms[0].primary_loss == cforms[0].primary_loss
     for k in ("low", "mode", "high"):
         assert type(jforms[0].primary_loss[k]) is type(cforms[0].primary_loss[k])
@@ -151,7 +151,7 @@ def test_effect_roundtrip_csv() -> None:
     _, fd = pairs[0]
     assert fd["effect"] == "confidentiality"
     # validate that the field_dict passes _validate_rows cleanly
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_active_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
     assert verrors == []
     assert forms[0] is not None
     assert forms[0].effect == "confidentiality"
@@ -168,7 +168,7 @@ def test_effect_roundtrip_json() -> None:
     assert pairs is not None
     _, fd = pairs[0]
     assert fd.get("effect") == "integrity"
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_active_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
     assert verrors == []
     assert forms[0] is not None
     assert forms[0].effect == "integrity"

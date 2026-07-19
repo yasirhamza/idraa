@@ -138,7 +138,7 @@ def _structural_attack_techniques_problem(raw: Any) -> str | None:
 def _validate_rows(
     pairs: list[tuple[int, dict[str, Any]]],
     *,
-    existing_active_names: set[str],
+    existing_names: set[str],
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -225,6 +225,29 @@ def _validate_rows(
                     "reason": (
                         f"{getattr(form, bad_col)!r} is not a valid {bad_col}; "
                         f"expected one of {sorted(e.value for e in bad_enum_cls)}"
+                    ),
+                }
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate))
+            attack_meta.append(None)
+            continue
+
+        # 2.4 Create-domain parity (epic #34 P1a): ScenarioService's
+        # _stamp_new_scenario chokepoint rejects DEPRECATED/DELETED at create,
+        # so accept only the creatable subset here — a row must not preview
+        # as "create" and then 422 at apply.
+        raw_status = form.status
+        status_value = raw_status.value if hasattr(raw_status, "value") else raw_status
+        if status_value not in (EntityStatus.ACTIVE.value, EntityStatus.DRAFT.value):
+            errors.append(
+                {
+                    "line": line,
+                    "column": "status",
+                    "reason": (
+                        f"{status_value!r} is not a creatable status; new "
+                        "scenarios may only be imported as 'active' or 'draft'"
                     ),
                 }
             )
@@ -330,7 +353,7 @@ def _validate_rows(
             continue
 
         # 4. Duplicate guard (after the row is otherwise valid).
-        if key in seen_names or key in existing_active_names:
+        if key in seen_names or key in existing_names:
             preview.append({"line": line, "name": name, "action": "skip"})
             forms.append(None)
             entry_meta.append((meta_currency, meta_rate))
@@ -346,12 +369,15 @@ def _validate_rows(
     return preview, errors, forms, entry_meta, attack_meta
 
 
-async def _existing_active_names(db: AsyncSession, *, org_id: uuid.UUID) -> set[str]:
-    """casefold()-ed names of ACTIVE scenarios in the org (the dedup key)."""
-    stmt = select(Scenario.name).where(
-        Scenario.organization_id == org_id,
-        Scenario.status == EntityStatus.ACTIVE,
-    )
+async def _existing_scenario_names(db: AsyncSession, *, org_id: uuid.UUID) -> set[str]:
+    """casefold()-ed names of ALL scenarios in the org, any status (the dedup key).
+
+    Parity with the qualitative converter (spec §3.1): a DRAFT sitting in the
+    review queue must block a same-name import, or promote-after-import yields
+    two ACTIVE scenarios sharing one name. The pre-P1a ACTIVE-only filter was
+    harmless only while non-ACTIVE states were unreachable for scenarios.
+    """
+    stmt = select(Scenario.name).where(Scenario.organization_id == org_id)
     rows = (await db.execute(stmt)).scalars().all()
     return {name.casefold() for name in rows}
 
@@ -424,8 +450,8 @@ async def validate_upload(
         token = await _store_preview(db, org_id=org_id, user_id=user_id, data=data, fmt=fmt)
         return token, [], hard_stop
 
-    existing = await _existing_active_names(db, org_id=org_id)
-    preview, errors, _, _meta, _attack_meta = _validate_rows(pairs, existing_active_names=existing)
+    existing = await _existing_scenario_names(db, org_id=org_id)
+    preview, errors, _, _meta, _attack_meta = _validate_rows(pairs, existing_names=existing)
     token = await _store_preview(db, org_id=org_id, user_id=user_id, data=data, fmt=fmt)
     return token, preview, errors
 
@@ -477,10 +503,8 @@ async def apply_validated_preview(
         )
         return 0, 0, hard_stop
 
-    existing = await _existing_active_names(db, org_id=org_id)
-    preview, errors, forms, entry_meta, attack_meta = _validate_rows(
-        pairs, existing_active_names=existing
-    )
+    existing = await _existing_scenario_names(db, org_id=org_id)
+    preview, errors, forms, entry_meta, attack_meta = _validate_rows(pairs, existing_names=existing)
 
     svc = ScenarioService(db)
     imported = 0

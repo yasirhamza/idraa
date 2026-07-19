@@ -53,7 +53,7 @@ def test_generated_template_parses_and_validates_clean() -> None:  # I-1
     }
 
     # Full row-level validation passes (action create, no errors).
-    preview, val_errors, forms, _, _am = _validate_rows(pairs, existing_active_names=set())
+    preview, val_errors, forms, _, _am = _validate_rows(pairs, existing_names=set())
     assert val_errors == []
     assert preview[0]["action"] == "create"
     assert forms[0] is not None
