@@ -68,10 +68,13 @@ mixture-aware variants:
   mixture CDF `F(x) = Σ wᵢ Fᵢ(x)` by bisection over the component supports
   (deterministic, no sampling; component CDFs are the existing truncated
   closed forms).
-- `mode` = argmax of the mixture density over `[low, high]` (grid + local
-  refine; for a single component this reduces exactly to the current
-  closed-form mode), with the existing `ModeClampReason` precedence machinery
-  unchanged. A multimodal mixture's global mode is a documented representation
+- `mode`: single component takes a dedicated branch — closed-form
+  `exp(meanlog − sdlog²)` then the EXISTING clamp machinery (byte-identical
+  incl. `mode_clamp_reason`). Multi-component `raw_mode` = the UNCONSTRAINED
+  global mixture-density argmax (candidates: every component's closed-form
+  mode, including out-of-range ones, plus a log-grid over a widened bracket),
+  THEN the existing `ModeClampReason` precedence applies — preserving the
+  current clamp-reason semantics (plan-gate R2 reconciliation). A multimodal mixture's global mode is a documented representation
   choice — the PERT triple is already a summary shape, and low/high carry the
   union coverage that #27 demands (for the worked pair: low lands near SME A's
   low decile, high near SME B's high decile).
@@ -141,7 +144,9 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
 - **Engine**: mixture sampling moments vs analytic (mean, variance via law of
   total variance) at fixed seed; component-selection frequencies vs weights.
 - **Quantile inversion**: `Q_mix` vs brute-force empirical quantiles at 1e6
-  samples (tolerance ~1e-3 relative); bisection determinism.
+  samples, tolerance 1e-2 relative at a pinned seed (1e-3 is MC-flaky on tail
+  quantiles — gate-measured; the deterministic bisection side converges to
+  1e-10); bisection determinism + 200-doubling bracket cap.
 - **R-oracle departure**: the existing oracle-parity test for `combine_*`
   updates to assert the DOCUMENTED departure (old expected values retired with
   the Clemen & Winkler rationale in the test docstring — an intentional
