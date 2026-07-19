@@ -833,11 +833,31 @@ class RegisterImportService:
                     f"category binding {file_value!r} -> {cat!r} is no longer valid; left unbound"
                 )
 
-        preview.state_json = {
-            **(preview.state_json or {}),
-            "column_map": dict(profile.column_map or {}),
+        # UAT fix 2026-07-19: a profile's column_map must pass the SAME
+        # required-target validation as set_column_map, or applying a legacy
+        # profile (saved before category became required) silently replays a
+        # broken mapping OVER the admin's manual one — the exact prod failure.
+        # An invalid profile column_map is NOT applied (the staged one, if
+        # any, survives); value bindings still pre-fill.
+        profile_cm = dict(profile.column_map or {})
+        state_update: dict[str, Any] = {
             "value_bindings": validated,
             "applied_profile_id": str(profile.id),
         }
+        missing = sorted(
+            target
+            for target in _REQUIRED_EXACTLY_ONE
+            if sum(1 for t_ in profile_cm.values() if t_ == target) != 1
+        )
+        if missing:
+            warnings.append(
+                "profile's column mapping does not map required target(s) "
+                f"{', '.join(repr(m) for m in missing)} (saved before they became "
+                "required?) — column mapping NOT applied; map columns manually "
+                "and consider re-saving the profile"
+            )
+        else:
+            state_update["column_map"] = profile_cm
+        preview.state_json = {**(preview.state_json or {}), **state_update}
         await self._db.flush()
         return warnings

@@ -1214,3 +1214,43 @@ async def test_state_json_reassignment_persists_across_fresh_session(
             assert row.state_json["filename"] == "r.csv"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_apply_profile_with_incomplete_column_map_does_not_clobber(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    """UAT regression 2026-07-19: a legacy profile saved WITHOUT a category
+    mapping must not silently replay its broken column_map over the admin's
+    manually-set one — the column map is left alone and a warning names the
+    missing required target. Value bindings still pre-fill."""
+    org, user = await seed_org_user(db_session)
+    await _seed_bands(db_session)
+    svc = RegisterImportService(db_session)
+    staged = await svc.stage_upload(
+        organization_id=org.id,
+        filename="r.csv",
+        content_type="text/csv",
+        data=_csv_bytes(),
+        user=user,
+    )
+    await svc.set_column_map(
+        organization_id=org.id, token=staged.token, column_map=dict(_FULL_COLUMN_MAP)
+    )
+    await svc.set_value_bindings(
+        organization_id=org.id, token=staged.token, bindings=_FULL_VALUE_BINDINGS
+    )
+    legacy_cm = {k: ("carry_along" if v == "category" else v) for k, v in _FULL_COLUMN_MAP.items()}
+    profile = await svc.save_profile(
+        organization_id=org.id, name="legacy", token=staged.token, user=user
+    )
+    profile.column_map = legacy_cm  # simulate a pre-fix saved profile
+    await db_session.flush()
+
+    warnings = await svc.apply_profile(
+        organization_id=org.id, token=staged.token, profile_id=profile.id
+    )
+    assert any("'category'" in w and "NOT applied" in w for w in warnings)
+    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    cm = (row.state_json or {}).get("column_map") or {}
+    assert "category" in cm.values()  # the manual mapping SURVIVED
