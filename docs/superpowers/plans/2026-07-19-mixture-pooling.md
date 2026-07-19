@@ -149,6 +149,45 @@
 
 Branch `feat/27-mixture-pooling` off current main, worktree per the concurrent-sessions convention. 4-reviewer final PR-gate (methodology Opus+max mandatory) before merge; PR body carries the worked-pair before/after table. Closes #27 AND #25.
 
+## Plan-gate round-1 amendments (BINDING — override conflicting text above)
+
+**Task 1**
+- ALSO rewrite `fair_cam/tests/quantile_pooling/test_combine_norm.py` with the same intentional-re-pin treatment: `test_combine_matches_r_oracle` (asserts `.mean`/`.sd` L62-63), `test_equal_weight_arithmetic_mean` (L90-91), `test_nonuniform_weights` (L103-105), `test_pooled_mean_outside_support_acceptable` (L108) all read the retired scalar shape (Spec-I2).
+
+**Task 2 (Meth-B1/I2/I5, Sec-I3 — the math contract)**
+- Worked-pair pin CORRECTED: assert `Q_mix(0.05) == pytest.approx(_qlnormtrunc(0.10, 8.06, 0.70, 0, inf), rel=1e-9)` — the exact identity (equal pool reaches CDF 0.05 where the lower component reaches 0.10; ≈ $1,291) — plus `Q_mix(0.95) > 15.2e6` (loose bound; actual ≈ $32.4M = B's upper decile). Print expected-vs-actual. The earlier `< $1,155` bound was arithmetically WRONG (MC-verified at gate) — do not "fix" the math to satisfy it.
+- MC brute-force comparison tolerance: 1e-2 relative at 1e6 draws (1e-3 is flaky on tail quantiles — gate-measured 62-72% seed-failure rate). Fixed seed, printed side-by-side.
+- Mode algorithm, precisely: `len(components) == 1` takes a DEDICATED branch computing `raw_mode = exp(meanlog - sdlog**2)` (closed form) and running the EXISTING clamp-precedence machinery — guaranteeing byte-identity of mode AND `mode_clamp_reason` (σ ≥ 1.645 single-SME cases clamp to low with `MODE_BELOW_PERT_LOW` exactly as today). Multi-component: `raw_mode` = UNCONSTRAINED global mixture-density argmax — candidates are every component's closed-form mode (including out-of-[low,high] ones) plus a 256-point log-grid over the bracket `[min_i mode_i / 4, max_i mode_i * 4] ∪ [low, high]`, golden-section refined — THEN the existing clamp machinery applies (so clamp reasons keep their current semantics for mixtures too).
+- Bracket widening in `mixture_quantile_lognorm`: HARD CAP 200 doublings, raise `ArithmeticError` with the component params on non-convergence (fail-loud; a finite-but-huge meanlog must not spin the render path).
+- ADD `test_divergent_pert_collapse_documented_limitation`: for the worked pair, pin the collapse's inter-expert valley mass (P[$20k,$500k] ≈ 0.129 vs mixture 0.009) and median ratio (~27×) as KNOWN limitation values with the Meth-I1 rationale in the docstring — a documentation pin, not a regression bar.
+
+**Task 3 (Meth-I3/I4 + Arch-NTH)**
+- Single-component mixtures take a DEDICATED sampling branch that bypasses `rng.choice` and calls `rng.lognormal(mean, sigma, size)` directly — this makes the sample-stream-identity test valid AND keeps the engine stream byte-identical for any 1-component mixture. State in code comment why (rng.choice advances the generator).
+- Variance test: verify the law-of-total-variance FORMULA analytically (exact arithmetic assert), and bound the EMPIRICAL variance at 7% relative at 4e5 draws with a pinned seed verified green (1% is unrealistic — 4th-moment domination, gate-measured). Mean stays at 1% with the pinned seed. Component-selection frequencies within ±3σ binomial bounds.
+- Also widen the LOCAL annotation `new_params: dict[str, float]` in `_scale_distribution` (fair_core.py:285) alongside the field typing.
+
+**Task 4 (Sec-B1 — BLOCKER — + Sec-N2, Spec-N)**
+- Validation order per component is FINITENESS FIRST: `math.isfinite(mean)`, `math.isfinite(sigma)`, `math.isfinite(weight)` BEFORE any range comparison (`NaN <= 0` and `NaN > 10` are both False — a NaN sigma passes range checks and corrupts Monte Carlo; the #306 class). Mirror the scalar branch's finite-first ordering exactly.
+- Rejection-matrix tests place the malformed component at the LAST index of a 3-component mixture (proves per-component iteration, not components[0]-only).
+- `input_validator.py:639` allowlist edit is defense-in-depth ONLY — the enforcing gate is v3-side (`_validate_finite` + `_structural_dist_problem`); state so in the code comment.
+
+**Task 5 (Arch-I2/I3, Meth-I6, Spec-I3)**
+- `common_meta` support fields: derive `pooled_min_support`/`pooled_max_support` from `r.pooled.components[0].min_support/.max_support` (support is per-fieldset-uniform by construction; assert all components share it).
+- Identity-pin SCOPE: single-SME byte-identity applies to the DISTRIBUTION dict (mean/sigma or low/mode/high) — the `distribution_fit_metadata` sidecar intentionally changes for everyone (schema_version 3, pooling_method, normalized weights [1.0] not [1.0]*n... for n=1 both are [1.0]; for n≥2 REAL normalized weights e.g. [0.5, 0.5]). Capture the pre-change golden of the distribution dict only.
+- ADD to the Files list and rewrite deliberately (not blind): `tests/services/test_wizard_finalize.py:101-107` (`.pooled.sdlog` → `.pooled.components[0].sdlog`), `tests/contracts/test_scenario_distribution_fit_metadata_roundtrip.py:96-160` (construct `PerFieldsetResult(pooled=LognormMixture(...))`), `tests/contracts/test_sme_estimate_persist_iteration.py` (type-only update).
+- ADD `src/idraa/routes/scenarios.py:2311-2314` to the Files list: the finalize route's `per_fieldset_pooling_summary` uses `getattr(r.pooled, "meanlog", None)` — silently None for mixtures, degrading the audit trail. Replace with component-aware summary (`component_meanlogs`/`component_sdlogs` lists + weights); assert in a test that a multi-SME finalize audit row carries non-null pooling summary.
+
+**Task 7 (Sec-I1 / Spec-I1 — round-trip contradiction)**
+- The importable mixture shape is EXACTLY `{"distribution", "components"}` (components exactly `{"mean","sigma","weight"}`) — the anti-blob gate is NEVER loosened to admit `distribution_fit_metadata`.
+- The round-trip test uses a MINIMAL metadata-free mixture (hand-authored import → export → re-import → identical). The metadata-carrying JSON export does not re-import — a PRE-EXISTING scalar-lognormal asymmetry (verified at gate), noted in the module docstring and NOT propagated as a new guarantee; do not change scalar behavior in this PR.
+
+**Task 8 (Arch answer + Sec-I2/Arch-I4)**
+- The uniform-stream question is ANSWERED: the LET binds `RANDARRAY({n},1)` columns without a budget (verification_workbook_let.py:373-376) — implement the TWO-UNIFORM path (`u_sel` per mixture node; nested cumulative-weight IFs selecting which `EXP(NORM.INV(u, mean_i, sigma_i))` applies; CRN parity holds by reusing both streams between base and residual). The asserted-gap fallback applies ONLY if implementation surfaces a concrete blocker — report it, don't silently choose it.
+- `_assert_numeric_dist` (verification_workbook_let.py:200-217) currently raises TypeError on the `components` list BEFORE `_invcdf` is reached. Extend it to RECURSE into `components` asserting each `mean`/`sigma`/`weight` is int|float (non-bool) — do NOT merely exempt the container key (that would disable the Sec-N1 formula-injection guard for nested params).
+- `scaled_params` emits the `lognormal_mixture` shape with every component mean shifted by `ln(mult)`.
+
+**NTH dispositions:** component-cap coupling to `max_smes_per_fieldset` accepted + noted in the validator comment (Sec-N1); numeric-only display pin added to T6 tests (Sec-N3); legacy-divergent-scenario banner deferred — file a follow-up issue at T9 (Meth-N3).
+
 ## Scope budget
 
 - target_task_count: 9 (single PR)
