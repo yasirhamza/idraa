@@ -96,21 +96,24 @@ use of "the names, labels, etc." contained in the specification):
   primary support for encoding register likelihood as LEF (TEF=band, vuln=1)
   and deferring the TEF×Vuln decomposition to calibrated review.
 
-Frequency bands (events/year), log-decade edges, PERT mode = geometric midpoint
-√(low·high) of the band:
+Frequency bands (events/year) — register loss-event-frequency convention
+(recalibrated 2026-07-19, canonical v2): under D3 a register likelihood IS the
+loss-event frequency, so bands anchor on once-in-X-years matrix semantics (once
+in 10–100y / once in 2–10y / roughly yearly / several times a year /
+monthly-to-weekly). PERT mode = geometric midpoint √(low·high), 2sf:
 
 | label | low | mode | high |
 |---|---|---|---|
 | very_low | 0.01 | 0.032 | 0.1 |
-| low | 0.1 | 0.32 | 1 |
-| moderate | 1 | 3.2 | 10 |
-| high | 10 | 32 | 100 |
-| very_high | 100 | 160 | 250 |
+| low | 0.1 | 0.22 | 0.5 |
+| moderate | 0.5 | 1.0 | 2 |
+| high | 2 | 4.5 | 10 |
+| very_high | 10 | 22 | 50 |
 
-Top band is open-ended in concept; capped at 250/yr (≈ business-daily) — documented
-in `derivation`. Modes rounded to 2 significant figures from the geometric midpoint — uniformly,
-all ten bands (√(100·250) ≈ 158.1 → 160; plan-gate M1 corrected the earlier
-1-sig-fig frequency roundings).
+Top band capped at 50/yr (≈ weekly) — loss-event recurrence beyond that is a
+different scenario shape, not a register row. Modes uniformly 2sf geometric
+midpoints across all ten bands (√(10·50) ≈ 22.4 → 22; the M1 2sf rule from the
+P1b plan-gate carries over unchanged).
 
 Magnitude bands (USD), same rule:
 
@@ -296,6 +299,13 @@ Quarterly re-uploads with a saved binding profile converge to "only the new rows
   separate future spec+plan and is NOT in this budget.
 
 ## Scope drift log
+
+- 2026-07-19 (prod UAT round 4): **frequency bands recalibrated to register
+  loss-event semantics** (canonical v2, migration 26444158e537): 0.01–0.1 /
+  0.1–0.5 / 0.5–2 / 2–10 / 10–50 events/yr with once-in-X-years anchors —
+  the original log-decade scale described threat-event rates, and positional
+  binding landed "Likely" on 10–100/yr. Owner-approved; methodology-reviewed.
+  Bind dropdowns now show each band's events/yr and $ ranges inline.
 
 - 2026-07-19 (prod UAT round 3): **category keyword pre-selection** — owner
   relaxed the §5 exact-match-only pre-selection rule for the CATEGORY group

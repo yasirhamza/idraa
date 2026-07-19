@@ -16,10 +16,10 @@ SEED = Path(idraa.__file__).resolve().parent.parent.parent / "data" / "seed_qual
 
 EXPECTED_FREQUENCY = {  # label: (low, mode, high)
     "very_low": (0.01, 0.032, 0.1),
-    "low": (0.1, 0.32, 1),
-    "moderate": (1, 3.2, 10),
-    "high": (10, 32, 100),
-    "very_high": (100, 160, 250),
+    "low": (0.1, 0.22, 0.5),
+    "moderate": (0.5, 1.0, 2),
+    "high": (2, 4.5, 10),
+    "very_high": (10, 22, 50),
 }
 EXPECTED_MAGNITUDE = {
     "very_low": (1_000, 3_200, 10_000),

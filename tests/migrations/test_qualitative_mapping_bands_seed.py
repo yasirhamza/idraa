@@ -69,7 +69,8 @@ def test_orm_read_back_by_id_guards_hex_uuid_format(
         assert got is not None, "ORM read-back by id failed — check for the raw-UUID foot-gun"
         assert got.kind == "frequency"
         assert got.label == "moderate"
-        assert got.mode == 3.2
+        # recalibrated 2026-07-19 (26444158e537): moderate = 0.5-2/yr, mode 1.0
+        assert got.mode == 1.0
 
 
 def test_qualitative_mapping_org_bands_table_empty_on_seed(
