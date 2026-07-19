@@ -45,32 +45,6 @@ jobs:
       - name: Run the local gate verbatim
         run: uv run --extra dev python scripts/run_local_gate.py
 
-  test-windows:
-    name: test (windows, platform coverage)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-      - run: uv sync --frozen --extra dev
-      - name: Fast pytest suite (css gate is posix-only; covered by `gate`)
-        run: uv run --extra dev python -m pytest -q --no-cov
-        env:
-          # First-ever green-path run of this job (Actions were billing-blocked
-          # through the fossil era) surfaced two Windows-only classes:
-          # cp1252 default-encoding reads (PYTHONUTF8 fixes hermetically — prod
-          # is Linux/UTF-8, so this is dev-parity, not masking) and Babel
-          # locale detection returning None without LANG/LC_ALL.
-          PYTHONUTF8: "1"
-          LANG: en_US.UTF-8
-          LC_ALL: en_US.UTF-8
-        # No SESSION_SECRET needed: tests/conftest.py forces ENVIRONMENT=test,
-        # which bypasses the secret-hardening boot guard (verified at plan-gate).
-
   sast:
     name: sast
     runs-on: ubuntu-latest
@@ -162,16 +136,22 @@ jobs:
           name: idraa-sbom-${{ github.sha }}
           path: idraa-sbom.cdx.json
 
-  # Aggregator over the DETERMINISTIC core only (gate, test-windows, secrets,
-  # sast). docker-build / notebook-smoke stay visible-but-advisory so a flaky
+  # Aggregator over the DETERMINISTIC core only (gate, secrets, sast).
+  # docker-build / notebook-smoke stay visible-but-advisory so a flaky
   # kernel can never wedge merges (plan-gate A-I5). The advisory Playwright
   # e2e job was REMOVED 2026-07-19 (owner call): its only failures were a
   # login-bootstrap race (#45), red-X noise on otherwise-green runs. The e2e
   # suite remains local-only: uv run python -m pytest -m e2e tests/e2e/.
+  # The Windows matrix job was ALSO removed 2026-07-19 (owner call): it was
+  # the CI critical path (43 min vs 12 min for everything else) and guarded a
+  # platform with no remaining dev environment, user, or deploy target (dev
+  # is macOS/Linux, prod is Docker/Linux on Fly). Its two known Windows-only
+  # failure classes (cp1252 default-encoding reads, Babel locale None
+  # without LANG) are moot without a Windows consumer.
   ci-success:
     name: ci-success
     if: always()
-    needs: [gate, test-windows, secrets, sast]
+    needs: [gate, secrets, sast]
     runs-on: ubuntu-latest
     steps:
       # Expression-based check: the original grep idiom NEVER failed
