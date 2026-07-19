@@ -79,8 +79,15 @@ mixture-aware variants:
   union coverage that #27 demands (for the worked pair: low lands near SME A's
   low decile, high near SME B's high decile).
 
-Stored JSON stays today's PERT triple byte-shape. This closes the defect for
-every PERT-shaped fieldset with no storage/engine/display change.
+Stored JSON stays today's PERT triple byte-shape. **Scope of the fix on PERT
+paths (Meth-I1):** this restores RANGE coverage (low/high span the experts'
+union) — the headline #27 defect — but a unimodal PERT cannot represent a
+bimodal mixture: for the worked pair the collapse still places ~13% of mass
+in the inter-expert valley and does not preserve the mixture mean/median.
+That residual is a documented, tested limitation of the summary shape;
+EXACTNESS (ranges + moments + multimodality) is delivered only on the native
+mixture path (§3). A divergent-experts collapse test pins the residual as a
+known limitation, not a regression.
 
 ## 3. Native path (catastrophic losses only — the one contract change)
 
@@ -98,9 +105,12 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
 - **Engine**: `FAIRDistribution` gains mixture sampling — component index per
   draw via `rng.choice(len(w), p=w)`, then that component's lognormal. Exact
   mixture Monte Carlo; no approximation anywhere.
-- **Validators** (`validate_fair_distributions` + fair_cam): per-component
-  finiteness, the existing `sigma ≤ 10` DoS cap per component, weights sum to
-  1 (±1e-9), 1 ≤ components ≤ `MAX_SMES_PER_FIELDSET` (the existing cap).
+- **Validators** (`validate_fair_distributions` + fair_cam): per component,
+  FINITENESS FIRST (`math.isfinite` on mean, sigma, weight — NaN passes range
+  comparisons, the #306 corruption class), THEN `0 < sigma ≤ 10` and
+  `weight > 0`; weights sum to 1 (±1e-9); 1 ≤ components ≤
+  `MAX_SMES_PER_FIELDSET`. Rejection tests place the malformed component at a
+  non-first index (iteration discipline).
 - This is a **material adapter-surface change** → data-contract paranoid tier:
   4-reviewer plan-gate before code, per policy.
 
@@ -110,11 +120,21 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
   list ("2 expert opinions, equal weight: …") — mixture-aware branch beside
   the existing lognormal rendering.
 - **PDF**: same component-list rendering (pure-renderer conventions).
-- **Import/export (#306 lineage)**: schema accepts the `lognormal_mixture`
-  shape through the same validators; export emits it verbatim.
-- **Verification workbook**: mixture parity via a component-select on a
-  uniform draw (cumulative-weight threshold IF/SUMPRODUCT in the existing LET
-  machinery). If plan-time spike shows the LET formula budget can't absorb it,
+- **Import/export (#306 lineage)**: the IMPORTABLE mixture shape is exactly
+  `{"distribution", "components"}` with each component exactly
+  `{"mean", "sigma", "weight"}` — the anti-blob exact-key gate is never
+  loosened. JSON export emits the stored dict verbatim (including
+  `distribution_fit_metadata`, matching the scalar-lognormal precedent, which
+  likewise does not JSON-re-import today — a pre-existing asymmetry, noted
+  not propagated); round-trip guarantees are scoped to minimal metadata-free
+  shapes. CSV flattens mixtures to derived p5/p95 like scalar lognormals;
+  CSV import cannot express mixtures (JSON-only, documented).
+- **Verification workbook**: mixture parity via a SECOND independent uniform
+  stream (`u_sel`) doing cumulative-weight component selection, with the
+  node's own `u` inverting the selected component — never one uniform for
+  both roles (comonotonic coupling ≠ mixture; empirically +76% mean error on
+  the worked pair). RANDARRAY bindings in the LET are unbounded, so the
+  stream is a trivial addition (plan-gate verified). If plan-time spike shows the LET formula budget can't absorb it,
   workbook mixture-parity splits to a fast-follow with the gap **asserted in
   the parity test as an explicit expected-gap**, never silent.
 - **Untouched**: qualitative converter (bands → PERT only), library entries
@@ -133,11 +153,13 @@ is `mean`, not `mu`.) Single-component mixtures store as today's plain
 
 ## 6. Testing spine
 
-- **Worked-example pin** (the #27 A/B pair): pooled PERT covers BOTH stated
-  ranges (low ≤ $1k-decile anchor, high ≥ $16M-decile anchor) AND the mixture
-  mean equals the analytic `Σ wᵢ·exp(μᵢ + σᵢ²/2)` — the two axes on which each
-  rejected approximation fails, pinned side-by-side (expected hand-math vs
-  actual, per the verification-reporting rule).
+- **Worked-example pin** (the #27 A/B pair, anchors MC-verified at plan-gate):
+  `Q_mix(0.05) == Q_A(0.10)` exactly (≈ $1,291 — in an equal pool the mixture
+  reaches CDF 0.05 where the lower component alone reaches 0.10; B contributes
+  ~2e-13 there) and `Q_mix(0.95) ≈ $32.4M` (= B's upper decile; loose bound
+  > $15.2M). Native mixture mean equals the analytic `Σ wᵢ·exp(μᵢ + σᵢ²/2)`
+  (**native path only** — the PERT collapse does not preserve it, see §2).
+  All pinned side-by-side expected-vs-actual per the verification rule.
 - **Identity pins**: single-SME mixture ≡ the old single-fit behavior exactly
   (PERT collapse byte-identical; native storage byte-identical plain
   lognormal).
