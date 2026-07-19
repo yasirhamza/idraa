@@ -132,6 +132,16 @@ def _assemble_distributions(row: dict[str, str]) -> dict[str, Any]:
       not a valid lognormal shape, so it never reaches storage).
     - PERT (and unknown kinds): ``{distribution, low, mode, high}`` verbatim,
       letting the §2.5 structural guard reject unknown kinds with a clean error.
+
+    #27 Task 7: ``lognormal_mixture`` is NOT assembled here — there is no flat
+    column carrying a component list, so a CSV cell containing
+    ``"lognormal_mixture"`` falls through to the PERT-shaped branch above
+    (``{distribution: "lognormal_mixture", low, mode, high}``), which the
+    downstream exact-key-set structural guard
+    (``scenario_import._structural_dist_problem``) then rejects with a clean
+    per-row error (missing ``components``) rather than silently mis-parsing
+    it. Mixture import is JSON-only — see the ``scenario_import`` module
+    docstring.
     """
     legacy = (row.get("distribution") or "").strip() or "PERT"
     out: dict[str, Any] = {}

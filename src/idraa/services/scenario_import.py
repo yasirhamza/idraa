@@ -5,6 +5,14 @@ Clones the overlays importer (services/overlays_importer.py) structure:
 ``apply_validated_preview`` (re-parse + create + delete preview). The two
 parsers (CSV/JSON) feed one ``_validate_rows`` pipeline. Create-only with a
 skip-duplicate guard (active same-name scenario already exists → skip).
+
+#27 Task 7: CSV import cannot express ``lognormal_mixture`` — a CSV row's
+distribution kind columns (``tef_dist``/``pl_dist``/``sl_dist``) select
+which of the four flat columns to assemble (``scenario_import_parsers.
+_assemble_distributions``), and there is no column for a component list.
+Mixture authoring/import is JSON-only; a CSV row remains a single lognormal
+(or PERT). See ``generate_template_csv`` below and
+``scenario_export``'s ``_dist_cells`` for the export-side flatten.
 """
 
 from __future__ import annotations
@@ -729,6 +737,15 @@ def generate_template_csv() -> bytes:
     I6/SC-I7: NO ``#`` comment lines — ``parse_csv_flat`` is comment-unaware, so
     a commented template would NOT round-trip (the comments would be read as a
     bogus header). Field guidance lives in ``import.html``, not in the CSV.
+
+    #27 Task 7: the CSV format cannot express ``lognormal_mixture`` — there is
+    no column for a component list, only the flat ``{prefix}_dist``/``low``/
+    ``mode``/``high`` quartet per node. The example row below stays PERT-only;
+    mixture authoring requires the JSON format (``generate_sample_json``
+    below covers PERT only too, but the JSON *shape* — unlike CSV — CAN carry
+    a ``{"distribution": "lognormal_mixture", "components": [...]}`` node;
+    see ``tests/unit/test_scenario_import_validate.py``'s mixture tests for
+    the accepted shape).
     """
     from idraa.services.scenario_import_parsers import CSV_HEADERS
 

@@ -540,6 +540,43 @@ def test_mixture_component_count_over_cap_is_error() -> None:  # Sec-N1
     assert preview[0]["action"] == "error"
 
 
+# --- #27 Task 7: allow_lognormal node-set coverage — tef/pl/sl accept a
+# mixture, vuln rejects it (test_mixture_vulnerability_is_rejected above).
+# test_valid_two_component_mixture_becomes_create above already covers pl;
+# these close out tef + sl so all three allowed nodes have direct coverage
+# (not just inferred from the shared allow_ln wiring in _validate_rows).
+
+
+def test_mixture_tef_is_accepted() -> None:
+    mix = _mixture(
+        [
+            _mix_component(mean=8.06, sigma=0.70, weight=0.5),
+            _mix_component(mean=15.77, sigma=1.19, weight=0.5),
+        ]
+    )
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(threat_event_frequency=mix))], existing_names=set()
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+    assert forms[0] is not None
+
+
+def test_mixture_secondary_loss_is_accepted() -> None:
+    mix = _mixture(
+        [
+            _mix_component(mean=8.06, sigma=0.70, weight=0.5),
+            _mix_component(mean=15.77, sigma=1.19, weight=0.5),
+        ]
+    )
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(secondary_loss=mix))], existing_names=set()
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+    assert forms[0] is not None
+
+
 # --- Slice 1: effect (C/I/A) enum validation ---------------------------------
 
 
