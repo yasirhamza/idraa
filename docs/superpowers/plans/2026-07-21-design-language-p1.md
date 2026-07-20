@@ -62,7 +62,7 @@ async def test_login_and_favicon(client):     # unauthenticated client fixture
 {%- endmacro %}
 ```
 
-`favicon.svg` = same three SVG elements, hardcoded `#0F4C81`?? NO — favicons cannot use CSS vars; use `fill/stroke="#2563a8"`-class neutral? DECISION: favicon uses the LIGHT brand hex from app.css verbatim (`#0F4C81`) with a comment that Phase 3 re-exports it; this is the sanctioned single exception, placed in a static asset (not a template). base.html: `<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ static_version }}">`. Sidebar: replace `▣` block with `{{ logomark(size=28, with_wordmark=not collapsed) }}` adapted to the Alpine `collapsed` x-show spans exactly as the preview does (keep both spans; wordmark span gets `x-show="!collapsed"`).
+`favicon.svg` = same three SVG elements with the LIGHT brand hex `#0F4C81` verbatim (spec-sanctioned single exception — SVG favicons cannot read CSS vars) + a comment pinning it to `--color-brand` for the Phase 3 palette swap. base.html: `<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ static_version }}">`. Sidebar: `collapsed` is an ALPINE client variable — invisible to Jinja — so call `{{ logomark(size=28) }}` (mark only, always visible) and keep a SEPARATE `<span x-show="!collapsed" class="text-h3 font-semibold tracking-tight">Idraa</span>` wordmark exactly as the preview branch does. `with_wordmark=True` is for the login page only.
 - [ ] **Step 4: run → PASS**, plus `uv run pytest tests/integration/test_scenario_routes.py -q --no-cov` (chrome regression).
 - [ ] **Step 5: rebuild css; commit** `feat(ui): logomark macro — sidebar, favicon, login (#59)`.
 
@@ -70,7 +70,7 @@ async def test_login_and_favicon(client):     # unauthenticated client fixture
 
 **Files:**
 - Modify: `src/idraa/templates/macros/breadcrumb.html` (add classes: `font-mono uppercase tracking-[0.14em] text-[10.5px]`, leading rule `<span class="inline-block w-[22px] h-px bg-brand opacity-75 mr-2"></span>`, current page `text-brand`)
-- Modify: `src/idraa/static/css/app.css` — port the preview's typography block (`git show preview/design-language:src/idraa/static/css/app.css`, section "Design-language PREVIEW") BUT DELETE the `header nav[aria-label="Breadcrumb"]` element-selector rules (now macro classes); KEEP body gradient, `.text-display`, `.text-number-*` mono/tabular rules.
+- Modify: `src/idraa/static/css/app.css` — port the preview's typography block (`git show preview/design-language:src/idraa/static/css/app.css`, section "Design-language PREVIEW") BUT DELETE the `header nav[aria-label="Breadcrumb"]` element-selector rules (now macro classes); KEEP body gradient + `.text-display`; the `.text-number-lg,.text-number-md` rule must ADD `font-family: var(--font-mono)` alongside tabular-nums (the preview block has tabular-nums ONLY — porting verbatim misses the spec's mono mandate; this is a deliberate delta from the prototype).
 - Test: extend `tests/integration/test_design_language_p1.py`
 
 - [ ] Failing test: `test_breadcrumb_is_eyebrow` — GET a page with breadcrumb (e.g. `/scenarios`), assert `uppercase` + `tracking-[0.14em]` classes present in the breadcrumb nav; `test_body_gradient_token` — assert `radial-gradient` appears in `app.css` served (or read file) referencing `--color-brand`.
@@ -80,8 +80,8 @@ async def test_login_and_favicon(client):     # unauthenticated client fixture
 ### Task 3: PDF header logomark
 
 **Files:**
-- Modify: `src/idraa/services/pdf_theme.py` (add `def brand_logomark(width: float = 22.0) -> Drawing` using `reportlab.graphics.shapes` Path/Polygon/Circle scaled from the 32-unit viewBox; colors: `PDFColors.brand` stroke, same at 14% alpha fill — use `Color(r,g,b,alpha=0.14)` from the brand hex)
-- Modify: `src/idraa/services/pdf_report.py` — READ the existing header-render block first (search "Idraa" wordmark drawing/Paragraph in the page-header/first-page builder); place the Drawing left of the wordmark, baseline-aligned, both report tiers.
+- Modify: `src/idraa/services/pdf_theme.py` (add `def brand_logomark(width: float = 22.0) -> Drawing` using `reportlab.graphics.shapes` Path/Polygon/Circle scaled from the 32-unit viewBox — reportlab's origin is BOTTOM-left (Y-up) vs SVG's top-left: apply `y' = 32 - y` to every coordinate (or a Drawing transform `(1,0,0,-1,0,32)`) or the curve renders mirrored; colors: `PDFColors.brand` stroke, `Color(r,g,b,alpha=0.14)` fill)
+- Modify: `src/idraa/services/pdf_report.py` — the shared `_draw_cover` (~lines 528-556) builds the header for BOTH tiers — one edit covers both. Place the Drawing left of the wordmark via a 2-column borderless `Table([[drawing, wordmark_paragraph]])` (a bare Drawing appended to the flowable list stacks ABOVE, not beside). The existing cover test asserts extracted TEXT ('Idraa'), so the Table wrap is safe.
 - Test: `tests/unit/test_pdf_theme.py` — ADDITIVE test `test_brand_logomark_drawing`: returns Drawing, width==22, contains 3 shapes, stroke color equals `PDFColors.brand`.
 
 - [ ] TDD as above; run FULL `tests/unit/test_pdf_theme.py` + `tests/unit/test_pdf_report.py` (existing pins must not change). Commit `feat(pdf): logomark in report header (#59)`.
@@ -89,7 +89,7 @@ async def test_login_and_favicon(client):     # unauthenticated client fixture
 ### Task 4: Forms — instrument labels + numeric inputs + section rules
 
 **Files:**
-- Modify: `src/idraa/static/css/app.css` — port the preview "Forms as instruments" block verbatim (`form fieldset label / .text-meta` mono-uppercase 10px; `form input[type="number"], form input[inputmode="decimal"]` mono tabular; legend padding; `.space-y-3` tightening). These stay CSS (they target plain elements across ~12 form templates — no macro exists for label/input primitives; document this exception in the block comment).
+- Modify: `src/idraa/static/css/app.css` — port the preview "Forms as instruments" block verbatim (`form fieldset label / .text-meta` mono-uppercase 10px; `form input[type="number"], form input[inputmode="decimal"]` mono tabular; legend padding; `.space-y-3` tightening). These stay CSS as the NET: `macros/form_field.html` IS the label/input macro (22 consumers, and it gets explicit classes below) but ~13 fieldset-bearing templates author raw `<label>`/`.text-meta` outside it; the element rules catch those, redundantly-but-harmlessly double-covering form_field output. Document exactly this in the block comment (a future dev must not read 'no macro exists' and proliferate raw labels). ALSO in this task: (a) audit `scenarios/form.html`, org settings, and the control form for single-column stacks of SHORT fields; convert to the existing `grid grid-cols-1 sm:grid-cols-3 gap-4` idiom where mechanical, record each no-change verdict in the drift log; (b) confirm inputs are uniformly `input-sm`-height with ~4px label gap (normalize only where trivially off); (c) note: numeric-input mono is largely already present via form_field/unit_aware partials — the CSS rule is a net, disclose redundancy.
 - Modify: `src/idraa/templates/macros/form_field.html` — label span gains explicit classes matching the CSS (macro-first for the one place a macro DOES exist).
 - Test: extend `tests/integration/test_design_language_p1.py`: `test_wizard_step4_labels_mono` (walk to step 4 via the `_wizard_step3_test_helpers` idiom OR assert on `/scenarios/new` form: label markup carries mono-uppercase classes / CSS block present); `test_numeric_inputs_mono` — app.css contains the `inputmode="decimal"` mono rule.
 

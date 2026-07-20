@@ -20,7 +20,6 @@ The loss-exceedance-curve mark (deck asset; `currentColor` SVG: falling curve
 - PDF report header in `services/pdf_theme.py`/`pdf_report.py` (reportlab
   Drawing, brand color from PDFColors — the ONE sync-surface touch; no color
   values change).
-- Empty-state placeholder where charts have no data.
 The mark ships as a Jinja macro (`macros/logo.html`, size/label params) so
 every slot renders the same path data from one source.
 
@@ -46,7 +45,7 @@ every slot renders the same path data from one source.
   today — density, not air).
 - **Row alignment invariant**: multi-cell estimate rows top-align
   (`items-start` + label/button nudge — shipped to prod in PR #60; keep).
-- **Readout recaps**: wizard step-6 review + run-form summaries render as
+- **Readout recaps**: wizard step-6 review renders as
   boxed readout strips (label-over-value, mono values, 1px-gap grid — the
   deck's readout pattern) via a `macros/readout.html` macro.
 - **Two-column geometry** where fields are short (low/mode/high triples
@@ -56,7 +55,7 @@ every slot renders the same path data from one source.
   numerics (workstream 2).
 
 ## Out of scope (later phases / never)
-- Phase 2: dashboard empty-state density pass; chart style layer (grid, area
+- Phase 2: dashboard empty-state density pass; logomark in chart/empty-state placeholders (generic empty_state.html macro is the natural host); run-form + run-detail readout strips; chart style layer (grid, area
   fills, endpoint markers, readout strip on run detail); wizard step-count
   polish.
 - Phase 3: palette (WCAG-AA audit, DaisyUI `*-base-*` override story,
@@ -69,7 +68,11 @@ every slot renders the same path data from one source.
 - CSS via `app.css` tokens + rebuilt `tailwind.css` (staleness gate);
   template-scoped classes, NOT element-selector overrides where a macro
   exists.
-- Both themes styled via tokens only; no hex introduced outside `app.css`.
+- Both themes styled via tokens only; no hex introduced outside `app.css` —
+  SINGLE exception: `static/favicon.svg` pins the light `--color-brand` hex
+  (`#0F4C81`) verbatim, because SVG favicons render in an isolated context
+  with no CSS-var access; a comment in the asset pins it to the token and
+  Phase 3 MUST update it with the palette.
 - `test_theme_bootstrap.py` config pins must keep passing; PDF logo addition
   updates `test_pdf_theme.py` only additively (no color pin changes).
 - Chart e2e suite runs explicitly before merge if `charts.js`/chart CSS is
@@ -97,3 +100,13 @@ every slot renders the same path data from one source.
 
 - (seed) 2026-07-21: scope per owner-blessed preview + "forms + density"
   feedback; dashboard density explicitly deferred to Phase 2 at spec time.
+- 2026-07-21 plan-gate (owner-trimmed tier: quality + architecture only;
+  methodology+security waived for UI-only work): 9 IMPORTANTs applied —
+  empty-state logomark slot + run-form readouts moved to Phase 2; favicon
+  hex exception codified here; display-number classes gain font-mono (the
+  preview only had tabular-nums); sidebar macro call corrected to mark-only
+  + x-show wordmark (Alpine var not visible server-side); PDF logomark gets
+  the SVG->reportlab Y-flip + 2-col Table placement; Task-4 macro-vs-CSS
+  rationale corrected (form_field IS the label macro; CSS is the net for
+  ~13 raw-label fieldset templates); two-column audit made an explicit
+  Task-4 step.
