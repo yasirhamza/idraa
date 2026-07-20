@@ -10,6 +10,7 @@
   Mobile (<md): hidden by default; drawer-toggled by the hamburger checkbox.
   Inline x-data per CLAUDE.md UI rendering conventions (HTMX swap race).
 #}
+{% from "macros/logo.html" import logomark %}
 {%- set is_admin = current_user is not none and current_user.role.value == "admin" -%}
 {%- set badge_count = request.state.maintenance_badge_count|default(0) -%}
 
@@ -44,11 +45,13 @@
        "
        aria-label="Primary navigation">
 
-  {# Brand header — collapses to wordmark glyph when icon-only. #}
+  {# Brand header — logomark stays visible icon-only; wordmark hides via Alpine
+     x-show (a separate span, NOT logomark's own with_wordmark param — `collapsed`
+     is an Alpine client var invisible to Jinja, so the toggle must be pure CSS/x-show). #}
   <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
-    <a href="/" class="text-h3 font-semibold text-ink-1 hover:text-brand">
-      <span x-show="!collapsed">Idraa</span>
-      <span x-show="collapsed" aria-hidden="true">▣</span>
+    <a href="/" class="flex items-center gap-2.5 text-ink-1 hover:text-brand transition-colors" aria-label="Idraa — home">
+      {{ logomark(size=28) }}
+      <span x-show="!collapsed" class="text-h3 font-semibold tracking-tight">Idraa</span>
     </a>
     <button type="button"
             @click="toggle()"
