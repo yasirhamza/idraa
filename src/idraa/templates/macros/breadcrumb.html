@@ -1,13 +1,19 @@
-{# breadcrumb(items) — Spec §2. items: list of (label, href|None). Last item has href=None. #}
+{# breadcrumb(items) — Spec §2. items: list of (label, href|None). Last item has href=None.
+   Design-language P1 (#59) task 2: the breadcrumb reads as the deck's "eyebrow" —
+   mono, uppercase, tracked, with a leading hairline rule and the current page in
+   the brand color. Classes live on the macro (not a `header nav[aria-label]`
+   element selector in app.css) so the treatment travels with every breadcrumb
+   consumer regardless of DOM position. #}
 {% macro breadcrumb(items) -%}
-<nav aria-label="Breadcrumb" class="text-meta text-ink-2">
+<nav aria-label="Breadcrumb" class="font-mono uppercase tracking-[0.14em] text-[10.5px] text-ink-2 flex items-center">
+  <span class="inline-block w-[22px] h-px bg-brand opacity-75 mr-2" aria-hidden="true"></span>
   <ol class="flex flex-wrap items-center gap-x-1">
     {% for label, href in items -%}
     <li class="flex items-center gap-x-1">
       {% if href -%}
         <a href="{{ href }}" class="hover:text-ink-1">{{ label }}</a>
       {%- else -%}
-        <span class="text-ink-1" aria-current="page">{{ label }}</span>
+        <span class="text-brand" aria-current="page">{{ label }}</span>
       {%- endif %}
       {%- if not loop.last %}<span aria-hidden="true">/</span>{%- endif %}
     </li>

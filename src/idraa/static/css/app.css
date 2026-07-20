@@ -306,3 +306,35 @@ a.cv:hover {
    (same as the LEC/EPC <figure>); this class only documents the contract for
    the pre-hydration/no-JS state (native <title> tooltip needs no CSS). */
 .chart-bars-wrap { display: block; }
+
+/* === Design language P1 (issue #59 task 2) ==================================
+   Palette-agnostic adoption of the pitch-deck's typography and gradient
+   motifs. Colours still flow entirely through existing tokens, so whatever
+   palette is chosen later carries through unchanged. The eyebrow treatment
+   for the breadcrumb (mono/uppercase/tracked, leading hairline rule,
+   brand-colored current page) lives on `macros/breadcrumb.html` itself
+   rather than a `header nav[aria-label="Breadcrumb"]` element selector — a
+   macro-level class travels with every breadcrumb consumer regardless of
+   DOM position, where an element selector would silently miss breadcrumbs
+   rendered outside a `<header>`. */
+
+/* Ambient brand glow behind the app shell (deck gradient motif). */
+body {
+  background-image: radial-gradient(900px 480px at 100% -6%,
+    color-mix(in srgb, var(--color-brand) 7%, transparent), transparent 62%);
+  background-attachment: fixed;
+}
+
+/* Display headings: tighter, more deliberate tracking. */
+.text-display { letter-spacing: -0.02em; text-wrap: balance; }
+
+/* Numeric data reads like an instrument: aligned, monospace-tabular digits.
+   Deliberate delta from the preview branch: the prototype's rule was
+   tabular-nums only — the spec's instrument-voice mandate also requires the
+   monospace family on these classes, so `font-family: var(--font-mono)` is
+   added here (not a verbatim port). */
+.text-number-lg, .text-number-md {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
