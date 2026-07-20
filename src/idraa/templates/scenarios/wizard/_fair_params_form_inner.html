@@ -107,7 +107,7 @@
              inline md:hidden label instead (the body Source cell can be briefly
              empty during an HTMX swap repaint, so a shared header would show a
              gap; per-cell labels avoid that). #}
-          <div class="hidden md:grid md:grid-cols-[5rem_minmax(0,1fr)_minmax(8.5rem,1.3fr)_minmax(8.5rem,1.3fr)_2.5rem] md:gap-3 md:items-end pb-1 text-meta text-ink-2">
+          <div class="hidden md:grid md:grid-cols-[4.5rem_minmax(0,1.15fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_2rem] md:gap-3 md:items-end pb-1 text-meta text-ink-2">
             <div>Source</div>
             <div>SME</div>
             <div>Low (5%)</div>
@@ -131,7 +131,7 @@
                (label-or-ordinal) semantics. #}
             <template x-for="(row, idx) in rows" :key="idx">
               <div class="grid grid-cols-1 gap-2 py-3 border-b border-border-subtle
-                          md:grid-cols-[5rem_minmax(0,1fr)_minmax(8.5rem,1.3fr)_minmax(8.5rem,1.3fr)_2.5rem] md:gap-3 md:items-center md:py-1.5 md:border-0">
+                          md:grid-cols-[4.5rem_minmax(0,1.15fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_2rem] md:gap-3 md:items-start md:py-1.5 md:border-0">
                 {# Defensive `($store.smeDirectory || [])` chain: under HTMX
                    fragment swaps (Reset to industry baseline, Apply overlay) the
                    inline store registration script in the page shells
@@ -143,7 +143,7 @@
                    on a freshly-prefilled wizard). The `|| []` fallback degrades to
                    "SME N" (unknown sme_id treated as non-IRIS) instead of blank.
                    Same defensive pattern applied to the combobox below. #}
-                <div class="flex items-baseline gap-2 text-sm text-ink-2 md:block">
+                <div class="flex items-baseline gap-2 text-sm text-ink-2 md:block md:pt-2">
                   <span class="md:hidden text-meta text-ink-2">Source</span>
                   <span class="whitespace-nowrap"
                         x-text="($store.smeDirectory || []).find(s => s.id === row.sme_id)?.is_system_owned
@@ -349,7 +349,7 @@
                            :name="fieldset + '_high_' + idx">
                   </template>
                 </div>
-                <div class="flex justify-end md:justify-center md:items-center">
+                <div class="flex justify-end md:justify-center md:items-start md:pt-1">
                   <button type="button"
                           class="btn btn-ghost btn-sm text-status-critical md:btn-xs"
                           @click="rows.splice(idx, 1)"

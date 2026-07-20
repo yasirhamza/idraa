@@ -21,7 +21,7 @@ from tests.integration._wizard_step3_test_helpers import (
 
 # The exact responsive grid template the SME rows + header share. If the
 # column layout is retuned, update this in one place.
-_SME_GRID = "md:grid-cols-[5rem_minmax(0,1fr)_minmax(8.5rem,1.3fr)_minmax(8.5rem,1.3fr)_2.5rem]"
+_SME_GRID = "md:grid-cols-[4.5rem_minmax(0,1.15fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_2rem]"
 
 
 async def _bootstrap_to_step_3(
