@@ -10,6 +10,8 @@ hairline rule, brand-colored current page) and the body-gradient token in
 forms/readout assertions — keep this module the single home for
 design-language P1 acceptance tests rather than scattering one-off test
 files per task.
+
+Task 4: forms-as-instruments — fieldset-scoped label/numeric-input treatment.
 """
 
 from __future__ import annotations
@@ -19,6 +21,11 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from tests.integration._wizard_step3_test_helpers import (
+    _bootstrap_wizard_through_step_2,
+    _user_id_from_org,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -70,3 +77,41 @@ async def test_body_gradient_token() -> None:
     css = APP_CSS_PATH.read_text(encoding="utf-8")
     assert "radial-gradient" in css
     assert "var(--color-brand)" in css
+
+
+async def test_wizard_step4_labels_mono(
+    authed_analyst: tuple[AsyncClient, object],
+    db_session: AsyncSession,
+) -> None:
+    """Forms-as-instruments (Task 4): the wizard's step-4 SME-row partial
+    (``_fair_params_form_inner.html``) authors ``.text-meta`` spans directly
+    inside a ``<fieldset>`` — no ``<label>`` tags, so it is NOT a
+    ``macros/form_field.html`` consumer. This proves the ``form fieldset
+    label, form fieldset .text-meta`` CSS net in app.css actually reaches
+    that hand-authored markup (not just form_field's own explicit classes)."""
+    client, org_id = authed_analyst
+    user_id = await _user_id_from_org(db_session, org_id)
+    tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
+
+    r = await client.get(f"/scenarios/new/wizard/step/4?tx={tx}")
+    assert r.status_code == 200
+    body = r.text
+    assert "<fieldset" in body
+    assert "text-meta" in body
+
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    assert "form fieldset label" in css
+    assert "form fieldset .text-meta" in css
+    assert "text-transform: uppercase" in css
+
+
+async def test_numeric_inputs_mono() -> None:
+    """app.css carries the numeric-input mono rule (money/decimal inputs
+    read like tabular readouts) — the net for the ~13 fieldset-bearing
+    templates whose numeric inputs aren't rendered via form_field/
+    unit_aware_inputs (both of which already inline `font-mono tabular-nums`
+    on their own numeric inputs)."""
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    assert 'form input[type="number"]' in css
+    assert 'form input[inputmode="decimal"]' in css
+    assert "font-variant-numeric: tabular-nums" in css

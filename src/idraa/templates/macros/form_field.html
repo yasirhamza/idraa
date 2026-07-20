@@ -19,7 +19,12 @@
 
 {% macro _label(name, label, required) -%}
 <div class="flex items-center justify-between">
-  <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}</label>
+  {# #59 task 4: explicit mono/uppercase/tracked classes — macro-first, so
+     this reads correctly even where app.css's `form fieldset label` net
+     doesn't apply (e.g. a form_field call outside a <fieldset>). Values
+     match that CSS rule exactly; see the app.css block comment for why
+     both layers exist. #}
+  <label for="{{ name }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
   {% if required %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
 </div>
 {%- endmacro %}
@@ -48,7 +53,14 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
   <p class="text-body text-ink-1">{{ value if value is not none else '&#8212;' }}</p>
 </div>
 {% else %}
-<div class="max-w-md">
+{# #59 task 4 (b): space-y-1 (4px) matches the display-mode branch above and
+   the pre-existing 4px gap convention elsewhere (e.g. controls/form.html's
+   NIST field `space-y-1`, controls/_assignment_row.html's label `mb-1`) —
+   this branch previously had no gap class, so labels sat flush against
+   their input (0px). Trivially-off fix per the (b) audit; input height
+   (h-10, set in `_input_classes` below) was already uniform across every
+   form_field text/number/select/date consumer and needed no change. #}
+<div class="max-w-md space-y-1">
   {{ _label(name, label, required) }}
 
   {% if input_type in ('text','email','password','url') %}

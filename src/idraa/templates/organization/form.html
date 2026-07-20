@@ -138,9 +138,14 @@
   <fieldset class="space-y-4">
     <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Security posture</legend>
 
-    <div class="max-w-md">
+    {# #59 task 4(a): two stacked short selects, no cross-field interaction —
+       converted to the FAIR-distributions grid idiom (grid grid-cols-1
+       sm:grid-cols-3 gap-4); a 2-of-3 fill leaves the third cell empty on
+       wide viewports, same as the scenario Threat-taxonomy 5-item wrap. #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="security_maturity" class="text-meta text-ink-2">Security maturity</label>
+        <label for="security_maturity" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Security maturity</label>
       </div>
       {% set sel_mat = (form_data['security_maturity'] if form_data and 'security_maturity' in form_data else (org.security_maturity.value if org.security_maturity else '')) %}
       <select id="security_maturity" name="security_maturity"
@@ -152,9 +157,9 @@
       </select>
     </div>
 
-    <div class="max-w-md">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="risk_appetite" class="text-meta text-ink-2">Risk appetite</label>
+        <label for="risk_appetite" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Risk appetite</label>
       </div>
       {% set sel_app = (form_data['risk_appetite'] if form_data and 'risk_appetite' in form_data else (org.risk_appetite.value if org.risk_appetite else '')) %}
       <select id="risk_appetite" name="risk_appetite"
@@ -164,6 +169,7 @@
         <option value="{{ a.value }}" {% if sel_app == a.value %}selected{% endif %}>{{ a.value | humanize_slug }}</option>
         {% endfor %}
       </select>
+    </div>
     </div>
   </fieldset>
 
@@ -205,6 +211,11 @@
       </label>
     </div>
 
+    {# #59 task 4(a): three stacked form_field money inputs, no cross-field
+       interaction (the toggle above stays out of the grid — different
+       widget kind) — converted to the FAIR-distributions grid idiom;
+       exactly 3 items fills one row cleanly, same shape as a PERT triple. #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     {{ form_field(name="annual_security_budget", label="Annual security budget (USD)",
                   input_type="money", value=_v('annual_security_budget'),
                   error=errors_by_field.get('annual_security_budget', []) | join('; ') or none) }}
@@ -216,12 +227,18 @@
     {{ form_field(name="cyber_insurance_deductible", label="Insurance deductible (USD)",
                   input_type="money", value=_v('cyber_insurance_deductible'),
                   error=errors_by_field.get('cyber_insurance_deductible', []) | join('; ') or none) }}
+    </div>
   </fieldset>
 
   {# ── Compliance + context ─────────────────── #}
   <fieldset class="space-y-4">
     <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Compliance &amp; context</legend>
 
+    {# #59 task 4(a): four stacked form_field text inputs (comma-separated
+       lists), no cross-field interaction — converted to the
+       FAIR-distributions grid idiom; 4 items wrap 3-then-1, same wrap
+       behaviour as the scenario Threat-taxonomy 5-item conversion. #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     {{ form_field(name="compliance_requirements", label="Compliance requirements (comma-separated)",
                   value=form_data['compliance_requirements'] if form_data and 'compliance_requirements' in form_data else org.compliance_requirements | join(', '),
                   error=errors_by_field.get('compliance_requirements', []) | join('; ') or none) }}
@@ -237,6 +254,7 @@
     {{ form_field(name="technology_stack", label="Technology stack (comma-separated)",
                   value=form_data['technology_stack'] if form_data and 'technology_stack' in form_data else org.technology_stack | join(', '),
                   error=errors_by_field.get('technology_stack', []) | join('; ') or none) }}
+    </div>
   </fieldset>
 
   {# ── Localisation ─────────────────────────── #}

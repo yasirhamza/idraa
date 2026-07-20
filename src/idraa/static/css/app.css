@@ -338,3 +338,61 @@ body {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
+
+/* === Forms as instruments (issue #59 task 4) =================================
+   Field labels speak the eyebrow voice (mono, uppercase, tracked); numeric
+   inputs read like tabular readouts. Scoped to `form fieldset` so page
+   chrome / nav / the Task 2 breadcrumb eyebrow are untouched — those already
+   have their own macro-level classes and must not double up with a
+   different tracking/size value from this block.
+
+   Why this is CSS *and not only* a macro (read this before adding a raw
+   `<label>` elsewhere in the app): `macros/form_field.html` IS the
+   label/input macro — 21 templates import it — and its `_label` sub-macro
+   now carries these SAME values as explicit Tailwind classes directly on
+   the `<label>` (macro-first: the one place a reusable macro exists gets
+   the classes on the macro, not a bolted-on selector). But form_field's
+   "single-column, max-w-md" shape does not fit every layout — the FAIR
+   PERT/SME-estimate grids, the wizard's `_fair_params_form_inner.html`
+   row partial, and several hand-rolled `<select>` blocks in
+   scenarios/form.html, organization/form.html and controls/form.html all
+   author `<label>` / `.text-meta` markup directly, inside a `<fieldset>`,
+   outside form_field. That's roughly a dozen more call sites with no
+   single macro wrapping all of them (by design — see form_field.html's own
+   docstring). This element-selector net is what makes THOSE consistent
+   with form_field's output. Where a template DOES go through form_field,
+   this rule redundantly-but-harmlessly re-applies the same values the
+   macro's own classes already set — that overlap is intentional double
+   coverage, not dead CSS to delete. If you're adding a new fieldset-scoped
+   label and no macro fits, put it in a `<form fieldset>` and this rule
+   covers it for free; don't invent a one-off label class. */
+form fieldset label,
+form fieldset .text-meta {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 10px;
+}
+/* Numeric-input mono is largely already present at the point of authoring:
+   form_field's number/money/percent/count inputs and macros/
+   unit_aware_inputs.html's widgets both inline `font-mono tabular-nums` on
+   the `<input>` directly, and scenarios/form.html's hand-rolled
+   `pert_input`/`annual_revenue` inputs do the same. This rule is the same
+   kind of net as the label rule above — it re-covers those (harmless
+   redundancy, disclosed here rather than silently overlapping) and is the
+   ONLY styling for any numeric input authored without the inline classes
+   (e.g. a future fieldset-scoped `type="number"` added without copying an
+   existing pattern). #59 task 4 (c). */
+form input[type="number"],
+form input[inputmode="decimal"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+/* Section chapters: legends get a firmer rule + breathing control. */
+form fieldset > legend {
+  letter-spacing: -0.01em;
+  padding-bottom: 0.4rem;
+}
+/* Tighter vertical rhythm inside form sections (density, not air). */
+form fieldset .space-y-3 > * + * { margin-top: 0.55rem; }

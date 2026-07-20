@@ -156,6 +156,13 @@
     <fieldset class="space-y-4">
       <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Scope</legend>
 
+      {# #59 task 4(a): three stacked form_field selects, no cross-field
+         interaction — converted to the FAIR-distributions grid idiom;
+         exactly 3 items fills one row cleanly. implementation_stage's help
+         text renders inside its own grid cell (form_field's normal
+         help-below-input layout), same as scenarios/form.html's "Effect
+         (CIA)" field in the Threat-taxonomy conversion. #}
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {{ form_field(name="type", label="Type", input_type="select",
                     value=cur_type,
                     options=type_options,
@@ -172,6 +179,7 @@
                     options=stage_options,
                     error=errors_dict.get("implementation_stage"),
                     help="How far along this control is in real deployment. ONLY 'Active' controls reduce modeled risk; others are tracked but excluded from analyses.") }}
+      </div>
     </fieldset>
 
     {# ------------------------------------------------------------------ #}
