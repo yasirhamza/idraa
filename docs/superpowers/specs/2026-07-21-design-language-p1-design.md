@@ -99,6 +99,19 @@ every slot renders the same path data from one source.
 
 - (seed) 2026-07-21: scope per owner-blessed preview + "forms + density"
   feedback; dashboard density explicitly deferred to Phase 2 at spec time.
+- 2026-07-21 execution (T1-T5 all reviewed 0/0; full gate 4453 green):
+  disclosed deviations — form_field consumer count 21 not 22; breadcrumb
+  hairline span rendered as nav-sibling of ol (HTML validity; visually
+  identical); form_field edit-branch label gap normalized 0->4px APP-WIDE
+  (screenshot sweep verified); T5 reuses format_dist_value filter (same
+  dispatch as old inline branches). Two-column audit verdicts: scenario
+  taxonomy 5-selects, org posture/insurance/compliance, controls scope
+  CONVERTED to sm:grid-cols-3; org identity/localisation + controls
+  identity/cost/assignments NO-CHANGE (non-mechanical stacks) — hand-rolled
+  labels there still styled via the fieldset CSS net. Known cosmetic
+  follow-up (Phase 2 polish): at 1440px the wizard SME name input can clip
+  ("Library referen") when the now-single-line mono revenue hint widens the
+  High column; fix is a hint max-width or wrap hint.
 - 2026-07-21 plan-gate (owner-trimmed tier: quality + architecture only;
   methodology+security waived for UI-only work): 9 IMPORTANTs applied —
   empty-state logomark slot + run-form readouts moved to Phase 2; favicon
