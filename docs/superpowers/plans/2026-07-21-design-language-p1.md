@@ -123,7 +123,7 @@ async def test_login_and_favicon(client):     # unauthenticated client fixture
 
 - [ ] FOREGROUND full gate: `uv run python scripts/run_local_gate.py` — green.
 - [ ] Screenshot acceptance: run the UAT-snapshot harness (recipe in `wt-preview`: `uat-snap.db` + mint `preview@local.test`; snapshot file NEVER committed — verify `.gitignore` or path outside repo): dashboard / wizard step 4 / scenario edit / login, light+dark, plus PDF page 1 via `gen_sample_report.py` recipe. Eyeball against the preview shots; attach to PR.
-- [ ] Regression spot-sweep: controls list, library, run detail render (200 + no missing-class artifacts).
+- [ ] Regression spot-sweep: controls list, library, run detail render (200 + no missing-class artifacts). ALSO: label-coverage check — the eyebrow selector is fieldset-gated (`form fieldset label`); verify each swept form's labels actually receive the treatment (i.e. the form uses `<fieldset>`), and record any non-fieldset form as a known coverage gap in the drift log.
 - [ ] Spec drift log: dated entries for every deviation implementers disclosed (incl. the favicon hex exception decision). Commit `docs(design): design-language P1 drift log (#59)`.
 
 ---

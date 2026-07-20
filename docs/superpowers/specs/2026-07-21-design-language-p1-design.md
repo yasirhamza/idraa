@@ -56,8 +56,7 @@ every slot renders the same path data from one source.
 
 ## Out of scope (later phases / never)
 - Phase 2: dashboard empty-state density pass; logomark in chart/empty-state placeholders (generic empty_state.html macro is the natural host); run-form + run-detail readout strips; chart style layer (grid, area
-  fills, endpoint markers, readout strip on run detail); wizard step-count
-  polish.
+  fills, endpoint markers); wizard step-count polish.
 - Phase 3: palette (WCAG-AA audit, DaisyUI `*-base-*` override story,
   brand-vs-warning collision, 3 sync surfaces + 4 pinning tests).
 - Never: re-deriving any FAIR value in templates; touching engine/report
