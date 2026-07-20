@@ -152,6 +152,7 @@
   .ro .v .arrow{color:var(--faint); margin:0 6px; font-weight:400}
   .ro .v .to{color:var(--data)}
   .ro.hl .v{color:var(--accent)}
+  .fine{font-family:var(--font-mono); font-size:10.5px; line-height:1.5; color:var(--faint); margin-top:10px; padding:0 2px}
 
   /* ---- problem ---- */
   .versus{display:grid; grid-template-columns:1fr auto 1fr; gap:clamp(16px,3vw,40px); align-items:stretch; margin-top:30px}
@@ -293,10 +294,11 @@
           </div>
           <div class="canvas-wrap"><canvas id="heroChart"></canvas></div>
           <div class="readouts">
-            <div class="ro"><div class="k">Expected annual loss</div><div class="v" id="ro-eal">—</div></div>
+            <div class="ro"><div class="k">Annualized loss expectancy (ALE)</div><div class="v" id="ro-eal">—</div></div>
             <div class="ro"><div class="k">1-in-20-year loss</div><div class="v" id="ro-p95">—</div></div>
-            <div class="ro hl"><div class="k">Risk reduced</div><div class="v" id="ro-red">—</div></div>
+            <div class="ro hl"><div class="k">Modeled reduction</div><div class="v" id="ro-red">—</div></div>
           </div>
+          <p class="fine">Illustrative scenario. Control-driven reduction is modeled with explicit uncertainty — a range, not a precise figure.</p>
         </div>
       </div>
     </section>
@@ -382,9 +384,9 @@
           </div>
           <div class="notelist" style="margin-top:6px">
             <div class="note"><span class="b">READ</span><p>Each point answers: <b>what’s the chance annual loss exceeds this dollar amount?</b> Read down for the tail, across for the odds.</p></div>
-            <div class="note"><span class="b">A</span><p><b>Expected annual loss</b> — the number you carry into the budget.</p></div>
+            <div class="note"><span class="b">A</span><p><b>Annualized loss expectancy (ALE)</b> — the number you carry into the budget.</p></div>
             <div class="note"><span class="b">B</span><p><b>1-in-20-year loss</b> — the bad-year figure that sizes your reserves and cyber-insurance limits.</p></div>
-            <div class="note"><span class="b">Δ</span><p>The shaded gap is <b>risk removed</b> by a proposed control — the basis for its ROI.</p></div>
+            <div class="note"><span class="b">Δ</span><p>The shaded gap is the <b>modeled reduction</b> from a proposed control — estimated with explicit uncertainty, and the basis for comparing control ROI.</p></div>
           </div>
         </div>
       </div>
@@ -405,12 +407,12 @@
           <div class="step panel">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20v-5M9 20V9M14 20v-8M19 20V6"/><circle cx="14" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
             <div class="num">STEP <b>02</b></div><h3>Elicit</h3>
-            <p>Capture expert ranges through a guided wizard — calibrated, control-aware, and pooled across multiple estimators.</p>
+            <p>Capture expert ranges through a guided wizard — calibrated, <b>inherent</b> (pre-control), and pooled across multiple estimators.</p>
           </div>
           <div class="step panel">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M12 3v9l6 3"/></svg>
             <div class="num">STEP <b>03</b></div><h3>Simulate</h3>
-            <p>Run tens of thousands of Monte-Carlo trials to build the full loss distribution — tail and all.</p>
+            <p>Run Monte-Carlo trials — up to 100K for standard scenarios, up to 1M for catastrophic tails — to build the full loss distribution.</p>
           </div>
           <div class="step panel">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 L10 11 L14 15 L20 7"/><path d="M20 12V7h-5"/></svg>
@@ -428,13 +430,13 @@
         <h2>Rigor under the hood, clarity on the surface.</h2>
         <div class="statstrip">
           <div class="stat panel"><div><div class="n" id="s1">100+</div><div class="l">Curated scenarios</div></div><canvas class="spark" id="spark1"></canvas></div>
-          <div class="stat panel"><div><div class="n" id="s2">100K</div><div class="l">Trials per run</div></div><canvas class="spark" id="spark2"></canvas></div>
+          <div class="stat panel"><div><div class="n" id="s2">1M</div><div class="l">Max trials / run</div></div><canvas class="spark" id="spark2"></canvas></div>
           <div class="stat panel"><div><div class="n" id="s3">200+</div><div class="l">ATT&amp;CK techniques mapped</div></div><canvas class="spark" id="spark3"></canvas></div>
         </div>
         <div class="capgrid">
           <div class="cap-c panel"><div class="idx">01</div>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
-            <h3>Control-aware modeling</h3><p>See how each control actually reduces frequency and magnitude — and its marginal effect — via FAIR-CAM.</p></div>
+            <h3>Control-aware modeling</h3><p>Model how controls reduce frequency and magnitude — each control's contribution shown as a range, with its uncertainty made explicit (FAIR-CAM).</p></div>
           <div class="cap-c panel"><div class="idx">02</div>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
             <h3>Library + ATT&amp;CK</h3><p>Begin from calibrated, sector-tiered scenarios cross-walked to MITRE ATT&amp;CK techniques.</p></div>
@@ -443,10 +445,10 @@
             <h3>Multi-expert pooling</h3><p>Combine disagreeing estimates without averaging away the disagreement — a true opinion pool, not a blurred mean.</p></div>
           <div class="cap-c panel"><div class="idx">04</div>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg>
-            <h3>Native simulation</h3><p>A purpose-built Monte-Carlo engine that keeps the full distribution — VaR, expected shortfall, exceedance.</p></div>
+            <h3>Native simulation</h3><p>A purpose-built Monte-Carlo engine that keeps the full distribution — VaR, expected shortfall, exceedance. Trial caps scale with deployment (100K standard, 1M catastrophic).</p></div>
           <div class="cap-c panel"><div class="idx">05</div>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-            <h3>Verification workbook</h3><p>Every number reproduces in an Excel workbook that mirrors the engine — auditable and defensible line by line.</p></div>
+            <h3>Verification workbook</h3><p>Re-derive the engine's per-scenario sampling and ALE in an Excel workbook that mirrors the math — auditable line by line. Tail metrics (VaR, expected shortfall) stay engine-computed, not reproduced in the sheet.</p></div>
           <div class="cap-c panel"><div class="idx">06</div>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 13l2 2 3-4"/></svg>
             <h3>Board-ready reporting</h3><p>A posture dashboard with a risk-vs-appetite verdict, control budget, and PDF / Excel exports.</p></div>
@@ -551,12 +553,12 @@
       ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx,h-padB); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle=accent; ctx.beginPath(); ctx.arc(bx,by,4,0,6.28); ctx.fill();
       ctx.strokeStyle=css('--panel'); ctx.lineWidth=1.5; ctx.stroke();
-      // EAL marker (A) — where current curve crosses EAL x
+      // ALE marker (A) — where current curve crosses ALE x
       var ax=gx(sc.eal), ay=gy(surv(sc.eal,CUR.med,CUR.sig));
       ctx.fillStyle=accent; ctx.beginPath(); ctx.arc(ax,ay,4,0,6.28); ctx.fill(); ctx.strokeStyle=css('--panel'); ctx.stroke();
       if(opts.full){
         ctx.font='600 11px '+css('--font-mono'); ctx.textAlign='left'; ctx.fillStyle=ink;
-        ctx.fillText('A · EAL '+money(sc.eal), Math.min(ax+9,w-120), ay-8);
+        ctx.fillText('A · ALE '+money(sc.eal), Math.min(ax+9,w-120), ay-8);
         ctx.textAlign='right'; ctx.fillText('B · 1-in-20  '+money(sc.p95), bx-8, by-8);
       }
     }
