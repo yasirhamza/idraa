@@ -107,7 +107,7 @@
              inline md:hidden label instead (the body Source cell can be briefly
              empty during an HTMX swap repaint, so a shared header would show a
              gap; per-cell labels avoid that). #}
-          <div class="hidden md:grid md:grid-cols-[5.5rem_minmax(0,1fr)_7rem_7rem_2.25rem] md:gap-3 md:items-end pb-1 text-meta text-ink-2">
+          <div class="hidden md:grid md:grid-cols-[5rem_minmax(0,1fr)_minmax(8.5rem,1.3fr)_minmax(8.5rem,1.3fr)_2.5rem] md:gap-3 md:items-end pb-1 text-meta text-ink-2">
             <div>Source</div>
             <div>SME</div>
             <div>Low (5%)</div>
@@ -131,7 +131,7 @@
                (label-or-ordinal) semantics. #}
             <template x-for="(row, idx) in rows" :key="idx">
               <div class="grid grid-cols-1 gap-2 py-3 border-b border-border-subtle
-                          md:grid-cols-[5.5rem_minmax(0,1fr)_7rem_7rem_2.25rem] md:gap-3 md:items-center md:py-1.5 md:border-0">
+                          md:grid-cols-[5rem_minmax(0,1fr)_minmax(8.5rem,1.3fr)_minmax(8.5rem,1.3fr)_2.5rem] md:gap-3 md:items-center md:py-1.5 md:border-0">
                 {# Defensive `($store.smeDirectory || [])` chain: under HTMX
                    fragment swaps (Reset to industry baseline, Apply overlay) the
                    inline store registration script in the page shells
