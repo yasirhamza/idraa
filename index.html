@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <meta name="description" content="Idraa turns expert judgment into loss distributions, so security leaders can budget, prioritize, and defend cyber-risk decisions in dollars.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Idraa — Cyber risk, quantified">
@@ -14,6 +15,7 @@
 <title>Idraa — Cyber Risk, Quantified</title>
 <style>
   :root{
+    color-scheme:light dark;
     --bg:#e9ece9; --panel:#ffffff; --panel-2:#f3f6f3;
     --ink:#15242a; --muted:#5b6a70; --faint:#8a979c;
     --line:#d2d9d5;
@@ -26,6 +28,7 @@
   }
   @media (prefers-color-scheme:dark){
     :root{
+      color-scheme:dark;
       --bg:#0c1315; --panel:#121c1f; --panel-2:#17242700; --panel-2:#182427;
       --ink:#e9e7df; --muted:#8a999b; --faint:#67787c;
       --line:rgba(233,231,223,.13);
@@ -35,12 +38,14 @@
     }
   }
   :root[data-theme="light"]{
+    color-scheme:light;
     --bg:#e9ece9; --panel:#ffffff; --panel-2:#f3f6f3;
     --ink:#15242a; --muted:#5b6a70; --faint:#8a979c; --line:#d2d9d5;
     --accent:#a4671a; --data:#2c7d74; --good:#3f8f66; --warn:#bd7d1a; --crit:#bf4e3e;
     --shadow:0 1px 0 rgba(20,35,42,.04), 0 18px 40px -28px rgba(20,35,42,.35);
   }
   :root[data-theme="dark"]{
+    color-scheme:dark;
     --bg:#0c1315; --panel:#121c1f; --panel-2:#182427;
     --ink:#e9e7df; --muted:#8a999b; --faint:#67787c; --line:rgba(233,231,223,.13);
     --accent:#e2a648; --data:#56b3aa; --good:#63c295; --warn:#e2a648; --crit:#df7a67;
