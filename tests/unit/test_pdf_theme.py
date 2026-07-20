@@ -104,3 +104,17 @@ def test_table_style_returns_tablestyle():
     from reportlab.platypus import TableStyle
 
     assert isinstance(pdf_theme.table_style(numeric_cols=[1, 2, 3]), TableStyle)
+
+
+def test_brand_logomark_drawing():
+    """T3 (#59): brand_logomark() is the reportlab port of the deck logomark
+    SVG (macros/logo.html) — curve stroke + translucent fill wedge + dot,
+    scaled from the 32-unit viewBox to the requested width."""
+    from reportlab.graphics.shapes import Drawing
+
+    d = pdf_theme.brand_logomark()
+    assert isinstance(d, Drawing)
+    assert d.width == 22.0
+    assert len(d.contents) == 3
+    stroke_colors = [getattr(shape, "strokeColor", None) for shape in d.contents]
+    assert pdf_theme.PDFColors.brand in stroke_colors

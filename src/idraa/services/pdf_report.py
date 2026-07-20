@@ -60,6 +60,7 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
     Table,
+    TableStyle,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
 
@@ -526,8 +527,9 @@ def _draw_cover(data: RunReportData, styles: Any) -> list[Any]:
     _has_wr = getattr(data, "weight_robustness", None) is not None
     _mpe_suffix = " (average)" if _has_wr else ""
     return [
-        # Typographic wordmark: "Idraa" Helvetica-Bold 20pt #0F4C81 over a 2pt rule
-        Paragraph("Idraa", wordmark_style),
+        # Logomark + typographic wordmark: "Idraa" Helvetica-Bold 20pt
+        # #0F4C81, logomark to its left (T3, #59), both over a 2pt rule.
+        _cover_header_table(wordmark_style),
         _wordmark_rule(),
         Spacer(1, 0.2 * inch),
         # Classification line
@@ -583,6 +585,35 @@ def _draw_toc_page(data: RunReportData, styles: Any) -> list[Any]:
         Paragraph("Contents", toc_heading_style),
         toc,
     ]
+
+
+_LOGOMARK_WIDTH = 22.0
+
+
+def _cover_header_table(wordmark_style: ParagraphStyle) -> Table:
+    """Logomark beside the "Idraa" wordmark (T3, #59).
+
+    A bare Drawing appended to the flowable list stacks ABOVE the following
+    flowable, not beside it, so the logomark and wordmark are paired via a
+    borderless 2-column Table instead. The cover test asserts extracted TEXT
+    ('Idraa'), which a Table-wrapped Paragraph still yields — the wrap is
+    safe.
+    """
+    drawing = pdf_theme.brand_logomark(width=_LOGOMARK_WIDTH)
+    wordmark = Paragraph("Idraa", wordmark_style)
+    return Table(
+        [[drawing, wordmark]],
+        colWidths=[_LOGOMARK_WIDTH + 8, None],
+        style=TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        ),
+    )
 
 
 def _wordmark_rule() -> Drawing:
