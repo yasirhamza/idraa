@@ -12,6 +12,8 @@ design-language P1 acceptance tests rather than scattering one-off test
 files per task.
 
 Task 4: forms-as-instruments — fieldset-scoped label/numeric-input treatment.
+
+Task 5: readout strips on the wizard review page (macros/readout.html).
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.integration._wizard_step3_test_helpers import (
     _bootstrap_wizard_through_step_2,
+    _persist_fair_rows_via_steps_3_and_4,
     _user_id_from_org,
 )
 
@@ -115,3 +118,34 @@ async def test_numeric_inputs_mono() -> None:
     assert 'form input[type="number"]' in css
     assert 'form input[inputmode="decimal"]' in css
     assert "font-variant-numeric: tabular-nums" in css
+
+
+async def test_wizard_review_uses_readout(
+    authed_analyst: tuple[AsyncClient, object],
+    db_session: AsyncSession,
+) -> None:
+    """Task 5: the step-6 review page renders the entered per-fieldset SME
+    estimate rows through ``readout_strip`` (``data-readout`` anchor) rather
+    than the old bare ``<ul>`` — same values (low-high range, per-row source
+    label), same wording, new instrument-panel presentation."""
+    client, org_id = authed_analyst
+    user_id = await _user_id_from_org(db_session, org_id)
+    tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
+
+    await _persist_fair_rows_via_steps_3_and_4(
+        client,
+        db_session,
+        tx,
+        tef=[("Red Team", 1.0, 12.0)],
+        vuln=[("Red Team", 0.05, 0.5)],
+        pl=[("Red Team", 100000.0, 5000000.0)],
+        sl=[("Red Team", 5000.0, 50000.0)],
+    )
+
+    r = await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")
+    assert r.status_code == 200, r.text
+    body = r.text
+    assert "data-readout" in body
+    # The entered Primary loss High value (5000000.0, formatted 2dp via the
+    # existing format_dist_value("money") filter) renders inside the strip.
+    assert "5000000.00" in body

@@ -1,0 +1,11 @@
+{% macro readout_strip(items) -%}
+{# items: list of {label, value, accent(bool, optional)} — deck readout pattern #}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border-subtle border border-border-subtle rounded-card overflow-hidden" data-readout>
+  {% for it in items %}
+  <div class="bg-surface-1 px-3.5 py-2.5">
+    <div class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">{{ it.label }}</div>
+    <div class="font-mono font-semibold text-number-md mt-1 {{ 'text-brand' if it.accent else 'text-ink-1' }}" style="font-variant-numeric:tabular-nums">{{ it.value }}</div>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
