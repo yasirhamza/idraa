@@ -146,3 +146,23 @@ async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
 
     body = (await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")).text
     assert "Catastrophic — uncapped lognormal" in body
+
+
+@pytest.mark.asyncio
+async def test_step4_toggle_has_inline_loss_shape_feedback(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """UAT 2026-07-21 round 2: the catastrophic toggle must have IMMEDIATE
+    in-form feedback (data-loss-shape-hint with both copy variants), not
+    only the step-6 review line."""
+    client, org_id = authed_analyst
+    user_id = await _resolve_analyst_user_id(db_session)
+    await db_session.close()
+
+    tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
+    body = (await client.get(f"/scenarios/new/wizard/step/4?tx={tx}")).text
+    assert "data-loss-shape-hint" in body
+    assert "uncapped heavy-tailed lognormal" in body
+    assert "bounded PERT" in body
+    assert "economic ceiling" in body

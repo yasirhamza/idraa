@@ -31,27 +31,55 @@
     <span class="label-text">Catastrophic — uncapped loss magnitude</span>
   </label>
 
-  <div class="flex gap-2 mb-4 flex-wrap">
-    {% if org_industry and org_revenue_tier %}
-      <button type="button" class="btn btn-sm btn-outline"
-              hx-post="/scenarios/wizard/prefill-from-industry"
-              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
-              hx-vals='{"tx": "{{ state.tx_id }}", "page": "impact"}'
-              hx-target="#fair-params-inner" hx-swap="outerHTML">
-        Reset impact to baseline ({{ org_industry }} / {{ org_revenue_tier }})
-      </button>
-    {% endif %}
-    {% for overlay in available_overlays %}
-      <button type="button" class="btn btn-sm btn-outline"
-              hx-post="/scenarios/wizard/apply-overlay"
-              hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
-              hx-include="#fair-params-inner input"
-              hx-vals='{"tx": "{{ state.tx_id }}", "overlay_id": "{{ overlay.id }}", "page": "impact"}'
-              hx-target="#fair-params-inner" hx-swap="outerHTML">
-        Apply: {{ overlay.display_name }}
-      </button>
-    {% endfor %}
-  </div>
+  {# UAT 2026-07-21 round 2: immediate in-form feedback for the toggle —
+     the choice previously had no visible consequence until the step-6
+     review. Server-rendered fallback matches the Alpine initial state
+     (no-JS parity); x-show flips the copy live. #}
+  <p class="text-sm -mt-2 mb-4" data-loss-shape-hint>
+    <span x-show="catastrophic"
+          {% if state.loss_shape != 'catastrophic' %}x-cloak{% endif %}
+          class="text-status-warning font-medium">
+      Loss magnitude switches to an uncapped heavy-tailed lognormal —
+      High (95%) is the 95th percentile, <em>not</em> a ceiling.
+    </span>
+    <span x-show="!catastrophic"
+          {% if state.loss_shape == 'catastrophic' %}x-cloak{% endif %}
+          class="text-ink-2">
+      Loss magnitude stays a bounded PERT — High (95%) is the economic ceiling.
+    </span>
+  </p>
+
+  {# UAT 2026-07-21: prefill actions demoted into a collapsed disclosure —
+     the prominent button row crowded the top of the form (owner request).
+     Native <details>: no JS, survives HTMX swaps of #fair-params-inner. #}
+  {% if (org_industry and org_revenue_tier) or available_overlays %}
+  <details class="mb-4" data-prefill-options>
+    <summary class="text-sm text-ink-3 hover:text-ink-2 cursor-pointer select-none w-fit">
+      Prefill options — baseline &amp; overlays
+    </summary>
+    <div class="flex gap-2 mt-2 flex-wrap">
+      {% if org_industry and org_revenue_tier %}
+        <button type="button" class="btn btn-sm btn-outline"
+                hx-post="/scenarios/wizard/prefill-from-industry"
+                hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                hx-vals='{"tx": "{{ state.tx_id }}", "page": "impact"}'
+                hx-target="#fair-params-inner" hx-swap="outerHTML">
+          Reset impact to baseline ({{ org_industry }} / {{ org_revenue_tier }})
+        </button>
+      {% endif %}
+      {% for overlay in available_overlays %}
+        <button type="button" class="btn btn-sm btn-outline"
+                hx-post="/scenarios/wizard/apply-overlay"
+                hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'
+                hx-include="#fair-params-inner input"
+                hx-vals='{"tx": "{{ state.tx_id }}", "overlay_id": "{{ overlay.id }}", "page": "impact"}'
+                hx-target="#fair-params-inner" hx-swap="outerHTML">
+          Apply: {{ overlay.display_name }}
+        </button>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 
   {% include "scenarios/wizard/_fair_params_form_inner.html" %}
 

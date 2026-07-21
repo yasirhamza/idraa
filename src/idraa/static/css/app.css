@@ -295,6 +295,72 @@ form:has(.sticky-action-bar) :is(input, select, textarea) {
   background-color: var(--color-brand);
   border-color: var(--color-brand);
 }
+/* Forms-plugin FOCUS de-clobber (UAT 2026-07-21 round 2). @tailwindcss/forms'
+   [type=checkbox]:focus / [type=radio]:focus rule expresses its ring via
+   box-shadow — but DaisyUI's toggle draws its HANDLE with box-shadow, so
+   tap-focus ERASED the handle and painted a blue ring: a white pill whose
+   on/off state was unreadable. Focus is expressed via the design-system
+   outline instead; the toggle's handle shadow is re-declared var-for-var
+   from DaisyUI 4.12 (the vars come from the restored base rule, and
+   --handleoffsetcalculator flips on :checked so the handle tracks state). */
+.toggle:focus,
+.toggle:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  box-shadow:
+    var(--handleoffsetcalculator) 0 0 2px var(--tglbg) inset,
+    0 0 0 2px var(--tglbg) inset,
+    var(--togglehandleborder);
+}
+.checkbox:focus,
+.radio:focus {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* forms' :checked:focus/:checked:hover repaint sets background-color:
+   currentColor — on variant toggles currentColor resolves to the CONTENT
+   var (white in light), blanking the track on tap/hover. Re-assert each
+   variant's real checked color (values mirror the DaisyUI rules the
+   restore block carries; vars come from those rules). */
+.toggle:checked:focus,
+.toggle:checked:hover {
+  background-color: var(--fallback-bc, oklch(var(--bc) / 1));
+  border-color: transparent;
+}
+.toggle-primary:checked:focus,
+.toggle-primary:checked:hover {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.toggle-warning:checked:focus,
+.toggle-warning:checked:hover {
+  background-color: var(--fallback-wa, oklch(var(--wa) / 1));
+  border-color: transparent;
+}
+.checkbox:checked:focus,
+.checkbox:checked:hover {
+  background-color: var(--chkbg);
+  border-color: transparent;
+}
+.radio:checked:focus,
+.radio:checked:hover {
+  background-color: var(--fallback-bc, oklch(var(--bc) / 1));
+  border-color: transparent;
+  /* T-1: our .radio:focus{box-shadow:none} above outranks (by order) the
+     restore block's dot shadow — re-assert DaisyUI's exact checked-dot
+     value here (0,3,0 beats the 0,2,0 focus reset). */
+  box-shadow:
+    0 0 0 4px var(--fallback-b1, oklch(var(--b1) / 1)) inset,
+    0 0 0 4px var(--fallback-b1, oklch(var(--b1) / 1)) inset;
+}
+/* KNOWN-OUT-OF-SCOPE (T-3): forms' [type=checkbox]:indeterminate:* rules
+   carry the same currentColor/box-shadow clobber pattern, but indeterminate
+   is UNUSED app-wide (zero templates/JS set it) — deliberately not covered
+   with speculative CSS. If indeterminate controls ever ship, extend this
+   de-clobber block first. */
 /* Used by the exceedance-chart LEC/EPC toggle added in redesign P1 Task 5.
    !important per the section note at the top of this file (a few rules compete
    with DaisyUI defaults): DaisyUI's own
