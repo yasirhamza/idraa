@@ -311,7 +311,7 @@
 
   {# Danger zone — analyst+ only #}
   {% if current_user and current_user.role.value in ("analyst", "admin") %}
-  <div class="bg-surface-1 border border-status-critical/30 rounded-card p-6">
+  <div class="bg-surface-1 border border-status-critical-faint rounded-card p-6">
     <h2 class="text-h3 text-status-critical mb-2">Delete scenario</h2>
     <p class="text-body text-ink-2 mb-3">
       Hard delete — scenario row is removed and the action is recorded

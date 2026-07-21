@@ -15,7 +15,7 @@ class WorkbookColors:
     """Design tokens (app.css :root light) as xlsxwriter ``#RRGGBB`` literals."""
 
     # Brand + ink
-    brand = "#0F4C81"
+    brand = "#37464F"
     ink1 = "#18181B"
     ink2 = "#52525B"
     ink3 = "#A1A1AA"

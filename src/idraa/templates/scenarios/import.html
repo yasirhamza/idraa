@@ -3,20 +3,22 @@
 {% block title %}Scenario import{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto">
-  <p class="text-sm text-base-content/60 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/scenarios">Scenarios</a> / Import
   </p>
-  <h1 class="text-2xl font-bold mb-2">Import scenarios {{ help_trigger('import-export') }}</h1>
-  <p class="text-base-content/70 mb-6">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-2 pl-16 md:pl-0">Import scenarios {{ help_trigger('import-export') }}</h1>
+  <p class="text-ink-2 mb-6">
     Upload a CSV or JSON file of scenarios. Nothing is written until you review
     the preview and confirm. Duplicate scenarios (an active scenario with the
     same name already exists) are skipped.
   </p>
 
-  <div class="card bg-base-100 shadow mb-6">
+  <div class="card bg-surface-1 shadow mb-6">
     <div class="card-body">
       <h2 class="card-title text-base">Templates</h2>
-      <p class="text-sm text-base-content/70 mb-2">
+      <p class="text-sm text-ink-2 mb-2">
         Download a starting point — the CSV template and JSON sample each
         contain one fully-populated example row.
       </p>
@@ -31,13 +33,13 @@
     </div>
   </div>
 
-  <div class="card bg-base-100 shadow mb-6">
+  <div class="card bg-surface-1 shadow mb-6">
     <div class="card-body">
       <h2 class="card-title text-base">Field guidance</h2>
-      <p class="text-sm text-base-content/70 mb-2">
+      <p class="text-sm text-ink-2 mb-2">
         The CSV template carries no comment lines, so the field rules are here:
       </p>
-      <ul class="text-sm text-base-content/70 list-disc ml-5 space-y-1">
+      <ul class="text-sm text-ink-2 list-disc ml-5 space-y-1">
         <li><code class="font-mono">name</code> — required, unique among active scenarios.</li>
         <li>
           <code class="font-mono">scenario_type</code>,
@@ -75,7 +77,7 @@
     </div>
   </div>
 
-  <div class="card bg-base-100 shadow">
+  <div class="card bg-surface-1 shadow">
     <div class="card-body">
       <h2 class="card-title text-base">Upload</h2>
       <form method="post" action="/scenarios/import" enctype="multipart/form-data"

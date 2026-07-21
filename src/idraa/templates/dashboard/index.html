@@ -78,12 +78,12 @@
         a separate "typical-case" claim. Legacy (typical-basis) tiles keep
         today's copy byte-identical. -#}
     {%- if data.weight_robustness.basis == "mean" %}
-    <div class="text-xs text-ink-3 mt-1 p-2 bg-base-200 rounded">
+    <div class="text-xs text-ink-3 mt-1 p-2 bg-surface-2 rounded">
       Value range (same average basis as the tile above): <span class="font-mono">{{ data.weight_robustness.headline_range_str }}</span>
       <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
     </div>
     {%- else %}
-    <div class="text-xs text-ink-3 mt-1 p-2 bg-base-200 rounded">
+    <div class="text-xs text-ink-3 mt-1 p-2 bg-surface-2 rounded">
       Typical-case value range: <span class="font-mono">{{ data.weight_robustness.headline_range_str }}</span>
       &mdash; sits below the average headline because a few rare, very large losses pull the average up.
       <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.

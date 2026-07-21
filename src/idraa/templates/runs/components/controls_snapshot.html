@@ -58,7 +58,7 @@
                                     <td title="{{ a.sub_function }}">{{ a.sub_function | humanize_slug }}</td>
                                     <td>
                                       {% if a.capability_value is not none %}{{ unit_display(a) }}
-                                      {% else %}<span class="text-warning text-xs">— (re-entry needed)</span>{% endif %}
+                                      {% else %}<span class="text-status-warning text-xs">— (re-entry needed)</span>{% endif %}
                                     </td>
                                     <td>{{ "%.3f" | format(a.coverage) }}</td>
                                     <td>{{ "%.3f" | format(a.reliability) }}</td>

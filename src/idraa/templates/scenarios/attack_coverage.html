@@ -31,7 +31,7 @@
 {% endif %}
 
 {% if not vm.domains %}
-  <div class="card bg-base-200 p-6">
+  <div class="card bg-surface-2 p-6">
     <p class="text-body text-ink-2">The ATT&amp;CK technique catalog is empty —
     run database migrations to seed it.</p>
   </div>
@@ -49,7 +49,7 @@
     </div>
     <div class="space-y-2">
       {% for tactic in domain.tactics %}
-        <details class="card bg-base-200 p-0 overflow-hidden">
+        <details class="card bg-surface-2 p-0 overflow-hidden">
           <summary class="cursor-pointer px-4 py-2 flex items-center justify-between gap-2">
             <span class="text-body text-ink-1 font-medium">{{ tactic.name }}</span>
             <span class="text-meta text-ink-2 shrink-0">

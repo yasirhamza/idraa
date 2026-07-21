@@ -55,11 +55,11 @@
     {# Pagination info #}
     {% set page_size = page_size | default(50) %}
     {% if total > page_size %}
-      <p class="text-sm text-base-content/60 mb-3">
+      <p class="text-sm text-ink-2 mb-3">
         Page {{ page }} — showing up to {{ page_size }} of {{ total }} entries.
       </p>
     {% else %}
-      <p class="text-sm text-base-content/60 mb-3">
+      <p class="text-sm text-ink-2 mb-3">
         {{ total }} entr{{ "y" if total == 1 else "ies" }} found.
       </p>
     {% endif %}

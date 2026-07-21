@@ -44,7 +44,7 @@ async def test_sidebar_renders_logomark(
     r = await client.get("/")
     assert r.status_code == 200
     assert "data-logomark" in r.text
-    assert "M3 7 C 11 8, 12 24, 29 26" in r.text
+    assert "M9.5 19 A 9 9 0 0 1 22.5 19" in r.text
 
 
 async def test_login_and_favicon(client: AsyncClient) -> None:

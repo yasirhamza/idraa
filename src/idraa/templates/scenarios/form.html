@@ -482,7 +482,7 @@
                   <span class="text-meta text-ink-2 block">
                     domain {{ control_domains(control) }}
                     {% if control.implementation_stage.value != 'active' %}
-                    · <span class="text-micro text-warning">(not active: {{ control.implementation_stage.label }})</span>
+                    · <span class="text-micro text-status-warning">(not active: {{ control.implementation_stage.label }})</span>
                     {% else %}
                     · <span class="font-medium">(inactive: {{ control.status.value | upper }})</span>
                     {% endif %}
@@ -503,7 +503,7 @@
   <div class="pb-24" aria-hidden="true"></div>
 
   {# ── Sticky action bar ────────────────────── #}
-  <div class="sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+  <div class="sticky bottom-0 bg-surface-0-scrim-80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
     <a href="/scenarios{% if scenario %}/{{ scenario.id }}{% endif %}" class="btn btn-outline btn-sm">Cancel</a>
     <button type="submit" class="btn btn-primary btn-sm">
       {% if scenario %}Save changes{% else %}Create scenario{% endif %}

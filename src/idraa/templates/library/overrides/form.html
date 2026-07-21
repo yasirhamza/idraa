@@ -15,7 +15,7 @@
 
   <form method="post"
         action="{% if override %}/library/overrides/{{ override.id }}{% else %}/library/overrides{% endif %}"
-        class="card bg-base-100 shadow p-6 grid grid-cols-1 gap-4">
+        class="card bg-surface-1 shadow p-6 grid grid-cols-1 gap-4">
     {{ csrf_field() }}
 
     {% if override %}
@@ -31,7 +31,7 @@
        for None so the input renders blank. #}
 
     {# Threat Event Frequency (TEF) #}
-    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+    <fieldset class="mb-4 border border-border-strong p-4 rounded">
       <legend class="text-lg font-semibold mb-3">Threat event frequency (optional override)</legend>
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
@@ -56,7 +56,7 @@
     </fieldset>
 
     {# Vulnerability #}
-    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+    <fieldset class="mb-4 border border-border-strong p-4 rounded">
       <legend class="text-lg font-semibold mb-3">Vulnerability (optional override)</legend>
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
@@ -81,7 +81,7 @@
     </fieldset>
 
     {# Primary Loss #}
-    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+    <fieldset class="mb-4 border border-border-strong p-4 rounded">
       <legend class="text-lg font-semibold mb-3">Primary loss (optional override)</legend>
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
@@ -106,7 +106,7 @@
     </fieldset>
 
     {# Secondary Loss #}
-    <fieldset class="mb-4 border border-base-300 p-4 rounded">
+    <fieldset class="mb-4 border border-border-strong p-4 rounded">
       <legend class="text-lg font-semibold mb-3">Secondary loss (optional override)</legend>
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
@@ -131,7 +131,7 @@
     </fieldset>
 
     <label class="form-control">
-      <span class="label-text">Reason <span class="text-error">*</span></span>
+      <span class="label-text">Reason <span class="text-status-critical">*</span></span>
       <textarea name="reason" class="textarea textarea-bordered" rows="3" required>{% if override %}{{ override.reason }}{% endif %}</textarea>
     </label>
 
@@ -139,7 +139,7 @@
     <label class="form-control">
       <span class="label-text">Methodology change reason</span>
       <textarea name="methodology_change_reason" class="textarea textarea-bordered" rows="2">{% if override.methodology_change_reason %}{{ override.methodology_change_reason }}{% endif %}</textarea>
-      <span class="label-text-alt text-base-content/60">
+      <span class="label-text-alt text-ink-2">
         Required when distribution shape changes.
       </span>
     </label>

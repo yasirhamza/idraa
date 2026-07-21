@@ -29,14 +29,16 @@ _CARD = (
 
 def test_capability_badge_grows_to_fit_wrapped_text() -> None:
     source = _CARD.read_text()
-    # The capability pill is the badge-accent span (distinct from the pink
-    # framework badge-secondary pills, which are short and never wrap).
-    matches = re.findall(r'class="(badge[^"]*badge-accent[^"]*)"', source)
-    assert matches, "expected a badge-accent capability pill in the card"
+    # The capability pill is identified by its h-auto growth class (distinct
+    # from the framework badge-secondary pills — NIST/CIS/ISO — which are
+    # short and never wrap). Both pill families use badge-secondary now that
+    # FA-7 retired badge-accent (brass stays logo-dot-only, never text-on-light).
+    matches = re.findall(r'class="(badge[^"]*h-auto[^"]*)"', source)
+    assert matches, "expected an h-auto capability pill in the card"
     for cls in matches:
-        assert "h-auto" in cls, (
-            "capability badge must use h-auto so long labels that wrap don't "
-            f"overflow a fixed-height pill and overlap the next one; got: {cls!r}"
+        assert "badge-secondary" in cls, (
+            "capability badge should use badge-secondary (badge-accent retired "
+            f"per FA-7); got: {cls!r}"
         )
         assert "whitespace-normal" in cls, (
             f"capability badge must allow its text to wrap cleanly; got: {cls!r}"

@@ -2,7 +2,8 @@
 {% block title %}Library overrides{% endblock %}
 {% block content %}
 <div class="max-w-6xl mx-auto">
-  <h1 class="text-2xl font-bold mb-4">Library overrides for your organization</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-4 pl-16 md:pl-0">Library overrides for your organization</h1>
   {# Flash rendered by base.html → layouts/_flash.html (single source). #}
   <div class="overflow-x-auto">
     <table class="table table-zebra w-full">
@@ -29,7 +30,7 @@
     </table>
   </div>
   {% if not overrides %}
-  <p class="text-center text-base-content/60 mt-4">No overrides yet. <a href="/library/entries" class="link">Browse library</a> to create one.</p>
+  <p class="text-center text-ink-2 mt-4">No overrides yet. <a href="/library/entries" class="link">Browse library</a> to create one.</p>
   {% endif %}
 </div>
 {% endblock %}

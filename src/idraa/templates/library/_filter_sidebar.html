@@ -1,7 +1,7 @@
 <div class="space-y-4">
   <h2 class="text-base font-semibold">Filters</h2>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Threat actor</legend>
     {% for opt in facets.threat_actor_type %}
       <label class="flex items-center gap-2 cursor-pointer mt-1">
@@ -18,7 +18,7 @@
     {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Threat category</legend>
     {% for opt in facets.threat_category %}
       <label class="flex items-center gap-2 cursor-pointer mt-1">
@@ -35,7 +35,7 @@
     {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Asset class</legend>
     {% for opt in facets.asset_class %}
       <label class="flex items-center gap-2 cursor-pointer mt-1">
@@ -52,7 +52,7 @@
     {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Provenance</legend>
     {# P3 Task 6: single-valued source filter (radio). 'all' clears the
        narrowing (the route allowlists only seed/imported; any other value,
@@ -75,7 +75,7 @@
   </fieldset>
 
   {% if facets.sub_sector %}
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Sub-sector</legend>
     {# WS5a: sub-sector is a purely optional filter; default browse returns all
        entries across all industries. Checkboxes start unchecked; selecting one
@@ -98,7 +98,7 @@
   {% endif %}
 
   {% if facets.industry %}
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Industry</legend>
     {# WS1: data-driven industry filter — only industries present in ≥1 published entry appear.
        Route already parses ?industry= into BrowseFilters.applicable_industries. #}

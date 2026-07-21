@@ -13,7 +13,7 @@
    Unlike the controls row there is NO hx-get on the hidden select: picking a
    technique does not re-render the row.
 #}
-<div class="attack-mapping-row card bg-base-200 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
+<div class="attack-mapping-row card bg-surface-2 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
   <div class="flex items-start gap-3">
     <div class="grow">
       <div class="flex items-center justify-between mb-1">
@@ -74,9 +74,9 @@
           x-show="open"
           x-cloak
           x-transition.opacity
-          class="absolute z-30 mt-1 w-full rounded-lg border border-base-300 bg-base-100 shadow-lg overflow-hidden"
+          class="absolute z-30 mt-1 w-full rounded-lg border border-border-strong bg-surface-1 shadow-lg overflow-hidden"
         >
-          <div class="p-2 border-b border-base-200">
+          <div class="p-2 border-b border-border-subtle">
             <input
               type="text"
               x-ref="search"
@@ -101,7 +101,7 @@
               <li role="presentation">
                 <div
                   role="presentation"
-                  class="sticky top-0 bg-base-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
+                  class="sticky top-0 bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
                   x-text="group.label"
                 ></div>
                 <template x-for="opt in group.options" :key="opt.value">
@@ -110,7 +110,7 @@
                     :id="`atk-opt-${index}-${opt.value}`"
                     :data-value="opt.value"
                     :aria-selected="opt.value === selectedValue ? 'true' : 'false'"
-                    :class="opt.value === highlightedValue ? 'bg-primary text-primary-content' : 'hover:bg-base-200'"
+                    :class="opt.value === highlightedValue ? 'bg-brand text-brand-contrast' : 'hover:bg-surface-2'"
                     @mousedown.prevent="commit(opt.value)"
                     @mouseenter="highlightedValue = opt.value"
                     class="cursor-pointer px-3 py-2"

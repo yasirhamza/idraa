@@ -2,12 +2,13 @@
 {% block title %}Override v{{ override.version }}{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto">
-  <h1 class="text-2xl font-bold mb-4">Override v{{ override.version }}</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-4 pl-16 md:pl-0">Override v{{ override.version }}</h1>
 
-  <div class="card bg-base-100 shadow p-6 grid grid-cols-1 gap-4">
+  <div class="card bg-surface-1 shadow p-6 grid grid-cols-1 gap-4">
     <div class="form-control">
       <span class="label-text font-semibold">Entry</span>
-      <a href="/library/entries/{{ override.library_entry_id }}" class="link text-primary">{{ override.library_entry_id }}</a>
+      <a href="/library/entries/{{ override.library_entry_id }}" class="link text-brand">{{ override.library_entry_id }}</a>
     </div>
 
     <div class="form-control">

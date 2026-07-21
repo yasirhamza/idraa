@@ -74,7 +74,7 @@
           </span>
         {% endif %}
       </legend>
-      <p class="text-sm text-gray-600 mb-2">
+      <p class="text-sm text-ink-2 mb-2">
         {{ rendered_questions[fieldset_key] }}
         {% set _tip = fieldset_tooltips.get(fieldset_key) %}
         {% if _tip %}
@@ -231,22 +231,22 @@
                            :value="row.sme_name || ''">
                     <ul x-show="open"
                         x-cloak
-                        class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-base-100 shadow">
+                        class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-surface-1 shadow">
                       <template x-for="sme in filtered" :key="sme.id">
                         {# Use x-text (textContent), never x-html (innerHTML), for sme.name —
                            sme.name is user-provided free text in the new design and must not
                            be interpolated into HTML directly. textContent is XSS-safe. #}
                         <li @mousedown.prevent="pick(sme)"
-                            class="cursor-pointer px-3 py-1 hover:bg-base-200"
+                            class="cursor-pointer px-3 py-1 hover:bg-surface-2"
                             x-text="sme.name + (sme.role_title ? ' (' + sme.role_title + ')' : '')"></li>
                       </template>
                       <li x-show="filtered.length === 0 && q.length === 0"
-                          class="px-3 py-1 text-sm italic text-gray-500">
+                          class="px-3 py-1 text-sm italic text-ink-3">
                         No saved SMEs yet — type a name above.
                       </li>
                       <li x-show="q.length >= 1 && !exactMatch"
                           @mousedown.prevent="saveToDirectory()"
-                          class="cursor-pointer border-t px-3 py-1 text-sm font-medium hover:bg-base-200">
+                          class="cursor-pointer border-t px-3 py-1 text-sm font-medium hover:bg-surface-2">
                         + Save "<span x-text="q"></span>" to directory
                       </li>
                     </ul>
@@ -332,7 +332,7 @@
                          page-level Alpine scope (catastrophic, annualRevenue)
                          set on the step-4 form; the route supplies
                          org_annual_revenue for step 4 ONLY (A-N2). #}
-                      <span class="text-meta text-ink-2 block mt-1"
+                      <span class="text-meta text-ink-2 block mt-1 max-w-[28ch] whitespace-normal"
                             data-revenue-hint data-annual-revenue="{{ org_annual_revenue }}"
                             x-show="!catastrophic && strip(display)"
                             x-text="'≈ ' + ((parseFloat(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>

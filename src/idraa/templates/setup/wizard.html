@@ -12,7 +12,8 @@
   may be bootstrapping from a tablet or restricted environment.
 #}
 <div class="pt-6">
-  <h1 class="text-display text-ink-1 mb-2">First-time setup</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-display text-ink-1 mb-2 pl-16 md:pl-0">First-time setup</h1>
   <p class="text-body text-ink-2 mb-6">Create your organization and initial admin account.</p>
 
   {#
@@ -23,11 +24,11 @@
     <aside class="hidden md:block md:w-48 shrink-0">
       <ol class="space-y-2 sticky top-20">
         <li class="flex items-center gap-2 text-meta">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand text-white text-micro">1</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand text-brand-contrast text-micro">1</span>
           <span class="text-ink-1 font-medium">Organization</span>
         </li>
         <li class="flex items-center gap-2 text-meta">
-          <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand text-white text-micro">2</span>
+          <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand text-brand-contrast text-micro">2</span>
           <span class="text-ink-1 font-medium">Admin user</span>
         </li>
       </ol>
@@ -97,7 +98,7 @@
         {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
         <div class="pb-24" aria-hidden="true"></div>
 
-        <div class="sticky-action-bar sticky bottom-0 bg-surface-0/80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+        <div class="sticky-action-bar sticky bottom-0 bg-surface-0-scrim-80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
           <button type="submit" class="btn btn-primary btn-sm">Create and sign in</button>
         </div>
       </form>

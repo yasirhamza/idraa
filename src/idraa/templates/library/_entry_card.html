@@ -1,6 +1,6 @@
 {% if entries %}
   {% for entry in entries %}
-    <div class="card bg-base-100 shadow">
+    <div class="card bg-surface-1 shadow">
       <div class="card-body">
         <h3 class="card-title text-lg">
           <a class="link link-hover" href="/library/entries/{{ entry.id }}">
@@ -17,7 +17,7 @@
             {{ entry.threat_event_type.value | replace("_", " ") | title }}
           </span>
           {# asset_class is also non-nullable per the model definition #}
-          <span class="badge badge-sm badge-accent badge-outline">
+          <span class="badge badge-sm badge-secondary badge-outline">
             {{ entry.asset_class.value | replace("_", " ") | title }}
           </span>
           {# P3 Task 6 provenance badge: 'imported' (uploaded at runtime) vs
@@ -30,7 +30,7 @@
           {% endif %}
         </div>
 
-        <p class="text-sm text-base-content/70">
+        <p class="text-sm text-ink-2">
           {% if entry.description | length > 120 %}
             {{ entry.description[:120] }}…
           {% else %}
@@ -52,7 +52,7 @@
   {% endfor %}
 {% else %}
   <div class="empty-state col-span-3 text-center py-12">
-    <p class="text-base-content/60 mb-3">No entries match these filters.</p>
+    <p class="text-ink-2 mb-3">No entries match these filters.</p>
     <a href="/library" class="btn btn-link">Clear filters</a>
   </div>
 {% endif %}

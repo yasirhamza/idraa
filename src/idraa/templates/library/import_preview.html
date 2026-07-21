@@ -3,16 +3,18 @@
 {% block title %}Library import — preview{% endblock %}
 {% block content %}
 <div class="max-w-5xl mx-auto">
-  <p class="text-sm text-base-content/60 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/library">Scenario library</a> / Import preview
   </p>
-  <h1 class="text-2xl font-bold mb-2">Library import — preview</h1>
-  <p class="text-base-content/70 mb-4">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-2 pl-16 md:pl-0">Library import — preview</h1>
+  <p class="text-ink-2 mb-4">
     Review the parsed entries below. Nothing has been written yet — confirm to
     apply, or cancel to abandon. The preview token expires after 10 minutes.
   </p>
 
-  <p class="text-xs text-base-content/60 mb-4">
+  <p class="text-xs text-ink-2 mb-4">
     Preview token: <code class="font-mono">{{ token }}</code>
   </p>
 
@@ -30,7 +32,7 @@
   {% endif %}
 
   {% if preview %}
-  <div class="card bg-base-100 shadow mb-4">
+  <div class="card bg-surface-1 shadow mb-4">
     <div class="card-body p-3 md:p-0">
       {{ preview_table(preview, [
            {"label": "Entry", "key": "index", "mono": True},
