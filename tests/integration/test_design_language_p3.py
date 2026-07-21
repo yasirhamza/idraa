@@ -324,3 +324,29 @@ async def test_daisyui_bridge_triplets_match_tokens() -> None:
             assert abs(got_c - exp_c) < 0.001, (var, scope_name, hexv)
             if exp_c > 0.0005:
                 assert abs(got_h - exp_h) < 0.1, (var, scope_name, hexv)
+
+
+async def test_control_focus_declobber_preserves_toggle_handle() -> None:
+    """UAT 2026-07-21 round 2: @tailwindcss/forms' [type=checkbox]:focus ring
+    is expressed via box-shadow — the SAME property DaisyUI uses to draw the
+    toggle HANDLE — so tap-focus erased the handle (white pill, blue ring,
+    unreadable state). app.css must re-declare the handle shadow on
+    .toggle:focus and route focus through the design-system outline."""
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    block = css.split(".toggle:focus", 1)[1].split("}", 1)[0]
+    assert "outline: 2px solid var(--color-brand)" in block
+    assert "--tglbg" in block, "handle shadow must be re-declared on focus"
+    assert "--tw-ring-shadow: 0 0 #0000" in block
+    cb_block = css.split(".checkbox:focus", 1)[1].split("}", 1)[0]
+    assert "outline: 2px solid var(--color-brand)" in cb_block
+    # checked-state repaint de-clobber: forms' :checked:hover/:focus paints
+    # currentColor (the CONTENT var — white on variant toggles); each variant
+    # in use re-asserts its real checked color.
+    for sel in (
+        ".toggle:checked:focus",
+        ".toggle-primary:checked:focus",
+        ".toggle-warning:checked:focus",
+        ".checkbox:checked:focus",
+        ".radio:checked:focus",
+    ):
+        assert sel in css, sel
