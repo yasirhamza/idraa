@@ -17,8 +17,10 @@ Current dashboard (`templates/dashboard/index.html` + `_posture.html`,
 same real estate as a full one. Principle: **density scales with content**.
 - Empty-state bands (posture "No aggregate run yet", loss-distributions
   "Run an analysis across 2+ scenarios", activity "No runs yet") collapse to
-  a compact single-row variant: one line of copy + the CTA inline, small
-  logomark watermark (workstream 3), no tall card body.
+  a compact single-row variant: one line of copy + the CTA inline, no tall
+  card body; the POSTURE row alone carries the small logomark watermark
+  (workstream 3) — the other compact rows use mark=False to avoid logo
+  over-repetition.
 - The two lone stat tiles ("Scenarios with runs", "Recent runs") merge into
   ONE `readout_strip` (existing macro) row.
 - "Get started" band renders ONLY while `scenarios == 0` (it already
@@ -41,15 +43,17 @@ sampling, scale, or series-semantics change** (colors stay `chart_palette`):
   residual — their fill is residual too).
 - Emphasized endpoint/marker dots: existing markers get a 1.5px surface
   stroke halo (deck treatment).
-- Tick labels: mono, 10px, `--color-ink-3` (they may already be — verify,
-  normalize).
-- Chart card caption row becomes an eyebrow (reuse P1 classes) where
-  templates render chart titles (`macros/chart.html`).
+- Tick labels: mono, 10px, `--color-ink-3` (`.chart-tick` is 12px non-mono
+  today — a REAL app-wide change; both-theme screenshots must confirm no
+  tick clipping).
+- Chart card caption row becomes an eyebrow (reuse P1 classes) where the
+  CALLING templates render chart titles (dashboard/index.html:106,
+  runs/_results_panel.html:68/:110).
 
 ### 3 · Empty-state logomark
-The generic empty-state pattern (locate the macro/partial; if none exists,
-the compact empty rows from workstream 1 host it) renders `logomark(size=20)`
-at reduced opacity as a quiet watermark — identity in the quiet moments.
+The compact empty-row pattern from workstream 1 hosts `logomark(size=20)`
+at reduced opacity as a quiet watermark on the POSTURE row only — identity
+in the quiet moments without repetition.
 
 ### 4 · Run-page readout strips
 - Run detail's REAL headline surfaces (verified at plan-gate): the AGGREGATE
