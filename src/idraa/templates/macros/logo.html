@@ -1,0 +1,14 @@
+{# logomark(size=28, with_wordmark=False) — issue #59 T1. Loss-exceedance-curve
+   mark: palette-agnostic (currentColor → var(--color-brand)). `data-logomark`
+   is the test/integration anchor — do not rename without updating
+   tests/integration/test_design_language_p1.py. #}
+{% macro logomark(size=28, with_wordmark=False) -%}
+<span class="inline-flex items-center gap-2.5" data-logomark>
+  <svg viewBox="0 0 32 32" width="{{ size }}" height="{{ size }}" class="flex-none overflow-visible" style="color:var(--color-brand)" aria-hidden="true">
+    <path d="M3 7 C 11 8, 12 24, 29 26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M3 7 C 11 8, 12 24, 29 26 L 29 29 L 3 29 Z" fill="currentColor" opacity=".14"/>
+    <circle cx="3" cy="7" r="2.6" fill="currentColor"/>
+  </svg>
+  {% if with_wordmark %}<span class="text-h3 font-semibold tracking-tight">Idraa</span>{% endif %}
+</span>
+{%- endmacro %}

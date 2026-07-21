@@ -129,9 +129,15 @@
   <fieldset class="space-y-4">
     <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Threat taxonomy</legend>
 
-    <div class="max-w-md">
+    {# #59 task 4(a): five stacked short selects, no cross-field
+       interaction — converted to the FAIR-distributions grid idiom below
+       (grid grid-cols-1 sm:grid-cols-3 gap-4). 5 items wrap 3-then-2, same
+       as the existing wrap behaviour nothing new here. Per-field
+       `max-w-md` dropped in favour of the grid cell's own width. #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="threat_category" class="text-meta text-ink-2">Threat category</label>
+        <label for="threat_category" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Threat category</label>
         <span class="text-micro text-ink-3">REQUIRED</span>
       </div>
       <select id="threat_category" name="threat_category" required
@@ -146,9 +152,9 @@
       {% endif %}
     </div>
 
-    <div class="max-w-md">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="threat_actor_type" class="text-meta text-ink-2">Threat actor type</label>
+        <label for="threat_actor_type" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Threat actor type</label>
       </div>
       <select id="threat_actor_type" name="threat_actor_type"
               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
@@ -159,9 +165,9 @@
       </select>
     </div>
 
-    <div class="max-w-md">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="attack_vector" class="text-meta text-ink-2">Attack vector</label>
+        <label for="attack_vector" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Attack vector</label>
       </div>
       <select id="attack_vector" name="attack_vector"
               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
@@ -172,9 +178,9 @@
       </select>
     </div>
 
-    <div class="max-w-md">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="asset_class" class="text-meta text-ink-2">Asset class</label>
+        <label for="asset_class" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Asset class</label>
       </div>
       <select id="asset_class" name="asset_class"
               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
@@ -185,9 +191,9 @@
       </select>
     </div>
 
-    <div class="max-w-md">
+    <div class="space-y-1">
       <div class="flex items-center justify-between">
-        <label for="effect" class="text-meta text-ink-2">Effect (CIA)</label>
+        <label for="effect" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Effect (CIA)</label>
       </div>
       <select id="effect" name="effect"
               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
@@ -197,6 +203,7 @@
         {% endfor %}
       </select>
       <p class="text-meta text-ink-3 mt-1">Availability effects self-detect — recovery controls (DBR/IR/BCDR) score even without a detection partner.</p>
+    </div>
     </div>
   </fieldset>
 

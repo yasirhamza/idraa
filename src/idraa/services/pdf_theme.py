@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from reportlab.graphics.shapes import Circle, Drawing, Path
 from reportlab.lib import colors
+from reportlab.lib.colors import Color
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import TableStyle
@@ -173,3 +175,66 @@ def table_style(*, numeric_cols: list[int] | None = None, total_row: bool = Fals
         cmds.append(("BACKGROUND", (0, -1), (-1, -1), PDFColors.surface2))
         cmds.append(("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"))
     return TableStyle(cmds)
+
+
+# ---- Brand logomark (T3, #59) ----
+
+# Source-of-truth SVG (src/idraa/templates/macros/logo.html), 0 0 32 32 viewBox:
+#   <path d="M3 7 C 11 8, 12 24, 29 26" fill="none" stroke="currentColor"
+#         stroke-width="2.6" stroke-linecap="round"/>
+#   <path d="M3 7 C 11 8, 12 24, 29 26 L 29 29 L 3 29 Z" fill="currentColor"
+#         opacity=".14"/>
+#   <circle cx="3" cy="7" r="2.6" fill="currentColor"/>
+_LOGOMARK_VIEWBOX = 32.0
+
+
+def brand_logomark(width: float = 22.0) -> Drawing:
+    """Reportlab port of the deck logomark (macros/logo.html's inline SVG).
+
+    Three shapes, scaled from the 32x32 SVG viewBox to ``width``: the curve
+    stroke, a translucent fill wedge under the curve, and the leading dot.
+
+    CRITICAL: reportlab's Drawing origin is BOTTOM-left (Y-up); SVG's is
+    TOP-left (Y-down). Every viewBox coordinate is mapped through
+    ``y' = 32 - y`` (applied in viewBox space, before scaling) — skipping
+    this mirrors the curve vertically.
+    """
+    scale = width / _LOGOMARK_VIEWBOX
+
+    def sx(x: float) -> float:
+        return x * scale
+
+    def sy(y: float) -> float:
+        return (_LOGOMARK_VIEWBOX - y) * scale
+
+    fill_translucent = Color(
+        PDFColors.brand.red, PDFColors.brand.green, PDFColors.brand.blue, alpha=0.14
+    )
+
+    d = Drawing(width, width)
+
+    # Shape 1: curve stroke, no fill.
+    curve = Path(
+        strokeColor=PDFColors.brand,
+        strokeWidth=2.6 * scale,
+        strokeLineCap=1,  # round
+        fillColor=None,
+    )
+    curve.moveTo(sx(3), sy(7))
+    curve.curveTo(sx(11), sy(8), sx(12), sy(24), sx(29), sy(26))
+    d.add(curve)
+
+    # Shape 2: translucent fill wedge under the curve, no stroke.
+    wedge = Path(strokeColor=None, fillColor=fill_translucent)
+    wedge.moveTo(sx(3), sy(7))
+    wedge.curveTo(sx(11), sy(8), sx(12), sy(24), sx(29), sy(26))
+    wedge.lineTo(sx(29), sy(29))
+    wedge.lineTo(sx(3), sy(29))
+    wedge.closePath()
+    d.add(wedge)
+
+    # Shape 3: leading dot.
+    dot = Circle(sx(3), sy(7), 2.6 * scale, fillColor=PDFColors.brand, strokeColor=None)
+    d.add(dot)
+
+    return d

@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% from "macros/form_field.html" import form_field %}
 {% from "macros/form_error_summary.html" import form_error_summary %}
+{% from "macros/logo.html" import logomark %}
 
 {% block title %}Sign in{% endblock %}
 {% block container_class %}max-w-md mx-auto{% endblock %}
 
 {% block content %}
 <div class="pt-8">
+  <div class="mb-6">{{ logomark(size=32, with_wordmark=True) }}</div>
   <h1 class="text-display text-ink-1 mb-6">Sign in</h1>
 
   {# #200: this form is hx-boosted like every other (global <body>
