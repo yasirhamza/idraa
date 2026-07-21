@@ -2,7 +2,8 @@
 {% from "macros/chart.html" import dual_lec_curve, dual_epc_curve %}
 {% from "macros/rbac.html" import analyst_or_admin %}
 {% from "macros/page_header.html" import page_header %}
-{% from "macros/kpi_card.html" import kpi_card %}
+{% from "macros/readout.html" import readout_strip %}
+{% from "macros/empty_state.html" import empty_row %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 
@@ -19,7 +20,7 @@
     breadcrumb=[("Home", "/")]
 ) }}
 
-<div class="space-y-8">
+<div class="space-y-6">
 
   {# Quick-start card — brand-new org (zero scenarios). Replaces the
      dead-end "Run analysis" CTAs with the actual first steps. #}
@@ -58,18 +59,10 @@
   {# Scenario / run counts still surfaced, now as a lightweight two-up strip
      rather than full KPI tiles (the dollar figures moved into the posture
      band above). #}
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    {{ kpi_card(
-        label="Scenarios with runs",
-        value=data.total_scenarios_with_runs,
-        format="count"
-    ) }}
-    {{ kpi_card(
-        label="Recent runs",
-        value=data.recent_runs | length,
-        format="count"
-    ) }}
-  </div>
+  {{ readout_strip([
+      {"label": "Scenarios with runs", "value": data.total_scenarios_with_runs | format_count},
+      {"label": "Recent runs", "value": data.recent_runs | length | format_count},
+  ]) }}
 
   {# Issue #413 / Task 5 (#419): control-value provenance disclaimer + robustness range.
      The Control Value tile renders a dollar figure that rests on fair_cam's
@@ -119,12 +112,12 @@
         </div>
       </div>
     {% else %}
-      <p class="text-body text-ink-2">
-        Run an analysis across 2+ scenarios to see the portfolio loss distributions.
-      </p>
-      {% call analyst_or_admin(current_user) %}
-        <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run aggregate analysis</a>
-      {% endcall %}
+      {% set can_author = current_user is not none and current_user.role.value in ("analyst", "admin") %}
+      {{ empty_row(
+          "Run an analysis across 2+ scenarios to see the portfolio loss distributions.",
+          cta={"href": "/analyses/new", "label": "Run aggregate analysis"} if can_author else none,
+          chrome=False,
+      ) }}
     {% endif %}
   </div>
 

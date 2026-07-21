@@ -16,20 +16,19 @@
     is None when there IS an aggregate run but no org risk-tolerance is
     configured — that state renders the hero WITHOUT a verdict badge plus a
     "Set a risk appetite" link, per the plan-gate fallback requirement. -#}
-{% from "macros/rbac.html" import analyst_or_admin, admin_only %}
+{% from "macros/rbac.html" import admin_only %}
+{% from "macros/empty_state.html" import empty_row %}
 
 {%- set _p = data.posture -%}
 {%- set _code = data.currency.code if data.currency else "USD" -%}
 
 {% if _p is none %}
-  <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
-    <p class="text-meta text-ink-2 uppercase">Risk posture</p>
-    <p class="text-number-lg text-ink-3 font-mono tabular-nums mt-1">&mdash;</p>
-    <p class="text-micro text-ink-3 mt-2">No aggregate run yet.</p>
-    {% call analyst_or_admin(current_user) %}
-      <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run aggregate analysis</a>
-    {% endcall %}
-  </div>
+  {% set can_author = current_user is not none and current_user.role.value in ("analyst", "admin") %}
+  {{ empty_row(
+      "No aggregate run yet — run one to see your risk posture.",
+      cta={"href": "/analyses/new", "label": "Run aggregate analysis"} if can_author else none,
+      mark=True,
+  ) }}
 {% else %}
   <div class="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-3">
 

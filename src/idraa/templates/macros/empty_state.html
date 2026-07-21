@@ -27,3 +27,15 @@
   {%- endif %}
 </div>
 {%- endmacro %}
+
+{% macro empty_row(body, cta=none, mark=False, chrome=True) -%}
+{# Compact single-row empty state (design-language P2): one line + inline
+   CTA + quiet logomark watermark. For dashboard bands where a tall card
+   would be a void. #}
+{% from "macros/logo.html" import logomark %}
+<div class="flex items-center gap-3 {% if chrome %}bg-surface-1 border border-border-subtle rounded-card {% endif %}px-4 py-3" data-empty-row>
+  {% if mark %}<span class="opacity-25 flex-none">{{ logomark(size=20) }}</span>{% endif %}
+  <p class="text-meta text-ink-2 flex-1">{{ body }}</p>
+  {% if cta %}<a href="{{ cta.href }}" class="btn btn-sm btn-primary flex-none">{{ cta.label }}</a>{% endif %}
+</div>
+{%- endmacro %}
