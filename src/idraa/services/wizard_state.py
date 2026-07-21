@@ -134,6 +134,40 @@ class WizardStateService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
+    async def get(
+        self,
+        *,
+        user_id: uuid.UUID,
+        tx_id: uuid.UUID,
+    ) -> WizardState | None:
+        """Read-only resolve by (user_id, tx_id); ``None`` if no row exists.
+
+        Drafts-surfaced spec §4b (DA-4/DQ-10): used by ``get_wizard_step``'s
+        tx-provided guard to detect a dead (swept/discarded/bookmarked) tx
+        BEFORE minting a phantom draft. Never creates or mutates a row —
+        ``get_or_create``'s found-branch delegates here so the two paths
+        stay in lockstep.
+        """
+        row = (
+            await self._db.execute(
+                select(WizardDraft).where(
+                    WizardDraft.user_id == user_id,
+                    WizardDraft.tx_id == tx_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        # Whitelist filter against current dataclass fields so a removed field
+        # in WizardState does not blow up reads of pre-removal rows.
+        # Drop ``version_token`` from the JSON payload (defense in depth
+        # against stale legacy rows that still have it embedded) — the
+        # row's column copy is the authoritative source for the token.
+        known = {f.name for f in dataclasses.fields(WizardState)} - {"version_token"}
+        state = WizardState(**{k: v for k, v in row.state_json.items() if k in known})
+        state.version_token = row.version_token
+        return state
+
     async def get_or_create(
         self,
         *,
@@ -150,23 +184,8 @@ class WizardStateService:
         boundary rather than re-parsed inside the service.
         """
         if tx_id is not None:
-            row = (
-                await self._db.execute(
-                    select(WizardDraft).where(
-                        WizardDraft.user_id == user_id,
-                        WizardDraft.tx_id == tx_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if row is not None:
-                # Whitelist filter against current dataclass fields so a removed field
-                # in WizardState does not blow up reads of pre-removal rows.
-                # Drop ``version_token`` from the JSON payload (defense in depth
-                # against stale legacy rows that still have it embedded) — the
-                # row's column copy is the authoritative source for the token.
-                known = {f.name for f in dataclasses.fields(WizardState)} - {"version_token"}
-                state = WizardState(**{k: v for k, v in row.state_json.items() if k in known})
-                state.version_token = row.version_token
+            state = await self.get(user_id=user_id, tx_id=tx_id)
+            if state is not None:
                 return state
         # New tx_id: mint and persist a default-state row so subsequent
         # gets see it immediately.

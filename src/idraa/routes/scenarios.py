@@ -1697,8 +1697,24 @@ async def get_wizard_step(
     tx: str | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
-) -> HTMLResponse:
+) -> Response:
     wiz = WizardStateService(db)
+    if tx is not None:
+        # Drafts-surfaced T4b (DA-4/DQ-10): an EXPLICITLY-provided tx that
+        # doesn't resolve to a live draft (swept/discarded/malformed/
+        # bookmarked) must NOT mint a phantom draft via get_or_create below
+        # — redirect with a friendly flash instead. Guarded BEFORE
+        # _resolve_tx/get_or_create run. The no-tx entry path (back-button /
+        # bare "+ New scenario") is untouched — it falls through unchanged.
+        try:
+            parsed_tx = uuid.UUID(tx)
+        except ValueError:
+            return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
+        existing = await wiz.get(user_id=user.id, tx_id=parsed_tx)
+        if existing is None:
+            return RedirectResponse(
+                url="/scenarios?draft_expired=1", status_code=status.HTTP_303_SEE_OTHER
+            )
     resolved_tx = await _resolve_tx(
         db, user_id=user.id, organization_id=user.organization_id, tx_str=tx
     )
@@ -2662,13 +2678,17 @@ async def cancel_wizard(
     if tx is None:
         return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 
+    # Drafts-surfaced T4b (DA-4/DA-8): guard the parse (malformed tx → 303,
+    # not 500) and call `clear` directly — no more mint-then-delete via
+    # get_or_create on an unknown tx. `clear` is a WHERE-delete, idempotent
+    # on a missing row.
+    try:
+        parsed_tx = uuid.UUID(tx)
+    except ValueError:
+        return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
+
     wiz = WizardStateService(db)
-    state = await wiz.get_or_create(
-        user_id=user.id,
-        organization_id=user.organization_id,
-        tx_id=uuid.UUID(tx),
-    )
-    await wiz.clear(user_id=user.id, tx_id=uuid.UUID(state.tx_id))
+    await wiz.clear(user_id=user.id, tx_id=parsed_tx)
     await db.commit()
     return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 

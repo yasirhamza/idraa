@@ -19,6 +19,7 @@ from idraa.models._types import now_utc
 from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.models.wizard_draft import WizardDraft
+from tests.conftest import csrf_post
 from tests.factories import create_user
 
 
@@ -358,3 +359,110 @@ async def test_badge_step1_targeting_draft_does_not_badge(
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert "data-reestimate-draft-badge" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# T4b: resume/discard robustness (spec §4b, DA-4/DA-8)
+# ---------------------------------------------------------------------------
+
+
+async def _draft_count(db: AsyncSession) -> int:
+    return len((await db.execute(select(WizardDraft))).scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_get_wizard_step_dead_tx_redirects_without_minting(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """(a) a random, well-formed but non-existent tx must 303 to /scenarios
+    and must NOT mint a fresh phantom draft (row count unchanged)."""
+    client, _org_id = authed_analyst
+    before = await _draft_count(db_session)
+    await db_session.close()
+
+    dead_tx = uuid.uuid4()
+    resp = await client.get(f"/scenarios/new/wizard/step/2?tx={dead_tx}", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/scenarios")
+
+    after = await _draft_count(db_session)
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_cancel_unknown_tx_redirects_without_write_pair(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """(b) cancel on an unknown tx must 303 without a mint-then-delete pair
+    (row count unchanged before/after)."""
+    client, _org_id = authed_analyst
+    before = await _draft_count(db_session)
+    await db_session.close()
+
+    unknown_tx = uuid.uuid4()
+    resp = await csrf_post(client, f"/scenarios/new/wizard/cancel?tx={unknown_tx}", data={})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/scenarios"
+
+    after = await _draft_count(db_session)
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_cancel_malformed_tx_returns_303_not_500(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """(c) cancel with tx=not-a-uuid must 303, never 500."""
+    client, _org_id = authed_analyst
+    resp = await csrf_post(client, "/scenarios/new/wizard/cancel?tx=not-a-uuid", data={})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/scenarios"
+
+
+@pytest.mark.asyncio
+async def test_no_tx_get_entry_still_mints_and_renders_step_1(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """(d) the no-tx entry path (bare '+ New scenario') is unchanged."""
+    client, _org_id = authed_analyst
+    before = await _draft_count(db_session)
+    await db_session.close()
+
+    resp = await client.get("/scenarios/new/wizard")
+    assert resp.status_code == 200
+
+    after = await _draft_count(db_session)
+    assert after == before + 1
+
+
+@pytest.mark.asyncio
+async def test_get_wizard_step_malformed_tx_returns_303_not_500(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """(e) DQ-10: a malformed tx on the resume path must 303, symmetrically
+    with cancel's malformed-tx handling — not 500."""
+    client, _org_id = authed_analyst
+    resp = await client.get("/scenarios/new/wizard/step/2?tx=not-a-uuid", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/scenarios")
+
+
+@pytest.mark.asyncio
+async def test_dead_tx_redirect_flash_renders_on_scenarios_list(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """(f) DQ-14: the dead-tx redirect's flash param must actually render a
+    'draft no longer exists' message on the follow-up /scenarios GET — the
+    friendly copy cannot silently no-op."""
+    client, _org_id = authed_analyst
+    dead_tx = uuid.uuid4()
+    resp = await client.get(f"/scenarios/new/wizard/step/2?tx={dead_tx}", follow_redirects=False)
+    assert resp.status_code == 303
+    location = resp.headers["location"]
+
+    follow_up = await client.get(location)
+    assert follow_up.status_code == 200
+    assert "no longer exists" in follow_up.text
