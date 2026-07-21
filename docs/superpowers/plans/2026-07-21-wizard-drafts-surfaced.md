@@ -127,16 +127,22 @@ tests/unit/test_wizard_state.py:150-154. `authed_analyst` yields
     (no default — the only caller passes the settings value; update the
     module docstring's stale "30min" reference).
   - **Boot sweep (DA-3, PRIMARY on scale-to-zero):** in `app.py`'s lifespan,
-    immediately after the existing boot `reap_orphaned_runs` call (~line
-    776), add an exception-guarded one-shot:
+    AFTER the existing reaper/retention `try/except` block CLOSES (~line
+    790 — NOT inside it: the sweep helper opens its own session and must
+    not nest inside the boot block's `async with get_session()` nor
+    double-wrap its exception handling — DQ-11), add a sibling one-shot:
     ```python
     try:
-        await _sweep_wizard_drafts(_settings)
+        await sweep_wizard_drafts(_settings)
     except Exception:
-        _logger.exception("Boot wizard-draft sweep failed; continuing startup")
+        logging.getLogger(__name__).exception(
+            "Boot wizard-draft sweep failed; continuing startup"
+        )
     ```
-    (import alongside the reaper imports at app.py:764; a sweep failure
-    must never block startup).
+    (app.py has NO module logger — the lifespan logs via
+    `logging.getLogger(__name__)` inline, see app.py:787/805 — DQ-9;
+    import `sweep_wizard_drafts` alongside the reaper imports at
+    app.py:764; a sweep failure must never block startup).
   - Both `config.py` field descriptions document the coupling (DQ-6): the
     new field notes "periodic sweep rides the run-reaper loop —
     RUN_REAPER_INTERVAL_SECONDS=0 disables it (boot sweep still runs)";
@@ -146,7 +152,7 @@ tests/unit/test_wizard_state.py:150-154. `authed_analyst` yields
     after the `reap_once` try/except, a SECOND isolated step:
     ```python
         try:
-            await _sweep_wizard_drafts(settings)
+            await sweep_wizard_drafts(settings)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -155,15 +161,15 @@ tests/unit/test_wizard_state.py:150-154. `authed_analyst` yields
     with (module-level, near `reap_once`; mirror its session pattern —
     READ how `reap_once` opens its session and copy that idiom):
     ```python
-    async def _sweep_wizard_drafts(settings: Settings) -> None:
+    async def sweep_wizard_drafts(settings: Settings) -> None:
         """Drafts-surfaced spec §4: TTL-sweep idle wizard drafts on the
-        reaper cadence. 0 days = disabled."""
+        reaper cadence (public name — consumed by both the boot one-shot
+        and the loop, DQ-13). 0 days = disabled."""
         ttl_days = settings.wizard_draft_ttl_days
         if ttl_days <= 0:
             return
-        from idraa.services.wizard_state import WizardStateService
-
         from idraa.db import get_session
+        from idraa.services.wizard_state import WizardStateService
 
         async with get_session() as session:  # the exact idiom reap_once uses (run_reaper.py:196-199)
             deleted = await WizardStateService(session).cleanup_expired(
@@ -182,7 +188,7 @@ tests/unit/test_wizard_state.py:150-154. `authed_analyst` yields
 
 **Files:**
 - Create: `alembic/versions/<rev>_prune_stale_wizard_drafts.py` (generate with `uv run alembic revision -m "prune stale wizard drafts"`; READ the newest existing revision first and chain `down_revision` correctly)
-- Test: `tests/migrations/` — follow the existing data-migration test pattern if one exists (grep `tests` for the #346 migration's test; if none exists, add a focused test that runs the upgrade body function against a seeded SQLite connection)
+- Test: `tests/migrations/` — use the EXISTING pytest-alembic harness (`tests/migrations/conftest.py`), following `test_audit_f2_vuln_framing.py:59-74` exactly (authoritative instructions in Step 2; never call the migration's `upgrade()` directly)
 
 - [ ] **Step 1:** Migration body (data-only, no schema):
 
@@ -298,15 +304,26 @@ random tx → 303 to `/scenarios` AND no new wizard_drafts row exists
 (count unchanged); (b) POST cancel with an unknown tx → 303, count
 unchanged (no mint-then-delete write pair — assert via row count before/
 after); (c) POST cancel with `tx=not-a-uuid` → 303 (not 500); (d) the
-no-tx GET entry path still mints + renders step 1 (unchanged behavior).
-- [ ] **Step 2:** `get_wizard_step`: when `tx` is provided, look the draft
-up first (`WizardStateService` needs a read-only `get(user_id, tx_id) ->
-WizardState | None` — add it beside `get_or_create`, same query minus the
-create branch); on miss: `build_flash("That draft no longer exists — it
-may have been discarded or expired.", "warning")` → 303 `/scenarios`
-(match the repo's flash-on-redirect pattern used by the delete-run fix in
-routes/runs.py — READ it and mirror the query-param + flash mechanics).
-No-tx path untouched. `cancel_wizard`: drop the `get_or_create` +
+no-tx GET entry path still mints + renders step 1 (unchanged behavior);
+(e) GET a wizard step with `tx=not-a-uuid` → 303 (not 500) — DQ-10: the
+resume path's `_resolve_tx` does a bare `uuid.UUID(tx_str)` today, so
+malformed resume links 500 symmetrically to cancel's case.
+- [ ] **Step 2:** `get_wizard_step`: the tx-provided branch is guarded
+BEFORE `_resolve_tx`/`get_or_create` runs (DQ-10 — `_resolve_tx` at
+routes/scenarios.py:1334 does a bare `uuid.UUID(tx_str)` and then
+`get_or_create`; it has THREE call sites (1579/1608/1828), so do NOT
+change `_resolve_tx` itself — scope the guard to `get_wizard_step`):
+`try: parsed = uuid.UUID(tx) except ValueError: → 303 /scenarios`; then
+the existence check via a new read-only
+`WizardStateService.get(user_id, tx_id) -> WizardState | None` (add it
+beside `get_or_create`, reusing the found-branch's whitelist-filter +
+version_token hydration at wizard_state.py:164-173; ideally
+`get_or_create` delegates its found-branch to it); on miss:
+`build_flash("That draft no longer exists — it may have been discarded
+or expired.", "warning")` → 303 `/scenarios` (mirror the delete-run
+query-param + flash mechanics in routes/runs.py:819-848, adding the
+analogous param handling to `list_scenarios`). Only on existence does
+the normal `_resolve_tx` path proceed. No-tx path untouched. `cancel_wizard`: drop the `get_or_create` +
 short-circuit dance; guard `uuid.UUID(tx)` in try/except ValueError → 303
 `/scenarios`; call `wiz.clear(user_id=user.id, tx_id=parsed)` directly
 (verify `clear` is a WHERE-delete safe on missing rows — READ it; if it
