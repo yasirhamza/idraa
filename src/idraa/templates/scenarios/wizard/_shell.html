@@ -59,7 +59,7 @@
       <li class="flex items-center gap-2 text-meta">
         <span class="w-6 h-6 rounded-full flex items-center justify-center text-micro
                      {% if is_done %}bg-status-success text-white
-                     {% elif is_current %}bg-brand text-white
+                     {% elif is_current %}bg-brand text-brand-contrast
                      {% else %}bg-surface-2 text-ink-3{% endif %}">
           {% if is_done %}✓{% else %}{{ i }}{% endif %}
         </span>

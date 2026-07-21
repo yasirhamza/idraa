@@ -10,7 +10,9 @@
   --color-ink-1:          #18181B;
   --color-ink-2:          #52525B;
   --color-ink-3:          #A1A1AA;
-  --color-brand:          #0F4C81;
+  --color-brand:          #37464F; /* graphite (#59 P3) */
+  --color-brand-contrast: #FFFFFF; /* foreground on brand fills — flips to near-black in dark (brand becomes a LIGHT fill) */
+  --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only — 2.77:1 on white) */
   --color-status-critical:#B91C1C;
   --color-status-warning: #B45309;
   --color-status-success: #15803D;
@@ -31,6 +33,20 @@
   --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
 
   --page-header-height: 4rem;
+
+  /* DaisyUI internal bridge (#59 P3, plan-gate Arch-3): the vendored DaisyUI
+     paints component internals (.alert, .stats, .modal-box, .badge-ghost,
+     .table-zebra, .tabs-boxed, menus) from these theme vars in the
+     oklch(var(--b1)/alpha) form. Re-ground them to the EXACT token values
+     (OKLCH component triplets — keep the alpha composition; do NOT use
+     --fallback-*, it flattens translucent variants). Triplets are derived
+     from the token hexes; re-derive if a token hex ever changes. */
+  --b1: 100.0000% 0.000000 89.875563;   /* surface-1 #FFFFFF */
+  --b2: 96.7434% 0.001326 286.375246;   /* surface-2 #F4F4F5 */
+  --b3: 87.1108% 0.005451 286.286023;   /* border-strong #D4D4D8 */
+  --bc: 21.0331% 0.005860 285.885153;   /* ink-1 #18181B */
+  --p:  38.4708% 0.024616 234.611538;   /* brand #37464F */
+  --pc: 100.0000% 0.000000 89.875563;   /* brand-contrast #FFFFFF */
 }
 
 /* Dark palette — applied when data-theme="dark" on <html>. */
@@ -43,7 +59,9 @@
   --color-ink-1:          #FAFAFA;
   --color-ink-2:          #A1A1AA;
   --color-ink-3:          #71717A;
-  --color-brand:          #3B82F6;
+  --color-brand:          #B8C6CC; /* graphite (#59 P3) */
+  --color-brand-contrast: #0A0A0B;
+  --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only) */
   --color-status-critical:#EF4444;
   --color-status-warning: #F59E0B;
   --color-status-success: #22C55E;
@@ -56,6 +74,14 @@
   --chart-appetite:      #D99A2B;
   /* Risk-reduction / value-of-controls bar color; SVG-only. */
   --chart-reduction:     #22C55E;
+
+  /* DaisyUI internal bridge — dark (see :root comment). */
+  --b1: 21.0331% 0.005860 285.885153;   /* surface-1 #18181B */
+  --b2: 27.3936% 0.005477 286.032639;   /* surface-2 #27272A */
+  --b3: 37.0323% 0.011880 285.805379;   /* border-strong #3F3F46 */
+  --bc: 98.5104% 0.000000 89.875563;    /* ink-1 #FAFAFA */
+  --p:  81.7627% 0.017546 225.240050;   /* brand #B8C6CC */
+  --pc: 14.5249% 0.002132 286.131340;   /* brand-contrast #0A0A0B */
 }
 
 /* === Token-backed utility classes (2026-05-23) ====================================
@@ -79,6 +105,8 @@
 .text-ink-2   { color: var(--color-ink-2); }
 .text-ink-3   { color: var(--color-ink-3); }
 .text-brand   { color: var(--color-brand); }
+.text-brand-contrast { color: var(--color-brand-contrast); }
+.ring-brand { --tw-ring-color: var(--color-brand); }
 .text-status-critical { color: var(--color-status-critical); }
 .text-status-warning  { color: var(--color-status-warning); }
 .text-status-success  { color: var(--color-status-success); }
@@ -217,13 +245,13 @@ form:has(.sticky-action-bar) :is(input, select, textarea) {
 }
 
 /* === Run-detail redesign (2026-07-03 spec) ==================================
-   Brand-navy primary actions — enumerated DaisyUI overrides, deliberately NOT
+   Brand primary actions — enumerated DaisyUI overrides, deliberately NOT
    a blanket --p theme override (that would recolor unaudited components).
    Audit before extending: grep templates for `-primary` classes. */
 .btn-primary {
   background-color: var(--color-brand);
   border-color: var(--color-brand);
-  color: #fff;
+  color: var(--color-brand-contrast);
 }
 .btn-primary:hover {
   background-color: color-mix(in srgb, var(--color-brand) 85%, black);
@@ -238,10 +266,10 @@ form:has(.sticky-action-bar) :is(input, select, textarea) {
    with DaisyUI defaults): DaisyUI's own
    `.tabs-boxed .tab-active` rule has equal specificity and loads after this
    sheet, so without !important the active tab renders DaisyUI-default purple
-   instead of brand navy (caught in the T8 visual smoke). */
+   instead of brand (caught in the T8 visual smoke). */
 .tabs-boxed .tab-active {
   background-color: var(--color-brand) !important;
-  color: #fff !important;
+  color: var(--color-brand-contrast) !important;
 }
 
 /* Caveat footnote chip (spec §Numbered caveat system). */

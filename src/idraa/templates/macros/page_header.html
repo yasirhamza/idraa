@@ -46,10 +46,10 @@
             even with `brand: 'var(--color-brand)'` in the config — silent miss
             results in a transparent button (verified 2026-05-23 against live).
             Tailwind utilities for layout/spacing still apply normally. -#}
-        {%- set cls = 'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white border border-transparent rounded hover:opacity-90 transition' -%}
+        {%- set cls = 'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-brand-contrast border border-transparent rounded hover:opacity-90 transition' -%}
         <a href="{{ a.href }}"
            class="{{ cls }}{% if a.requires_md %} hidden md:inline-flex{% endif %}"
-           style="background-color: var(--color-brand, #0F4C81);"
+           style="background-color: var(--color-brand, #37464F);"
            {%- if a.download %} hx-boost="false" download{% endif %}
            {%- if a.hx %}{% for k, v in a.hx.items() %} hx-{{ k }}="{{ v }}"{% endfor %}{% endif %}>
           {% if a.icon %}<span aria-hidden="true">{{ a.icon }}</span>{% endif %}
