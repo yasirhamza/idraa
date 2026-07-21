@@ -24,16 +24,19 @@
 
 ---
 
-### Task 1: Graphite tokens + inline fallbacks
+### Task 1: Graphite tokens, brand-contrast, DaisyUI bridge + inline fallbacks
 
 **Files:**
-- Modify: `src/idraa/static/css/app.css` (`:root` line ~13, `[data-theme="dark"]` line ~46)
-- Modify: `src/idraa/templates/macros/page_header.html:52`
-- Modify: `src/idraa/templates/macros/data_table.html:73`
+- Modify: `src/idraa/static/css/app.css` (`:root` line ~13, `[data-theme="dark"]` line ~46, `.btn-primary` ~line 224, `.tabs-boxed .tab-active` ~line 243, utilities block ~line 73)
+- Modify: `src/idraa/templates/macros/page_header.html` (line 52 fallback + line 49 `text-white`)
+- Modify: `src/idraa/templates/macros/data_table.html` (line 73 fallback + line 72 `text-white`)
+- Modify: `src/idraa/templates/setup/wizard.html:26,30`, `src/idraa/templates/scenarios/wizard/_shell.html:62`, `src/idraa/templates/fx_rates/form.html:33` (`text-white` → `text-brand-contrast`)
 - Test: `tests/integration/test_design_language_p3.py` (new file)
 
 **Interfaces:**
-- Produces: `--color-brand` = `#37464F` (light) / `#B8C6CC` (dark); `--color-logo-accent` = `#C89141` (both scopes). Tasks 2–3 rely on these exact values.
+- Produces: `--color-brand` = `#37464F` / `#B8C6CC`; `--color-logo-accent` = `#C89141` (both scopes); `--color-brand-contrast` = `#FFFFFF` / `#0A0A0B`; utilities `.text-brand-contrast`, `.ring-brand`; DaisyUI bridge vars `--b1/--b2/--b3/--bc/--p/--pc`. Tasks 2–4 rely on these exact names/values.
+
+- [ ] **Step 0: Verify sheet load order** — in `src/idraa/templates/base.html`, confirm the app sheet (`tailwind.css`) `<link>` comes AFTER the vendored DaisyUI `<link>` so equal-specificity `:root`/`[data-theme="dark"]` redefinitions win. If it does not, STOP and flag (do not silently reorder — the order is load-bearing for other overrides).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -41,10 +44,12 @@ Create `tests/integration/test_design_language_p3.py`:
 
 ```python
 """Design-language Phase 3 acceptance tests (issue #59): graphite palette,
-sonar-arcs logomark, base-* retirement, hamburger clearance."""
+brand-contrast, DaisyUI bridge, sonar-arcs logomark, color-class retirement,
+hamburger clearance."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -56,18 +61,50 @@ TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "src" / "idraa" / "templat
 
 
 async def test_graphite_brand_tokens() -> None:
-    """P3: the palette is graphite — light #37464F / dark #B8C6CC — and the
-    brass logo accent #C89141 exists in BOTH theme scopes."""
+    """P3: graphite palette — light #37464F / dark #B8C6CC — with the brass
+    logo accent and the brand-contrast foreground in BOTH theme scopes.
+
+    NOTE: rpartition, not partition — app.css line 3's header COMMENT
+    mentions the [data-theme="dark"] selector; the real block is the last
+    occurrence (plan-gate Q-1)."""
     css = APP_CSS_PATH.read_text(encoding="utf-8")
-    root, _, dark = css.partition('[data-theme="dark"]')
-    assert "--color-brand:          #37464F" in root
-    assert "--color-brand:          #B8C6CC" in dark
-    assert root.count("--color-logo-accent:    #C89141") == 1
-    assert dark.count("--color-logo-accent:    #C89141") == 1
+    root, _, dark = css.rpartition('[data-theme="dark"]')
+    assert re.search(r"--color-brand:\s+#37464F", root)
+    assert re.search(r"--color-brand:\s+#B8C6CC", dark)
+    assert re.search(r"--color-logo-accent:\s+#C89141", root)
+    assert re.search(r"--color-logo-accent:\s+#C89141", dark)
+    assert re.search(r"--color-brand-contrast:\s+#FFFFFF", root)
+    assert re.search(r"--color-brand-contrast:\s+#0A0A0B", dark)
     assert "#0F4C81" not in css
+
+
+async def test_brand_contrast_routing() -> None:
+    """Arch-1: no white-on-brand hardcodes survive — btn-primary and the
+    active chart tab route their foreground through --color-brand-contrast
+    (dark brand #B8C6CC is a LIGHT fill; white text would be ~1.7:1)."""
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    assert "text-brand-contrast" in css
+    assert "--tw-ring-color: var(--color-brand)" in css
+    for rule in (".btn-primary", ".tabs-boxed .tab-active"):
+        block = css.split(rule, 1)[1].split("}", 1)[0]
+        assert "var(--color-brand-contrast)" in block, rule
+        assert "#fff" not in block, rule
+
+
+async def test_daisyui_bridge_vars() -> None:
+    """Arch-3: DaisyUI component internals (--b1/--b2/--b3/--bc/--p/--pc)
+    are re-grounded to token-equivalent OKLCH triplets in both scopes so
+    alerts/stats/modals/tabs match token surfaces."""
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    root, _, dark = css.rpartition('[data-theme="dark"]')
+    for var in ("--b1:", "--b2:", "--b3:", "--bc:", "--p:", "--pc:"):
+        assert var in root, f"{var} missing in :root"
+        assert var in dark, f"{var} missing in dark scope"
+    assert "21.0331% 0.005860 285.885153" in root   # light --bc = ink-1 #18181B
+    assert "21.0331% 0.005860 285.885153" in dark   # dark --b1 = surface-1 #18181B
 ```
 
-- [ ] **Step 2: Run it — expect FAIL** (`#0F4C81` still present):
+- [ ] **Step 2: Run it — expect FAIL:**
 
 `SESSION_SECRET=p3-graphite-implement uv run pytest tests/integration/test_design_language_p3.py -q --no-cov` → FAIL
 
@@ -77,6 +114,7 @@ In `app.css` `:root` (whitespace-aligned like neighbors):
 
 ```css
   --color-brand:          #37464F; /* graphite (#59 P3) */
+  --color-brand-contrast: #FFFFFF; /* foreground on brand fills — flips to near-black in dark (brand becomes a LIGHT fill) */
   --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only — 2.77:1 on white) */
 ```
 
@@ -84,20 +122,64 @@ In `[data-theme="dark"]`:
 
 ```css
   --color-brand:          #B8C6CC; /* graphite (#59 P3) */
+  --color-brand-contrast: #0A0A0B;
   --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only) */
 ```
 
-In `macros/page_header.html:52` and `macros/data_table.html:73`, change
-`var(--color-brand, #0F4C81)` → `var(--color-brand, #37464F)`.
+In the token-utilities block (next to `.text-brand`):
 
-- [ ] **Step 4: Rebuild sheet + run test — expect PASS**
+```css
+.text-brand-contrast { color: var(--color-brand-contrast); }
+.ring-brand { --tw-ring-color: var(--color-brand); }
+```
+
+DaisyUI bridge — add at the END of the `:root` block (with this comment) and the matching dark values at the end of `[data-theme="dark"]`:
+
+```css
+  /* DaisyUI internal bridge (#59 P3, plan-gate Arch-3): the vendored DaisyUI
+     paints component internals (.alert, .stats, .modal-box, .badge-ghost,
+     .table-zebra, .tabs-boxed, menus) from these theme vars in the
+     oklch(var(--b1)/alpha) form. Re-ground them to the EXACT token values
+     (OKLCH component triplets — keep the alpha composition; do NOT use
+     --fallback-*, it flattens translucent variants). Triplets are derived
+     from the token hexes; re-derive if a token hex ever changes. */
+  --b1: 100.0000% 0.000000 89.875563;   /* surface-1 #FFFFFF */
+  --b2: 96.7434% 0.001326 286.375246;   /* surface-2 #F4F4F5 */
+  --b3: 87.1108% 0.005451 286.286023;   /* border-strong #D4D4D8 */
+  --bc: 21.0331% 0.005860 285.885153;   /* ink-1 #18181B */
+  --p:  38.4708% 0.024616 234.611538;   /* brand #37464F */
+  --pc: 100.0000% 0.000000 89.875563;   /* brand-contrast #FFFFFF */
+```
+
+Dark scope:
+
+```css
+  /* DaisyUI internal bridge — dark (see :root comment). */
+  --b1: 21.0331% 0.005860 285.885153;   /* surface-1 #18181B */
+  --b2: 27.3936% 0.005477 286.032639;   /* surface-2 #27272A */
+  --b3: 37.0323% 0.011880 285.805379;   /* border-strong #3F3F46 */
+  --bc: 98.5104% 0.000000 89.875563;    /* ink-1 #FAFAFA */
+  --p:  81.7627% 0.017546 225.240050;   /* brand #B8C6CC */
+  --pc: 14.5249% 0.002132 286.131340;   /* brand-contrast #0A0A0B */
+```
+
+Foreground routing:
+- `.btn-primary` block: `color: #fff;` → `color: var(--color-brand-contrast);`
+- `.tabs-boxed .tab-active` block: `color: #fff !important;` → `color: var(--color-brand-contrast) !important;`
+- `macros/page_header.html:49` and `macros/data_table.html:72`: `text-white` → `text-brand-contrast` (keep every other class).
+- `setup/wizard.html:26,30`, `scenarios/wizard/_shell.html:62`, `fx_rates/form.html:33`: `bg-brand text-white` → `bg-brand text-brand-contrast`.
+- `macros/page_header.html:52` and `macros/data_table.html:73`: `var(--color-brand, #0F4C81)` → `var(--color-brand, #37464F)`.
+
+- [ ] **Step 4: Rebuild sheet + run tests — expect PASS**
 
 ```bash
 SESSION_SECRET=p3-graphite-implement uv run python -m idraa.tasks.build_css
 SESSION_SECRET=p3-graphite-implement uv run pytest tests/integration/test_design_language_p3.py tests/integration/test_design_language_p1.py -q --no-cov
 ```
 
-- [ ] **Step 5: Commit** — `feat(design): graphite brand tokens + logo-accent token (#59 P3 T1)`
+Also verify the rebuilt `tailwind.css` contains `.text-brand-contrast` (grep).
+
+- [ ] **Step 5: Commit** — `feat(design): graphite tokens, brand-contrast routing, DaisyUI bridge (#59 P3 T1)`
 
 ---
 
@@ -196,8 +278,9 @@ Also flip the P1 pin at `test_design_language_p1.py:47`:
 **Files:**
 - Modify: `src/idraa/services/pdf_theme.py` (PDFColors.brand, +logo_accent, brand_logomark rewrite, source-of-truth comment block)
 - Modify: `src/idraa/services/workbook_theme.py:18`
-- Modify: `tests/unit/test_pdf_theme.py` (brand pin + `test_brand_logomark_drawing`)
-- Modify: `tests/unit/test_workbook_theme.py`, `tests/services/test_verification_workbook_formatting.py` (brand hex pins `#0F4C81` → `#37464F`; READ each pin's context first — only brand pins change, not other colors)
+- Modify: `src/idraa/services/pdf_report.py` — rename `_BRAND_BLUE` → `_BRAND` (~line 138 + all uses) and update the stale `#0F4C81`/"brand blue"/"navy" COMMENTS (~lines 124, 531, 620, 950, 2047). Do NOT touch the chart-legend string "With controls (blue)" (~line 1353) — it refers to `chart_residual` #1E6BB0, which is correct and unchanged.
+- Modify: `tests/unit/test_pdf_theme.py` (brand pin `#37464F`; ADD `logo_accent` to the `_TOKENS` drift-pin dict at ~line 11; rewrite `test_brand_logomark_drawing`)
+- Modify: `tests/unit/test_workbook_theme.py` (brand hex pin), `tests/services/test_verification_workbook_formatting.py` — CAREFUL (plan-gate Q-2): the fill pin at line 332 is stored as ARGB **`FF0F4C81` → `FF37464F`** (a literal `#`-replace misses it); the nearby `FFE7EEF6` legacy-accent assert is UNTOUCHED; also rename the `..._brand_navy_...` test + re-word its "brand-navy (#0F4C81)" docstring to graphite. READ each pin's context first — only brand pins change, not other colors.
 
 **Interfaces:**
 - Consumes: mark geometry from Task 2 (same numbers, Bézier-approximated).
@@ -222,7 +305,8 @@ def test_brand_logomark_drawing():
     assert pdf_theme.PDFColors.logo_accent in fill_colors
 ```
 
-In the two workbook test files change every `#0F4C81` BRAND pin to `#37464F`.
+In the two workbook test files change every BRAND pin: `#0F4C81` → `#37464F`
+AND the ARGB form `FF0F4C81` → `FF37464F` (test_verification_workbook_formatting.py:332).
 
 - [ ] **Step 2: Run the three test files — expect FAIL.**
 
@@ -305,55 +389,97 @@ def brand_logomark(width: float = 22.0) -> Drawing:
 
 `SESSION_SECRET=p3-graphite-implement uv run pytest tests/unit/test_pdf_theme.py tests/unit/test_workbook_theme.py tests/services/test_verification_workbook_formatting.py -q --no-cov`
 
+Also in `test_pdf_theme.py`, extend the `_TOKENS` drift pin (plan-gate Q-8):
+`"logo_accent": "#C89141",` so a future accent edit trips the palette test.
+
 - [ ] **Step 5: Commit** — `feat(design): graphite PDF/workbook brand + sonar-arcs PDF port (#59 P3 T3)`
 
 ---
 
-### Task 4: Retire DaisyUI `base-*` color classes (111 usages)
+### Task 4: Retire DaisyUI color classes (base-* + semantic families, ~136 usages)
 
 **Files:**
-- Modify: every template under `src/idraa/templates/` matching `-base-` color utilities (~30 files; enumerate with the grep below)
+- Modify: every template under `src/idraa/templates/` matching the class families below (~30+ files; enumerate with the grep below)
 - Test: append guard to `tests/integration/test_design_language_p3.py`
 
-**Interfaces:** none produced; purely mechanical per the spec's mapping table.
+**Interfaces:** Consumes `.text-brand-contrast` / `.ring-brand` (Task 1). Purely mechanical per the spec's mapping table otherwise.
 
 - [ ] **Step 1: Write the failing guard test**
 
 ```python
-_BASE_CLASS_RE = r"(?:bg|text|border|from|to|ring|divide)-base-"
+_DAISY_COLOR_CLASS_RE = (
+    r"(?:bg|text|border|ring|from|to|divide)-"
+    r"(?:base-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
+)
 
 
-async def test_no_daisyui_base_color_classes() -> None:
-    """P3: the DaisyUI base-* color system is retired — all fills/text/borders
-    route through the app.css tokens (single color system). Guard against
-    re-introduction."""
+async def test_no_daisyui_color_classes() -> None:
+    """P3: DaisyUI color utilities (base-* AND the semantic families) are
+    retired from templates — fills/text/borders route through the app.css
+    tokens. Component classes (btn, alert, badge...) are exempt: their
+    internals are re-grounded by the Task-1 bridge. Guard against
+    re-introduction (Arch-2)."""
     import re
 
     offenders: list[str] = []
     for path in sorted(TEMPLATES_DIR.rglob("*.html")):
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(_BASE_CLASS_RE, line):
+            if re.search(_DAISY_COLOR_CLASS_RE, line):
                 offenders.append(f"{path.relative_to(TEMPLATES_DIR)}:{i}")
-    assert not offenders, f"DaisyUI base-* color classes found: {offenders[:20]}"
+    assert not offenders, f"DaisyUI color classes found: {offenders[:20]}"
+
+
+async def test_no_legacy_brand_hex() -> None:
+    """Arch-7: the retired brand navy may not reappear anywhere first-party
+    (templates, CSS, services, JS) — vendored assets excluded."""
+    src = Path(__file__).resolve().parents[2] / "src" / "idraa"
+    offenders: list[str] = []
+    for path in sorted(src.rglob("*")):
+        if not path.is_file() or "static/vendor" in str(path).replace("\\", "/"):
+            continue
+        if path.suffix not in {".py", ".html", ".css", ".js", ".svg"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "0F4C81" in text.upper().replace("#", ""):
+            offenders.append(str(path.relative_to(src)))
+    assert not offenders, f"legacy brand hex #0F4C81/FF0F4C81 found in: {offenders}"
+
+
+async def test_rebuilt_sheet_has_hover_surface() -> None:
+    """Arch-4: the JIT build must generate hover:bg-surface-2 (destination of
+    the 5 hover:bg-base-200 swaps, incl. 2 Alpine :class strings)."""
+    sheet = APP_CSS_PATH.parent / "tailwind.css"
+    assert "hover\\:bg-surface-2" in sheet.read_text(encoding="utf-8")
 ```
 
-- [ ] **Step 2: Run — expect FAIL with ~111 offender lines.**
+- [ ] **Step 2: Run — expect FAIL** (offenders listed; the hex guard may already pass if Tasks 1–3 landed first — that is fine, it is a ratchet).
 
-- [ ] **Step 3: Mechanical replacement** — exact mapping (whole-token replace, preserving surrounding classes):
+- [ ] **Step 3: Mechanical replacement** — exact mapping (whole-token replace, preserving surrounding classes; 2 sites are inside Alpine `:class` STRINGS — `controls/_assignment_row.html:176`, `scenarios/_attack_mapping_row.html:113` — edit inside the quoted JS string, keep quoting intact):
 
 | from | to |
 |---|---|
 | `bg-base-100` | `bg-surface-1` |
+| `hover:bg-base-200` | `hover:bg-surface-2` |
 | `bg-base-200` | `bg-surface-2` |
 | `border-base-300` | `border-border-strong` |
 | `border-base-200` | `border-border-subtle` |
 | `text-base-content/70` | `text-ink-2` |
 | `text-base-content/60` | `text-ink-2` |
 | `text-base-content/50` | READ the context: decorative glyph → `text-ink-3`, readable text → `text-ink-2` |
+| `bg-primary` | `bg-brand` |
+| `text-primary-content` | `text-brand-contrast` |
+| `text-primary` | `text-brand` |
+| `ring-primary` | `ring-brand` |
+| `text-error` | `text-status-critical` |
+| `border-error` | `border-status-critical` |
+| `text-success` | `text-status-success` |
+| `text-warning` | `text-status-warning` |
 
-Enumerate first: `grep -rEln '(bg|text|border)-base-' src/idraa/templates`.
-Apply with sed or per-file edits; then verify zero remain:
-`grep -rEn '(bg|text|border|from|to|ring|divide)-base-' src/idraa/templates` → empty.
+Replacement ORDER matters where prefixes overlap: replace `hover:bg-base-200`
+before `bg-base-200`, `text-primary-content` before `text-primary`.
+
+Enumerate first: `grep -rEln '(bg|text|border|ring)-(base-|primary|error|success|warning)' src/idraa/templates`.
+Then verify zero remain with the guard regex.
 
 - [ ] **Step 4: Rebuild sheet + full design tests — expect PASS:**
 
@@ -362,7 +488,7 @@ SESSION_SECRET=p3-graphite-implement uv run python -m idraa.tasks.build_css
 SESSION_SECRET=p3-graphite-implement uv run pytest tests/integration/test_design_language_p3.py tests/integration/test_design_language_p1.py -q --no-cov
 ```
 
-- [ ] **Step 5: Commit** — `refactor(design): retire DaisyUI base-* color classes for token utilities (#59 P3 T4)`
+- [ ] **Step 5: Commit** — `refactor(design): retire DaisyUI color classes for token utilities (#59 P3 T4)`
 
 ---
 
@@ -376,10 +502,12 @@ SESSION_SECRET=p3-graphite-implement uv run pytest tests/integration/test_design
 
 **DO NOT touch `help/_article.html`** (shared with the drawer partial) or `help/article_page.html` (already clear via the breadcrumb macro).
 
-- [ ] **Step 1: Write the failing tests** — NOTE: `/library/import` is
-ADMIN-gated (`require_role(UserRole.ADMIN)`, routes/library.py:304), so use
-the `authed_admin` fixture (tests/conftest.py:243), which can reach all
-three pages:
+- [ ] **Step 1: Write the failing tests** — NOTE (citations corrected at
+plan-gate, Q-3): `/library/import` GET is ADMIN-gated
+(`routes/library_import.py:51-52`), `/scenarios/import` GET is ADMIN-gated
+(`routes/scenario_import.py:49-52`), `/help` needs only `require_user`
+(`routes/help.py:26`) — so use the `authed_admin` fixture
+(tests/conftest.py:243), which reaches all three pages:
 
 ```python
 async def test_hand_authored_headers_clear_hamburger(
@@ -396,18 +524,59 @@ async def test_hand_authored_headers_clear_hamburger(
         assert "pl-16 md:pl-0" in r.text, f"{path} header lacks hamburger clearance"
 ```
 
-- [ ] **Step 2: Run — expect FAIL on all three paths.**
+Additionally (Arch-5 — durable guard; this bug class has recurred twice), a
+sweep test with an explicit allowlist:
+
+```python
+# Templates whose <h1> demonstrably renders BELOW the mobile burger band
+# (result/preview/expired flows render h1 inside cards mid-page) or which
+# render WITHOUT the sidebar shell (login, setup) or only inside the help
+# drawer (partials). Verified at 390px during P3; a new entry here requires
+# the same verification.
+_H1_CLEARANCE_ALLOWLIST = {
+    "auth/login.html",
+    "setup/wizard.html",
+    "help/_article.html",
+    "help/article_page.html",  # breadcrumb macro precedes the h1 — clear
+    # ... implementer: seed with the full current grep -L list, one line
+    # per file, after VERIFYING each is genuinely below-band/no-sidebar.
+}
+
+
+async def test_hand_authored_h1_headers_have_clearance() -> None:
+    """Arch-5: any template with an <h1> that neither uses the page_header
+    macro nor carries pl-16 clearance must be allowlisted (verified
+    below-band). A new top-of-page hand-authored header fails HERE, not in
+    UAT."""
+    offenders: list[str] = []
+    for path in sorted(TEMPLATES_DIR.rglob("*.html")):
+        rel = str(path.relative_to(TEMPLATES_DIR)).replace("\\", "/")
+        text = path.read_text(encoding="utf-8")
+        if "<h1" not in text or rel in _H1_CLEARANCE_ALLOWLIST:
+            continue
+        if "page_header" in text or "pl-16" in text:
+            continue
+        offenders.append(rel)
+    assert not offenders, (
+        f"templates with unprotected <h1> headers (add pl-16 md:pl-0 or "
+        f"page_header, or allowlist WITH 390px verification): {offenders}"
+    )
+```
+
+- [ ] **Step 2: Run — expect FAIL on all three paths (and possibly more allowlist candidates — verify each at 390px before allowlisting).**
 
 - [ ] **Step 3: Implement.** `help/index.html`: `<header class="mb-8">` →
 `<header class="mb-8 pl-16 md:pl-0">`. In each import template, add
 `pl-16 md:pl-0` to BOTH the breadcrumb `<p class="text-sm ... mb-1">` and the
 `<h1 class="text-2xl font-bold mb-2">` (both sit in the burger's fixed band;
-matches the `page_header` macro's clearance convention). Add a one-line Jinja
-comment above each: `{# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}`.
+same clearance idea as page_header's `pl-16 pr-4 md:px-6` — the reset
+differs because these headers sit inside padded containers). Add a one-line
+Jinja comment above each: `{# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}`.
+Seed `_H1_CLEARANCE_ALLOWLIST` from `grep -rLl "page_header\|pl-16" $(grep -rll "<h1" src/idraa/templates -r)` — verify each candidate renders below-band at 390px (the import_result/preview/expired families render h1 inside cards; login/setup have no sidebar).
 
 - [ ] **Step 4: Rebuild sheet (`pl-16`/`md:pl-0` may be new to these files' class inventory) + run — expect PASS.**
 
-- [ ] **Step 5: Commit** — `fix(ui): hamburger clearance on hand-authored page headers (#59 P3 T5)`
+- [ ] **Step 5: Commit** — `fix(ui): hamburger clearance on hand-authored page headers + durable guard (#59 P3 T5)`
 
 ---
 
@@ -443,7 +612,12 @@ and fix land together; the pin must match the shipped markup.)
 
 - [ ] **Step 2: Run — expect FAIL.**
 
-- [ ] **Step 3: Implement the minimal hint constraint.**
+- [ ] **Step 3: Implement the minimal hint constraint.** In the SAME file
+(plan-gate Q-4), also map the 3 `text-gray-*` usages (~lines 77, 244) to ink
+tokens: `text-gray-600` → `text-ink-2`; `text-gray-500` → `text-ink-3` if
+decorative in context, else `text-ink-2` — completing the single-color-system
+claim. Optionally extend the Task-4 guard regex with `|gray-` afterwards if
+no other `-gray-` usages exist repo-wide (check first).
 
 - [ ] **Step 4: Rebuild sheet + run the design tests — PASS. Then Playwright-verify at 1440×900** (script in Task 7 covers it; a quick manual check here is fine: load wizard step 4 with a library-referenced scenario, assert the SME name input's full placeholder is visible).
 
@@ -456,5 +630,6 @@ and fix land together; the pin must match the shipped markup.)
 - [ ] **Step 1: Full local gate:** `SESSION_SECRET=p3-graphite-implement uv run pytest -q -m "not e2e"` + `uv run ruff check .` + `uv run ruff format --check .` + `uv run mypy src`
 - [ ] **Step 2: Chart e2e explicitly:** `uv run pytest tests/e2e/test_chart_hydration_e2e.py -q --no-cov -m e2e`
 - [ ] **Step 3: Playwright sweep** (local dev server, fresh sheet): dashboard, run detail, wizard step 4, /help, /library/import at 1440×900 and 390×844, light + dark. Assert: no DaisyUI default grays (spot-check computed colors), sonar-arcs mark present, hamburger-collision sweep (the §5 evaluate() script from the spec investigation) returns clear on ALL swept paths, SME name input unclipped.
-- [ ] **Step 4: PDF eyeball:** render the executive PDF via the production renderer (pattern: `scratchpad/gen_sample_report.py` from the deck work — `_make_completed_single_run` + `build_executive_pdf_data` + `render_executive_pdf`, `ENVIRONMENT=test`) and confirm the header mark is sonar-arcs with brass dot and chrome is graphite.
-- [ ] **Step 5: Commit any stragglers; branch ready for final gate.**
+- [ ] **Step 4: PDF eyeball:** render the executive PDF via the production renderer (pattern: `scratchpad/gen_sample_report.py` from the deck work — `_make_completed_single_run` + `build_executive_pdf_data` + `render_executive_pdf`, `ENVIRONMENT=test`) and confirm the header mark is sonar-arcs with brass dot and chrome is graphite. Check mark SIZE/placement (plan-gate Q-7): the arcs occupy a smaller, left-of-center portion of the 22×22 Drawing than the old corner-to-corner curve — if under-sized, bump the `brand_logomark(width=...)` call site, do not distort geometry.
+- [ ] **Step 5: Open the follow-on GH issue** (spec Out-of-scope / plan-gate Arch-3): "DaisyUI status-family bridge (`--er/--su/--wa/--in`) — align alert/badge component internals with `--color-status-*` tokens", labeled design-language, referencing #59 and this plan.
+- [ ] **Step 6: Commit any stragglers; branch ready for final gate.**

@@ -37,11 +37,48 @@ so `logo_ink` must NOT exist (arcs stroke = `PDFColors.brand`).
 
 ## Scope
 
-### 1. Token swap (the palette lands)
+### 1. Token swap (the palette lands) + brand-contrast + DaisyUI bridge
 
 - `app.css` `:root`: `--color-brand: #37464F`; `[data-theme="dark"]`:
   `--color-brand: #B8C6CC`. Add `--color-logo-accent: #C89141` to BOTH
   scopes (same hue both themes).
+- **`--color-brand-contrast` (plan-gate Arch-1 BLOCKER):** light `#FFFFFF`,
+  dark `#0A0A0B`. The dark brand flip inverts brand from a dark fill to a
+  LIGHT fill — every `color: #fff`-on-brand surface becomes ~1.7:1
+  unreadable in dark. All white-on-brand foregrounds route through the new
+  token: `app.css` `.btn-primary` and `.tabs-boxed .tab-active` (`color:
+  var(--color-brand-contrast)`), a new `.text-brand-contrast` utility, and
+  the six `text-white`-over-brand template sites
+  (`macros/page_header.html:49`, `macros/data_table.html:72`,
+  `setup/wizard.html:26,30`, `scenarios/wizard/_shell.html:62`,
+  `fx_rates/form.html:33`) become `text-brand-contrast`. Also add
+  `.ring-brand { --tw-ring-color: var(--color-brand); }` (consumed by §4's
+  `ring-primary` retirement).
+- **DaisyUI internal bridge (plan-gate Arch-3):** the vendored DaisyUI
+  paints component internals (`.alert`, `.stats`, `.modal-box`,
+  `.badge-ghost`, `.table-zebra`, `.tabs-boxed`, dropdown/menu surfaces)
+  from its own `--b1/--b2/--b3/--bc/--p/--pc` theme variables in the
+  `oklch(var(--b1)/α)` form — in dark those are blue-tinted (`--b1` ≈
+  `#1D232A`) and will visibly mismatch token surfaces (`#18181B`).
+  `app.css` therefore redefines the six variables per theme scope as
+  OKLCH component triplets EQUAL to the tokens (keeping the `oklch(var/α)`
+  alpha composition intact — do NOT use `--fallback-*`, which flattens
+  translucent variants):
+
+  | var | light (token) | dark (token) |
+  |---|---|---|
+  | `--b1` (surface-1) | `100.0000% 0.000000 89.875563` (#FFFFFF) | `21.0331% 0.005860 285.885153` (#18181B) |
+  | `--b2` (surface-2) | `96.7434% 0.001326 286.375246` (#F4F4F5) | `27.3936% 0.005477 286.032639` (#27272A) |
+  | `--b3` (border-strong) | `87.1108% 0.005451 286.286023` (#D4D4D8) | `37.0323% 0.011880 285.805379` (#3F3F46) |
+  | `--bc` (ink-1) | `21.0331% 0.005860 285.885153` (#18181B) | `98.5104% 0.000000 89.875563` (#FAFAFA) |
+  | `--p` (brand) | `38.4708% 0.024616 234.611538` (#37464F) | `81.7627% 0.017546 225.240050` (#B8C6CC) |
+  | `--pc` (brand-contrast) | `100.0000% 0.000000 89.875563` (#FFFFFF) | `14.5249% 0.002132 286.131340` (#0A0A0B) |
+
+  Load-order prerequisite (implementer verifies): the app sheet must load
+  AFTER the vendored DaisyUI sheet in `base.html` so the equal-specificity
+  redefinitions win. DaisyUI's STATUS family (`--er/--su/--wa/--in` —
+  alert-error/badge-success internals) is deliberately NOT bridged in P3;
+  a follow-on issue is opened at PR time (see Out of scope).
 - Update the two hardcoded `var(--color-brand, #0F4C81)` fallbacks
   (`macros/page_header.html:52`, `macros/data_table.html:73`) to the new
   light hex `#37464F` (they are light-theme-first inline fallbacks).
@@ -79,7 +116,10 @@ Geometry (32×32 viewBox, bilateral about x=16, vertically centered):
   read CSS custom properties — the P1-sanctioned exception) with an
   internal `@media (prefers-color-scheme: dark)` style switching ink
   `#37464F → #B8C6CC` so the mark stays visible on dark browser chrome;
-  dot `#C89141`. Sync comment updated.
+  dot `#C89141`. Sync comment updated, including (plan-gate Arch-8) an
+  explicit sentence that the favicon follows the BROWSER's scheme, not the
+  in-app `data-theme` toggle — tab chrome is browser-themed, so this
+  divergence is deliberate and must not be "fixed".
 - Test pins in `tests/integration/test_design_language_p1.py`: sidebar pin
   becomes `"M9.5 19 A 9 9 0 0 1 22.5 19"`.
 
@@ -95,37 +135,67 @@ Geometry (32×32 viewBox, bilateral about x=16, vertically centered):
   55% alpha, dot at (16, 20.5) r 2.6 filled `logo_accent`. Arc strokes =
   `PDFColors.brand` (NO `logo_ink` — see Reference implementation).
 - `services/workbook_theme.py:18`: `brand = "#37464F"`.
-- Pin-test updates: `tests/unit/test_pdf_theme.py` (brand hex pin +
+- `services/pdf_report.py` naming sweep (plan-gate Arch-6/Q-5): rename
+  `_BRAND_BLUE` → `_BRAND` and update the `#0F4C81`/"brand blue"/"navy"
+  comments (lines ~124, ~531, ~620, ~950, ~2047). The chart-legend string
+  "With controls (blue)" stays — it refers to `chart_residual` (#1E6BB0,
+  untouched chart palette), not brand.
+- Pin-test updates: `tests/unit/test_pdf_theme.py` (brand hex pin, add
+  `logo_accent` to the `_TOKENS` drift pin, and the
   `test_brand_logomark_drawing` shape/color assertions),
-  `tests/unit/test_workbook_theme.py`,
-  `tests/services/test_verification_workbook_formatting.py` (brand hex
-  pins).
+  `tests/unit/test_workbook_theme.py`, and
+  `tests/services/test_verification_workbook_formatting.py` — NOTE
+  (plan-gate Q-2): the workbook fill pin at line 332 is stored as ARGB
+  `FF0F4C81` and becomes `FF37464F` (a literal `#`-prefixed replace misses
+  it); the `FFE7EEF6` legacy-accent assert nearby is untouched; the
+  `..._brand_navy_...` test name + docstring re-worded to graphite
+  (plan-gate Q-5).
 
-### 4. DaisyUI `base-*` retirement (kill the parallel color system)
+### 4. DaisyUI utility-class retirement (kill the parallel color system)
 
-All 111 `-base-` color-utility usages in `src/idraa/templates/` are
-replaced with token utilities, so the tokens are the ONLY color system
-(per the project's kill-dead-optionality preference). Mapping:
+All DaisyUI COLOR-utility usages in `src/idraa/templates/` — the 111
+`-base-` family (spec original) PLUS the ~25 semantic-family stragglers
+found at plan-gate (Arch-2) — are replaced with token utilities. Mapping:
 
 | DaisyUI class | count | token utility |
 |---|---|---|
 | `bg-base-100` | 25 | `bg-surface-1` |
-| `bg-base-200` | 17 | `bg-surface-2` |
+| `bg-base-200` | 12 | `bg-surface-2` |
+| `hover:bg-base-200` | 5 | `hover:bg-surface-2` (2 sites are inside Alpine `:class` strings — `controls/_assignment_row.html:176`, `scenarios/_attack_mapping_row.html:113`) |
 | `border-base-300` | 16 | `border-border-strong` |
 | `border-base-200` | 2 | `border-border-subtle` |
 | `text-base-content/70` | 18 | `text-ink-2` |
 | `text-base-content/60` | 32 | `text-ink-2` |
 | `text-base-content/50` | 1 | `text-ink-3` if decorative in context, else `text-ink-2` |
+| `bg-primary` (incl. Alpine `:class`) | 3 | `bg-brand` |
+| `text-primary-content` | 2 | `text-brand-contrast` |
+| `text-primary` | 1 | `text-brand` |
+| `ring-primary` | 1 | `ring-brand` (utility added in §1) |
+| `text-error` | 7 | `text-status-critical` |
+| `border-error` | 3 | `border-status-critical` |
+| `text-success` | 5 | `text-status-success` |
+| `text-warning` | 3 | `text-status-warning` |
 
 The /60 vs /70 distinction deliberately flattens to `ink-2`: the ink scale
 has no AA-passing tier between ink-2 (7.0:1) and ink-3 (2.5:1), and /60
 text was body-legible, so both map up, never down. DaisyUI COMPONENT
-classes (`btn`, `badge`, `alert`, `join`, …) are untouched — their brand
-colors already route through tokens via the P1 overrides in app.css.
+classes (`btn`, `badge`, `alert`, `join`, …) are untouched as classes —
+their internals are re-grounded via the §1 OKLCH bridge.
 
-Guard: a unit test that scans `src/idraa/templates/**/*.html` and asserts
-zero matches of `(bg|text|border|from|to|ring|divide)-base-`, so the
-parallel system cannot creep back.
+Guards (one test, three assertions):
+- zero template matches of
+  `(bg|text|border|ring|from|to|divide)-(base-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)`
+  (word-bounded so `text-base` the font-size and `link-error`-style
+  component modifiers, if any appear, are judged deliberately);
+- zero occurrences of `#0F4C81`/`FF0F4C81` anywhere under `src/idraa/`
+  excluding `static/vendor/` (plan-gate Arch-7 — repo-wide old-hex guard);
+- the rebuilt `tailwind.css` contains `hover\:bg-surface-2` (the JIT build
+  generates it from the registered `theme.extend.colors`; verified in
+  `tailwind.config.js:21-31` at plan-gate).
+
+Remaining known non-token colors after this task: the 3 `text-gray-*`
+usages in `_fair_params_form_inner.html` (folded into §6, which already
+edits that file) — after which templates carry token utilities only.
 
 ### 5. Fixed-hamburger clearance (UAT 2026-07-21 bug class)
 
@@ -141,18 +211,35 @@ sweep at 390px of all sidebar destinations + import flows):
 - `/library/import` (`library/import.html` breadcrumb `<p>` + H1).
 - `/scenarios/import` (`scenarios/import.html` breadcrumb `<p>` + H1).
 
-Fix: mobile-only left clearance (`pl-16 md:pl-0` on the page-top header
-block, matching the page_header convention), one string-pin regression
-test per template. All other swept pages are clear; the sweep script
-pattern lives in the plan for reuse.
+Fix: mobile-only left clearance — `pl-16 md:pl-0` on the page-top header
+block. (Same clearance IDEA as `page_header.html:31`'s `pl-16 pr-4
+md:px-6`; the reset differs because these headers sit inside padded
+containers rather than full-bleed.) One string-pin regression test per
+template, PLUS a durable allowlist sweep guard (plan-gate Arch-5 — this
+bug class has now recurred twice): a unit test scans every template for
+`<h1` where the file (a) extends `base.html`, (b) does not use the
+`page_header` macro, (c) carries no `pl-16` clearance, and (d) is not in
+an explicit allowlist of templates whose `<h1` demonstrably renders below
+the burger band (import result/preview/expired pages, standalone no-
+sidebar pages like login/setup, drawer partials). A future hand-authored
+top-of-page `<h1>` then fails in CI, not in UAT. Route-gating facts for
+the tests: `/library/import` GET is ADMIN-gated
+(`routes/library_import.py:51-52`), `/scenarios/import` GET is ADMIN-gated
+(`routes/scenario_import.py:49-52`), `/help` needs only `require_user`
+(`routes/help.py:26`) — so the test uses the `authed_admin` fixture.
 
-### 6. SME-name clip at 1440px (P1 drift-log item)
+### 6. SME-name clip at 1440px (P1 drift-log item) + `text-gray-*` cleanup
 
 Wizard step-4 (`_fair_params_form_inner.html`): at 1440px the SME name
 input clips ("Library referen") when the single-line mono revenue hint
 widens the High column. Fix per the P1 drift note: constrain the hint
 (`max-width` + allow wrap) so the name column keeps its width. Playwright
 check at 1440×900 that the full placeholder/value renders.
+
+Same file (plan-gate Q-4): the 3 `text-gray-*` usages (lines ~77, ~244)
+map to ink tokens (`text-gray-600` → `text-ink-2`, `text-gray-500` →
+`text-ink-3` if decorative in context else `text-ink-2`), completing the
+single-color-system claim in §4.
 
 ### 7. Verification (gate for the PR)
 
@@ -164,7 +251,11 @@ check at 1440×900 that the full placeholder/value renders.
   DaisyUI grays, logomark correct, no hamburger collisions (re-run the §5
   sweep), no SME clip.
 - PDF: render the executive report via the production renderer and eyeball
-  the header mark + brand chrome (graphite, brass dot).
+  the header mark + brand chrome (graphite, brass dot). Pay attention to
+  mark SIZE/placement (plan-gate Q-7): the sonar-arcs geometry occupies a
+  smaller, left-of-center portion of its 22×22 Drawing box than the old
+  corner-to-corner curve; if the header looks under-sized, bump the
+  `brand_logomark(width=...)` call site rather than distorting geometry.
 
 ## Out of scope (follow-ons)
 
@@ -172,7 +263,10 @@ check at 1440×900 that the full placeholder/value renders.
   `theme_color`/icons derive from the shipped palette and mark.
 - Marketing deck logo/palette refresh (idraa.org + idraa.io mirrors).
 - Favicon PNG derivatives / apple-touch-icon (lands with the PWA PR).
-- DaisyUI component-theme rebuild (btn/badge internals stay).
+- DaisyUI STATUS-family bridge (`--er/--su/--wa/--in` — alert-error /
+  badge-success internals keep DaisyUI's own reds/greens, which differ
+  slightly from the `--color-status-*` tokens). Tracked as a follow-on GH
+  issue opened at PR time (plan-gate Arch-3 documentation requirement).
 - Teardown of `idraa-graphite` + `preview/graphite` happens after prod
   deploy verification (operational, not part of the PR).
 
@@ -206,3 +300,16 @@ methodology and security personas are waived per that standing decision.
 - −CUT: marketing deck (idraa.org/io) logo+palette refresh — follow-on.
 - UNCHANGED from the P1/P2 deferrals: DaisyUI base-* retirement, AA audit,
   pdf/workbook sync + pin tests, SME-name clip fix.
+- +ADDED at plan-gate (2026-07-21, quality+architect reviews applied as
+  one consolidated commit): `--color-brand-contrast` token + 8-site
+  routing (Arch-1 BLOCKER — dark brand flip inverts fill lightness);
+  DaisyUI `--b1/--b2/--b3/--bc/--p/--pc` OKLCH bridge (Arch-3); semantic
+  color-utility retirement `primary/error/success/warning` + widened guard
+  (Arch-2); `hover:bg-base-200` mapping row + Alpine-site notes (Arch-4);
+  durable `<h1>`-clearance allowlist sweep test (Arch-5); pdf_report
+  naming sweep (Arch-6/Q-5); repo-wide old-hex guard (Arch-7); favicon
+  scheme-divergence comment (Arch-8); T1 test rpartition + regex
+  assertions (Q-1 BLOCKER, Q-6); ARGB `FF0F4C81` workbook pin called out
+  (Q-2); route-gating citations corrected (Q-3); `text-gray-*` cleanup
+  folded into §6 (Q-4); PDF mark-size eyeball note (Q-7); `logo_accent`
+  drift pin (Q-8).
