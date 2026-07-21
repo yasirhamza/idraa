@@ -2,10 +2,12 @@
 {% block title %}Library entry deleted{% endblock %}
 {% block content %}
 <div class="max-w-2xl mx-auto">
-  <p class="text-sm text-ink-2 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/library">Scenario library</a> / Deleted
   </p>
-  <h1 class="text-2xl font-bold mb-4">Imported entry deleted</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-4 pl-16 md:pl-0">Imported entry deleted</h1>
 
   <div class="card bg-surface-1 shadow mb-6">
     <div class="card-body">

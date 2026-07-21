@@ -3,10 +3,12 @@
 {% block title %}Overlay import — preview{% endblock %}
 {% block content %}
 <div class="max-w-5xl mx-auto">
-  <p class="text-sm text-ink-2 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/overlays">Overlays</a> / Import preview
   </p>
-  <h1 class="text-2xl font-bold mb-2">Overlay import — preview</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-2 pl-16 md:pl-0">Overlay import — preview</h1>
   <p class="text-ink-2 mb-4">
     Review the parsed rows below. Nothing has been written yet — confirm to apply,
     or cancel to abandon. The preview token expires after 10 minutes.

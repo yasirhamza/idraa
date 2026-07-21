@@ -3,10 +3,12 @@
 {% block title %}Scenario import{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto">
-  <p class="text-sm text-ink-2 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/scenarios">Scenarios</a> / Import
   </p>
-  <h1 class="text-2xl font-bold mb-2">Import scenarios {{ help_trigger('import-export') }}</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-2 pl-16 md:pl-0">Import scenarios {{ help_trigger('import-export') }}</h1>
   <p class="text-ink-2 mb-6">
     Upload a CSV or JSON file of scenarios. Nothing is written until you review
     the preview and confirm. Duplicate scenarios (an active scenario with the

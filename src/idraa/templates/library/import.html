@@ -2,10 +2,12 @@
 {% block title %}Library import{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto">
-  <p class="text-sm text-ink-2 mb-1">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
     <a class="link" href="/library">Scenario library</a> / Import
   </p>
-  <h1 class="text-2xl font-bold mb-2">Import library entries</h1>
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-2xl font-bold mb-2 pl-16 md:pl-0">Import library entries</h1>
   <p class="text-ink-2 mb-6">
     Upload a JSON bundle of scenario-library entries. Nothing is written until
     you review the preview and confirm. Imported entries are added to the

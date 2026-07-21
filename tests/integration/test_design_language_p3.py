@@ -127,3 +127,52 @@ async def test_rebuilt_sheet_has_hover_surface() -> None:
     # separately), so today it contains NO color-mix — this is a strict
     # positive guard that the tint utility generated.
     assert "color-mix" in sheet_text
+
+
+async def test_hand_authored_headers_clear_hamburger(
+    authed_admin,
+    db_session,
+) -> None:
+    """UAT 2026-07-21: pages that hand-author their headers (skip
+    macros/page_header.html) must carry the same mobile clearance for the
+    fixed ☰ (`pl-16 md:pl-0`) so the burger never overlaps their titles."""
+    client, _ = authed_admin
+    for path in ("/help", "/library/import", "/scenarios/import"):
+        r = await client.get(path)
+        assert r.status_code == 200, path
+        assert "pl-16 md:pl-0" in r.text, f"{path} header lacks hamburger clearance"
+
+
+# Allowlist categories (the burger renders on EVERY page — base.html
+# includes the sidebar unconditionally): (1) h1 verified below the burger
+# band at 390px; (2) drawer partial, never a full page; (3) only_on_md-
+# gated content (burger is md:hidden). Allowlisting a COLLIDING page is
+# never permitted; a new entry requires 390px verification.
+_H1_CLEARANCE_ALLOWLIST = {
+    "auth/login.html",  # h1 y~110 below-band; NOTE its logomark starts at
+    # y=48 exactly abutting the burger band — re-verify if login padding
+    # ever changes
+    "help/_article.html",  # drawer partial (no extends)
+    "library/overrides/form.html",  # only_on_md-gated
+    "qualitative_bands/form.html",  # only_on_md-gated
+}
+
+
+async def test_hand_authored_h1_headers_have_clearance() -> None:
+    """Arch-5: any template with an <h1> that neither uses the page_header
+    macro nor carries pl-16 clearance must be allowlisted (verified
+    below-band). A new top-of-page hand-authored header fails HERE, not in
+    UAT."""
+    offenders: list[str] = []
+    for path in sorted(TEMPLATES_DIR.rglob("*.html")):
+        rel = str(path.relative_to(TEMPLATES_DIR)).replace("\\", "/")
+        text = path.read_text(encoding="utf-8")
+        if "<h1" not in text or rel in _H1_CLEARANCE_ALLOWLIST:
+            continue
+        if "page_header" in text or "pl-16" in text:
+            continue
+        offenders.append(rel)
+    assert not offenders, (
+        f"templates with unprotected <h1> headers (add pl-16 md:pl-0 or "
+        f"page_header, or allowlist WITH 390px verification): {offenders}"
+    )
