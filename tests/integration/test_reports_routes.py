@@ -603,7 +603,12 @@ async def test_run_report_audit_error_does_not_abort_download(
     db_session: AsyncSession,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """T8(d): if the audit write raises, response is still 200 PDF and error is logged."""
+    """T8(d): if the DETAILED report.exported egress audit raises, the response is
+    still 200 PDF and the error is logged (that write is log-and-continue). The
+    fail-closed throttle/budget row (risk_analysis_run.export) is written first
+    and is NOT what this test perturbs — see test_report_export_throttled_at_cap
+    for its enforcement, and the fail-closed behavior on budget-write failure is
+    intentional (matches the CSV export path)."""
     import logging
 
     client, org_id = authed_admin
@@ -611,12 +616,19 @@ async def test_run_report_audit_error_does_not_abort_download(
     run = await _make_completed_aggregate_run(db_session, organization, name="audit-fail-test")
     await db_session.commit()
 
+    def _fail_only_detailed(*_a: object, **kwargs: object) -> object:
+        # The budget row (risk_analysis_run.export) succeeds; only the detailed
+        # per-download report.exported write fails — exercising T8(d)'s tolerance.
+        if kwargs.get("action") == "report.exported":
+            raise RuntimeError("db boom")
+        return None
+
     with (
         caplog.at_level(logging.ERROR, logger="idraa.routes.reports"),
         patch(
             "idraa.routes.reports.AuditWriter.log",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("db boom"),
+            side_effect=_fail_only_detailed,
         ),
     ):
         r = await client.get(f"/reports/run/{run.id}")
@@ -724,3 +736,31 @@ async def test_run_detail_non_completed_has_no_pdf_download_link(
         "Neither the PDF report nor the verification-workbook download link may appear "
         "on the run-detail page for a non-COMPLETED run (the substring covers both hrefs)"
     )
+
+
+@pytest.mark.asyncio
+async def test_report_export_throttled_at_cap(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """riskflow#564 (L4): the heavy PDF/xlsx exports now share the sliding-window
+    export budget (the old report.exported action didn't match the limiter's
+    %.export predicate, so they were un-throttled). The Nth+1 export is refused
+    with 429 before another reportlab build runs."""
+    from idraa.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "export_rate_limit_count", 2)
+    monkeypatch.setattr(settings, "export_rate_limit_window_seconds", 3600)
+
+    client, org_id = authed_admin
+    organization = await _org_for(db_session, org_id)
+    run = await _make_completed_aggregate_run(db_session, organization, name="throttle-test")
+    await db_session.commit()
+
+    assert (await client.get(f"/reports/run/{run.id}")).status_code == 200
+    assert (await client.get(f"/reports/run/{run.id}")).status_code == 200
+    r = await client.get(f"/reports/run/{run.id}")
+    assert r.status_code == 429
+    assert r.headers["Retry-After"] == "3600"

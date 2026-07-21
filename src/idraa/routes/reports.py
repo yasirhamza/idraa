@@ -179,26 +179,69 @@ async def download_run_pdf(
         )
         raise HTTPException(status_code=500)
 
-    data = await build_executive_pdf_data(db, run, org)
-    pdf_bytes = render_executive_pdf(data)
-    filename = _build_filename(run, org)
+    client = client_ip(request)
 
-    # T8(d): export audit — log-and-continue so audit failure never aborts download.
+    # L4 (riskflow#564): throttle + budget-count the heavy PDF export BEFORE
+    # spending CPU, sharing the sliding-window budget with the CSV exports. The
+    # report.exported action below does NOT match the limiter's `%.export`
+    # predicate, so this path was previously un-throttled. Over budget ->
+    # ExportRateLimitedError (over budget) -> 429. FAIL-CLOSED on the
+    # throttle/budget row, matching the CSV export path and the "audit_log health
+    # gates bulk egress" stance: a heavy export must not proceed un-throttled and
+    # un-counted. (The DETAILED report.exported row below stays log-and-continue —
+    # T8(d) — so a hiccup writing that non-load-bearing egress detail does not
+    # block a legit download.) Committed now because this handler releases the
+    # request connection mid-flight (below), bypassing get_db's terminal commit.
+    await log_bulk_export(
+        db,
+        organization_id=org.id,
+        entity_type="risk_analysis_run",
+        fmt="pdf",
+        count=1,
+        user_id=user.id,
+        ip_address=client,
+        filters={"kind": "report_pdf"},
+    )
+    await db.commit()
+
+    data = await build_executive_pdf_data(db, run, org)
+    filename = _build_filename(run, org)
+    org_id = org.id
+    user_id = user.id
+    run_pk = run.id
+
+    # M1 (riskflow#563): release the pooled DB connection BEFORE the CPU-bound
+    # reportlab render + response stream — neither touches the DB. Holding the
+    # connection across a multi-second build exhausted the pool (size 5 + overflow
+    # 10) under repeated taps and 500'd concurrent requests incl. login (prod
+    # outage 2026-06-15); the sibling verification-xlsx path was fixed then, this
+    # one wasn't. expire_on_commit=False keeps already-loaded columns readable on
+    # the detached objects for the filename/audit.
+    db.expunge_all()
+    await db.close()
+
+    # CPU-bound reportlab multiBuild -> thread: never blocks the event loop and
+    # holds no DB connection.
+    pdf_bytes = await asyncio.to_thread(render_executive_pdf, data)
+
+    # T8(d): detailed per-download egress audit on a FRESH short-lived connection
+    # (the request session is closed) — log-and-continue so audit failure never
+    # aborts the download.
     try:
-        await AuditWriter(db).log(
-            organization_id=org.id,
-            entity_type="risk_analysis_run",
-            entity_id=run.id,
-            action="report.exported",
-            changes={"bytes_written": [None, len(pdf_bytes)]},
-            user_id=user.id,
-            ip_address=client_ip(request),
-        )
-        await db.commit()
+        async with get_session() as audit_db:
+            await AuditWriter(audit_db).log(
+                organization_id=org_id,
+                entity_type="risk_analysis_run",
+                entity_id=run_pk,
+                action="report.exported",
+                changes={"bytes_written": [None, len(pdf_bytes)]},
+                user_id=user_id,
+                ip_address=client,
+            )
     except Exception:
         logger.error(
             "report.exported audit write failed for run %s — continuing",
-            run.id,
+            run_pk,
             exc_info=True,
         )
 
@@ -255,6 +298,27 @@ async def download_verification_workbook(
         )
         raise HTTPException(status_code=500)
 
+    client = client_ip(request)
+
+    # L4 (riskflow#564): throttle + budget-count the heavy xlsx export BEFORE the
+    # CPU build, sharing the sliding-window budget with the CSV exports (the
+    # report.exported action below does NOT match the limiter's `%.export`
+    # predicate). ExportRateLimitedError -> 429; FAIL-CLOSED on the budget row
+    # (CSV-consistent; the detailed report.exported write below stays
+    # log-and-continue). Committed now because this handler releases the request
+    # connection below, bypassing get_db's terminal commit.
+    await log_bulk_export(
+        db,
+        organization_id=org.id,
+        entity_type="risk_analysis_run",
+        fmt="xlsx",
+        count=1,
+        user_id=user.id,
+        ip_address=client,
+        filters={"kind": "verification_xlsx"},
+    )
+    await db.commit()
+
     # Capture what we need, then RELEASE the pooled DB connection BEFORE the
     # CPU-bound build AND the ~750 KB response stream — neither touches the DB.
     # Holding the request's connection across the build + (slow-mobile) body
@@ -265,7 +329,6 @@ async def download_verification_workbook(
     # the threaded build can still read run/org after the session is closed.
     org_id = org.id
     user_id = user.id
-    client = client_ip(request)
     db.expunge_all()
     await db.close()
 
