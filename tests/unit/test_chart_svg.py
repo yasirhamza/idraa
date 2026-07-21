@@ -6,6 +6,8 @@ Hand-math anchors: with VIEW_W=820, MARGIN left=62/right=20 the plot width is
 0.5*318 = 175.0 measured from top with y inverted (probability 1.0 at top).
 """
 
+import re
+
 import pytest
 
 from idraa.services.chart_svg import (
@@ -172,6 +174,45 @@ def test_epc_none_guards():
         epc_curve({"without_controls": [], "with_controls": []}, None, y_label="Annual loss")
         is None
     )
+
+
+def _area_tail_coords(area_d: str, path_d: str) -> list[tuple[str, str]]:
+    """Extract the coordinate pairs appended after ``path_d`` in an area_d
+    string (the two baseline-closing points before Z)."""
+    assert area_d.startswith(path_d)
+    tail = area_d[len(path_d) :]
+    return re.findall(r"L ([\-0-9.]+),([\-0-9.]+)", tail)
+
+
+def test_area_d_closes_to_baseline():
+    """Design-language P2 (#59) chart style layer: every series gains an
+    area_d = path_d extended with two baseline-closing points + Z, so the
+    macro can fill the area under the curve with a gradient. baseline =
+    round(VIEW_H - MARGIN["bottom"], 1) — the shared plot-bottom constant,
+    computed the SAME way in both dual_curve (probability y) and epc_curve
+    (log-loss y, axis-swapped) — EPC's plot-bottom closure is the
+    verified-correct "under-curve" semantics even though its y-axis has no
+    zero (plan-gate)."""
+    baseline = round(VIEW_H - MARGIN["bottom"], 1)
+    assert baseline == pytest.approx(334.0, abs=0.01)  # 380 - 46
+
+    dual = dual_curve(_PAYLOAD, None, x_label="Loss")
+    for s in dual["series"]:
+        assert s["area_d"] is not None
+        assert s["area_d"].endswith(" Z")
+        coords = _area_tail_coords(s["area_d"], s["path_d"])
+        assert len(coords) == 2
+        for _x, y in coords:
+            assert float(y) == pytest.approx(baseline, abs=0.01)
+
+    epc = epc_curve(_EPC_PAYLOAD, None, y_label="Annual loss")
+    for s in epc["series"]:
+        assert s["area_d"] is not None
+        assert s["area_d"].endswith(" Z")
+        coords = _area_tail_coords(s["area_d"], s["path_d"])
+        assert len(coords) == 2
+        for _x, y in coords:
+            assert float(y) == pytest.approx(baseline, abs=0.01)
 
 
 # ===========================================================================

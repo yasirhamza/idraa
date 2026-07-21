@@ -146,21 +146,36 @@
          role="img" aria-label="Loss exceedance curve{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          class="chart-svg">
       <desc>Exceedance probability vs loss on a logarithmic loss axis.</desc>
+      <defs>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-inherent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-inherent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-inherent)" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-residual" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-residual)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-residual)" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
       {%- for t in g.x_ticks %}
-      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
       {%- for t in g.y_ticks %}
-      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-strong)" stroke-width="1"/>
       <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }} (log scale)</text>
       {%- for s in g.series %}
+      {%- if s.area_d %}
+      <path d="{{ s.area_d }}" fill="url(#grad-{{ uid }}-{{ g.y_scale }}-residual)" stroke="none" pointer-events="none"/>
+      {%- endif %}
       <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round" stroke="var(--chart-residual)" data-series="{{ s.key }}"/>
       {%- endfor %}
       {%- if g.tolerance_marker %}
       <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
       <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="var(--color-surface-1)"/>
       <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
       <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
       {%- endif %}
@@ -201,21 +216,36 @@
          role="img" aria-label="Exceedance probability vs loss{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          class="chart-svg">
       <desc>Loss on a logarithmic axis vs exceedance probability (linear axis).</desc>
+      <defs>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-inherent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-inherent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-inherent)" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-residual" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-residual)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-residual)" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
       {%- for t in g.x_ticks %}
-      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
       {%- for t in g.y_ticks %}
-      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-strong)" stroke-width="1"/>
       <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }}</text>
       {%- for s in g.series %}
+      {%- if s.area_d %}
+      <path d="{{ s.area_d }}" fill="url(#grad-{{ uid }}-{{ g.y_scale }}-residual)" stroke="none" pointer-events="none"/>
+      {%- endif %}
       <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round" stroke="var(--chart-residual)" data-series="{{ s.key }}"/>
       {%- endfor %}
       {%- if g.tolerance_marker %}
       <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
       <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="var(--color-surface-1)"/>
       <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
       <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
       {%- endif %}
@@ -323,7 +353,7 @@
          aria-label="Control effectiveness scores, 0 to 1" class="chart-svg">
       <desc>Horizontal bars showing each control's effectiveness score from 0 to 1.</desc>
       {%- for t in g.x_ticks %}
-      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
       <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">Effectiveness (0–1)</text>
@@ -388,16 +418,30 @@
          role="img" aria-label="{{ x_label }} exceedance curves, with and without controls{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          {% if scale == "log" %}hidden{% endif %} class="chart-svg">
       <desc>Exceedance probability vs {{ x_label|lower }} on a logarithmic loss axis.</desc>
+      <defs>
+        <linearGradient id="grad-{{ uid }}-{{ scale }}-inherent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-inherent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-inherent)" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="grad-{{ uid }}-{{ scale }}-residual" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-residual)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-residual)" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
       {%- for t in g.x_ticks %}
-      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
       {%- for t in g.y_ticks %}
-      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-strong)" stroke-width="1"/>
       <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ x_label }} (log scale)</text>
       {%- for s in g.series %}
+      {%- if s.area_d %}
+      <path d="{{ s.area_d }}" fill="url(#grad-{{ uid }}-{{ scale }}-{{ 'inherent' if s.key == 'without' else 'residual' }})" stroke="none" pointer-events="none"/>
+      {%- endif %}
       <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round"
             stroke="{{ 'var(--chart-inherent)' if s.key == 'without' else 'var(--chart-residual)' }}"
             {% if s.key == 'with' %}stroke-dasharray="6 4"{% endif %} data-series="{{ s.key }}"/>
@@ -405,6 +449,7 @@
       {%- if g.tolerance_marker %}
       <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
       <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="var(--color-surface-1)"/>
       <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
       <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
       {%- endif %}
@@ -445,16 +490,30 @@
          role="img" aria-label="Exceedance probability vs {{ g.y_label|lower }}{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          class="chart-svg">
       <desc>{{ g.y_label }} on a logarithmic axis vs exceedance probability (linear axis).</desc>
+      <defs>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-inherent" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-inherent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-inherent)" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="grad-{{ uid }}-{{ g.y_scale }}-residual" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--chart-residual)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--chart-residual)" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
       {%- for t in g.x_ticks %}
-      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ t.x }}" y1="{{ g.margin.top }}" x2="{{ t.x }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ t.x }}" y="{{ g.view_h - g.margin.bottom + 18 }}" text-anchor="middle" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
       {%- for t in g.y_ticks %}
-      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1"/>
+      <line x1="{{ g.margin.left }}" y1="{{ t.y }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ t.y }}" stroke="var(--color-border-subtle)" stroke-width="1" opacity="0.6"/>
       <text x="{{ g.margin.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="chart-tick">{{ t.label }}</text>
       {%- endfor %}
+      <line x1="{{ g.margin.left }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.view_w - g.margin.right }}" y2="{{ g.view_h - g.margin.bottom }}" stroke="var(--color-border-strong)" stroke-width="1"/>
       <text x="{{ (g.margin.left + g.view_w - g.margin.right) // 2 }}" y="{{ g.view_h - 8 }}" text-anchor="middle" class="chart-axis-title">{{ g.x_label }}</text>
       {%- for s in g.series %}
+      {%- if s.area_d %}
+      <path d="{{ s.area_d }}" fill="url(#grad-{{ uid }}-{{ g.y_scale }}-{{ 'inherent' if s.key == 'without' else 'residual' }})" stroke="none" pointer-events="none"/>
+      {%- endif %}
       <path d="{{ s.path_d }}" fill="none" stroke-width="2" stroke-linejoin="round"
             stroke="{{ 'var(--chart-inherent)' if s.key == 'without' else 'var(--chart-residual)' }}"
             {% if s.key == 'with' %}stroke-dasharray="6 4"{% endif %} data-series="{{ s.key }}"/>
@@ -462,6 +521,7 @@
       {%- if g.tolerance_marker %}
       <line x1="{{ g.margin.left }}" y1="{{ g.tolerance_marker.y }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
       <line x1="{{ g.tolerance_marker.x }}" y1="{{ g.view_h - g.margin.bottom }}" x2="{{ g.tolerance_marker.x }}" y2="{{ g.tolerance_marker.y }}" stroke="var(--chart-appetite)" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="var(--color-surface-1)"/>
       <circle data-role="tolerance-marker" cx="{{ g.tolerance_marker.x }}" cy="{{ g.tolerance_marker.y }}" r="6" fill="none" stroke="var(--chart-appetite)" stroke-width="2.5"/>
       <text x="{{ g.tolerance_marker.x + 10 }}" y="{{ g.tolerance_marker.y - 10 }}" class="chart-annotation">{{ g.tolerance_marker.label }}</text>
       {%- endif %}

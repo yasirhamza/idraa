@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
-{% from "macros/kpi_card.html" import kpi_card %}
 {% from "macros/status_pill.html" import status_pill %}
 {% from "macros/action_menu.html" import action_menu %}
 {% from "runs/components/controls_snapshot.html" import controls_snapshot %}
@@ -98,30 +97,33 @@
   {% if cost and run.run_type.value == "single" %}
     <section class="run-cost-summary mt-6 mb-4">
       <h2 class="text-h3 text-ink-1 mb-3">Cost vs risk reduction</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {{ kpi_card(
-            label="Total annual cost",
-            value=(cost.get('total_annual_cost') or 0) if cost is mapping else (cost.total_annual_cost or 0),
-            format="money",
-            currency=_csym
-        ) }}
-        {{ kpi_card(
-            label="Risk reduction (ALE)",
-            value=(cost.get('total_risk_reduction') or 0) if cost is mapping else (cost.total_risk_reduction or 0),
-            format="money",
-            currency=_csym
-        ) }}
-        {{ kpi_card(
-            label="Net benefit",
-            value=(cost.get('net_benefit') or 0) if cost is mapping else (cost.net_benefit or 0),
-            format="money",
-            currency=_csym
-        ) }}
-        {{ kpi_card(
-            label="ROI",
-            value=cost.get('aggregate_roi') if cost is mapping else cost.aggregate_roi,
-            format="ratio"
-        ) }}
+      {#- Readout-classed hand-rolled grid (design-language P2, #59 Task 3):
+          kpi_card.html itself is untouched — these four cells mirror its
+          _format_value formatting EXACTLY (money = currency + comma-grouped
+          integer; ratio = 2-decimal, no suffix; none -> em dash) while
+          adopting the mono-instrument label/value typography used elsewhere
+          in the P2 restyle (macros/readout.html). -#}
+      {%- set _total_cost = (cost.get('total_annual_cost') or 0) if cost is mapping else (cost.total_annual_cost or 0) -%}
+      {%- set _risk_reduction = (cost.get('total_risk_reduction') or 0) if cost is mapping else (cost.total_risk_reduction or 0) -%}
+      {%- set _net_benefit = (cost.get('net_benefit') or 0) if cost is mapping else (cost.net_benefit or 0) -%}
+      {%- set _agg_roi = cost.get('aggregate_roi') if cost is mapping else cost.aggregate_roi -%}
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+          <p class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Total annual cost</p>
+          <p class="text-number-md text-ink-1 font-mono tabular-nums mt-1">{{ _csym }}{{ '{:,.0f}'.format(_total_cost) }}</p>
+        </div>
+        <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+          <p class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Risk reduction (ALE)</p>
+          <p class="text-number-md text-ink-1 font-mono tabular-nums mt-1">{{ _csym }}{{ '{:,.0f}'.format(_risk_reduction) }}</p>
+        </div>
+        <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+          <p class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Net benefit</p>
+          <p class="text-number-md text-ink-1 font-mono tabular-nums mt-1">{{ _csym }}{{ '{:,.0f}'.format(_net_benefit) }}</p>
+        </div>
+        <div class="bg-surface-1 border border-border-subtle rounded-card p-4">
+          <p class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">ROI</p>
+          <p class="text-number-md text-ink-1 font-mono tabular-nums mt-1">{% if _agg_roi is none %}—{% else %}{{ '{:.2f}'.format(_agg_roi) }}{% endif %}</p>
+        </div>
       </div>
       {% if (cost is mapping and cost.get('n_unique_controls') is not none) or (cost is not mapping and cost.n_unique_controls is defined) %}
         <p class="text-micro text-ink-3 mt-2">

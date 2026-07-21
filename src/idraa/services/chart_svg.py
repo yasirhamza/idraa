@@ -85,6 +85,20 @@ def _path_d(
     return "".join(parts)
 
 
+def _area_d(path_d: str, x_first: float, x_last: float, baseline: float) -> str | None:
+    """Close a stroked curve's ``path_d`` into a fillable area shape (design-
+    language P2 #59): extend to the plot-bottom baseline under the LAST
+    point, across to under the FIRST point, then close. Pure geometry, no
+    color/fill decision here (that's the macro's job).
+
+    None-safe: an empty ``path_d`` (should not happen — callers only invoke
+    this for non-empty series) yields None rather than a malformed path.
+    """
+    if not path_d:
+        return None
+    return f"{path_d} L {x_last},{baseline} L {x_first},{baseline} Z"
+
+
 def dual_curve(
     payload: dict[str, Any] | None,
     tolerance: dict[str, Any] | None,
@@ -119,13 +133,27 @@ def dual_curve(
     x_max = max(x_max, x_min * 10.0)
 
     sx, sy = _x_scale(x_min, x_max), _y_scale(y_scale)
+    # Shared plot-bottom baseline for the under-curve area fill (design-
+    # language P2 #59) — computed here, not via _y_scale(0), since a log
+    # y-axis has no zero to feed it; this constant IS the pixel row _y_scale
+    # asymptotes to at its floor (see module docstring / plan-gate note).
+    baseline = round(VIEW_H - MARGIN["bottom"], 1)
 
     series = []
     for key, label, pts in series_in:
         # Series identity is carried by a legend row (macro-side) + line dash,
         # not by on-curve endpoint labels (those clip/overlap where the dual
         # curves converge at the bottom-right). Geometry emits key/label only.
-        series.append({"key": key, "label": label, "path_d": _path_d(pts, sx, sy)})
+        path_d = _path_d(pts, sx, sy)
+        x_first, x_last = sx(pts[0]["loss"]), sx(pts[-1]["loss"])
+        series.append(
+            {
+                "key": key,
+                "label": label,
+                "path_d": path_d,
+                "area_d": _area_d(path_d, x_first, x_last, baseline),
+            }
+        )
 
     # x ticks: decade values inside [x_min, x_max]
     x_ticks = []
@@ -236,11 +264,29 @@ def epc_curve(
             parts.append(f"{cmd}{sx(1.0 - pt['percentile'])} {sy(pt['loss'])}")
         return "".join(parts)
 
+    # Shared plot-bottom baseline for the under-curve area fill (design-
+    # language P2 #59). EPC's y-axis is log-loss (never zero — there is no
+    # "0 loss" to close against), so the baseline is the SAME raw
+    # plot-bottom pixel row dual_curve uses, computed directly here (EPC
+    # never routes through _y_scale) — the verified-correct "under-curve"
+    # semantics per plan-gate.
+    baseline = round(VIEW_H - MARGIN["bottom"], 1)
+
     series = []
     for key, label, pts in series_in:
         # Identity via the legend row (macro-side) + line dash — no on-curve
         # endpoint labels (see dual_curve).
-        series.append({"key": key, "label": label, "path_d": _path(pts)})
+        path_d = _path(pts)
+        x_first = sx(1.0 - pts[0]["percentile"])
+        x_last = sx(1.0 - pts[-1]["percentile"])
+        series.append(
+            {
+                "key": key,
+                "label": label,
+                "path_d": path_d,
+                "area_d": _area_d(path_d, x_first, x_last, baseline),
+            }
+        )
 
     # x ticks: exceedance-probability quartiles 0..100%
     x_ticks = [

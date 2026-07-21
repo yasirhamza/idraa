@@ -26,7 +26,7 @@
     Panel 2 is the recent-runs feed, unchanged in shape from the old
     index.html card — just relocated into this partial. -#}
 {% from "macros/data_table.html" import data_table %}
-{% from "macros/rbac.html" import analyst_or_admin %}
+{% from "macros/empty_state.html" import empty_row %}
 
 {%- set _code = data.currency.code if data.currency else "USD" -%}
 
@@ -40,7 +40,7 @@
       <p class="text-micro text-ink-3 mb-4">Mean annualized loss, without &rarr; with controls</p>
 
       {% if not data.top_scenarios %}
-        <p class="text-body text-ink-2">No completed runs yet.</p>
+        {{ empty_row("No completed runs yet.", chrome=False) }}
       {% else %}
         {% if data.total_scenarios_with_runs > data.top_scenarios|length %}
           <p class="text-meta text-ink-2 mb-2">
@@ -123,10 +123,12 @@
       <p class="text-micro text-ink-3 mb-4">Latest analyses across the org</p>
 
       {% if not data.recent_runs %}
-        <p class="text-body text-ink-2">No runs yet.</p>
-        {% call analyst_or_admin(current_user) %}
-          <a class="btn btn-primary btn-sm mt-2" href="/analyses/new">Run your first analysis</a>
-        {% endcall %}
+        {% set can_author = current_user is not none and current_user.role.value in ("analyst", "admin") %}
+        {{ empty_row(
+            "No runs yet.",
+            cta={"href": "/analyses/new", "label": "Run your first analysis"} if can_author else none,
+            chrome=False,
+        ) }}
       {% else %}
         {%- set run_rows = [] -%}
         {% for row in data.recent_runs %}

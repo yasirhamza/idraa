@@ -13,6 +13,7 @@ nothing left to port)."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -197,3 +198,62 @@ def test_single_run_charts_use_residual_token_not_default_blue() -> None:
         assert "#1f77b4" not in rendered, (
             f"{name}: default chart-vendor blue #1f77b4 must not appear"
         )
+
+
+# ===========================================================================
+# design-language P2 (#59): chart style layer — area gradients, quiet grid,
+# halo markers. chart_svg.py stays geometry-only (area_d is pure pixel math,
+# already pinned in test_chart_svg.py); these pin the macro-side markup that
+# turns area_d into a filled <path>.
+# ===========================================================================
+
+
+def test_area_gradient_defs_present() -> None:
+    """Every SVG that renders series paths gets its own <defs> with
+    linearGradient stops, and at least one area <path> filled via url(#grad-...)."""
+    rendered = _render_macro("dual_lec_curve", _DUAL_LEC_PAYLOAD)
+    assert "linearGradient" in rendered
+    assert 'fill="url(#grad-' in rendered
+
+
+def test_gridlines_dimmed_to_0_6_opacity() -> None:
+    """Gridlines (tick lines) dim to opacity 0.6 — the deck's quiet-grid
+    treatment — leaving room for a NEW full-opacity baseline line to read as
+    the one distinguishable axis line."""
+    rendered = _render_macro("dual_lec_curve", _DUAL_LEC_PAYLOAD)
+    assert 'opacity="0.6"' in rendered
+
+
+def test_single_curve_fill_references_residual_gradient() -> None:
+    """The single-run LEC/EPC curves stroke --chart-residual UNCONDITIONALLY
+    (no with/without split — see test_single_run_charts_use_residual_token_
+    not_default_blue above). The area fill must reference the SAME
+    (residual) gradient — a naive key-based ('without' -> inherent) gradient
+    selection would mismatch fill vs stroke here (plan-gate A-I2)."""
+    for name, pts in (
+        ("loss_exceedance_curve", _LEC_POINTS),
+        ("exceedance_probability_curve", _EPC_POINTS),
+    ):
+        rendered = _render_macro(name, pts)
+        area = re.search(r'<path d="[^"]*Z" fill="url\(#([^)]+)\)"', rendered)
+        assert area is not None, f"{name}: expected an area <path> with a gradient fill"
+        assert area.group(1).endswith("-residual"), (
+            f"{name}: fill must reference the residual gradient, got {area.group(1)!r}"
+        )
+        # <defs> declares both gradients unconditionally (simpler, defensive
+        # markup) but no <path fill=...> may point at -inherent — there is
+        # only ever one series (residual) on a single-curve figure.
+        fills = re.findall(r'fill="url\(#([^)]+)\)"', rendered)
+        assert fills and all(f.endswith("-residual") for f in fills), fills
+
+
+def test_dual_figure_no_duplicate_gradient_id() -> None:
+    """dual_lec_curve emits TWO <svg> variants (linear + log) sharing ONE
+    chart_uid (chart.html:386-ish) — gradient ids must be scale-scoped or
+    the linear/log <defs> collide on the same id (plan-gate A-I1)."""
+    rendered = _render_macro("dual_lec_curve", _DUAL_LEC_PAYLOAD)
+    ids = re.findall(r'<linearGradient id="([^"]+)"', rendered)
+    assert ids, "expected at least one linearGradient id"
+    assert len(ids) == len(set(ids)), f"duplicate gradient ids across the two svgs: {ids}"
+    assert any("-linear-" in i for i in ids), ids
+    assert any("-log-" in i for i in ids), ids
