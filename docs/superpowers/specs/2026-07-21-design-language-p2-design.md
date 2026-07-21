@@ -21,9 +21,8 @@ same real estate as a full one. Principle: **density scales with content**.
   logomark watermark (workstream 3), no tall card body.
 - The two lone stat tiles ("Scenarios with runs", "Recent runs") merge into
   ONE `readout_strip` (existing macro) row.
-- "Get started" band renders ONLY while `scenarios == 0`; once content
-  exists it collapses to a dismissible single line (server-side condition —
-  no new JS state).
+- "Get started" band renders ONLY while `scenarios == 0` (it already
+  disappears once a scenario exists — no dismiss state, no new JS).
 - Inter-band vertical rhythm tightens (`space-y` scale down one step);
   populated bands keep today's inner spacing.
 - With data present, layout must be visually unchanged except rhythm —
@@ -32,10 +31,14 @@ same real estate as a full one. Principle: **density scales with content**.
 ### 2 · Chart style layer (deck language on first-party SVG)
 `services/chart_svg.py` renders LEC/EPC/bars; style only — **no data,
 sampling, scale, or series-semantics change** (colors stay `chart_palette`):
-- Grid: lighter hairlines (`--color-border-subtle` at reduced opacity),
-  solid baseline only on the zero axis.
+- Grid: gridlines dim to opacity 0.6; a NEW dedicated full-opacity baseline
+  `<line>` at the plot bottom (the current tick loops have no
+  distinguishable zero-axis element — plan-gate finding).
 - Under-curve area fill: vertical gradient from series color ~18% alpha to
-  ~2% (SVG `<linearGradient>` defs; both series).
+  ~2% (SVG `<linearGradient>` defs) on BOTH series — including the dashed
+  with-controls/residual overlay; each fill's gradient MUST derive from the
+  same conditional that picks that path's stroke (single-run curves stroke
+  residual — their fill is residual too).
 - Emphasized endpoint/marker dots: existing markers get a 1.5px surface
   stroke halo (deck treatment).
 - Tick labels: mono, 10px, `--color-ink-3` (they may already be — verify,
@@ -49,9 +52,12 @@ the compact empty rows from workstream 1 host it) renders `logomark(size=20)`
 at reduced opacity as a quiet watermark — identity in the quiet moments.
 
 ### 4 · Run-page readout strips
-- Run detail (`templates/runs/…` — locate the KPI/summary block) renders its
-  headline numbers through `readout_strip`: residual **ALE**, 1-in-20-year
-  loss (VaR p95 wording as currently labeled), modeled reduction. **Copy
+- Run detail's REAL headline surfaces (verified at plan-gate): the AGGREGATE
+  `verdict_strip` cells — "Residual ALE (mean)", "Control value / yr
+  (mean)", "Return on control spend" — and the SINGLE-run "Cost vs risk
+  reduction" 4-up (Total annual cost / Risk reduction (ALE) / Net benefit /
+  ROI). These get the readout VISUAL (typography-level restyle); VaR/p95
+  figures live in the dist table and are NOT headline cells. **Copy
   rule (claim conventions): reuse the page's EXISTING metric labels
   verbatim; if any label must be authored anew it says "ALE" /
   "modeled reduction" — never EAL / guaranteed.** A methodology CHECK
@@ -76,8 +82,10 @@ at reduced opacity as a quiet watermark — identity in the quiet moments.
   `uv run pytest -m e2e tests/e2e/ -k chart` (or the chart e2e modules
   found by `ls tests/e2e | grep -i chart`) explicitly FOREGROUND before the
   PR; record the count in the drift log.
-- `chart_palette.py` / `pdf_theme.py` / `workbook_theme.py` untouched
-  (style layer lives in `chart_svg.py` + CSS only).
+- `chart_palette.py` / `pdf_theme.py` / `workbook_theme.py` untouched.
+  Style layer lives in `macros/chart.html` + `app.css`; `chart_svg.py` is
+  geometry-only and gains ONLY the pure-geometry `area_d` per series
+  (plan-gate correction of this spec's earlier wording).
 - Populated-dashboard behavior pinned by existing tests; empty-state
   variants get new integration tests (fresh-org fixture).
 - Screenshot acceptance on BOTH the empty fresh-org DB AND the UAT
@@ -105,3 +113,19 @@ at reduced opacity as a quiet watermark — identity in the quiet moments.
 - (seed) 2026-07-21: scope = P1 spec's Phase-2 deferrals + owner's
   white-space complaint; run-form readout conditional on the surface
   actually existing.
+- 2026-07-21 plan-gate R1 (quality + architecture): 10 IMPORTANTs applied —
+  §4 rewritten to the real headline cells (no VaR-p95 headline exists);
+  baseline instruction made executable (dedicated line); area fill on both
+  series with stroke-derived gradient ids; gradient ids scale-scoped
+  (`grad-{uid}-{scale}-{series}` — the dual figure emits TWO svgs per uid);
+  charts.js verified SAFE for area insertion (data-role selectors only;
+  area gets no data-series attr + pointer-events none); EPC baseline
+  confirmed plot-bottom; readout_strip generalized to derive columns from
+  item count (also fixes the wizard 1-item stray cells); empty_row gains
+  chrome=False for in-card sites (card-in-card fix); role-gating via the
+  existing `{% set %}` boolean precedent; chart-card titles → eyebrows
+  mapped into T2; watermark on posture row only; rhythm one step
+  (space-y-6); CI-marker halo dropped (no such marker); .chart-tick change
+  disclosed as a real change (12px non-mono today). Coverage&budget band
+  stays out of scope (structural, not empty-state) — T4 verifies the
+  fresh-org viewport fit and drift-logs if it voids.
