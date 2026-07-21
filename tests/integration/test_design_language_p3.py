@@ -176,3 +176,30 @@ async def test_hand_authored_h1_headers_have_clearance() -> None:
         f"templates with unprotected <h1> headers (add pl-16 md:pl-0 or "
         f"page_header, or allowlist WITH 390px verification): {offenders}"
     )
+
+
+async def test_sme_hint_width_constrained() -> None:
+    """P1 drift-log fix: the step-4 revenue hint must not propagate width
+    into the grid column that holds the SME name input (1440px clip)."""
+    tpl = (TEMPLATES_DIR / "scenarios" / "wizard" / "_fair_params_form_inner.html").read_text(
+        encoding="utf-8"
+    )
+    assert "max-w-[28ch]" in tpl
+
+
+async def test_no_opacity_modified_token_classes() -> None:
+    """Hex-var token utilities silently drop /NN opacity modifiers (the
+    documented page_header foot-gun) — use the -faint color-mix utilities
+    instead. Guards the residue after the P3 sweeps (T4 + T6.5)."""
+    import re
+
+    offenders: list[str] = []
+    for path in sorted(TEMPLATES_DIR.rglob("*.html")):
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(
+                r"(?:bg-brand|bg-surface|text-ink|text-status|border-status|border-border)"
+                r"[a-z0-9-]*/\d+",
+                line,
+            ):
+                offenders.append(f"{path.relative_to(TEMPLATES_DIR)}:{i}")
+    assert not offenders, f"opacity-modified token classes: {offenders}"

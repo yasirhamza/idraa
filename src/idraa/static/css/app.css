@@ -118,6 +118,13 @@
 .border-border-strong { border-color: var(--color-border-strong); }
 .border-status-critical { border-color: var(--color-status-critical); }
 .border-status-critical-faint { border-color: color-mix(in srgb, var(--color-status-critical) 30%, transparent); }
+.border-status-warning-faint { border-color: color-mix(in srgb, var(--color-status-warning) 40%, transparent); }
+/* Sticky-action-bar scrims (#59 P3 T6.5): translucent surface-0 for the
+   bottom action bars' backdrop-blur. Tailwind's `/NN` opacity modifier is a
+   silent no-op on our hex-var tokens (the documented page_header foot-gun),
+   so the intent is hand-written here via color-mix instead. */
+.bg-surface-0-scrim-80 { background-color: color-mix(in srgb, var(--color-surface-0) 80%, transparent); }
+.bg-surface-0-scrim-95 { background-color: color-mix(in srgb, var(--color-surface-0) 95%, transparent); }
 .border-brand           { border-color: var(--color-brand); }
 
 /* Even-row zebra striping for data_grid */

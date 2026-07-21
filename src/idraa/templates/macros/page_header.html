@@ -21,10 +21,13 @@
 {% from "macros/breadcrumb.html" import breadcrumb as _breadcrumb %}
 
 {% macro page_header(title, breadcrumb=[], actions=[], meta=none) -%}
-{# Solid background (not `bg-surface-0/95`) — opacity-modifier syntax requires
-   the underlying CSS var to be an `<r> <g> <b>` triplet, but our tokens are
-   hex. Without that the `/95` silently fails, leaving the header transparent
-   and the `backdrop-blur` smearing content underneath. (Reported 2026-05-23.) #}
+{# Solid background (not surface-0 at /95 opacity) — Tailwind's opacity-modifier
+   syntax requires the underlying CSS var to be an `<r> <g> <b>` triplet, but
+   our tokens are hex. Without that the `/95` silently fails, leaving the header
+   transparent and the `backdrop-blur` smearing content underneath. (Reported
+   2026-05-23.) If a translucent surface-0 scrim is wanted, use the hand-written
+   `.bg-surface-0-scrim-80` / `.bg-surface-0-scrim-95` color-mix utilities in
+   app.css (#59 P3 T6.5) instead of a `/NN` modifier. #}
 {# pl-16 on <md reserves space for the fixed hamburger (☰, `fixed top-4 left-4`
    in layouts/_sidebar.html) so the breadcrumb/title don't render under it.
    md:px-6 restores symmetric padding once the hamburger is hidden (md:hidden). #}
