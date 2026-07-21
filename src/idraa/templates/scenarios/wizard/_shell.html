@@ -97,6 +97,14 @@
       {% else %}<span></span>{% endif %}
 
       <div class="flex items-center gap-2">
+        {# Drafts-surfaced T5 (spec §3): honest exit affordance — every step
+           already persists, this link only makes that visible. Placed
+           BEFORE Cancel (exit = safe action, cancel = destructive). No new
+           POST surface. #}
+        <a href="/scenarios" class="btn btn-ghost btn-sm"
+           title="Progress through your last completed step is saved. Edits on this page since then are not.">
+          Exit — draft saved
+        </a>
         <form method="post" action="/scenarios/new/wizard/cancel?tx={{ state.tx_id }}">
           {{ csrf_field() }}
           <button type="submit" class="btn btn-ghost btn-sm text-status-critical">Cancel</button>

@@ -466,3 +466,19 @@ async def test_dead_tx_redirect_flash_renders_on_scenarios_list(
     follow_up = await client.get(location)
     assert follow_up.status_code == 200
     assert "no longer exists" in follow_up.text
+
+
+# ---------------------------------------------------------------------------
+# T5: wizard shell exit affordance (spec §3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_wizard_shell_renders_exit_draft_saved_link(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    client, _org_id = authed_analyst
+    resp = await client.get("/scenarios/new/wizard")
+    assert resp.status_code == 200
+    assert "Exit — draft saved" in resp.text
+    assert "Progress through your last completed step is saved" in resp.text
