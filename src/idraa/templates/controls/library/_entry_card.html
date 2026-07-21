@@ -57,7 +57,7 @@
                  A stock DaisyUI badge is fixed-height, so wrapped text
                  overflows and overlaps the next pill — let the pill grow to fit
                  its content instead. #}
-              <span class="badge badge-sm badge-accent badge-outline h-auto py-0.5 leading-tight whitespace-normal text-left"
+              <span class="badge badge-sm badge-secondary badge-outline h-auto py-0.5 leading-tight whitespace-normal text-left"
                     title="Reference (default) effectiveness — adjust for your org. Coverage {{ '%.0f' | format((a.coverage_default or 0) * 100) }}% · reliability {{ '%.0f' | format((a.reliability_default or 0) * 100) }}%">
                 {{ a.sub_function.value | replace("_", " ") | title }}
                 {% if a.capability_default is not none %}

@@ -49,8 +49,8 @@
   --pc: 100.0000% 0.000000 89.875563;   /* brand-contrast #FFFFFF */
   --s:  44.1861% 0.014617 285.786377;   /* secondary = neutral ink family (ink-2 #52525B) */
   --sc: 100.0000% 0.000000 89.875563;   /* secondary-content #FFFFFF */
-  --a:  69.5165% 0.116760 73.789873;    /* accent = brass #C89141 (the approved logo accent; badge text below is AA) */
-  --ac: 14.5249% 0.002132 286.131340;   /* accent-content #0A0A0B (7.15:1 on brass) */
+  --a:  44.1861% 0.014617 285.786377;   /* accent = neutral ink family (brass is DECORATIVE-only, logo dot exclusively — FA-7) */
+  --ac: 100.0000% 0.000000 89.875563;   /* accent-content #FFFFFF */
 }
 
 /* Dark palette — applied when data-theme="dark" on <html>. */
@@ -88,7 +88,7 @@
   --pc: 14.5249% 0.002132 286.131340;   /* brand-contrast #0A0A0B */
   --s:  71.1815% 0.012937 286.066504;   /* secondary = neutral ink family (dark ink-2 #A1A1AA) */
   --sc: 14.5249% 0.002132 286.131340;   /* secondary-content #0A0A0B (7.72:1) */
-  --a:  69.5165% 0.116760 73.789873;    /* accent = brass #C89141 (same hue both themes) */
+  --a:  71.1815% 0.012937 286.066504;   /* accent = neutral ink family (brass is DECORATIVE-only, logo dot exclusively — FA-7) */
   --ac: 14.5249% 0.002132 286.131340;   /* accent-content #0A0A0B */
 }
 

@@ -218,20 +218,20 @@ async def test_no_opacity_modified_token_classes() -> None:
     assert not offenders, f"opacity-modified token classes: {offenders}"
 
 
-_BRIDGE_TOKEN_MAP: dict[str, tuple[str, str]] = {
-    # DaisyUI bridge var -> (light token hex, dark token hex). The bridge
-    # triplets are DERIVED constants; this test re-derives them from the
-    # hexes so a palette change cannot silently strand the bridge (FA-2).
-    "--b1": ("#FFFFFF", "#18181B"),
-    "--b2": ("#F4F4F5", "#27272A"),
-    "--b3": ("#D4D4D8", "#3F3F46"),
-    "--bc": ("#18181B", "#FAFAFA"),
-    "--p": ("#37464F", "#B8C6CC"),
-    "--pc": ("#FFFFFF", "#0A0A0B"),
-    "--s": ("#52525B", "#A1A1AA"),
-    "--sc": ("#FFFFFF", "#0A0A0B"),
-    "--a": ("#C89141", "#C89141"),
-    "--ac": ("#0A0A0B", "#0A0A0B"),
+_BRIDGE_TOKEN_NAME_MAP: dict[str, tuple[str, str]] = {
+    # DaisyUI bridge var -> (light token name, dark token name). Expected
+    # hexes are PARSED from app.css itself (FA-2r) so a token edit fails
+    # this test — no third hand-maintained copy.
+    "--b1": ("surface-1", "surface-1"),
+    "--b2": ("surface-2", "surface-2"),
+    "--b3": ("border-strong", "border-strong"),
+    "--bc": ("ink-1", "ink-1"),
+    "--p": ("brand", "brand"),
+    "--pc": ("brand-contrast", "brand-contrast"),
+    "--s": ("ink-2", "ink-2"),
+    "--sc": ("brand-contrast", "brand-contrast"),
+    "--a": ("ink-2", "ink-2"),
+    "--ac": ("brand-contrast", "brand-contrast"),
 }
 
 
@@ -258,15 +258,28 @@ def _hex_to_oklch(hexc: str) -> tuple[float, float, float]:
     return ll, c, hue
 
 
+def _token_hex(scope_text: str, token: str) -> str:
+    import re
+
+    m = re.search(rf"--color-{re.escape(token)}:\s+(#[0-9A-Fa-f]{{6}})", scope_text)
+    assert m, f"token --color-{token} not found in scope"
+    return m.group(1)
+
+
 async def test_daisyui_bridge_triplets_match_tokens() -> None:
-    """FA-2: every bridge triplet re-derives from its token hex (tolerance
-    L +/-0.01pp, C +/-0.001; hue checked only when chromatic)."""
+    """FA-2/FA-2r: every bridge triplet re-derives from the CURRENT token hex
+    parsed out of app.css (tolerance L +/-0.01pp, C +/-0.001; hue checked
+    only when chromatic) — a palette edit that forgets the bridge fails here."""
     import re
 
     css = APP_CSS_PATH.read_text(encoding="utf-8")
     root, _, dark = css.rpartition('[data-theme="dark"]')
-    for var, (light_hex, dark_hex) in _BRIDGE_TOKEN_MAP.items():
-        for scope_name, scope_text, hexv in (("light", root, light_hex), ("dark", dark, dark_hex)):
+    for var, (light_token, dark_token) in _BRIDGE_TOKEN_NAME_MAP.items():
+        for scope_name, scope_text, token in (
+            ("light", root, light_token),
+            ("dark", dark, dark_token),
+        ):
+            hexv = _token_hex(scope_text, token)
             m = re.search(rf"{re.escape(var)}:\s*([\d.]+)% ([\d.]+) ([\d.]+)", scope_text)
             assert m, f"{var} missing in {scope_name} scope"
             got_l, got_c, got_h = (float(g) for g in m.groups())
