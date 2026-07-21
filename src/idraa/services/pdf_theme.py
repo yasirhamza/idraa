@@ -25,7 +25,8 @@ _H = colors.HexColor
 class PDFColors:
     """Design tokens (app.css :root, light) as reportlab HexColors."""
 
-    brand = _H("#0F4C81")
+    brand = _H("#37464F")
+    logo_accent = _H("#C89141")  # brass dot in the sonar-arcs logomark (decorative)
     ink1 = _H("#18181B")
     ink2 = _H("#52525B")
     ink3 = _H("#A1A1AA")
@@ -179,25 +180,30 @@ def table_style(*, numeric_cols: list[int] | None = None, total_row: bool = Fals
 
 # ---- Brand logomark (T3, #59) ----
 
-# Source-of-truth SVG (src/idraa/templates/macros/logo.html), 0 0 32 32 viewBox:
-#   <path d="M3 7 C 11 8, 12 24, 29 26" fill="none" stroke="currentColor"
-#         stroke-width="2.6" stroke-linecap="round"/>
-#   <path d="M3 7 C 11 8, 12 24, 29 26 L 29 29 L 3 29 Z" fill="currentColor"
-#         opacity=".14"/>
-#   <circle cx="3" cy="7" r="2.6" fill="currentColor"/>
+# Source-of-truth SVG (src/idraa/templates/macros/logo.html), 0 0 32 32 viewBox —
+# sonar-arcs mark (owner pick 2026-07-21), bilateral about x=16:
+#   <path d="M9.5 19 A 9 9 0 0 1 22.5 19" fill="none" stroke="currentColor"
+#         stroke-width="2.5" stroke-linecap="round"/>
+#   <path d="M5 14.5 A 15.5 15.5 0 0 1 27 14.5" fill="none" stroke="currentColor"
+#         stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+#   <circle cx="16" cy="20.5" r="2.6" fill="var(--color-logo-accent)"/>
 _LOGOMARK_VIEWBOX = 32.0
 
 
 def brand_logomark(width: float = 22.0) -> Drawing:
-    """Reportlab port of the deck logomark (macros/logo.html's inline SVG).
+    """Reportlab port of the sonar-arcs logomark (macros/logo.html's inline SVG).
 
-    Three shapes, scaled from the 32x32 SVG viewBox to ``width``: the curve
-    stroke, a translucent fill wedge under the curve, and the leading dot.
+    Three shapes, scaled from the 32x32 SVG viewBox to ``width``: inner arc,
+    outer arc at 55% opacity, and the brass dot. reportlab's ``Path`` has no
+    circular-arc primitive, so each ~92° arc is a single cubic Bezier
+    (control points precomputed from the arc's center/radius via the standard
+    k = 4/3*tan(dtheta/4) construction; max deviation < 0.03 viewBox units,
+    invisible at render sizes).
 
     CRITICAL: reportlab's Drawing origin is BOTTOM-left (Y-up); SVG's is
     TOP-left (Y-down). Every viewBox coordinate is mapped through
     ``y' = 32 - y`` (applied in viewBox space, before scaling) — skipping
-    this mirrors the curve vertically.
+    this mirrors the mark vertically.
     """
     scale = width / _LOGOMARK_VIEWBOX
 
@@ -207,34 +213,35 @@ def brand_logomark(width: float = 22.0) -> Drawing:
     def sy(y: float) -> float:
         return (_LOGOMARK_VIEWBOX - y) * scale
 
-    fill_translucent = Color(
-        PDFColors.brand.red, PDFColors.brand.green, PDFColors.brand.blue, alpha=0.14
-    )
+    brand = PDFColors.brand
+    outer_translucent = Color(brand.red, brand.green, brand.blue, alpha=0.55)
 
     d = Drawing(width, width)
 
-    # Shape 1: curve stroke, no fill.
-    curve = Path(
-        strokeColor=PDFColors.brand,
-        strokeWidth=2.6 * scale,
+    # Shape 1: inner arc (SVG: M9.5 19 A 9 9 0 0 1 22.5 19).
+    inner = Path(
+        strokeColor=brand,
+        strokeWidth=2.5 * scale,
         strokeLineCap=1,  # round
         fillColor=None,
     )
-    curve.moveTo(sx(3), sy(7))
-    curve.curveTo(sx(11), sy(8), sx(12), sy(24), sx(29), sy(26))
-    d.add(curve)
+    inner.moveTo(sx(9.5), sy(19))
+    inner.curveTo(sx(13.05), sy(15.30), sx(18.95), sy(15.30), sx(22.5), sy(19))
+    d.add(inner)
 
-    # Shape 2: translucent fill wedge under the curve, no stroke.
-    wedge = Path(strokeColor=None, fillColor=fill_translucent)
-    wedge.moveTo(sx(3), sy(7))
-    wedge.curveTo(sx(11), sy(8), sx(12), sy(24), sx(29), sy(26))
-    wedge.lineTo(sx(29), sy(29))
-    wedge.lineTo(sx(3), sy(29))
-    wedge.closePath()
-    d.add(wedge)
+    # Shape 2: outer arc at 55% (SVG: M5 14.5 A 15.5 15.5 0 0 1 27 14.5).
+    outer = Path(
+        strokeColor=outer_translucent,
+        strokeWidth=2.5 * scale,
+        strokeLineCap=1,  # round
+        fillColor=None,
+    )
+    outer.moveTo(sx(5), sy(14.5))
+    outer.curveTo(sx(11.07), sy(8.39), sx(20.93), sy(8.39), sx(27), sy(14.5))
+    d.add(outer)
 
-    # Shape 3: leading dot.
-    dot = Circle(sx(3), sy(7), 2.6 * scale, fillColor=PDFColors.brand, strokeColor=None)
+    # Shape 3: brass dot (the asset under modeled exposure).
+    dot = Circle(sx(16), sy(20.5), 2.6 * scale, fillColor=PDFColors.logo_accent, strokeColor=None)
     d.add(dot)
 
     return d

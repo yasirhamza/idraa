@@ -8,7 +8,7 @@ from idraa.services.workbook_theme import WorkbookColors
 def test_workbook_colors_match_canonical_design_tokens() -> None:
     """Pin the workbook palette to the app.css :root light tokens (same values
     the PDF's PDFColors uses), so the Excel/PDF/web surfaces stay one system."""
-    assert WorkbookColors.brand == "#0F4C81"
+    assert WorkbookColors.brand == "#37464F"
     assert WorkbookColors.ink1 == "#18181B"
     assert WorkbookColors.ink2 == "#52525B"
     assert WorkbookColors.white == "#FFFFFF"

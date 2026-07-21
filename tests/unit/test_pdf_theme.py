@@ -9,7 +9,8 @@ from idraa.services.chart_palette import CHART_SERIES
 
 # Light-mode token hexes from src/idraa/static/css/app.css :root
 _TOKENS = {
-    "brand": "#0F4C81",
+    "brand": "#37464F",
+    "logo_accent": "#C89141",
     "ink1": "#18181B",
     "ink2": "#52525B",
     "ink3": "#A1A1AA",
@@ -107,9 +108,9 @@ def test_table_style_returns_tablestyle():
 
 
 def test_brand_logomark_drawing():
-    """T3 (#59): brand_logomark() is the reportlab port of the deck logomark
-    SVG (macros/logo.html) — curve stroke + translucent fill wedge + dot,
-    scaled from the 32-unit viewBox to the requested width."""
+    """#59 P3: brand_logomark() is the reportlab port of the sonar-arcs
+    logomark SVG (macros/logo.html) — inner arc + outer arc (55%) + brass
+    dot, scaled from the 32-unit viewBox to the requested width."""
     from reportlab.graphics.shapes import Drawing
 
     d = pdf_theme.brand_logomark()
@@ -118,3 +119,5 @@ def test_brand_logomark_drawing():
     assert len(d.contents) == 3
     stroke_colors = [getattr(shape, "strokeColor", None) for shape in d.contents]
     assert pdf_theme.PDFColors.brand in stroke_colors
+    fill_colors = [getattr(shape, "fillColor", None) for shape in d.contents]
+    assert pdf_theme.PDFColors.logo_accent in fill_colors

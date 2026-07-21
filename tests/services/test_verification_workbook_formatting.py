@@ -312,12 +312,12 @@ def _banner_text(cell_value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_workbook_uses_brand_navy_headers_not_legacy_accent(
+async def test_workbook_uses_brand_graphite_headers_not_legacy_accent(
     db_session, seed_organization_factory
 ):
-    """Design-system alignment (2026-07-04): the produced workbook carries the
-    brand-navy (#0F4C81) header fill and NONE of the legacy ad-hoc accent
-    (#E7EEF6) remains. openpyxl reads fills as 8-char ARGB (e.g. 'FF0F4C81')."""
+    """Design-system alignment (#59 P3): the produced workbook carries the
+    graphite brand (#37464F) header fill and NONE of the legacy ad-hoc accent
+    (#E7EEF6) remains. openpyxl reads fills as 8-char ARGB (e.g. 'FF37464F')."""
     org = await seed_organization_factory(name="vwb-brand-navy")
     run = await _make_reconstructible_run(db_session, org)
 
@@ -329,7 +329,7 @@ async def test_workbook_uses_brand_navy_headers_not_legacy_accent(
                 fg = cell.fill.fgColor
                 if fg is not None and fg.rgb and isinstance(fg.rgb, str):
                     fills.add(fg.rgb.upper())
-    assert "FF0F4C81" in fills, f"brand-navy header fill missing; fills={sorted(fills)}"
+    assert "FF37464F" in fills, f"brand header fill missing; fills={sorted(fills)}"
     assert "FFE7EEF6" not in fills, "legacy _ACCENT #E7EEF6 must be gone"
 
 

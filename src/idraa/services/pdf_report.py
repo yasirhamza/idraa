@@ -121,7 +121,7 @@ _Z_P95: float = 1.6448536269514720  # Phi^-1(0.95)
 # equivalent and stay raw HexColor literals.
 PDF_CHART_THEME: dict[str, Any] = {
     "colorway": [
-        pdf_theme.PDFColors.brand,  # #0F4C81
+        pdf_theme.PDFColors.brand,  # #37464F
         pdf_theme.PDFColors.numeric_neg,  # #B91C1C (status-critical)
         pdf_theme.PDFColors.numeric_pos,  # #15803D (status-success)
         pdf_theme.PDFColors.status_warning,  # #B45309
@@ -135,7 +135,7 @@ PDF_CHART_THEME: dict[str, Any] = {
 }
 
 # ---- Brand color alias (single reference drawn from PDFColors, not re-typed) ----
-_BRAND_BLUE = pdf_theme.PDFColors.brand
+_BRAND = pdf_theme.PDFColors.brand
 
 # ---- Muted-typical sub-line color (2026-07-04 mean+typical side-by-side, #467) ----
 # Reportlab <font color="..."> markup needs a literal hex string, not a Color
@@ -528,7 +528,7 @@ def _draw_cover(data: RunReportData, styles: Any) -> list[Any]:
     _mpe_suffix = " (average)" if _has_wr else ""
     return [
         # Logomark + typographic wordmark: "Idraa" Helvetica-Bold 20pt
-        # #0F4C81, logomark to its left (T3, #59), both over a 2pt rule.
+        # #37464F, logomark to its left (T3, #59), both over a 2pt rule.
         _cover_header_table(wordmark_style),
         _wordmark_rule(),
         Spacer(1, 0.2 * inch),
@@ -617,7 +617,7 @@ def _cover_header_table(wordmark_style: ParagraphStyle) -> Table:
 
 
 def _wordmark_rule() -> Drawing:
-    """2pt brand-blue horizontal rule under the wordmark — pure vector.
+    """2pt brand horizontal rule under the wordmark — pure vector.
 
     P3: the rule sits near the BOTTOM of a taller (12pt) drawing so ~9pt of
     clearance separates it from the wordmark baseline. The previous 4pt-tall
@@ -626,7 +626,7 @@ def _wordmark_rule() -> Drawing:
     """
     d = Drawing(400, 12)
     line = Line(0, 2, 400, 2)
-    line.strokeColor = _BRAND_BLUE
+    line.strokeColor = _BRAND
     line.strokeWidth = 2
     d.add(line)
     return d
@@ -947,7 +947,7 @@ def _epc_chart(data: RunReportData, *, width: float = 480.0) -> Drawing:
     epc_series = [s for s in [_without, _with] if s]
     plot.data = epc_series if epc_series else [[]]
     # Color assignments: without (orange/inherent) first when present,
-    # with (brand blue solid) second (or first if without is absent).
+    # with (brand solid) second (or first if without is absent).
     _color_idx = 0
     if _without:
         plot.lines[_color_idx].strokeColor = PDF_CHART["inherent"]
@@ -2044,10 +2044,10 @@ def _draw_control_effectiveness_page(data: RunReportData, styles: Any) -> list[A
         bg.fillColor = PDF_CHART["grid"]  # surface/border token, was literal "#E4E4E7"
         bg.strokeColor = None
         d.add(bg)
-        # Filled bar (brand blue, width proportional to score)
+        # Filled bar (brand, width proportional to score)
         if filled_width > 0:
             fill = Rect(0, 3, filled_width, bar_height)
-            fill.fillColor = _BRAND_BLUE
+            fill.fillColor = _BRAND
             fill.strokeColor = None
             d.add(fill)
         # Score label to the right of the bar
