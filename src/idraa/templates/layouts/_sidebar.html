@@ -24,7 +24,13 @@
 
 <aside id="sidebar"
        x-data="{
-         collapsed: document.documentElement.getAttribute('data-sidebar-collapsed') === 'true',
+         // Collapse is a DESKTOP-only concept: below md the sidebar is an
+         // off-canvas drawer that must always render full-width with full
+         // labels. Without this viewport gate, a 'collapsed' pref persisted
+         // from a desktop session leaks into the phone drawer (w-16 rail,
+         // single-letter labels — UAT 2026-07-21).
+         collapsed: window.matchMedia('(min-width: 768px)').matches
+           && document.documentElement.getAttribute('data-sidebar-collapsed') === 'true',
          toggle() {
            this.collapsed = !this.collapsed;
            try { localStorage.setItem('idraa.sidebar', this.collapsed ? 'collapsed' : 'expanded'); } catch(_){}
@@ -48,7 +54,9 @@
   {# Brand header — logomark stays visible icon-only; wordmark hides via Alpine
      x-show (a separate span, NOT logomark's own with_wordmark param — `collapsed`
      is an Alpine client var invisible to Jinja, so the toggle must be pure CSS/x-show). #}
-  <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+  {# pl-16 below md clears the fixed ☰ hamburger (left-4, ~32px wide) so it
+     never overlaps the logomark when the drawer is open. #}
+  <div class="pl-16 pr-4 md:px-4 py-3 border-b border-border-subtle flex items-center justify-between">
     <a href="/" class="flex items-center gap-2.5 text-ink-1 hover:text-brand transition-colors" aria-label="Idraa — home">
       {{ logomark(size=28) }}
       <span x-show="!collapsed" class="text-h3 font-semibold tracking-tight">Idraa</span>
