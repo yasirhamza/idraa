@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi import BackgroundTasks
-from sqlalchemy import func, select
+from sqlalchemy import or_, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ from idraa.services.run_inputs_hash import (
     build_aggregate_inputs_hash,
     build_inputs_hash,
 )
+from idraa.services.run_reaper import active_run_ids
 from idraa.services.sample_codec import decode_sample_arrays
 
 _MIN_ITERATIONS = 100
@@ -167,27 +168,55 @@ class RunService:
         # Issue #508 (PR2 final-gate Sec-I): single-flight cap for high-fidelity
         # runs. Raising mc_iterations_max to 1M scaled each max-N run's peak RSS
         # ~10x (~700 MB), so unbounded concurrent high-N dispatch could OOM the
-        # 4 GB VM. Reject a new high-N run when the cap of concurrent in-flight
-        # (RUNNING + QUEUED) high-N runs is already met. Counted from the DB, so
-        # it self-heals via the run reaper on an OOM-orphaned RUNNING row — no
-        # in-process counter to leak on SIGKILL. GLOBAL, not org-scoped: the VM
-        # RAM is shared across orgs. A small TOCTOU between two truly-simultaneous
-        # dispatches is acceptable (a rare off-by-one still fits at ~700 MB/run).
+        # VM. Reject a new high-fidelity run when the concurrency cap is already
+        # met. GLOBAL, not org-scoped: the VM RAM is shared across orgs. A small
+        # TOCTOU between two truly-simultaneous dispatches is acceptable.
+        #
+        # Two hardenings over the original DB-status count (2026-07-21 security
+        # sweep):
+        #   riskflow#566 (H1): a run holds its numpy arrays while its executor
+        #     TASK is alive, which OUTLIVES a CANCELLED DB status — cancel() is
+        #     accounting-only and the uninterruptible to_thread compute runs to
+        #     completion. A DB-status-only count would let a cancel-then-
+        #     redispatch loop free the cap slot while the memory is still held.
+        #     So we also count runs present in the in-process active-run registry
+        #     (run_reaper, which tracks a task for its WHOLE lifetime regardless
+        #     of DB status). The registry is per-process in-memory, so it can't
+        #     leak on SIGKILL, and DB-status still covers reaper-orphaned rows.
+        #   riskflow#565 (L5): effective peak work is iterations x scenario count.
+        #     An AGGREGATE holds every constituent scenario's full per-iteration
+        #     arrays at once, so its RSS scales with NxM, not M — a many-scenario
+        #     aggregate just under the per-run threshold would otherwise slip the
+        #     cap. We weigh both the incoming dispatch and each in-flight run by
+        #     NxM. (This limits CONCURRENCY of big aggregates; it does not reject
+        #     any single large aggregate — hundreds-of-scenario runs remain valid.)
         settings = get_settings()
-        if effective_iterations >= settings.high_fidelity_iterations_threshold:
-            inflight_high_n = await self._db.scalar(
-                select(func.count())
-                .select_from(RiskAnalysisRun)
-                .where(
-                    RiskAnalysisRun.status.in_((RunStatus.RUNNING, RunStatus.QUEUED)),
-                    RiskAnalysisRun.mc_iterations >= settings.high_fidelity_iterations_threshold,
-                )
+        threshold = settings.high_fidelity_iterations_threshold
+        if effective_iterations * len(scenario_ids) >= threshold:
+            active = active_run_ids()
+            status_pred = RiskAnalysisRun.status.in_((RunStatus.RUNNING, RunStatus.QUEUED))
+            where_pred = (
+                status_pred if not active else or_(status_pred, RiskAnalysisRun.id.in_(active))
             )
-            if (inflight_high_n or 0) >= settings.max_concurrent_high_fidelity_runs:
+            candidates = (
+                await self._db.execute(
+                    select(
+                        RiskAnalysisRun.mc_iterations,
+                        RiskAnalysisRun.run_type,
+                        RiskAnalysisRun.aggregate_scenario_ids,
+                    ).where(where_pred)
+                )
+            ).all()
+            inflight_high_n = sum(
+                1
+                for mc, rtype, agg_ids in candidates
+                if mc * (len(agg_ids) if rtype == RunType.AGGREGATE and agg_ids else 1) >= threshold
+            )
+            if inflight_high_n >= settings.max_concurrent_high_fidelity_runs:
                 raise RunValidationError(
                     "High-fidelity capacity is busy: at most "
                     f"{settings.max_concurrent_high_fidelity_runs} runs of "
-                    f"{settings.high_fidelity_iterations_threshold:,}+ iterations can "
+                    f"{threshold:,}+ effective iterations (iterations x scenarios) can "
                     "run at once (memory limit). Wait for one to finish, or lower the "
                     "iteration count."
                 )
@@ -327,6 +356,15 @@ class RunService:
         run_id: uuid.UUID,
         cancelled_by: uuid.UUID,
     ) -> RiskAnalysisRun:
+        """Cancel a run. BEST-EFFORT: this flips the DB status and writes audit,
+        but does NOT abort the background computation — the heavy Monte-Carlo
+        work runs inside an uninterruptible ``asyncio.to_thread`` call that takes
+        no cancel token, so a cancelled run keeps its CPU and ~700 MB of numpy
+        arrays until the engine call finishes. The high-fidelity concurrency cap
+        in ``create_and_dispatch`` accounts for this by counting the in-process
+        active-run registry (which tracks the task past its CANCELLED DB status),
+        so cancel-then-redispatch cannot free a memory slot early (riskflow#566).
+        """
         run = await RunRepo(self._db).get_for_org_or_raise(
             organization_id,
             run_id,
@@ -368,6 +406,14 @@ class RunService:
         In-flight guard: QUEUED / RUNNING runs raise ``RunBusyError``
         (-> route 409) unless ``force=True`` — deleting a row the
         background executor still holds can orphan the executor's commit.
+        ``force`` is for cleaning up ORPHANED rows (RUNNING in the DB but no
+        live task — e.g. after a SIGKILL). It does NOT override a run whose
+        executor task is still live (present in the active-run registry):
+        deleting that row both orphans the pending commit AND makes its
+        ~700 MB compute invisible to the high-fidelity OOM cap, reopening the
+        cancel-then-redispatch bypass class this hardening closes (riskflow#566
+        security-review sibling). A live run must be cancelled and allowed to
+        finish before deletion.
 
         The 1:1 ``run_samples`` row is removed by the DB-level
         ``ON DELETE CASCADE`` FK, so no explicit child delete here.
@@ -377,6 +423,17 @@ class RunService:
         (mirrors ScenarioService.delete).
         """
         run = await RunRepo(self._db).get_for_org_or_raise(org_id, run_id)
+        # riskflow#566 sibling (security-review R-1): a run whose executor task
+        # is still live may never be deleted — not even with force — because its
+        # uninterruptible compute keeps ~700 MB after the row is gone, and a
+        # gone row is invisible to the high-fidelity cap (which needs the row to
+        # weigh it). `force` remains available for true orphans (RUNNING in DB,
+        # absent from the registry — the reaper's domain).
+        if run.id in active_run_ids():
+            raise RunBusyError(
+                f"run id={run_id} is still computing; cancel it and wait for it "
+                "to finish before deleting (a live run cannot be force-deleted)"
+            )
         if run.status in (RunStatus.RUNNING, RunStatus.QUEUED) and not force:
             raise RunBusyError(
                 f"run id={run_id} is {run.status.value}; cancel it first or "
