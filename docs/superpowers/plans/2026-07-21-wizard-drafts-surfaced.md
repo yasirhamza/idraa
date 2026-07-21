@@ -16,7 +16,7 @@
 
 - Timestamps render via the `format_datetime` Jinja filter (`<time data-localize>`), NEVER raw strftime (CLAUDE.md).
 - Discard reuses `POST /scenarios/new/wizard/cancel?tx=` — no new delete surface. Every form carries `{{ csrf_field() }}`.
-- Resume links are `/scenarios/new/wizard/step/{current_step}?tx={tx_id}` with `current_step` clamped to 2..6 (defensive: a corrupt draft with step 1/7 must not 500 the list — clamp, don't crash).
+- Resume links are `/scenarios/new/wizard/step/{current_step}?tx={tx_id}`; `current_step` upper-clamped to 6 only (step 1 is a VALID route — DQ-1/DA-7); never-advanced drafts (`current_step < 2`) are FILTERED out of strip and badge entirely (DA-1, spec §1).
 - pytest FOREGROUND only, `SESSION_SECRET=drafts-implement-01 uv run pytest ... -q --no-cov`.
 - Rebuild the sheet (`uv run python -m idraa.tasks.build_css`) in any commit that changes template class inventory; commit `tailwind.css` with it.
 - Pre-commit auto-fix → `git add -A`, retry once.
@@ -55,7 +55,7 @@ from idraa.utils.timeutils import now_utc
 pytestmark = pytest.mark.asyncio
 
 
-async def _mk_draft(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID, age_days: int) -> uuid.UUID:
+async def _mk_draft(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID, age_days: int) -> uuid.UUID:  # noqa: E501
     tx = uuid.uuid4()
     draft = WizardDraft(
         user_id=user_id,
@@ -82,15 +82,16 @@ async def test_ttl_setting_default() -> None:
 
 
 async def test_cleanup_deletes_old_keeps_recent(
-    analyst_user, db_session: AsyncSession
+    seed_user, seed_organization, db_session: AsyncSession
 ) -> None:
-    user = analyst_user
+    user = seed_user
     old_tx = await _mk_draft(db_session, user.id, user.organization_id, age_days=40)
     new_tx = await _mk_draft(db_session, user.id, user.organization_id, age_days=1)
     svc = WizardStateService(db_session)
-    deleted = await svc.cleanup_expired(max_age_minutes=30 * 24 * 60)
+    await svc.cleanup_expired(max_age_minutes=30 * 24 * 60)
     await db_session.commit()
-    assert deleted == 1
+    # NO count assertion (DQ-5): cleanup_expired's docstring warns SQLite may
+    # report -1 — correctness is the row set, not the count.
     from sqlalchemy import select
 
     remaining = (
@@ -99,9 +100,11 @@ async def test_cleanup_deletes_old_keeps_recent(
     assert new_tx in remaining and old_tx not in remaining
 ```
 
-(READ tests/conftest.py first for the real analyst-user fixture name — use
-whatever yields a persisted `User`; if only `authed_analyst` exists, derive
-the user via the existing `_user_id_from_org`-style helper pattern.)
+(Fixtures pinned per DQ-3: `seed_user` is an ANALYST `User` at
+tests/conftest.py:386, `seed_organization` its org — the exact pair the
+adjacent `test_cleanup_expired_removes_idle_drafts` already uses at
+tests/unit/test_wizard_state.py:150-154. `authed_analyst` yields
+`(client, org_id)` — NOT a User — do not use it here.)
 
 - [ ] **Step 2: Run — expect FAIL** (`wizard_draft_ttl_days` missing).
 
@@ -123,6 +126,22 @@ the user via the existing `_user_id_from_org`-style helper pattern.)
     `async def cleanup_expired(self, *, max_age_minutes: int) -> int:`
     (no default — the only caller passes the settings value; update the
     module docstring's stale "30min" reference).
+  - **Boot sweep (DA-3, PRIMARY on scale-to-zero):** in `app.py`'s lifespan,
+    immediately after the existing boot `reap_orphaned_runs` call (~line
+    776), add an exception-guarded one-shot:
+    ```python
+    try:
+        await _sweep_wizard_drafts(_settings)
+    except Exception:
+        _logger.exception("Boot wizard-draft sweep failed; continuing startup")
+    ```
+    (import alongside the reaper imports at app.py:764; a sweep failure
+    must never block startup).
+  - Both `config.py` field descriptions document the coupling (DQ-6): the
+    new field notes "periodic sweep rides the run-reaper loop —
+    RUN_REAPER_INTERVAL_SECONDS=0 disables it (boot sweep still runs)";
+    `run_reaper_interval_seconds`'s description gains "also the cadence of
+    the wizard-draft TTL sweep".
   - `run_reaper.py` — inside `periodic_reaper_loop`'s `while True:` body,
     after the `reap_once` try/except, a SECOND isolated step:
     ```python
@@ -144,7 +163,9 @@ the user via the existing `_user_id_from_org`-style helper pattern.)
             return
         from idraa.services.wizard_state import WizardStateService
 
-        async with <the same session-factory idiom reap_once uses>() as session:
+        from idraa.db import get_session
+
+        async with get_session() as session:  # the exact idiom reap_once uses (run_reaper.py:196-199)
             deleted = await WizardStateService(session).cleanup_expired(
                 max_age_minutes=ttl_days * 24 * 60
             )
@@ -175,24 +196,43 @@ new drafts strip debuts as a wall of abandoned test walks. 7 days keeps
 anything plausibly wanted. Downgrade is a no-op (rows are gone).
 """
 
+import datetime
+import logging
+
+import sqlalchemy as sa
+from alembic import op
+
+logger = logging.getLogger("alembic.runtime.migration")
+
+
 def upgrade() -> None:
-    op.execute(
-        "DELETE FROM wizard_drafts "
-        "WHERE updated_at < datetime('now', '-7 days')"
+    # Dialect-neutral bound-param cutoff (DQ-2/DA-6): mirrors the
+    # b7d2e8a1c5f3 timestamp-window precedent — NOT SQLite's datetime().
+    # UtcDateTime stores "YYYY-MM-DD HH:MM:SS.ffffff" UTC wall-clock
+    # (verified at plan-gate), so a same-format string compares correctly.
+    cutoff = (
+        datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=7)
+    ).strftime("%Y-%m-%d %H:%M:%S.%f")
+    result = op.get_bind().execute(
+        sa.text("DELETE FROM wizard_drafts WHERE updated_at < :cutoff"),
+        {"cutoff": cutoff},
     )
+    logger.warning("pruned %d stale wizard draft(s) (>7 days idle)", result.rowcount)
 
 
 def downgrade() -> None:
     pass
 ```
 
-NOTE: `datetime('now', ...)` is SQLite dialect. The repo is
-SQLite-dev/Postgres-later — follow the repo's existing data-migration
-dialect handling (READ the #346-era migration `d4918202a23a`-adjacent
-files for the established pattern; if they branch on dialect, mirror it;
-`updated_at` is stored UTC via UtcDateTime).
-
-- [ ] **Step 2:** Test: seed two drafts (10 days / 1 day old) into a migrated fixture DB, run the upgrade SQL, assert 1 survivor. `uv run alembic heads` shows exactly ONE head.
+- [ ] **Step 2:** Test via the EXISTING pytest-alembic harness (DQ-4 —
+tests/migrations/conftest.py provides `alembic_config`/`alembic_engine`;
+follow the exact time-cutoff analog `tests/migrations/test_audit_f2_vuln_framing.py:59-74`):
+`command.upgrade(cfg, <prior rev>)` → raw-INSERT two drafts with
+`updated_at` at now−10 days / now−1 day (format them with the same
+`%Y-%m-%d %H:%M:%S.%f` strftime) → `command.upgrade(cfg, <new rev>)` →
+assert exactly the 1-day row survives. Do NOT call the migration's
+`upgrade()` function directly. `uv run alembic heads` shows exactly ONE
+head (current head to chain from: `26444158e537`).
 - [ ] **Step 3: Commit** — `chore(wizard): one-time prune of pre-UI stale drafts (drafts-surfaced T2)`
 
 ---
@@ -207,8 +247,8 @@ files for the established pattern; if they branch on dialect, mirror it;
 **Interfaces:**
 - Produces: template context `wizard_drafts: list[dict]` — each `{"tx_id": str, "name": str, "step": int, "reestimating": bool, "updated_at": datetime}`. Task 4 mirrors the same dict shape.
 
-- [ ] **Step 1: Failing tests** — own-drafts-only isolation (create drafts for two users, assert only the session user's render), cap 20 (create 22, assert 20 rendered + newest first), name fallback, `data-drafts-strip` pin, absent when zero drafts.
-- [ ] **Step 2:** Route: query `WizardDraft` where `user_id == user.id` order `updated_at desc` limit 20; map `state_json` → the context dict (name = `state_json.get("name") or "New scenario"`; `reestimating` = bool(`target_scenario_id`); step = clamp(`current_step`, 2, 6)). NO N+1: no per-draft scenario lookups (the strip shows the draft's own name copy, which for re-estimates IS the target's name at seed time).
+- [ ] **Step 1: Failing tests** — own-drafts-only isolation (create drafts for two users, assert only the session user's render — the session user is resolved by email `analyst@test.local` via a select on User, since `authed_analyst` yields only (client, org_id) — DQ-3), org isolation (a same-user draft in ANOTHER org does not render — DA-2), step-1 drafts EXCLUDED (DA-1), cap 20 (create 22 qualifying, assert 20 rendered + newest first), name fallback, `data-drafts-strip` pin, absent when zero qualifying drafts.
+- [ ] **Step 2:** Route: query `WizardDraft` where `user_id == user.id` AND `organization_id == user.organization_id` (DA-2) order `updated_at desc` limit 20; then map rows, SKIPPING drafts whose `state_json.get("current_step", 1) < 2` (DA-1 — filter in Python after the fetch; the JSON filter in SQL is not worth the dialect fuss at limit-20 scale) — NOTE this means fewer than 20 may render when step-1 rows pad the fetch; acceptable (they are invisible noise, not content). Context dict per row: name = `state_json.get("name") or "New scenario"`; `reestimating` = bool(`state_json.get("target_scenario_id")`); step = `min(int(state_json.get("current_step", 2)), 6)` (upper clamp only — DQ-1); `tx_id`/`updated_at` from the ORM row (DQ-8). NO N+1: no per-draft scenario lookups.
 - [ ] **Step 3:** Template:
 ```html
 {% if wizard_drafts %}
@@ -243,7 +283,35 @@ files for the established pattern; if they branch on dialect, mirror it;
 - Modify: `src/idraa/templates/scenarios/view.html` — notice under the Re-estimate row (`data-reestimate-draft-badge`)
 - Test: append to `tests/integration/test_wizard_drafts_strip.py`
 
-- [ ] Steps: failing test (badge for targeting draft w/ Resume+Discard; absent without; newest-of-two) → route (query by `user_id` + JSON `target_scenario_id == scenario.id.hex` — SQLite JSON extract or filter in Python over the ≤20 newest; keep it simple: fetch user's drafts once, filter in Python) → template notice → run → commit `feat(wizard): re-estimation-in-progress badge on scenario page (drafts-surfaced T4)`.
+- [ ] Steps: failing test (badge for targeting draft w/ Resume+Discard; absent without; newest-of-two wins; a step-1 targeting draft does NOT badge) → route: SQL by target, NOT a capped fetch (DA-5): `select(WizardDraft).where(WizardDraft.user_id == user.id, WizardDraft.organization_id == user.organization_id, WizardDraft.state_json["target_scenario_id"].as_string() == scenario.id.hex).order_by(WizardDraft.updated_at.desc()).limit(1)` (SQLAlchemy JSON accessor works on SQLite JSON1; verify `.as_string()` against the stored plain-string value, else use `func.json_extract`), then apply the same `current_step >= 2` filter → template notice → run → commit `feat(wizard): re-estimation-in-progress badge on scenario page (drafts-surfaced T4)`.
+
+---
+
+### Task 4b: Resume/discard robustness (spec §4b — DA-4/DA-8)
+
+**Files:**
+- Modify: `src/idraa/routes/scenarios.py` — `get_wizard_step` (~1611) + `cancel_wizard` (~2559)
+- Test: append to `tests/integration/test_wizard_drafts_strip.py`
+
+- [ ] **Step 1: Failing tests** — (a) GET a wizard step with an explicit
+random tx → 303 to `/scenarios` AND no new wizard_drafts row exists
+(count unchanged); (b) POST cancel with an unknown tx → 303, count
+unchanged (no mint-then-delete write pair — assert via row count before/
+after); (c) POST cancel with `tx=not-a-uuid` → 303 (not 500); (d) the
+no-tx GET entry path still mints + renders step 1 (unchanged behavior).
+- [ ] **Step 2:** `get_wizard_step`: when `tx` is provided, look the draft
+up first (`WizardStateService` needs a read-only `get(user_id, tx_id) ->
+WizardState | None` — add it beside `get_or_create`, same query minus the
+create branch); on miss: `build_flash("That draft no longer exists — it
+may have been discarded or expired.", "warning")` → 303 `/scenarios`
+(match the repo's flash-on-redirect pattern used by the delete-run fix in
+routes/runs.py — READ it and mirror the query-param + flash mechanics).
+No-tx path untouched. `cancel_wizard`: drop the `get_or_create` +
+short-circuit dance; guard `uuid.UUID(tx)` in try/except ValueError → 303
+`/scenarios`; call `wiz.clear(user_id=user.id, tx_id=parsed)` directly
+(verify `clear` is a WHERE-delete safe on missing rows — READ it; if it
+isn't idempotent, make it so).
+- [ ] **Step 3: Run + commit** — `fix(wizard): dead-tx resume redirects instead of minting phantoms; idempotent cancel (drafts-surfaced T4b)`
 
 ---
 
@@ -267,6 +335,7 @@ Placed BEFORE Cancel (exit = safe action, cancel = destructive). Commit `feat(wi
 ### Task 6: Verification sweep (main loop)
 
 - [ ] Full affected suites + `tests/unit tests/integration -k "wizard or draft or scenario"` green; `uv run ruff check .`, `format --check`, `mypy src`.
+- [ ] Open the follow-up GH issue for the DA-1 root cause: "wizard mints a draft on GET — move to lazy-create on first POST" (cite this spec).
 - [ ] `uv run alembic heads` → single head; upgrade runs clean on a copy of a seeded dev DB.
 - [ ] Playwright smoke on the UAT snapshot: strip renders with the snapshot's real drafts, Resume lands on the right step, Discard removes the row, badge on a targeted scenario, exit link present. Screenshots for the owner.
 - [ ] Full local gate green → final bundled review → PR.
