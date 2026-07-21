@@ -229,3 +229,132 @@ async def test_strip_absent_when_zero_qualifying_drafts(
     resp = await client.get("/scenarios")
     assert resp.status_code == 200
     assert "data-drafts-strip" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# T4: re-estimation badge on the scenario page (spec §2, DA-5)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_scenario(
+    db: AsyncSession, org_id: uuid.UUID, *, name: str = "Badge scenario"
+) -> Any:
+    from idraa.models.enums import ScenarioSource, ScenarioType
+    from idraa.models.scenario import Scenario
+
+    sc = Scenario(
+        organization_id=org_id,
+        name=name,
+        threat_category="malware",
+        scenario_type=ScenarioType.CUSTOM,
+        source=ScenarioSource.EXPERT_JUDGMENT,
+        threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 2.0},
+        vulnerability={"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6},
+        primary_loss={"distribution": "PERT", "low": 1000, "mode": 5000, "high": 20000},
+        version="1.0",
+    )
+    db.add(sc)
+    await db.flush()
+    return sc
+
+
+@pytest.mark.asyncio
+async def test_badge_shown_for_targeting_draft(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_analyst
+    analyst = await _analyst_user(db_session, org_id)
+    scenario = await _seed_scenario(db_session, org_id)
+    draft = _mk_draft(
+        user_id=analyst.id,
+        organization_id=org_id,
+        current_step=3,
+        target_scenario_id=scenario.id.hex,
+    )
+    db_session.add(draft)
+    await db_session.commit()
+    tx_id = str(draft.tx_id)
+    await db_session.close()
+
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "data-reestimate-draft-badge" in body
+    assert f"tx={tx_id}" in body  # Resume link
+    assert "Discard" in body
+
+
+@pytest.mark.asyncio
+async def test_badge_absent_without_targeting_draft(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_analyst
+    scenario = await _seed_scenario(db_session, org_id)
+    await db_session.commit()
+    await db_session.close()
+
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
+    assert "data-reestimate-draft-badge" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_badge_newest_of_two_wins(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_analyst
+    analyst = await _analyst_user(db_session, org_id)
+    scenario = await _seed_scenario(db_session, org_id)
+    now = now_utc()
+    older = _mk_draft(
+        user_id=analyst.id,
+        organization_id=org_id,
+        current_step=2,
+        target_scenario_id=scenario.id.hex,
+        updated_at=now - datetime.timedelta(minutes=10),
+    )
+    newer = _mk_draft(
+        user_id=analyst.id,
+        organization_id=org_id,
+        current_step=3,
+        target_scenario_id=scenario.id.hex,
+        updated_at=now,
+    )
+    db_session.add(older)
+    db_session.add(newer)
+    await db_session.commit()
+    older_tx, newer_tx = str(older.tx_id), str(newer.tx_id)
+    await db_session.close()
+
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert f"tx={newer_tx}" in body
+    assert f"tx={older_tx}" not in body
+
+
+@pytest.mark.asyncio
+async def test_badge_step1_targeting_draft_does_not_badge(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_analyst
+    analyst = await _analyst_user(db_session, org_id)
+    scenario = await _seed_scenario(db_session, org_id)
+    db_session.add(
+        _mk_draft(
+            user_id=analyst.id,
+            organization_id=org_id,
+            current_step=1,
+            target_scenario_id=scenario.id.hex,
+        )
+    )
+    await db_session.commit()
+    await db_session.close()
+
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
+    assert "data-reestimate-draft-badge" not in resp.text

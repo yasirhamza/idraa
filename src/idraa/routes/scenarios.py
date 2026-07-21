@@ -753,6 +753,35 @@ async def view_scenario(
             )
             recommendations = [r for r in all_recs if not r.adopted]  # un-adopted only (§6.3)
 
+    # Drafts-surfaced T4 (spec §2, DA-5): newest current-user draft targeting
+    # THIS scenario, queried by target in SQL (never "the 20 newest,
+    # filtered" — that would inherit the strip's display cap and could miss
+    # a real targeting draft beyond it).
+    reestimate_draft: dict[str, Any] | None = None
+    draft_row = (
+        await db.execute(
+            select(WizardDraft)
+            .where(
+                WizardDraft.user_id == user.id,
+                WizardDraft.organization_id == user.organization_id,
+                WizardDraft.state_json["target_scenario_id"].as_string() == scenario.id.hex,
+            )
+            .order_by(WizardDraft.updated_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if draft_row is not None:
+        draft_sj = draft_row.state_json or {}
+        draft_step = int(draft_sj.get("current_step", 1))
+        if draft_step >= 2:  # DA-1: same never-advanced filter as the strip
+            reestimate_draft = {
+                "tx_id": str(draft_row.tx_id),
+                "name": draft_sj.get("name") or "New scenario",
+                "step": min(draft_step, 6),
+                "reestimating": True,
+                "updated_at": draft_row.updated_at,
+            }
+
     return templates.TemplateResponse(
         request,
         "scenarios/view.html",
@@ -762,6 +791,7 @@ async def view_scenario(
             "scenario": scenario,
             "recommendations": recommendations,
             "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
+            "reestimate_draft": reestimate_draft,
         },
     )
 
