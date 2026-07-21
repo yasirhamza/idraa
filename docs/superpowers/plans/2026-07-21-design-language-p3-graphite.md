@@ -85,8 +85,10 @@ async def test_brand_contrast_routing() -> None:
     css = APP_CSS_PATH.read_text(encoding="utf-8")
     assert "text-brand-contrast" in css
     assert "--tw-ring-color: var(--color-brand)" in css
+    # Split on the rule's opening brace, not the bare selector — the selector
+    # text also appears in an explanatory COMMENT above the rule (Q-11).
     for rule in (".btn-primary", ".tabs-boxed .tab-active"):
-        block = css.split(rule, 1)[1].split("}", 1)[0]
+        block = css.split(rule + " {", 1)[1].split("}", 1)[0]
         assert "var(--color-brand-contrast)" in block, rule
         assert "#fff" not in block, rule
 
@@ -166,6 +168,9 @@ Dark scope:
 Foreground routing:
 - `.btn-primary` block: `color: #fff;` → `color: var(--color-brand-contrast);`
 - `.tabs-boxed .tab-active` block: `color: #fff !important;` → `color: var(--color-brand-contrast) !important;`
+- While editing these two blocks, reword their stale comments (plan-gate
+  Arch-11): app.css ~line 222 "Brand-navy primary actions" → "Brand primary
+  actions"; ~lines 240-241 "…instead of brand navy" → "…instead of brand".
 - `macros/page_header.html:49` and `macros/data_table.html:72`: `text-white` → `text-brand-contrast` (keep every other class).
 - `setup/wizard.html:26,30`, `scenarios/wizard/_shell.html:62`, `fx_rates/form.html:33`: `bg-brand text-white` → `bg-brand text-brand-contrast`.
 - `macros/page_header.html:52` and `macros/data_table.html:73`: `var(--color-brand, #0F4C81)` → `var(--color-brand, #37464F)`.
@@ -255,7 +260,9 @@ Also flip the P1 pin at `test_design_language_p1.py:47`:
      palette-agnostic rule. They MUST be kept in sync with the light/dark
      --color-brand tokens in src/idraa/static/css/app.css (the internal media
      query below handles dark browser chrome); the dot matches
-     --color-logo-accent. -->
+     --color-logo-accent. The media query follows the BROWSER's color scheme,
+     not the in-app data-theme toggle — tab chrome is browser-themed, so this
+     divergence is deliberate; do not "fix" it. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <style>
     .ink { stroke: #37464F; }
@@ -466,17 +473,38 @@ async def test_rebuilt_sheet_has_hover_surface() -> None:
 | `text-base-content/70` | `text-ink-2` |
 | `text-base-content/60` | `text-ink-2` |
 | `text-base-content/50` | READ the context: decorative glyph → `text-ink-3`, readable text → `text-ink-2` |
-| `bg-primary` | `bg-brand` |
+| `bg-primary` (NOT the `/5` site — see below) | `bg-brand` |
 | `text-primary-content` | `text-brand-contrast` |
 | `text-primary` | `text-brand` |
 | `ring-primary` | `ring-brand` |
 | `text-error` | `text-status-critical` |
-| `border-error` | `border-status-critical` |
+| `border-error` (NOT the `/30` sites — see below) | `border-status-critical` |
 | `text-success` | `text-status-success` |
 | `text-warning` | `text-status-warning` |
 
-Replacement ORDER matters where prefixes overlap: replace `hover:bg-base-200`
-before `bg-base-200`, `text-primary-content` before `text-primary`.
+**OPACITY-MODIFIED sites (plan-gate Q-10 — 4 usages; the hex-var tokens
+silently DROP `/NN` modifiers, per the documented foot-gun at
+`macros/page_header.html:24-27`, so a whole-token replace would render
+solid fills):**
+
+- `scenarios/wizard/_step_1_library_cards.html:7` —
+  `[&:has(input:checked)]:bg-primary/5` →
+  `[&:has(input:checked)]:bg-[color-mix(in_srgb,var(--color-brand)_5%,transparent)]`
+  (Tailwind arbitrary-value; the JIT already generates arbitrary-variant
+  utilities from this file — `ring-primary` on line 6 proves the scan
+  reaches it). This is a THIRD edit-site kind (Tailwind arbitrary-variant
+  string), distinct from the two Alpine `:class` sites.
+- `overlays/import_result.html:29`, `library/import_result.html:29`,
+  `scenarios/import_result.html:29` — `border-error/30` →
+  `border-status-critical-faint`, a new hand-written utility added next to
+  the other token utilities in `app.css`:
+  `.border-status-critical-faint { border-color: color-mix(in srgb, var(--color-status-critical) 30%, transparent); }`
+
+Replacement ORDER matters where prefixes overlap: handle the 4
+opacity-modified sites FIRST, then `hover:bg-base-200` before
+`bg-base-200`, `text-primary-content` before `text-primary`. After Step 3,
+verify no `/NN`-modified token utility exists:
+`grep -rEn '(bg-brand|border-status|text-status|bg-surface|text-ink)[a-z-]*/[0-9]+' src/idraa/templates` → empty.
 
 Enumerate first: `grep -rEln '(bg|text|border|ring)-(base-|primary|error|success|warning)' src/idraa/templates`.
 Then verify zero remain with the guard regex.
@@ -494,10 +522,38 @@ SESSION_SECRET=p3-graphite-implement uv run pytest tests/integration/test_design
 
 ### Task 5: Hamburger clearance on hand-authored headers
 
+**Pre-triage (plan-gate Arch-9 — the heuristic population was enumerated
+and classified against the tree; the burger renders on EVERY page,
+including login/setup, because `base.html:115` includes the sidebar
+unconditionally):**
+
+FIX — every heuristic candidate whose breadcrumb/`<h1>` is the first
+content element and is not device-gated gets `pl-16 md:pl-0`.
+**Allowlisting a colliding page is never permitted.** The 19 FIX files:
+`help/index.html`; `library/import.html`, `library/import_preview.html`,
+`library/import_result.html`, `library/import_expired.html`,
+`library/delete_result.html`; `scenarios/import.html`,
+`scenarios/import_preview.html`, `scenarios/import_result.html`,
+`scenarios/import_expired.html`, `scenarios/confirm_delete.html`;
+`overlays/import_preview.html`, `overlays/import_result.html`,
+`overlays/import_expired.html`; `register_import/import_expired.html`;
+`fx_rates/list.html`; `library/overrides/list.html`,
+`library/overrides/view.html`; `setup/wizard.html`. (For each, READ the
+file first and confirm the header is the first content element; apply the
+clearance to the topmost header element(s) exactly as in Step 3.)
+
+ALLOWLIST — 4 files, by named category:
+- `auth/login.html` — h1 at y≈110, below-band (VERIFIED at 390px; its
+  logomark starts at y=48, exactly abutting the burger band — borderline,
+  note this in the allowlist comment so a padding tweak re-triggers
+  scrutiny).
+- `help/_article.html` — drawer partial (no `{% extends %}`).
+- `library/overrides/form.html`, `qualitative_bands/form.html` —
+  `only_on_md()`-gated (content renders only ≥ md, where the burger is
+  hidden).
+
 **Files:**
-- Modify: `src/idraa/templates/help/index.html` (header block, line ~8)
-- Modify: `src/idraa/templates/library/import.html` (breadcrumb `<p>` + `<h1>`, lines ~5–8)
-- Modify: `src/idraa/templates/scenarios/import.html` (breadcrumb `<p>` + `<h1>`, lines ~6–9)
+- Modify: the 19 FIX templates above
 - Test: append to `tests/integration/test_design_language_p3.py`
 
 **DO NOT touch `help/_article.html`** (shared with the drawer partial) or `help/article_page.html` (already clear via the breadcrumb macro).
@@ -528,18 +584,18 @@ Additionally (Arch-5 — durable guard; this bug class has recurred twice), a
 sweep test with an explicit allowlist:
 
 ```python
-# Templates whose <h1> demonstrably renders BELOW the mobile burger band
-# (result/preview/expired flows render h1 inside cards mid-page) or which
-# render WITHOUT the sidebar shell (login, setup) or only inside the help
-# drawer (partials). Verified at 390px during P3; a new entry here requires
-# the same verification.
+# Allowlist categories (the burger renders on EVERY page — base.html
+# includes the sidebar unconditionally): (1) h1 verified below the burger
+# band at 390px; (2) drawer partial, never a full page; (3) only_on_md-
+# gated content (burger is md:hidden). Allowlisting a COLLIDING page is
+# never permitted; a new entry requires 390px verification.
 _H1_CLEARANCE_ALLOWLIST = {
-    "auth/login.html",
-    "setup/wizard.html",
-    "help/_article.html",
-    "help/article_page.html",  # breadcrumb macro precedes the h1 — clear
-    # ... implementer: seed with the full current grep -L list, one line
-    # per file, after VERIFYING each is genuinely below-band/no-sidebar.
+    "auth/login.html",  # h1 y~110 below-band; NOTE its logomark starts at
+    # y=48 exactly abutting the burger band — re-verify if login padding
+    # ever changes
+    "help/_article.html",  # drawer partial (no extends)
+    "library/overrides/form.html",  # only_on_md-gated
+    "qualitative_bands/form.html",  # only_on_md-gated
 }
 
 
@@ -563,16 +619,19 @@ async def test_hand_authored_h1_headers_have_clearance() -> None:
     )
 ```
 
-- [ ] **Step 2: Run — expect FAIL on all three paths (and possibly more allowlist candidates — verify each at 390px before allowlisting).**
+- [ ] **Step 2: Run — expect FAIL listing exactly the 19 FIX files (the sweep test) plus the three route assertions.**
 
 - [ ] **Step 3: Implement.** `help/index.html`: `<header class="mb-8">` →
-`<header class="mb-8 pl-16 md:pl-0">`. In each import template, add
-`pl-16 md:pl-0` to BOTH the breadcrumb `<p class="text-sm ... mb-1">` and the
-`<h1 class="text-2xl font-bold mb-2">` (both sit in the burger's fixed band;
-same clearance idea as page_header's `pl-16 pr-4 md:px-6` — the reset
-differs because these headers sit inside padded containers). Add a one-line
-Jinja comment above each: `{# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}`.
-Seed `_H1_CLEARANCE_ALLOWLIST` from `grep -rLl "page_header\|pl-16" $(grep -rll "<h1" src/idraa/templates -r)` — verify each candidate renders below-band at 390px (the import_result/preview/expired families render h1 inside cards; login/setup have no sidebar).
+`<header class="mb-8 pl-16 md:pl-0">`. In every other FIX template, add
+`pl-16 md:pl-0` to the topmost header element(s) — for the
+breadcrumb-`<p>` + `<h1>` shape, BOTH elements (both sit in the burger's
+fixed band; same clearance idea as page_header's `pl-16 pr-4 md:px-6` —
+the reset differs because these headers sit inside padded containers). Add
+a one-line Jinja comment above each:
+`{# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}`.
+The FIX/ALLOWLIST classification is already done in the pre-triage above —
+do not re-derive it; if a FIX file's header turns out NOT to be the first
+content element on reading, flag it rather than silently allowlisting.
 
 - [ ] **Step 4: Rebuild sheet (`pl-16`/`md:pl-0` may be new to these files' class inventory) + run — expect PASS.**
 

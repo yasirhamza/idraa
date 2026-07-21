@@ -167,14 +167,24 @@ found at plan-gate (Arch-2) — are replaced with token utilities. Mapping:
 | `text-base-content/70` | 18 | `text-ink-2` |
 | `text-base-content/60` | 32 | `text-ink-2` |
 | `text-base-content/50` | 1 | `text-ink-3` if decorative in context, else `text-ink-2` |
-| `bg-primary` (incl. Alpine `:class`) | 3 | `bg-brand` |
+| `bg-primary` (incl. Alpine `:class`) | 3 | `bg-brand` — EXCEPT the `bg-primary/5` site (below) |
 | `text-primary-content` | 2 | `text-brand-contrast` |
 | `text-primary` | 1 | `text-brand` |
 | `ring-primary` | 1 | `ring-brand` (utility added in §1) |
 | `text-error` | 7 | `text-status-critical` |
-| `border-error` | 3 | `border-status-critical` |
+| `border-error` | 3 | `border-status-critical` — EXCEPT the `border-error/30` sites (below) |
 | `text-success` | 5 | `text-status-success` |
 | `text-warning` | 3 | `text-status-warning` |
+
+**Opacity-modified sites (plan-gate Q-10):** the token utilities are
+hex-var-backed, so Tailwind `/NN` opacity modifiers SILENTLY fail on them
+(documented foot-gun, `macros/page_header.html:24-27`). The 4 such sites
+get explicit color-mix treatments instead: the library-card
+`[&:has(input:checked)]:bg-primary/5` becomes an arbitrary-value
+`bg-[color-mix(in_srgb,var(--color-brand)_5%,transparent)]` under the same
+variant, and the three `border-error/30` import-result cards use a new
+hand-written `.border-status-critical-faint` utility (30% color-mix).
+Exact edits in the plan (Task 4).
 
 The /60 vs /70 distinction deliberately flattens to `ink-2`: the ink scale
 has no AA-passing tier between ink-2 (7.0:1) and ink-3 (2.5:1), and /60
@@ -200,16 +210,22 @@ edits that file) — after which templates carry token utilities only.
 ### 5. Fixed-hamburger clearance (UAT 2026-07-21 bug class)
 
 The mobile drawer toggle is `fixed top-4 left-4` and floats OVER page
-content; `macros/page_header.html` carries `pl-16` clearance but three
-page families hand-author their headers and collide (found by Playwright
-sweep at 390px of all sidebar destinations + import flows):
-
-- `/help` (`help/index.html` H1). The full-page article route
-  (`help/article_page.html`) swept CLEAR — its breadcrumb macro already
-  clears the burger — and `help/_article.html` is shared byte-identical
-  with the slide-over drawer partial, so neither is touched.
-- `/library/import` (`library/import.html` breadcrumb `<p>` + H1).
-- `/scenarios/import` (`scenarios/import.html` breadcrumb `<p>` + H1).
+content on EVERY page (`base.html` includes the sidebar unconditionally —
+login and setup included); `macros/page_header.html` carries `pl-16`
+clearance but pages that hand-author their headers collide. The original
+Playwright sweep (sidebar destinations + import GET forms) found 3; the
+plan-gate re-triage of the full heuristic population (`<h1` + no
+page_header + no pl-16) classified 23 candidates: **19 FIX** (first-content
+headers — the help index, the entire import
+preview/result/expired families across library/scenarios/overlays/
+register_import, `library/delete_result`, `scenarios/confirm_delete`,
+`fx_rates/list`, `library/overrides/list` + `view`, `setup/wizard`) and
+**4 ALLOWLIST** (login — h1 below-band, verified 390px; the help drawer
+partial; two `only_on_md`-gated forms). The exact lists live in the plan
+(Task 5 pre-triage); allowlisting a colliding page is never permitted.
+`help/article_page.html` swept CLEAR (breadcrumb macro) and
+`help/_article.html` is shared with the drawer partial — neither is
+touched.
 
 Fix: mobile-only left clearance — `pl-16 md:pl-0` on the page-top header
 block. (Same clearance IDEA as `page_header.html:31`'s `pl-16 pr-4
@@ -313,3 +329,12 @@ methodology and security personas are waived per that standing decision.
   (Q-2); route-gating citations corrected (Q-3); `text-gray-*` cleanup
   folded into §6 (Q-4); PDF mark-size eyeball note (Q-7); `logo_accent`
   drift pin (Q-8).
+- +ADDED at plan-gate round 2 (convergence pass): opacity-modified class
+  carve-outs — `bg-primary/5` → color-mix arbitrary value,
+  `border-error/30`×3 → `.border-status-critical-faint` (Q-10); §5
+  clearance expanded from 3 to 19 FIX templates after full-population
+  re-triage — the burger renders on every page, and several
+  result/expired/list/setup headers are first-content (Arch-9); T1
+  routing-test brace anchor (Q-11); allowlist-seed grep corrected (Q-12);
+  favicon scheme sentence into the plan's verbatim block (Arch-10);
+  app.css "brand navy" comment rewording (Arch-11).
