@@ -3,8 +3,11 @@
 The OUTERMOST request-path layer for the hosted UAT runtime. When
 ``UAT_BASIC_AUTH_PASSWORD`` is set in the env (Fly secrets in production
 UAT), every request without a valid ``Authorization: Basic`` header is
-rejected with 401 — except ``/healthz``, which is unconditionally exempt
-so Fly's health probe can pass.
+rejected with 401 — except the exact paths in ``EXEMPT_PATHS``:
+``/healthz`` (Fly's probe runs credential-less; a 401 would loop the
+deploy) and the enumerated PWA install assets (browser install pipelines
+fetch manifest/icons/worker in credentials modes that may omit HTTP-auth
+entries — see the EXEMPT_PATHS comment).
 
 When the password is unset (dev, test, local docker), this middleware is
 a no-op: the existing inner stack (setup_guard → SecurityHeaders → CSRF
@@ -26,7 +29,24 @@ from collections.abc import Awaitable, Callable
 from starlette.requests import Request
 from starlette.responses import Response
 
-EXEMPT_PATHS = frozenset({"/healthz"})
+EXEMPT_PATHS = frozenset(
+    {
+        "/healthz",
+        # PWA install assets (M0.1, UAT 2026-07-21): browser install
+        # pipelines fetch the manifest/icons/worker in credentials modes
+        # that may omit HTTP-auth entries (Samsung Internet's installer
+        # 401s behind the gate and refuses install). These are public
+        # brand assets — name + logo tiles + a no-op worker — exposing
+        # them leaks nothing. EXACT paths only, no prefixes: the gate's
+        # bypass surface must stay enumerable.
+        "/sw.js",
+        "/static/manifest.webmanifest",
+        "/static/icons/icon-192.png",
+        "/static/icons/icon-512.png",
+        "/static/icons/icon-maskable-512.png",
+        "/static/icons/apple-touch-icon.png",
+    }
+)
 
 DispatchFn = Callable[[Request], Awaitable[Response]]
 MiddlewareFn = Callable[[Request, DispatchFn], Awaitable[Response]]
@@ -44,8 +64,11 @@ def uat_basic_auth_factory(*, user: str | None = None, password: str | None = No
 
     async def uat_basic_auth(request: Request, call_next: DispatchFn) -> Response:
         # Health-probe exemption is unconditional: Fly's probe runs without
-        # credentials, and a 401 there would loop the deploy.
-        if request.url.path in EXEMPT_PATHS:
+        # credentials, and a 401 there would loop the deploy. Read-only verbs
+        # ONLY (S-2): every exempt path serves a GET-only asset today; the
+        # method guard keeps a future POST handler on one of these paths from
+        # silently inheriting an unauthenticated write.
+        if request.url.path in EXEMPT_PATHS and request.method in {"GET", "HEAD"}:
             return await call_next(request)
         # No password configured = middleware is a no-op (dev/test).
         if not eff_password:

@@ -52,11 +52,15 @@
   </script>
   <title>{% block title %}Idraa{% endblock %} — Idraa</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ static_version }}">
-  {# PWA M0 (mobile strategy): manifest + icons only — installable via
-     manifest+HTTPS; NO service worker by design (session-authed, DB-backed
-     app — offline mode is meaningless and a SW invites stale-cache bugs
-     alongside static_version busting). theme-color pairs with the graphite
-     brand (light) / dark surface-0; keep in sync with app.css tokens. #}
+  {# PWA M0/M0.1 (mobile strategy): manifest + icons + a NO-OP service
+     worker. The worker (static/sw.js, served at /sw.js for root scope) is
+     an installability shim ONLY — Samsung Internet requires a registered SW
+     with a fetch listener before it offers install (Chrome no longer does).
+     It caches NOTHING: offline mode is meaningless for a session-authed,
+     DB-backed app, and a caching SW invites stale-cache bugs alongside
+     static_version busting (guarded by test_pwa_manifest.py). theme-color
+     pairs with the graphite brand (light) / dark surface-0; keep in sync
+     with app.css tokens. #}
   {# crossorigin="use-credentials": the manifest fetch runs in a credentials
      mode that excludes HTTP-auth entries by default — behind the prod UAT
      basic-auth gate it would 401 and suppress the install prompt (P-1). #}
@@ -65,6 +69,16 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0A0B">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v={{ static_version }}">
   <meta name="apple-mobile-web-app-title" content="Idraa">
+  <script>
+    // PWA installability shim registration (see the comment above and
+    // static/sw.js). The worker is a no-op; registering it only satisfies
+    // Samsung Internet's install criteria.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js");
+      });
+    }
+  </script>
   {# Same-origin CSS — SRI intentionally omitted (integrity attrs are for cross-origin
      assets; these are served from /static by this app). Cache-busted via static_version. #}
   <link rel="stylesheet"

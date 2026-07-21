@@ -146,3 +146,39 @@ def test_middleware_compare_does_not_short_circuit_on_user_mismatch() -> None:
             "twice (user + password) on every auth attempt to prevent "
             "timing-leak via short-circuit"
         )
+
+
+def test_pwa_install_assets_exempt_without_auth() -> None:
+    """M0.1 (Samsung install fix): browser install pipelines fetch the
+    manifest/icons/worker in credentials modes that may omit HTTP-auth
+    entries — the enumerated PWA install assets pass the gate without
+    credentials. EXACT paths only; anything else stays 401."""
+    from idraa.middleware.uat_basic_auth import EXEMPT_PATHS
+
+    app = _build_app(user="admin", password="hunter2")
+
+    @app.get("/sw.js")
+    async def sw() -> dict[str, str]:
+        return {"js": "shim"}
+
+    @app.get("/static/manifest.webmanifest")
+    async def manifest() -> dict[str, str]:
+        return {"name": "Idraa"}
+
+    client = TestClient(app)
+    assert client.get("/sw.js").status_code == 200
+    assert client.get("/static/manifest.webmanifest").status_code == 200
+    # every enumerated install asset stays exempt (S-1: dropping one would
+    # silently re-break install on Samsung/Safari) — 404 here means the
+    # exemption matched and routing proceeded (no route in this mini-app);
+    # 401 would mean the gate swallowed it.
+    for p in EXEMPT_PATHS - {"/healthz"}:
+        assert client.get(p).status_code != 401, p
+    # every enumerated exemption is exact-path (no trailing-slash prefixes)
+    assert all(not p.endswith("/") for p in EXEMPT_PATHS)
+    # read-only verbs only (S-2): a POST to an exempt path stays gated
+    assert client.post("/sw.js").status_code == 401
+    # a sibling static path is NOT exempt — the bypass surface is enumerable
+    assert client.get("/static/css/app.css").status_code == 401
+    # and the app proper stays gated
+    assert client.get("/scenarios").status_code == 401
