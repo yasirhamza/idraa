@@ -153,7 +153,7 @@
         {{ "{:,}".format(max_mc_iterations) }} on this deployment.
         Higher = tighter VaR / LEC tails but more compute + memory.
       </p>
-      <p class="text-micro text-warning mt-1" x-show="mcIterations >= highFidelityThreshold" x-cloak>
+      <p class="text-micro text-status-warning mt-1" x-show="mcIterations >= highFidelityThreshold" x-cloak>
         High-fidelity run (250k+ iterations): a stable deep-tail ES and a tighter
         95% MC interval, but slower and larger to store &mdash; use when you need
         the 99.9% tail. 500k&ndash;1M gives the most stable ES(99.9%).

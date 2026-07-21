@@ -2,7 +2,7 @@
   {% for entry in entries %}
     {% set assignments = (assignments_by_entry or {}).get((entry.id, entry.version)) or [] %}
     {% set already_adopted = (adopted_entry_ids is defined) and (entry.id | string in adopted_entry_ids) %}
-    <div class="card bg-base-100 shadow">
+    <div class="card bg-surface-1 shadow">
       <div class="card-body">
         <h3 class="card-title text-lg">
           {{ entry.name }}
@@ -34,7 +34,7 @@
           {% endfor %}
         </div>
 
-        <p class="text-sm text-base-content/70">
+        <p class="text-sm text-ink-2">
           {% if entry.description | length > 120 %}
             {{ entry.description[:120] }}…
           {% else %}
@@ -47,7 +47,7 @@
              calibrated data. Surface a visible qualifier so a user doesn't mistake
              the placeholder 0.7/0.8/0.8 for measured effectiveness (spec §4.1
              "reference — adjust for your org"). #}
-          <p class="text-xs text-base-content/50 mt-2 mb-1">
+          <p class="text-xs text-ink-2 mt-2 mb-1">
             FAIR-CAM reference defaults — adjust after adopting.
           </p>
           <div class="badges flex flex-wrap gap-1">
@@ -69,7 +69,7 @@
         {% endif %}
 
         {% if entry.reference_annual_cost is not none %}
-          <p class="text-xs text-base-content/60 mt-2">
+          <p class="text-xs text-ink-2 mt-2">
             Reference annual cost: ${{ '{:,.0f}'.format(entry.reference_annual_cost) }}
           </p>
         {% endif %}
@@ -89,7 +89,7 @@
   {% endfor %}
 {% else %}
   <div class="empty-state col-span-3 text-center py-12">
-    <p class="text-base-content/60 mb-3">No entries match these filters.</p>
+    <p class="text-ink-2 mb-3">No entries match these filters.</p>
     <a href="/controls/library" class="btn btn-link">Clear filters</a>
   </div>
 {% endif %}

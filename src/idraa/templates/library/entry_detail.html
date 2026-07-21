@@ -129,7 +129,7 @@
           <span class="text-meta text-ink-2 ml-2">{{ rec.catalog_entry.control_type.value | replace("_", " ") | title }}</span>
         </div>
         {% if rec.adopted %}
-          <span class="text-meta text-success">Adopted ✓</span>
+          <span class="text-meta text-status-success">Adopted ✓</span>
         {% elif can_adopt %}
           <form method="post" action="/controls/library/{{ rec.catalog_entry.id }}/adopt">
             {{ csrf_field() }}

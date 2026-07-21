@@ -1,7 +1,7 @@
 <div class="space-y-4">
   <h2 class="text-base font-semibold">Filters</h2>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Control type</legend>
     {% for ct_value, ct_label in [
       ("technical", "Technical"),
@@ -22,7 +22,7 @@
     {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">FAIR-CAM function</legend>
     {# Curated subset of the most commonly-browsed FAIR-CAM sub-functions
        (one or two per domain). The full 26-member enum is over-granular for a
@@ -51,9 +51,9 @@
     {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-base-300 rounded p-3">
+  <fieldset class="border border-border-strong rounded p-3">
     <legend class="text-sm font-semibold px-1">Framework / industry</legend>
-    <label class="block text-xs text-base-content/70 mt-2 mb-1" for="filter-nist-csf">
+    <label class="block text-xs text-ink-2 mt-2 mb-1" for="filter-nist-csf">
       NIST CSF subcategory
     </label>
     <input
@@ -64,7 +64,7 @@
       placeholder="e.g. PR.AA-01"
       value="{{ (filters.nist_csf_subcategories or []) | join(', ') }}">
 
-    <label class="block text-xs text-base-content/70 mt-3 mb-1" for="filter-cis">
+    <label class="block text-xs text-ink-2 mt-3 mb-1" for="filter-cis">
       CIS safeguard
     </label>
     <input
@@ -75,7 +75,7 @@
       placeholder="e.g. 6.3"
       value="{{ (filters.cis_safeguards or []) | join(', ') }}">
 
-    <label class="block text-xs text-base-content/70 mt-3 mb-1" for="filter-industry">
+    <label class="block text-xs text-ink-2 mt-3 mb-1" for="filter-industry">
       Industry
     </label>
     <input

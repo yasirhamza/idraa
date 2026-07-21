@@ -117,6 +117,7 @@
 .border-border-subtle { border-color: var(--color-border-subtle); }
 .border-border-strong { border-color: var(--color-border-strong); }
 .border-status-critical { border-color: var(--color-status-critical); }
+.border-status-critical-faint { border-color: color-mix(in srgb, var(--color-status-critical) 30%, transparent); }
 .border-brand           { border-color: var(--color-brand); }
 
 /* Even-row zebra striping for data_grid */

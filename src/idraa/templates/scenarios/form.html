@@ -482,7 +482,7 @@
                   <span class="text-meta text-ink-2 block">
                     domain {{ control_domains(control) }}
                     {% if control.implementation_stage.value != 'active' %}
-                    · <span class="text-micro text-warning">(not active: {{ control.implementation_stage.label }})</span>
+                    · <span class="text-micro text-status-warning">(not active: {{ control.implementation_stage.label }})</span>
                     {% else %}
                     · <span class="font-medium">(inactive: {{ control.status.value | upper }})</span>
                     {% endif %}

@@ -3,16 +3,16 @@
 {% block title %}Scenario import — preview{% endblock %}
 {% block content %}
 <div class="max-w-5xl mx-auto">
-  <p class="text-sm text-base-content/60 mb-1">
+  <p class="text-sm text-ink-2 mb-1">
     <a class="link" href="/scenarios">Scenarios</a> / Import preview
   </p>
   <h1 class="text-2xl font-bold mb-2">Scenario import — preview</h1>
-  <p class="text-base-content/70 mb-4">
+  <p class="text-ink-2 mb-4">
     Review the parsed rows below. Nothing has been written yet — confirm to apply,
     or cancel to abandon. The preview token expires after 10 minutes.
   </p>
 
-  <p class="text-xs text-base-content/60 mb-4">
+  <p class="text-xs text-ink-2 mb-4">
     Preview token: <code class="font-mono">{{ token }}</code>
   </p>
 
@@ -30,7 +30,7 @@
   {% endif %}
 
   {% if preview %}
-  <div class="card bg-base-100 shadow mb-4">
+  <div class="card bg-surface-1 shadow mb-4">
     <div class="card-body p-3 md:p-0">
       {{ preview_table(preview, [
            {"label": "Line", "key": "line", "mono": True},

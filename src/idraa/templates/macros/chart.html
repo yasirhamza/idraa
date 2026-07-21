@@ -51,7 +51,7 @@
             </tr>
           </tbody>
         </table>
-        <p class="text-xs text-base-content/60 mt-1">Distribution: PERT</p>
+        <p class="text-xs text-ink-2 mt-1">Distribution: PERT</p>
       {% elif distribution.distribution == "lognormal" %}
         {% set rows = lognormal_display_rows(distribution) %}
         {# fmt is passed by the caller: "money" for pl/sl, "rate" for tef.
@@ -78,7 +78,7 @@
             </tr>
           </tbody>
         </table>
-        <p class="text-xs text-base-content/60 mt-1">Distribution: Lognormal</p>
+        <p class="text-xs text-ink-2 mt-1">Distribution: Lognormal</p>
       {% elif distribution.distribution == "lognormal_mixture" %}
         {# Issue #27 Task 6: catastrophic multi-SME loss pooled as a linear-
            opinion-pool mixture (not averaged into one distribution). Rows
@@ -107,17 +107,17 @@
             </tr>
           </tbody>
         </table>
-        <p class="text-xs text-base-content/60 mt-1">
+        <p class="text-xs text-ink-2 mt-1">
           Distribution: Lognormal mixture — {{ rows.n_components }} expert opinions,
           weights {{ rows.weights_display }}
         </p>
       {% else %}
-        <p class="text-sm text-base-content/60">
+        <p class="text-sm text-ink-2">
           Distribution: {{ distribution.distribution }}
         </p>
       {% endif %}
     {% else %}
-      <p class="text-sm text-base-content/60 italic">No distribution data.</p>
+      <p class="text-sm text-ink-2 italic">No distribution data.</p>
     {% endif %}
   </div>
 {%- endmacro %}
@@ -270,7 +270,7 @@
      PR nu §1.4a — see docs/plans/2026-05-03-pr-nu-run-detail-viz-design.md #}
   {%- set _code = (currency.code if currency and currency.code else "USD") -%}
   {%- set _sym = (currency.symbol if currency and currency.symbol else "$") -%}
-  <div class="headline-ale-block bg-base-100 rounded-lg shadow-sm p-6 mb-6">
+  <div class="headline-ale-block bg-surface-1 rounded-lg shadow-sm p-6 mb-6">
     <h2 class="text-sm uppercase tracking-wide opacity-70 mb-2">
       Residual annualized loss expectancy
     </h2>

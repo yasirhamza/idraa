@@ -20,7 +20,7 @@
 #}
 {% from "macros/unit_aware_inputs.html" import unit_input, unit_label_suffix %}
 {% from "macros/form_field.html" import form_field %}
-<div class="assignment-row card bg-base-200 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
+<div class="assignment-row card bg-surface-2 p-4 mb-2 overflow-visible" data-row-index="{{ index }}">
   {# Layout contract: 6-column grid on md+; sub_function takes 2 cols
      (long enum values like ``lec_prev_resistance`` need the room),
      capability takes 2 cols (UAT 2026-05-21 — the currency widget label
@@ -137,9 +137,9 @@
           x-show="open"
           x-cloak
           x-transition.opacity
-          class="absolute z-30 mt-1 w-full rounded-lg border border-base-300 bg-base-100 shadow-lg overflow-hidden"
+          class="absolute z-30 mt-1 w-full rounded-lg border border-border-strong bg-surface-1 shadow-lg overflow-hidden"
         >
-          <div class="p-2 border-b border-base-200">
+          <div class="p-2 border-b border-border-subtle">
             <input
               type="text"
               x-ref="search"
@@ -164,7 +164,7 @@
               <li role="presentation">
                 <div
                   role="presentation"
-                  class="sticky top-0 bg-base-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
+                  class="sticky top-0 bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-wide opacity-70"
                   x-text="group.label"
                 ></div>
                 <template x-for="opt in group.options" :key="opt.value">
@@ -173,7 +173,7 @@
                     :id="`sf-opt-${index}-${opt.value}`"
                     :data-value="opt.value"
                     :aria-selected="opt.value === selectedValue ? 'true' : 'false'"
-                    :class="opt.value === highlightedValue ? 'bg-primary text-primary-content' : 'hover:bg-base-200'"
+                    :class="opt.value === highlightedValue ? 'bg-brand text-brand-contrast' : 'hover:bg-surface-2'"
                     @mousedown.prevent="commit(opt.value)"
                     @mouseenter="highlightedValue = opt.value"
                     class="cursor-pointer px-3 py-2"

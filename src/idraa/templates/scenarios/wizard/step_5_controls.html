@@ -13,7 +13,7 @@
     <li class="flex items-center justify-between gap-2">
       <span>{{ rec.catalog_entry.name }}</span>
       {% if rec.adopted %}
-        <span class="text-xs text-success">Adopted — pre-selected below</span>
+        <span class="text-xs text-status-success">Adopted — pre-selected below</span>
       {% else %}
         <form method="post" action="/controls/library/{{ rec.catalog_entry.id }}/adopt" class="inline">
           {{ csrf_field() }}

@@ -76,3 +76,54 @@ async def test_sonar_arcs_mark_and_favicon(client) -> None:
     assert "#C89141" in fav
     assert "prefers-color-scheme: dark" in fav
     assert "#B8C6CC" in fav
+
+
+_DAISY_COLOR_CLASS_RE = (
+    r"(?:bg|text|border|ring|from|to|divide)-"
+    r"(?:base-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
+)
+
+
+async def test_no_daisyui_color_classes() -> None:
+    """P3: DaisyUI color utilities (base-* AND the semantic families) are
+    retired from templates — fills/text/borders route through the app.css
+    tokens. Component classes (btn, alert, badge...) are exempt: their
+    internals are re-grounded by the Task-1 bridge. Guard against
+    re-introduction (Arch-2)."""
+    import re
+
+    offenders: list[str] = []
+    for path in sorted(TEMPLATES_DIR.rglob("*.html")):
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(_DAISY_COLOR_CLASS_RE, line):
+                offenders.append(f"{path.relative_to(TEMPLATES_DIR)}:{i}")
+    assert not offenders, f"DaisyUI color classes found: {offenders[:20]}"
+
+
+async def test_no_legacy_brand_hex() -> None:
+    """Arch-7: the retired brand navy may not reappear anywhere first-party
+    (templates, CSS, services, JS) — vendored assets excluded."""
+    src = Path(__file__).resolve().parents[2] / "src" / "idraa"
+    offenders: list[str] = []
+    for path in sorted(src.rglob("*")):
+        if not path.is_file() or "static/vendor" in str(path).replace("\\", "/"):
+            continue
+        if path.suffix not in {".py", ".html", ".css", ".js", ".svg"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "0F4C81" in text.upper().replace("#", ""):
+            offenders.append(str(path.relative_to(src)))
+    assert not offenders, f"legacy brand hex #0F4C81/FF0F4C81 found in: {offenders}"
+
+
+async def test_rebuilt_sheet_has_hover_surface() -> None:
+    """Arch-4/Q-10r: the JIT build must generate the swap destinations —
+    hover:bg-surface-2 (5 hover:bg-base-200 swaps, incl. 2 Alpine :class
+    strings) and the checked-library-card color-mix tint (which must be a
+    LIVE rule, unlike the dead bg-primary/5 it replaces)."""
+    sheet_text = (APP_CSS_PATH.parent / "tailwind.css").read_text(encoding="utf-8")
+    assert "hover\\:bg-surface-2" in sheet_text
+    # tailwind.css is JIT-built from _tailwind_entry.css (app.css serves
+    # separately), so today it contains NO color-mix — this is a strict
+    # positive guard that the tint utility generated.
+    assert "color-mix" in sheet_text

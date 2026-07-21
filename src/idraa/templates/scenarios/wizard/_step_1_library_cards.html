@@ -1,10 +1,10 @@
 {% for entry in library_entries %}
   {# `:has(input:checked)` (Tailwind 3.4+) gives the card a visible
      selected state when its hidden radio is toggled by a label click. #}
-  <label class="card bg-base-100 shadow cursor-pointer hover:bg-base-200
+  <label class="card bg-surface-1 shadow cursor-pointer hover:bg-surface-2
                 [&:has(input:checked)]:ring-2
-                [&:has(input:checked)]:ring-primary
-                [&:has(input:checked)]:bg-primary/5">
+                [&:has(input:checked)]:ring-brand
+                [&:has(input:checked)]:bg-[color:color-mix(in_srgb,var(--color-brand)_5%,transparent)]">
     <input type="radio" name="library_entry_id" value="{{ entry.id }}" class="hidden"
            {% if state.library_entry_id == entry.id|string %}checked{% endif %}>
     <div class="card-body">
@@ -18,5 +18,5 @@
     </div>
   </label>
 {% else %}
-  <p class="col-span-2 text-sm text-base-content/60 py-4">No library entries match your filters.</p>
+  <p class="col-span-2 text-sm text-ink-2 py-4">No library entries match your filters.</p>
 {% endfor %}

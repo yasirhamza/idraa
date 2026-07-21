@@ -2,15 +2,15 @@
 {% block title %}Overlay import — result{% endblock %}
 {% block content %}
 <div class="max-w-4xl mx-auto">
-  <p class="text-sm text-base-content/60 mb-1">
+  <p class="text-sm text-ink-2 mb-1">
     <a class="link" href="/overlays">Overlays</a> / Import result
   </p>
   <h1 class="text-2xl font-bold mb-4">Overlay import — result</h1>
 
-  <div class="stats stats-vertical md:stats-horizontal shadow bg-base-100 mb-6 w-full">
+  <div class="stats stats-vertical md:stats-horizontal shadow bg-surface-1 mb-6 w-full">
     <div class="stat">
       <div class="stat-title">Imported</div>
-      <div class="stat-value text-success">{{ imported }}</div>
+      <div class="stat-value text-status-success">{{ imported }}</div>
       <div class="stat-desc">rows created or updated</div>
     </div>
     <div class="stat">
@@ -20,16 +20,16 @@
     </div>
     <div class="stat">
       <div class="stat-title">Errors</div>
-      <div class="stat-value {% if errors %}text-error{% endif %}">{{ errors|length }}</div>
+      <div class="stat-value {% if errors %}text-status-critical{% endif %}">{{ errors|length }}</div>
       <div class="stat-desc">rows rejected</div>
     </div>
   </div>
 
   {% if errors %}
-  <div class="card bg-base-100 shadow mb-6 border border-error/30">
+  <div class="card bg-surface-1 shadow mb-6 border border-status-critical-faint">
     <div class="card-body">
-      <h2 class="card-title text-error">Row errors</h2>
-      <p class="text-sm text-base-content/70">
+      <h2 class="card-title text-status-critical">Row errors</h2>
+      <p class="text-sm text-ink-2">
         These rows were not applied. Fix them in the source CSV and re-upload to retry.
       </p>
       <div class="overflow-x-auto">
