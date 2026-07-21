@@ -13,7 +13,7 @@
   --color-brand:          #37464F; /* graphite (#59 P3) */
   --color-brand-contrast: #FFFFFF; /* foreground on brand fills — flips to near-black in dark (brand becomes a LIGHT fill) */
   --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only — 2.77:1 on white) */
-  --color-status-critical:#B91C1C;
+  --color-status-critical: #B91C1C;
   --color-status-warning: #B45309;
   --color-status-success: #15803D;
   --color-status-info:    #1D4ED8;
@@ -34,13 +34,15 @@
 
   --page-header-height: 4rem;
 
-  /* DaisyUI internal bridge (#59 P3, plan-gate Arch-3): the vendored DaisyUI
-     paints component internals (.alert, .stats, .modal-box, .badge-ghost,
-     .table-zebra, .tabs-boxed, menus) from these theme vars in the
-     oklch(var(--b1)/alpha) form. Re-ground them to the EXACT token values
-     (OKLCH component triplets — keep the alpha composition; do NOT use
-     --fallback-*, it flattens translucent variants). Triplets are derived
-     from the token hexes; re-derive if a token hex ever changes. */
+  /* DaisyUI internal bridge (#59 P3, plan-gate Arch-3; status family added
+     #65): the vendored DaisyUI paints component internals (.alert, .stats,
+     .modal-box, .badge-ghost, .table-zebra, .tabs-boxed, menus, plus the
+     status family .alert-error/.badge-success/.badge-warning/.badge-info)
+     from these theme vars in the oklch(var(--b1)/alpha) form. Re-ground
+     them to the EXACT token values (OKLCH component triplets — keep the
+     alpha composition; do NOT use --fallback-*, it flattens translucent
+     variants). Triplets are derived from the token hexes; re-derive if a
+     token hex ever changes. */
   --b1: 100.0000% 0.000000 89.875563;   /* surface-1 #FFFFFF */
   --b2: 96.7434% 0.001326 286.375246;   /* surface-2 #F4F4F5 */
   --b3: 87.1108% 0.005451 286.286023;   /* border-strong #D4D4D8 */
@@ -51,6 +53,14 @@
   --sc: 100.0000% 0.000000 89.875563;   /* secondary-content #FFFFFF */
   --a:  44.1861% 0.014617 285.786377;   /* accent = neutral ink family (brass is DECORATIVE-only, logo dot exclusively — FA-7) */
   --ac: 100.0000% 0.000000 89.875563;   /* accent-content #FFFFFF */
+  --er:  50.5420% 0.190493 27.518103;    /* status-critical #B91C1C */
+  --erc: 100.0000% 0.000000 89.875563;   /* status content = brand-contrast #FFFFFF */
+  --su:  52.7299% 0.137103 150.069279;   /* status-success #15803D */
+  --suc: 100.0000% 0.000000 89.875563;
+  --wa:  55.5283% 0.145505 48.997530;    /* status-warning #B45309 */
+  --wac: 100.0000% 0.000000 89.875563;
+  --in:  48.8198% 0.217165 264.376304;   /* status-info #1D4ED8 */
+  --inc: 100.0000% 0.000000 89.875563;
 }
 
 /* Dark palette — applied when data-theme="dark" on <html>. */
@@ -66,7 +76,7 @@
   --color-brand:          #B8C6CC; /* graphite (#59 P3) */
   --color-brand-contrast: #0A0A0B;
   --color-logo-accent:    #C89141; /* brass dot in the sonar-arcs logomark (same hue both themes; DECORATIVE only) */
-  --color-status-critical:#EF4444;
+  --color-status-critical: #EF4444;
   --color-status-warning: #F59E0B;
   --color-status-success: #22C55E;
   --color-status-info:    #3B82F6;
@@ -90,6 +100,14 @@
   --sc: 14.5249% 0.002132 286.131340;   /* secondary-content #0A0A0B (7.72:1) */
   --a:  71.1815% 0.012937 286.066504;   /* accent = neutral ink family (brass is DECORATIVE-only, logo dot exclusively — FA-7) */
   --ac: 14.5249% 0.002132 286.131340;   /* accent-content #0A0A0B */
+  --er:  63.6834% 0.207849 25.331328;    /* status-critical #EF4444 */
+  --erc: 14.5249% 0.002132 286.131340;   /* status content = brand-contrast #0A0A0B (dark fills are BRIGHT) */
+  --su:  72.2746% 0.192007 149.579330;   /* status-success #22C55E */
+  --suc: 14.5249% 0.002132 286.131340;
+  --wa:  76.8590% 0.164659 70.080390;    /* status-warning #F59E0B */
+  --wac: 14.5249% 0.002132 286.131340;
+  --in:  62.3083% 0.188015 259.814527;   /* status-info #3B82F6 */
+  --inc: 14.5249% 0.002132 286.131340;
 }
 
 /* === Token-backed utility classes (2026-05-23) ====================================

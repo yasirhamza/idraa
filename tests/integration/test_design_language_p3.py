@@ -49,9 +49,10 @@ async def test_brand_contrast_routing() -> None:
 
 
 async def test_daisyui_bridge_vars() -> None:
-    """Arch-3: DaisyUI component internals (--b1/--b2/--b3/--bc/--p/--pc)
-    are re-grounded to token-equivalent OKLCH triplets in both scopes so
-    alerts/stats/modals/tabs match token surfaces."""
+    """Arch-3: DaisyUI component internals (--b1/--b2/--b3/--bc/--p/--pc,
+    plus the #65 status family --er/--su/--wa/--in + -content pairs) are
+    re-grounded to token-equivalent OKLCH triplets in both scopes so
+    alerts/stats/modals/tabs/badges match token surfaces."""
     css = APP_CSS_PATH.read_text(encoding="utf-8")
     root, _, dark = css.rpartition('[data-theme="dark"]')
     for var in (
@@ -65,6 +66,14 @@ async def test_daisyui_bridge_vars() -> None:
         "--sc:",
         "--a:",
         "--ac:",
+        "--er:",
+        "--erc:",
+        "--su:",
+        "--suc:",
+        "--wa:",
+        "--wac:",
+        "--in:",
+        "--inc:",
     ):
         assert var in root, f"{var} missing in :root"
         assert var in dark, f"{var} missing in dark scope"
@@ -91,8 +100,10 @@ async def test_sonar_arcs_mark_and_favicon(client) -> None:
 
 
 _DAISY_COLOR_CLASS_RE = (
-    r"(?:bg|text|border|ring|from|to|divide)-"
-    r"(?:base-|gray-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
+    r"(?:bg|text|border|ring|ring-offset|from|via|to|divide|fill|stroke|placeholder)-"
+    r"(?:base-|gray-|red-|orange-|amber-|yellow-|lime-|green-|emerald-|teal-|cyan-|"
+    r"sky-|blue-|indigo-|violet-|purple-|fuchsia-|pink-|rose-|slate-|zinc-|neutral-|stone-|"
+    r"primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
 )
 
 
@@ -100,9 +111,9 @@ async def test_no_daisyui_color_classes() -> None:
     """P3: DaisyUI color utilities (base-* AND the semantic families) are
     retired from templates — fills/text/borders route through the app.css
     tokens. Component classes (btn, alert, badge...) are exempt: their
-    internals are re-grounded by the app.css bridge (base/primary/secondary/
-    accent families); the status family (--er/--su/--wa/--in) is tracked in
-    the follow-on issue. Guard against re-introduction (Arch-2)."""
+    internals are re-grounded by the app.css bridge — base/primary/secondary/
+    accent families (#59 P3) and the status family --er/--su/--wa/--in (#65).
+    Guard against re-introduction (Arch-2)."""
     import re
 
     offenders: list[str] = []
@@ -175,14 +186,32 @@ async def test_hand_authored_h1_headers_have_clearance() -> None:
     """Arch-5: any template with an <h1> that neither uses the page_header
     macro nor carries pl-16 clearance must be allowlisted (verified
     below-band). A new top-of-page hand-authored header fails HERE, not in
-    UAT."""
+    UAT.
+
+    #65 hardening: the clearance evidence must sit near the <h1> itself
+    (on its own line or within the 5 lines above it) rather than merely
+    ANYWHERE in the file — a whole-file substring match would pass a
+    template whose pl-16/page_header usage is unrelated to the header
+    that actually needs clearance. Jinja comments are STRIPPED before
+    scanning (R-1): the convention comment above each fixed header quotes
+    the literal `pl-16`, which would otherwise satisfy the window even if
+    the class itself were removed — only real markup counts as evidence."""
     offenders: list[str] = []
     for path in sorted(TEMPLATES_DIR.rglob("*.html")):
         rel = str(path.relative_to(TEMPLATES_DIR)).replace("\\", "/")
-        text = path.read_text(encoding="utf-8")
-        if "<h1" not in text or rel in _H1_CLEARANCE_ALLOWLIST:
+        raw = path.read_text(encoding="utf-8")
+        if "<h1" not in raw or rel in _H1_CLEARANCE_ALLOWLIST:
             continue
-        if "page_header" in text or "pl-16" in text:
+        text = re.sub(r"\{#.*?#\}", "", raw, flags=re.DOTALL)
+        lines = text.splitlines()
+        protected = True
+        for i, line in enumerate(lines):
+            if "<h1" not in line:
+                continue
+            window = "\n".join(lines[max(0, i - 5) : i + 1])
+            if "pl-16" not in window and "page_header" not in window:
+                protected = False
+        if protected:
             continue
         offenders.append(rel)
     assert not offenders, (
@@ -210,8 +239,7 @@ async def test_no_opacity_modified_token_classes() -> None:
     for path in sorted(TEMPLATES_DIR.rglob("*.html")):
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(
-                r"(?:bg-brand|bg-surface|text-ink|text-status|border-status|border-border)"
-                r"[a-z0-9-]*/\d+",
+                r"(?:bg|text|border|ring|divide)-(?:brand|surface|ink|status|border)[a-z0-9-]*/\d+",
                 line,
             ):
                 offenders.append(f"{path.relative_to(TEMPLATES_DIR)}:{i}")
@@ -232,6 +260,14 @@ _BRIDGE_TOKEN_NAME_MAP: dict[str, tuple[str, str]] = {
     "--sc": ("brand-contrast", "brand-contrast"),
     "--a": ("ink-2", "ink-2"),
     "--ac": ("brand-contrast", "brand-contrast"),
+    "--er": ("status-critical", "status-critical"),
+    "--erc": ("brand-contrast", "brand-contrast"),
+    "--su": ("status-success", "status-success"),
+    "--suc": ("brand-contrast", "brand-contrast"),
+    "--wa": ("status-warning", "status-warning"),
+    "--wac": ("brand-contrast", "brand-contrast"),
+    "--in": ("status-info", "status-info"),
+    "--inc": ("brand-contrast", "brand-contrast"),
 }
 
 

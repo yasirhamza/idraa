@@ -19,8 +19,18 @@
      contract test is the real safety net for enum-vs-map drift.
 #}
 {% set unit = sub_function_units_map[assignment.sub_function] %}
+{# #65 color-guard hardening surfaced this: the previous "backdrop, ink-1
+   token, half opacity" class never generated a CSS rule (Tailwind's
+   hex-var tokens drop the opacity modifier — the documented app.css
+   foot-gun — and no safelist entry covers backdrop-variant + opacity
+   combos), so it was dead markup. DaisyUI's own
+   `.modal::backdrop{background-color:#0006}` already dims the page
+   behind the dialog; it's also the theme-correct choice — the ink-1
+   token flips to near-white in dark mode, which would have LIGHTENED the
+   backdrop instead of dimming it had the class ever taken effect. Dropped
+   rather than repaired. #}
 <dialog id="clear-capability-modal-{{ assignment.id }}"
-        class="modal backdrop:bg-ink-1/50">
+        class="modal">
   <div class="bg-surface-0 border border-border-subtle rounded-card shadow-xl p-6 max-w-md w-full mx-auto">
     <h3 class="text-h3 text-ink-1 font-bold mb-4">Clear capability value?</h3>
     <p class="text-body text-ink-2 mb-6">

@@ -57,6 +57,12 @@
       {% set is_done = i < step %}
       {% set is_current = i == step %}
       <li class="flex items-center gap-2 text-meta">
+        {# #65: the done chip's `text-brand-contrast` doubles as the
+           status-content foreground here — it's the same OKLCH values as
+           the DaisyUI bridge's --suc (and --erc/--wac/--inc), since every
+           status-content pairing in this design system resolves to the
+           brand-contrast token in both themes. No separate
+           status-contrast utility needed. #}
         <span class="w-6 h-6 rounded-full flex items-center justify-center text-micro
                      {% if is_done %}bg-status-success text-brand-contrast
                      {% elif is_current %}bg-brand text-brand-contrast
