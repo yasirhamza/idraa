@@ -173,7 +173,7 @@ def test_action_menu_renders_link_and_form_items() -> None:
     assert 'href="/x/edit"' in html
     assert 'action="/x/duplicate"' in html
     assert "Delete" in html
-    assert "status-critical" in html or "text-error" in html, "danger items mark themselves"
+    assert "status-critical" in html, "danger items mark themselves"
     # Inline x-data for HTMX swap-race avoidance (CLAUDE.md UI rendering conventions).
     # Substring (not a brace-bound literal) so the x-data can carry extra state —
     # e.g. the `flipUp` boundary-flip flag — without this proxy assertion breaking.

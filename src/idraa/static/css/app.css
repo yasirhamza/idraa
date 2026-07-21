@@ -47,6 +47,10 @@
   --bc: 21.0331% 0.005860 285.885153;   /* ink-1 #18181B */
   --p:  38.4708% 0.024616 234.611538;   /* brand #37464F */
   --pc: 100.0000% 0.000000 89.875563;   /* brand-contrast #FFFFFF */
+  --s:  44.1861% 0.014617 285.786377;   /* secondary = neutral ink family (ink-2 #52525B) */
+  --sc: 100.0000% 0.000000 89.875563;   /* secondary-content #FFFFFF */
+  --a:  69.5165% 0.116760 73.789873;    /* accent = brass #C89141 (the approved logo accent; badge text below is AA) */
+  --ac: 14.5249% 0.002132 286.131340;   /* accent-content #0A0A0B (7.15:1 on brass) */
 }
 
 /* Dark palette — applied when data-theme="dark" on <html>. */
@@ -82,6 +86,10 @@
   --bc: 98.5104% 0.000000 89.875563;    /* ink-1 #FAFAFA */
   --p:  81.7627% 0.017546 225.240050;   /* brand #B8C6CC */
   --pc: 14.5249% 0.002132 286.131340;   /* brand-contrast #0A0A0B */
+  --s:  71.1815% 0.012937 286.066504;   /* secondary = neutral ink family (dark ink-2 #A1A1AA) */
+  --sc: 14.5249% 0.002132 286.131340;   /* secondary-content #0A0A0B (7.72:1) */
+  --a:  69.5165% 0.116760 73.789873;    /* accent = brass #C89141 (same hue both themes) */
+  --ac: 14.5249% 0.002132 286.131340;   /* accent-content #0A0A0B */
 }
 
 /* === Token-backed utility classes (2026-05-23) ====================================

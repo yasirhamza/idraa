@@ -54,7 +54,18 @@ async def test_daisyui_bridge_vars() -> None:
     alerts/stats/modals/tabs match token surfaces."""
     css = APP_CSS_PATH.read_text(encoding="utf-8")
     root, _, dark = css.rpartition('[data-theme="dark"]')
-    for var in ("--b1:", "--b2:", "--b3:", "--bc:", "--p:", "--pc:"):
+    for var in (
+        "--b1:",
+        "--b2:",
+        "--b3:",
+        "--bc:",
+        "--p:",
+        "--pc:",
+        "--s:",
+        "--sc:",
+        "--a:",
+        "--ac:",
+    ):
         assert var in root, f"{var} missing in :root"
         assert var in dark, f"{var} missing in dark scope"
     assert "21.0331% 0.005860 285.885153" in root  # light --bc = ink-1 #18181B
@@ -76,6 +87,7 @@ async def test_sonar_arcs_mark_and_favicon(client) -> None:
     assert "#C89141" in fav
     assert "prefers-color-scheme: dark" in fav
     assert "#B8C6CC" in fav
+    assert "#37464F" in fav
 
 
 _DAISY_COLOR_CLASS_RE = (
@@ -88,8 +100,9 @@ async def test_no_daisyui_color_classes() -> None:
     """P3: DaisyUI color utilities (base-* AND the semantic families) are
     retired from templates — fills/text/borders route through the app.css
     tokens. Component classes (btn, alert, badge...) are exempt: their
-    internals are re-grounded by the Task-1 bridge. Guard against
-    re-introduction (Arch-2)."""
+    internals are re-grounded by the app.css bridge (base/primary/secondary/
+    accent families); the status family (--er/--su/--wa/--in) is tracked in
+    the follow-on issue. Guard against re-introduction (Arch-2)."""
     import re
 
     offenders: list[str] = []
@@ -203,3 +216,62 @@ async def test_no_opacity_modified_token_classes() -> None:
             ):
                 offenders.append(f"{path.relative_to(TEMPLATES_DIR)}:{i}")
     assert not offenders, f"opacity-modified token classes: {offenders}"
+
+
+_BRIDGE_TOKEN_MAP: dict[str, tuple[str, str]] = {
+    # DaisyUI bridge var -> (light token hex, dark token hex). The bridge
+    # triplets are DERIVED constants; this test re-derives them from the
+    # hexes so a palette change cannot silently strand the bridge (FA-2).
+    "--b1": ("#FFFFFF", "#18181B"),
+    "--b2": ("#F4F4F5", "#27272A"),
+    "--b3": ("#D4D4D8", "#3F3F46"),
+    "--bc": ("#18181B", "#FAFAFA"),
+    "--p": ("#37464F", "#B8C6CC"),
+    "--pc": ("#FFFFFF", "#0A0A0B"),
+    "--s": ("#52525B", "#A1A1AA"),
+    "--sc": ("#FFFFFF", "#0A0A0B"),
+    "--a": ("#C89141", "#C89141"),
+    "--ac": ("#0A0A0B", "#0A0A0B"),
+}
+
+
+def _hex_to_oklch(hexc: str) -> tuple[float, float, float]:
+    """sRGB hex -> OKLCH (L in 0..1, C, H in degrees). Reference OKLab math."""
+    import math
+
+    h = hexc.lstrip("#")
+    r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+
+    def lin(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = lin(r), lin(g), lin(b)
+    l_cone = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+    m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+    s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+    l_, m_, s_ = l_cone ** (1 / 3), m ** (1 / 3), s ** (1 / 3)
+    ll = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
+    aa = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
+    bb = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    c = math.hypot(aa, bb)
+    hue = math.degrees(math.atan2(bb, aa)) % 360
+    return ll, c, hue
+
+
+async def test_daisyui_bridge_triplets_match_tokens() -> None:
+    """FA-2: every bridge triplet re-derives from its token hex (tolerance
+    L +/-0.01pp, C +/-0.001; hue checked only when chromatic)."""
+    import re
+
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    root, _, dark = css.rpartition('[data-theme="dark"]')
+    for var, (light_hex, dark_hex) in _BRIDGE_TOKEN_MAP.items():
+        for scope_name, scope_text, hexv in (("light", root, light_hex), ("dark", dark, dark_hex)):
+            m = re.search(rf"{re.escape(var)}:\s*([\d.]+)% ([\d.]+) ([\d.]+)", scope_text)
+            assert m, f"{var} missing in {scope_name} scope"
+            got_l, got_c, got_h = (float(g) for g in m.groups())
+            exp_l, exp_c, exp_h = _hex_to_oklch(hexv)
+            assert abs(got_l - exp_l * 100) < 0.01, (var, scope_name, hexv)
+            assert abs(got_c - exp_c) < 0.001, (var, scope_name, hexv)
+            if exp_c > 0.0005:
+                assert abs(got_h - exp_h) < 0.1, (var, scope_name, hexv)

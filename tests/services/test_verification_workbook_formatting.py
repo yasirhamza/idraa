@@ -318,7 +318,7 @@ async def test_workbook_uses_brand_graphite_headers_not_legacy_accent(
     """Design-system alignment (#59 P3): the produced workbook carries the
     graphite brand (#37464F) header fill and NONE of the legacy ad-hoc accent
     (#E7EEF6) remains. openpyxl reads fills as 8-char ARGB (e.g. 'FF37464F')."""
-    org = await seed_organization_factory(name="vwb-brand-navy")
+    org = await seed_organization_factory(name="vwb-brand-graphite")
     run = await _make_reconstructible_run(db_session, org)
 
     wb = openpyxl.load_workbook(io.BytesIO(build_verification_workbook(run, org)))
