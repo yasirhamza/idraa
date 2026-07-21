@@ -104,9 +104,6 @@ class WizardState:
         }
 
 
-_DEFAULT_TTL_MINUTES = 30
-
-
 def _state_json_excluding_version_token(state: WizardState) -> dict[str, Any]:
     """Spec-C PR3 NICE: avoid dual-source-of-truth for ``version_token``.
 
@@ -303,10 +300,10 @@ class WizardStateService:
         )
         await self._db.flush()
 
-    async def cleanup_expired(self, *, max_age_minutes: int = _DEFAULT_TTL_MINUTES) -> int:
-        # F17 ships this method orphaned — no scheduler wires it yet. F25 cron
-        # or a Phase 1.5b APScheduler task should call cleanup_expired periodically
-        # (e.g., every 10 minutes) to sweep idle drafts.
+    async def cleanup_expired(self, *, max_age_minutes: int) -> int:
+        # Drafts-surfaced spec §4: swept periodically by
+        # services.run_reaper.sweep_wizard_drafts, on the reaper's cadence
+        # (Settings.run_reaper_interval_seconds) plus a boot one-shot.
         """Delete drafts older than max_age_minutes. Returns deleted-count.
 
         r3 LOW (threat-model #7): a concurrent in-flight wizard step POST
