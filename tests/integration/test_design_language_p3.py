@@ -59,3 +59,20 @@ async def test_daisyui_bridge_vars() -> None:
         assert var in dark, f"{var} missing in dark scope"
     assert "21.0331% 0.005860 285.885153" in root  # light --bc = ink-1 #18181B
     assert "21.0331% 0.005860 285.885153" in dark  # dark --b1 = surface-1 #18181B
+
+
+async def test_sonar_arcs_mark_and_favicon(client) -> None:
+    """P3: the logomark is the sonar-arcs mark — two bilateral arcs over the
+    brass dot — in the login page SVG and in the favicon (which carries a
+    dark-scheme media query so the mark survives dark browser chrome)."""
+    r = await client.get("/login")
+    assert r.status_code == 200
+    assert "M9.5 19 A 9 9 0 0 1 22.5 19" in r.text
+    assert "M5 14.5 A 15.5 15.5 0 0 1 27 14.5" in r.text
+    assert "var(--color-logo-accent)" in r.text
+
+    fav = (await client.get("/static/favicon.svg")).text
+    assert "M9.5 19 A 9 9 0 0 1 22.5 19" in fav
+    assert "#C89141" in fav
+    assert "prefers-color-scheme: dark" in fav
+    assert "#B8C6CC" in fav

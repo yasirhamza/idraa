@@ -1,10 +1,18 @@
-<!-- Idraa favicon (issue #59 T1). Static asset — SVG favicons cannot read CSS
-     custom properties, so #0F4C81 is hardcoded here as the ONE spec-sanctioned
-     exception to the palette-agnostic rule. This MUST be kept in sync with the
-     light-theme --color-brand token in src/idraa/static/css/app.css; if that
-     token's hex changes (e.g. Phase 3 palette swap), update this file to match. -->
+<!-- Idraa favicon (issue #59 P3; sonar-arcs mark, owner pick 2026-07-21).
+     Static asset — SVG favicons cannot read CSS custom properties, so the ink
+     hexes are hardcoded here as the ONE sanctioned exception to the
+     palette-agnostic rule. They MUST be kept in sync with the light/dark
+     --color-brand tokens in src/idraa/static/css/app.css (the internal media
+     query below handles dark browser chrome); the dot matches
+     --color-logo-accent. The media query follows the BROWSER's color scheme,
+     not the in-app data-theme toggle — tab chrome is browser-themed, so this
+     divergence is deliberate; do not "fix" it. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <path d="M3 7 C 11 8, 12 24, 29 26" fill="none" stroke="#0F4C81" stroke-width="2.6" stroke-linecap="round"/>
-  <path d="M3 7 C 11 8, 12 24, 29 26 L 29 29 L 3 29 Z" fill="#0F4C81" opacity=".14"/>
-  <circle cx="3" cy="7" r="2.6" fill="#0F4C81"/>
+  <style>
+    .ink { stroke: #37464F; }
+    @media (prefers-color-scheme: dark) { .ink { stroke: #B8C6CC; } }
+  </style>
+  <path class="ink" d="M9.5 19 A 9 9 0 0 1 22.5 19" fill="none" stroke-width="2.5" stroke-linecap="round"/>
+  <path class="ink" d="M5 14.5 A 15.5 15.5 0 0 1 27 14.5" fill="none" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+  <circle cx="16" cy="20.5" r="2.6" fill="#C89141"/>
 </svg>

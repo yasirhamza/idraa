@@ -1,13 +1,17 @@
-{# logomark(size=28, with_wordmark=False) — issue #59 T1. Loss-exceedance-curve
-   mark: palette-agnostic (currentColor → var(--color-brand)). `data-logomark`
-   is the test/integration anchor — do not rename without updating
-   tests/integration/test_design_language_p1.py. #}
+{# logomark(size=28, with_wordmark=False) — issue #59 P3; sonar-arcs mark
+   (owner pick 2026-07-21): two bilateral arcs over a brass dot — layered
+   defenses warding off exposure above the asset (Idraa, from إدرأ = to
+   avert/mitigate); also reads as a watchful eye. Arcs are palette-agnostic
+   (currentColor → var(--color-brand)); the dot uses var(--color-logo-accent).
+   Bilateral about x=16. `data-logomark` is the test/integration anchor — do
+   not rename without updating tests/integration/test_design_language_p1.py
+   and _p3.py. #}
 {% macro logomark(size=28, with_wordmark=False) -%}
 <span class="inline-flex items-center gap-2.5" data-logomark>
   <svg viewBox="0 0 32 32" width="{{ size }}" height="{{ size }}" class="flex-none overflow-visible" style="color:var(--color-brand)" aria-hidden="true">
-    <path d="M3 7 C 11 8, 12 24, 29 26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M3 7 C 11 8, 12 24, 29 26 L 29 29 L 3 29 Z" fill="currentColor" opacity=".14"/>
-    <circle cx="3" cy="7" r="2.6" fill="currentColor"/>
+    <path d="M9.5 19 A 9 9 0 0 1 22.5 19" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M5 14.5 A 15.5 15.5 0 0 1 27 14.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" opacity=".55"/>
+    <circle cx="16" cy="20.5" r="2.6" fill="var(--color-logo-accent)"/>
   </svg>
   {% if with_wordmark %}<span class="text-h3 font-semibold tracking-tight">Idraa</span>{% endif %}
 </span>
