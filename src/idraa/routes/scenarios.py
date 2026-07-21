@@ -185,6 +185,16 @@ async def list_scenarios(
             "banner here."
         ),
     ),
+    draft_expired: int | None = Query(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Drafts-surfaced T4b (DQ-14): set to 1 by get_wizard_step's "
+            "dead-tx redirect; rendered as a 'warning' banner here so the "
+            "friendly copy cannot silently no-op."
+        ),
+    ),
 ) -> HTMLResponse:
     """List scenarios for the current user's org, paginated + filterable.
 
@@ -200,8 +210,61 @@ async def list_scenarios(
         limit=_page_size,
         offset=(page - 1) * _page_size,
     )
-    # Issue #167: post-delete flash.
-    flash = build_flash("Deleted scenario.", "success") if deleted == 1 else None
+    # Issue #167: post-delete flash. Drafts-surfaced T4b (DQ-14): a second,
+    # mutually-exclusive flash flag for get_wizard_step's dead-tx redirect —
+    # mirrors the ?deleted=1 mechanics one-for-one.
+    if deleted == 1:
+        flash = build_flash("Deleted scenario.", "success")
+    elif draft_expired == 1:
+        flash = build_flash(
+            "That draft no longer exists — it may have been discarded or expired.",
+            "warning",
+        )
+    else:
+        flash = None
+
+    # Drafts-surfaced T3 (spec §1): current user's in-progress wizard drafts,
+    # org-scoped (DA-2) + user-scoped, newest-first, NO SQL limit (DA-9 — a
+    # limit-then-filter window would let a burst of step-1 ghosts evict a
+    # real draft from view before the step-1 filter below runs). Per-user
+    # org-scoped rows are TTL-bounded, so the unbounded fetch is
+    # production-scale safe.
+    draft_rows = (
+        (
+            await db.execute(
+                select(WizardDraft)
+                .where(
+                    WizardDraft.user_id == user.id,
+                    WizardDraft.organization_id == user.organization_id,
+                )
+                .order_by(WizardDraft.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    wizard_drafts: list[dict[str, Any]] = []
+    for d in draft_rows:
+        sj = d.state_json or {}
+        # DA-1: never-advanced (mint-on-GET) drafts are re-creatable noise —
+        # excluded from the strip entirely.
+        current_step = int(sj.get("current_step", 1))
+        if current_step < 2:
+            continue
+        wizard_drafts.append(
+            {
+                "tx_id": str(d.tx_id),
+                # DQ-8: name/current_step/target_scenario_id from state_json;
+                # tx_id/updated_at from the ORM row.
+                "name": sj.get("name") or "New scenario",
+                "step": min(current_step, 6),  # upper-clamp only (DQ-1/DA-7)
+                "reestimating": bool(sj.get("target_scenario_id")),
+                "updated_at": d.updated_at,
+            }
+        )
+        if len(wizard_drafts) >= 20:  # cap the MAPPED list at 20 for display
+            break
+
     return templates.TemplateResponse(
         request,
         "scenarios/list.html",
@@ -213,6 +276,7 @@ async def list_scenarios(
             "page": page,
             "page_size": _page_size,
             "status_filter": status,
+            "wizard_drafts": wizard_drafts,
         },
     )
 

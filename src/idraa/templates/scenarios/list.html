@@ -23,6 +23,29 @@
   ),
 ) }}
 
+{# Drafts-surfaced T3 (spec §1): the current user's in-progress wizard
+   drafts — quiet strip between the header and the status filter chips,
+   rendered only when at least one qualifying (step>=2) draft exists. #}
+{% if wizard_drafts %}
+<section class="mb-4" data-drafts-strip>
+  <h2 class="text-meta text-ink-3 uppercase mb-2">In progress ({{ wizard_drafts|length }})</h2>
+  <ul class="space-y-1">
+    {% for d in wizard_drafts %}
+    <li class="flex items-center gap-3 text-sm">
+      <a class="link" href="/scenarios/new/wizard/step/{{ d.step }}?tx={{ d.tx_id }}">
+        {{ d.name }}{% if d.reestimating %} <span class="text-ink-3">(re-estimating)</span>{% endif %}
+      </a>
+      <span class="text-ink-3">Step {{ d.step }} of 6 · {{ d.updated_at | format_datetime }}</span>
+      <form method="post" action="/scenarios/new/wizard/cancel?tx={{ d.tx_id }}">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-ghost btn-xs text-status-critical">Discard</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {# Status filter chips (epic #34 P1a, plan-gate Spec-I1). Plain links that
    set ?status=; the active option is highlighted. Mirrors the source
    provenance filter precedent in controls/list.html. #}
