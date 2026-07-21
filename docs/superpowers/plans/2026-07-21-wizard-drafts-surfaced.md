@@ -296,7 +296,7 @@ head (current head to chain from: `26444158e537`).
 ### Task 4b: Resume/discard robustness (spec §4b — DA-4/DA-8)
 
 **Files:**
-- Modify: `src/idraa/routes/scenarios.py` — `get_wizard_step` (~1611) + `cancel_wizard` (~2559)
+- Modify: `src/idraa/routes/scenarios.py` — `get_wizard_step` (~1611) + `cancel_wizard` (~2559) + `list_scenarios` (~172: flash-param consumer for the dead-draft message — DQ-14; mirror its existing `?deleted=1`-style handling)
 - Test: append to `tests/integration/test_wizard_drafts_strip.py`
 
 - [ ] **Step 1: Failing tests** — (a) GET a wizard step with an explicit
@@ -307,7 +307,10 @@ after); (c) POST cancel with `tx=not-a-uuid` → 303 (not 500); (d) the
 no-tx GET entry path still mints + renders step 1 (unchanged behavior);
 (e) GET a wizard step with `tx=not-a-uuid` → 303 (not 500) — DQ-10: the
 resume path's `_resolve_tx` does a bare `uuid.UUID(tx_str)` today, so
-malformed resume links 500 symmetrically to cancel's case.
+malformed resume links 500 symmetrically to cancel's case; (f) DQ-14: the
+dead-tx redirect of (a) carries the flash param AND a follow-up GET of
+`/scenarios` with that param renders the "draft no longer exists" message
+— so the friendly copy cannot silently no-op.
 - [ ] **Step 2:** `get_wizard_step`: the tx-provided branch is guarded
 BEFORE `_resolve_tx`/`get_or_create` runs (DQ-10 — `_resolve_tx` at
 routes/scenarios.py:1334 does a bare `uuid.UUID(tx_str)` and then
