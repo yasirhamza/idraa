@@ -6,7 +6,12 @@
 {% block title %}Styleguide{% endblock %}
 {% block content %}
 
-<h1 class="text-display text-ink-1">Design system</h1>
+{# pl-16 below md clears the fixed ☰ (see macros/page_header.html) —
+   surfaced by the #65 h1-clearance proximity hardening: the whole-file
+   check previously "passed" this page only because a LOWER section
+   happens to demonstrate the page_header macro's own source, not because
+   this h1 carried any clearance of its own. #}
+<h1 class="text-display text-ink-1 pl-16 md:pl-0">Design system</h1>
 <p class="text-body text-ink-2 mt-1 mb-8">Live preview of every design-system primitive. Use this page to verify visual changes touch every macro consistently.</p>
 
 <section class="mb-12">
