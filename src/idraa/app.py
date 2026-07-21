@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
@@ -672,7 +672,9 @@ templates.env.filters["format_dist_value"] = _format_dist_value
 # Starlette-mount-style subtrees whose descendants are intentionally in
 # the allowlist. ``/api`` is NOT listed — the JSON API surface does not
 # exist yet; re-add it explicitly when 1.2+ ships it.
-_ALLOW_EXACT = frozenset({"/setup", "/healthz", "/login"})
+_ALLOW_EXACT = frozenset(
+    {"/setup", "/healthz", "/login", "/sw.js"}
+)  # /sw.js: PWA shim, static asset served at root scope (M0.1)
 _ALLOW_DIR_PREFIXES = ("/setup/", "/static/", "/login/")
 
 
@@ -990,6 +992,17 @@ def create_app() -> FastAPI:
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok", "version": settings.version}
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker() -> FileResponse:
+        """PWA installability shim served at the ROOT path (not /static/):
+        a service worker's default scope is its script's directory, and the
+        app must control scope "/" for install. No-cache like all statics."""
+        return FileResponse(
+            STATIC_DIR / "sw.js",
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     return app
 

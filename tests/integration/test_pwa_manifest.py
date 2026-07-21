@@ -49,8 +49,9 @@ async def test_icons_served_as_png(client: AsyncClient) -> None:
 
 
 async def test_base_head_carries_pwa_links(client: AsyncClient) -> None:
-    """base.html links the manifest, both theme-color metas, and the
-    apple-touch-icon — and ships NO service-worker registration."""
+    """base.html links the manifest, both theme-color metas, the
+    apple-touch-icon — and registers the no-op installability-shim worker
+    (M0.1: Samsung Internet requires a registered SW to offer install)."""
     r = await client.get("/login")
     assert r.status_code == 200
     html = r.text
@@ -60,13 +61,29 @@ async def test_base_head_carries_pwa_links(client: AsyncClient) -> None:
     assert 'content="#37464F"' in html
     assert 'content="#0A0A0B"' in html
     assert "apple-touch-icon" in html
-    assert "serviceWorker" not in html  # M0: deliberately no SW
+    assert 'navigator.serviceWorker.register("/sw.js")' in html
 
 
-async def test_no_service_worker_anywhere() -> None:
-    """P-2: the no-SW decision covers the whole first-party tree, not just
-    the login page's HTML — a register() in a static JS file or any template
-    must trip this, so adding a SW is a conscious, reviewed decision."""
+async def test_service_worker_is_noop_shim(client: AsyncClient) -> None:
+    """M0.1: the service worker exists ONLY to satisfy Samsung Internet's
+    install criteria — it must stay a no-op. No caches, no respondWith, no
+    importScripts: adding caching is a conscious, reviewed decision (the
+    original M0 no-SW rationale still applies to CACHING workers)."""
+    import re
+
+    r = await client.get("/sw.js")
+    assert r.status_code == 200
+    assert "text/javascript" in r.headers["content-type"]
+    # Strip comments before asserting (the #65 lesson: explanatory comments
+    # legitimately NAME the forbidden APIs; only real code counts).
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", r.text, flags=re.DOTALL)
+    assert 'addEventListener("fetch"' in code
+    assert "caches" not in code
+    assert "respondWith" not in code
+    assert "importScripts" not in code
+
+    # The shim source and its base.html registration are the ONLY
+    # first-party serviceWorker references (tree ratchet, ex-P-2).
     src = Path(__file__).resolve().parents[2] / "src" / "idraa"
     offenders: list[str] = []
     for path in sorted(src.rglob("*")):
@@ -75,9 +92,9 @@ async def test_no_service_worker_anywhere() -> None:
         if path.suffix not in {".js", ".html", ".py"}:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if "serviceWorker" in text and "test_pwa" not in path.name:
+        if "serviceWorker" in text and path.name not in {"base.html"}:
             offenders.append(str(path.relative_to(src)))
-    assert not offenders, f"service-worker references found: {offenders}"
+    assert not offenders, f"unexpected service-worker references: {offenders}"
 
 
 async def test_manifest_theme_matches_tokens() -> None:
