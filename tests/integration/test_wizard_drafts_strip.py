@@ -183,7 +183,12 @@ async def test_strip_name_fallback(
 
     resp = await client.get("/scenarios")
     assert resp.status_code == 200
-    assert "New scenario" in resp.text
+    # F-2: the page-header "+ New scenario" action ALWAYS renders on this
+    # page (see list.html:21), so a page-wide substring check is vacuous —
+    # it would pass even if the strip's own fallback name were broken. Scope
+    # the assertion to the drafts-strip section itself.
+    strip_html = resp.text.split("data-drafts-strip", 1)[1].split("</section>", 1)[0]
+    assert "New scenario" in strip_html
 
 
 @pytest.mark.asyncio

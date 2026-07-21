@@ -1699,6 +1699,7 @@ async def get_wizard_step(
     user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
 ) -> Response:
     wiz = WizardStateService(db)
+    existing: WizardState | None = None
     if tx is not None:
         # Drafts-surfaced T4b (DA-4/DQ-10): an EXPLICITLY-provided tx that
         # doesn't resolve to a live draft (swept/discarded/malformed/
@@ -1715,14 +1716,21 @@ async def get_wizard_step(
             return RedirectResponse(
                 url="/scenarios?draft_expired=1", status_code=status.HTTP_303_SEE_OTHER
             )
-    resolved_tx = await _resolve_tx(
-        db, user_id=user.id, organization_id=user.organization_id, tx_str=tx
-    )
-    state = await wiz.get_or_create(
-        user_id=user.id,
-        organization_id=user.organization_id,
-        tx_id=resolved_tx,
-    )
+    if existing is not None:
+        # F-4: the guard above already loaded this exact (user_id, tx_id)
+        # row via wiz.get() and nothing awaits/writes to it in between —
+        # get_or_create's tx_id-provided branch would only re-fetch the same
+        # row via another wiz.get() call. Reuse it instead of re-querying.
+        state = existing
+    else:
+        resolved_tx = await _resolve_tx(
+            db, user_id=user.id, organization_id=user.organization_id, tx_str=tx
+        )
+        state = await wiz.get_or_create(
+            user_id=user.id,
+            organization_id=user.organization_id,
+            tx_id=resolved_tx,
+        )
     await db.commit()
     if n < 1 or n > 6:
         raise HTTPException(status_code=400, detail="invalid step number")

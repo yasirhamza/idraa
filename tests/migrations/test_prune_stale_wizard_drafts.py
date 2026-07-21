@@ -16,6 +16,8 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import Engine
 
+from idraa.models.wizard_draft import WizardDraft
+
 _PRE_REV = "26444158e537"  # current head immediately before the prune migration
 _PRUNE_REV = "47c4064a2c1e"
 
@@ -58,6 +60,40 @@ def test_prune_deletes_stale_keeps_recent(alembic_config: Config, alembic_engine
         ]
     assert remaining == [recent_tx]
     assert old_tx not in remaining
+
+
+def test_prune_deletes_orm_written_row_too(alembic_config: Config, alembic_engine: Engine) -> None:
+    """F-3: independent proof that the migration's raw-string cutoff
+    comparison (see upgrade()'s docstring) is format-compatible with a row
+    written through the ORM's own ``UtcDateTime`` bind — not just the
+    hand-formatted raw-SQL seeds ``_seed_draft`` above uses. Inserts via the
+    ``WizardDraft`` table object with a real, tz-aware ``datetime.datetime``
+    value (not a pre-formatted string), so ``UtcDateTime.process_bind_param``
+    does the formatting, then asserts the resulting row is pruned same as a
+    raw-seeded one."""
+    command.upgrade(alembic_config, _PRE_REV)
+    old_dt = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
+    tx_id = uuid.uuid4()
+    with alembic_engine.begin() as conn:
+        conn.execute(sa.text("PRAGMA foreign_keys = OFF"))
+        conn.execute(
+            WizardDraft.__table__.insert().values(
+                user_id=uuid.uuid4(),
+                tx_id=tx_id,
+                organization_id=uuid.uuid4(),
+                state_json={"tx_id": str(tx_id), "current_step": 3},
+                version_token=0,
+                updated_at=old_dt,
+            )
+        )
+
+    command.upgrade(alembic_config, _PRUNE_REV)
+
+    with alembic_engine.connect() as conn:
+        remaining = [
+            r[0] for r in conn.execute(sa.text("SELECT tx_id FROM wizard_drafts")).fetchall()
+        ]
+    assert remaining == []
 
 
 def test_downgrade_is_a_noop(alembic_config: Config, alembic_engine: Engine) -> None:

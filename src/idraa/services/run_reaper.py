@@ -214,7 +214,10 @@ async def sweep_wizard_drafts(settings: Settings) -> None:
             max_age_minutes=ttl_days * 24 * 60
         )
         await session.commit()
-    if deleted:
+    # F-5: cleanup_expired's docstring warns SQLite may report rowcount=-1
+    # (dialect-dependent) — guard against logging a nonsensical negative
+    # "deleted" count.
+    if deleted and deleted > 0:
         logger.info("Wizard-draft TTL sweep deleted %d idle draft(s)", deleted)
 
 
