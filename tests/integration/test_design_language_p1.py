@@ -149,3 +149,16 @@ async def test_wizard_review_uses_readout(
     # The entered Primary loss High value (5000000.0, formatted 2dp via the
     # existing format_dist_value("money") filter) renders inside the strip.
     assert "5000000.00" in body
+
+
+async def test_mobile_drawer_never_inherits_desktop_collapse(authed_analyst, db_session) -> None:
+    """UAT 2026-07-21: a 'collapsed' pref persisted from a desktop session must
+    not leak into the phone drawer (w-16 rail, single-letter labels), and the
+    brand header must clear the fixed hamburger. String-pins the two template
+    mechanisms; geometry verified by Playwright at 390px during the fix."""
+    client, _ = authed_analyst
+    r = await client.get("/")
+    # viewport gate on the Alpine collapse state
+    assert "window.matchMedia('(min-width: 768px)').matches" in r.text
+    # brand-header hamburger clearance (mobile-only padding)
+    assert "pl-16 pr-4 md:px-4" in r.text
