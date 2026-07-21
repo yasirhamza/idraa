@@ -43,5 +43,12 @@ module.exports = {
       borderRadius: { input: "4px", card: "6px", table: "0" },
     },
   },
+  // @tailwindcss/forms runs in its default `base` strategy DELIBERATELY: the
+  // app's text-input/select/textarea chrome builds on its global reset
+  // (app.css layers bg/border tokens on top). Its checkbox/radio reset,
+  // however, clobbers DaisyUI's .toggle/.checkbox/.radio — build_css.py
+  // appends a daisyui-controls-restore block after it to undo exactly that
+  // (UAT 2026-07-21). Do NOT switch to strategy:"class" casually — it strips
+  // the text-input base app-wide.
   plugins: [require("@tailwindcss/forms"), require("@tailwindcss/typography")],
 };

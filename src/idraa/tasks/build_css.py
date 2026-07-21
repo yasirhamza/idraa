@@ -106,11 +106,92 @@ def ensure_binary() -> Path:
     return dest
 
 
+VENDOR_DIR = REPO_ROOT / "src" / "idraa" / "static" / "vendor"
+
+# UAT 2026-07-21 (wizard catastrophic toggle): @tailwindcss/forms ships GLOBAL
+# `[type=checkbox],[type=radio]` resets (appearance:none, 1rem square). They tie
+# DaisyUI's `.toggle`/`.checkbox`/`.radio` on specificity, and tailwind.css
+# loads AFTER the vendored DaisyUI sheet — so the reset won every tie and
+# flattened all DaisyUI form controls into unstyled 16px squares. Fix: extract
+# the DaisyUI control rules from the vendored sheet and append them to the END
+# of the built output, where same-specificity+later restores them. Extraction
+# (not a hand copy) keeps the block in sync across Dependabot DaisyUI bumps.
+_CONTROL_SELECTOR_TOKENS = (".toggle", ".checkbox", ".radio")
+_RESTORE_MARKER = "/*! daisyui-controls-restore (build_css) */"
+
+
+def _iter_css_rules(css: str) -> list[tuple[str, str]]:
+    """Yield (selector_or_atrule_header, full_rule_text) for top-level blocks,
+    recursing one level into grouping at-rules (@media/@supports). Brace-
+    balance parser — sufficient for minified vendor CSS (no comments after
+    the jsDelivr header is stripped)."""
+    rules: list[tuple[str, str]] = []
+    i, n = 0, len(css)
+    while i < n:
+        brace = css.find("{", i)
+        if brace == -1:
+            break
+        header = css[i:brace].strip()
+        depth, j = 1, brace + 1
+        while j < n and depth:
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+            j += 1
+        body = css[brace + 1 : j - 1]
+        if header.startswith("@") and "{" in body:
+            for inner_header, inner_rule in _iter_css_rules(body):
+                rules.append((inner_header, f"{header}{{{inner_rule}}}"))
+        else:
+            rules.append((header, css[i:j]))
+        i = j
+    return rules
+
+
+def _extract_control_rules() -> str:
+    """Pull every DaisyUI rule styling .toggle/.checkbox/.radio from the
+    vendored sheet, in vendor order."""
+    import re
+
+    sheets = sorted(VENDOR_DIR.glob("daisyui-*.min.css"))
+    if len(sheets) != 1:
+        # Exactly one vendored sheet, ever: lexical sort is NOT semver
+        # (4.9 > 4.12), so choosing among several could desync the restore
+        # block from the sheet base.html actually loads (W-3).
+        raise SystemExit(
+            f"build-css: expected exactly one vendored daisyui-*.min.css, found {len(sheets)}"
+        )
+    css = sheets[0].read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    keep: list[str] = []
+    for header, rule in _iter_css_rules(css):
+        if header.startswith("@") and not rule.startswith("@"):
+            continue
+        selector = header
+        if any(tok in selector for tok in _CONTROL_SELECTOR_TOKENS):
+            keep.append(rule)
+    if not keep:
+        raise SystemExit("build-css: daisyui control extraction found 0 rules")
+    return "".join(keep)
+
+
 def build(output: Path = OUTPUT) -> int:
     binary = ensure_binary()
     cmd = [str(binary), "-c", str(CONFIG), "-i", str(ENTRY), "-o", str(output), "--minify"]
     print(f"> {' '.join(cmd)}", flush=True)
-    return subprocess.run(cmd, check=False, cwd=REPO_ROOT).returncode  # noqa: S603
+    rc = subprocess.run(cmd, check=False, cwd=REPO_ROOT).returncode  # noqa: S603
+    if rc == 0:
+        # NOTE (W-5): appending at EOF also places these rules AFTER the
+        # utilities layer, so `class="toggle w-10"`-style sizing utilities on
+        # controls would lose to the restored base rules. No template does
+        # that today (only mt-* margins co-occur); prefer DaisyUI's own size
+        # variants (toggle-sm etc.) on controls.
+        restore = _extract_control_rules()
+        with output.open("a", encoding="utf-8") as f:
+            f.write(f"\n{_RESTORE_MARKER}{restore}")
+        print(f"build-css: appended daisyui-controls-restore ({len(restore)} bytes)", flush=True)
+    return rc
 
 
 def _normalize(data: bytes) -> bytes:

@@ -50,3 +50,31 @@ def test_check_fresh_across_crlf(monkeypatch, tmp_path):
         build_css, "build", lambda output: (output.write_bytes(b"x\r\ny\r\n"), 0)[1]
     )
     assert build_css.check() == 0
+
+
+def test_built_sheet_carries_daisyui_controls_restore():
+    """UAT 2026-07-21 (wizard catastrophic toggle): @tailwindcss/forms' global
+    [type=checkbox]/[type=radio] reset ties DaisyUI's .toggle/.checkbox/.radio
+    on specificity and wins by sheet order, flattening every DaisyUI form
+    control to an unstyled 1rem square. build() must append the extracted
+    DaisyUI control rules AFTER the reset (end of the built sheet)."""
+    css = build_css.OUTPUT.read_text(encoding="utf-8")
+    marker = css.find(build_css._RESTORE_MARKER)
+    assert marker != -1, "daisyui-controls-restore block missing from tailwind.css"
+    reset = css.find("[type=checkbox]")
+    if reset == -1:
+        reset = css.find('[type="checkbox"]')
+    assert reset != -1 and marker > reset, "restore block must come AFTER the forms reset"
+    restore = css[marker:]
+    assert ".toggle{" in restore and "width:3rem" in restore
+    assert ".checkbox{" in restore
+    assert ".radio{" in restore
+
+
+def test_extract_control_rules_nonempty_and_scoped():
+    """The extraction pulls only control-class rules from the vendored sheet."""
+    restore = build_css._extract_control_rules()
+    assert len(restore) > 5_000  # toggle+checkbox+radio families are substantial
+    # spot-check scoping: no unrelated component rules leak in
+    assert ".btn{" not in restore
+    assert ".card{" not in restore
