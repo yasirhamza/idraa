@@ -117,6 +117,22 @@ in the quiet moments without repetition.
 - (seed) 2026-07-21: scope = P1 spec's Phase-2 deferrals + owner's
   white-space complaint; run-form readout conditional on the surface
   actually existing.
+- 2026-07-21 execution (T1-T3 all reviewed 0/0; full gate 4461 green; chart
+  e2e run EXPLICITLY: 5/5 passed — hover/slider/tooltip/CSV survive the new
+  area markup): disclosed deviations — posture cold-row copy is the
+  plan-authored merged string, not byte-concatenation of the old 3-element
+  card (substring assertions preserved); baseline line on the 4 curve
+  macros only (bar/band macros are not curve axes); gradient defs declared
+  unconditionally on single-curve figures (unused def inert); tolerance
+  under-disc same-radius surface fill; gradient stops use stop-opacity;
+  SINGLE cost-summary ROI mirrors kpi_card's real ratio format (no ×) while
+  verdict_strip's pre-existing × stays — each surface mirrors its own prior
+  behavior. "No run-form summary surface" CONFIRMED (analyses/new.html is a
+  plain form) — workstream 4's run-form clause skipped as pre-authorized.
+  Fresh-org dashboard height 1393px at 1440x900 (was ~1574px): voids
+  collapsed; the remainder is the STRUCTURAL coverage&budget band +
+  get-started card (both pre-declared) — "~one viewport" partially met,
+  accepted per the plan-gate disposition.
 - 2026-07-21 plan-gate R1 (quality + architecture): 10 IMPORTANTs applied —
   §4 rewritten to the real headline cells (no VaR-p95 headline exists);
   baseline instruction made executable (dedicated line); area fill on both
