@@ -857,7 +857,7 @@ class _Styles:
     """Workbook-scoped xlsxwriter formats, built ONCE and reused (per-cell
     add_format bloats the file). Colors come from the design-system tokens
     (``workbook_theme.WorkbookColors``) so the workbook matches the web + PDF:
-    brand-navy section headers/title, success/warning verdict hues, ink2 muted
+    brand section headers/title, success/warning verdict hues, ink2 muted
     notes. Money stays exact ($#,##0); Calibri (Excel default) is kept."""
 
     def __init__(self, wb: Any) -> None:

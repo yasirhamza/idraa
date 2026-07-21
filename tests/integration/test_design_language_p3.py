@@ -80,7 +80,7 @@ async def test_sonar_arcs_mark_and_favicon(client) -> None:
 
 _DAISY_COLOR_CLASS_RE = (
     r"(?:bg|text|border|ring|from|to|divide)-"
-    r"(?:base-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
+    r"(?:base-|gray-|primary\b|secondary\b|accent\b|error\b|success\b|warning\b|info\b)"
 )
 
 

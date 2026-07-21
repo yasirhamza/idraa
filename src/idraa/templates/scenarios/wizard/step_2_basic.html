@@ -3,7 +3,7 @@
 {% block step_body %}
 {%- set errors = errors if errors is mapping else {} -%}
 {% if selected_library_entry_name is defined %}
-  <p class="mb-4 text-sm text-gray-600">Selected from library: <strong>{{ selected_library_entry_name }}</strong></p>
+  <p class="mb-4 text-sm text-ink-2">Selected from library: <strong>{{ selected_library_entry_name }}</strong></p>
 {% endif %}
 <form method="post" action="/scenarios/new/wizard/step/2?tx={{ state.tx_id }}">
   {{ csrf_field() }}
