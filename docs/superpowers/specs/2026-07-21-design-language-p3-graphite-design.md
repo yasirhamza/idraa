@@ -181,10 +181,14 @@ hex-var-backed, so Tailwind `/NN` opacity modifiers SILENTLY fail on them
 (documented foot-gun, `macros/page_header.html:24-27`). The 4 such sites
 get explicit color-mix treatments instead: the library-card
 `[&:has(input:checked)]:bg-primary/5` becomes an arbitrary-value
-`bg-[color-mix(in_srgb,var(--color-brand)_5%,transparent)]` under the same
-variant, and the three `border-error/30` import-result cards use a new
-hand-written `.border-status-critical-faint` utility (30% color-mix).
-Exact edits in the plan (Task 4).
+`bg-[color:color-mix(in_srgb,var(--color-brand)_5%,transparent)]` under
+the same variant (the `color:` hint guarantees type inference; note the
+class it replaces is currently DEAD — vendor DaisyUI never generated the
+arbitrary-variant combo — so the tint becomes live for the first time),
+and the three `border-error/30` import-result cards use a new hand-written
+`.border-status-critical-faint` utility (30% color-mix). A positive sheet
+assertion guards that the color-mix rule actually lands in the rebuilt
+`tailwind.css`. Exact edits in the plan (Task 4).
 
 The /60 vs /70 distinction deliberately flattens to `ink-2`: the ink scale
 has no AA-passing tier between ink-2 (7.0:1) and ink-3 (2.5:1), and /60

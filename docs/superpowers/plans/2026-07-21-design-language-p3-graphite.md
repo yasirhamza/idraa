@@ -453,10 +453,16 @@ async def test_no_legacy_brand_hex() -> None:
 
 
 async def test_rebuilt_sheet_has_hover_surface() -> None:
-    """Arch-4: the JIT build must generate hover:bg-surface-2 (destination of
-    the 5 hover:bg-base-200 swaps, incl. 2 Alpine :class strings)."""
-    sheet = APP_CSS_PATH.parent / "tailwind.css"
-    assert "hover\\:bg-surface-2" in sheet.read_text(encoding="utf-8")
+    """Arch-4/Q-10r: the JIT build must generate the swap destinations —
+    hover:bg-surface-2 (5 hover:bg-base-200 swaps, incl. 2 Alpine :class
+    strings) and the checked-library-card color-mix tint (which must be a
+    LIVE rule, unlike the dead bg-primary/5 it replaces)."""
+    sheet_text = (APP_CSS_PATH.parent / "tailwind.css").read_text(encoding="utf-8")
+    assert "hover\\:bg-surface-2" in sheet_text
+    # tailwind.css is JIT-built from _tailwind_entry.css (app.css serves
+    # separately), so today it contains NO color-mix — this is a strict
+    # positive guard that the tint utility generated.
+    assert "color-mix" in sheet_text
 ```
 
 - [ ] **Step 2: Run — expect FAIL** (offenders listed; the hex guard may already pass if Tasks 1–3 landed first — that is fine, it is a ratchet).
@@ -489,11 +495,16 @@ solid fills):**
 
 - `scenarios/wizard/_step_1_library_cards.html:7` —
   `[&:has(input:checked)]:bg-primary/5` →
-  `[&:has(input:checked)]:bg-[color-mix(in_srgb,var(--color-brand)_5%,transparent)]`
-  (Tailwind arbitrary-value; the JIT already generates arbitrary-variant
-  utilities from this file — `ring-primary` on line 6 proves the scan
-  reaches it). This is a THIRD edit-site kind (Tailwind arbitrary-variant
-  string), distinct from the two Alpine `:class` sites.
+  `[&:has(input:checked)]:bg-[color:color-mix(in_srgb,var(--color-brand)_5%,transparent)]`
+  (Tailwind arbitrary VALUE with the explicit `color:` data-type hint so
+  the JIT binds it to background-color). NOTE (plan-gate Q-10r, verified
+  empirically): the CURRENT `bg-primary/5` and `ring-primary` on lines 6-7
+  are DEAD classes — `primary` is not a registered JIT color and the
+  vendored DaisyUI sheet has no arbitrary-variant combos, so they generate
+  nothing today. The swap makes both the tint and the ring live for the
+  first time (`brand` IS registered). This is a THIRD edit-site kind
+  (Tailwind arbitrary-variant string), distinct from the two Alpine
+  `:class` sites.
 - `overlays/import_result.html:29`, `library/import_result.html:29`,
   `scenarios/import_result.html:29` — `border-error/30` →
   `border-status-critical-faint`, a new hand-written utility added next to
