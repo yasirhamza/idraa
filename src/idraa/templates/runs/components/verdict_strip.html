@@ -44,8 +44,8 @@
   {% endif %}
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
     <div class="border-l-2 border-border-strong pl-4">
-      <div class="text-meta text-ink-3 uppercase">Residual ALE <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
-      <div class="text-number-lg font-mono">{{ dr.headline_ale.value | money(_code) }}</div>
+      <div class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Residual ALE <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
+      <div class="text-number-md font-mono">{{ dr.headline_ale.value | money(_code) }}</div>
       {#- Re-homed central-95% band (plan-gate Arch-I3): the old panel's
           headline_ale_with_ci_band lo–hi figures survive as a micro line;
           the mini band CHART is retired (dist table + curves carry spread). -#}
@@ -67,8 +67,8 @@
     </div>
     {% if cvh and cvh.dollars %}
     <div class="border-l-2 pl-4" style="border-color:var(--chart-residual)">
-      <div class="text-meta text-ink-3 uppercase">Control value / yr <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
-      <div class="text-number-lg font-mono">{{ cvh.dollars | money(_code) }}</div>
+      <div class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Control value / yr <span class="normal-case">(mean)</span>{{ cvm.cv("mean-vs-typical", caveats.numbers) }}</div>
+      <div class="text-number-md font-mono">{{ cvh.dollars | money(_code) }}</div>
       {% if _wr_has_range %}
         {#- Mean+typical side-by-side (2026-07-04): on a mean-basis run the range
             IS on the same average basis as the headline dollar figure above — it
@@ -97,8 +97,8 @@
     {% endif %}
     {% if _roi is not none %}
     <div class="border-l-2 border-border-strong pl-4">
-      <div class="text-meta text-ink-3 uppercase">Return on control spend</div>
-      <div class="text-number-lg font-mono">{{ "%.1f" | format(_roi) }}×</div>
+      <div class="font-mono uppercase tracking-[0.12em] text-[10px] text-ink-3">Return on control spend</div>
+      <div class="text-number-md font-mono">{{ "%.1f" | format(_roi) }}×</div>
       <div class="text-micro text-ink-3">
         {% if _net is not none %}net benefit {{ _net | money(_code) }} / yr{% endif %}
         {% if _n_controls is not none %} · {{ _n_controls }} unique control(s){{ cvm.cv("cost-dedup", caveats.numbers) }}{% endif %}
