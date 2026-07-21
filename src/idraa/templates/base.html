@@ -52,6 +52,19 @@
   </script>
   <title>{% block title %}Idraa{% endblock %} — Idraa</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v={{ static_version }}">
+  {# PWA M0 (mobile strategy): manifest + icons only — installable via
+     manifest+HTTPS; NO service worker by design (session-authed, DB-backed
+     app — offline mode is meaningless and a SW invites stale-cache bugs
+     alongside static_version busting). theme-color pairs with the graphite
+     brand (light) / dark surface-0; keep in sync with app.css tokens. #}
+  {# crossorigin="use-credentials": the manifest fetch runs in a credentials
+     mode that excludes HTTP-auth entries by default — behind the prod UAT
+     basic-auth gate it would 401 and suppress the install prompt (P-1). #}
+  <link rel="manifest" href="/static/manifest.webmanifest?v={{ static_version }}" crossorigin="use-credentials">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#37464F">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0A0B">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v={{ static_version }}">
+  <meta name="apple-mobile-web-app-title" content="Idraa">
   {# Same-origin CSS — SRI intentionally omitted (integrity attrs are for cross-origin
      assets; these are served from /static by this app). Cache-busted via static_version. #}
   <link rel="stylesheet"
