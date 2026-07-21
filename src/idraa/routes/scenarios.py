@@ -185,6 +185,16 @@ async def list_scenarios(
             "banner here."
         ),
     ),
+    draft_expired: int | None = Query(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Drafts-surfaced T4b (DQ-14): set to 1 by get_wizard_step's "
+            "dead-tx redirect; rendered as a 'warning' banner here so the "
+            "friendly copy cannot silently no-op."
+        ),
+    ),
 ) -> HTMLResponse:
     """List scenarios for the current user's org, paginated + filterable.
 
@@ -200,8 +210,61 @@ async def list_scenarios(
         limit=_page_size,
         offset=(page - 1) * _page_size,
     )
-    # Issue #167: post-delete flash.
-    flash = build_flash("Deleted scenario.", "success") if deleted == 1 else None
+    # Issue #167: post-delete flash. Drafts-surfaced T4b (DQ-14): a second,
+    # mutually-exclusive flash flag for get_wizard_step's dead-tx redirect —
+    # mirrors the ?deleted=1 mechanics one-for-one.
+    if deleted == 1:
+        flash = build_flash("Deleted scenario.", "success")
+    elif draft_expired == 1:
+        flash = build_flash(
+            "That draft no longer exists — it may have been discarded or expired.",
+            "warning",
+        )
+    else:
+        flash = None
+
+    # Drafts-surfaced T3 (spec §1): current user's in-progress wizard drafts,
+    # org-scoped (DA-2) + user-scoped, newest-first, NO SQL limit (DA-9 — a
+    # limit-then-filter window would let a burst of step-1 ghosts evict a
+    # real draft from view before the step-1 filter below runs). Per-user
+    # org-scoped rows are TTL-bounded, so the unbounded fetch is
+    # production-scale safe.
+    draft_rows = (
+        (
+            await db.execute(
+                select(WizardDraft)
+                .where(
+                    WizardDraft.user_id == user.id,
+                    WizardDraft.organization_id == user.organization_id,
+                )
+                .order_by(WizardDraft.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    wizard_drafts: list[dict[str, Any]] = []
+    for d in draft_rows:
+        sj = d.state_json or {}
+        # DA-1: never-advanced (mint-on-GET) drafts are re-creatable noise —
+        # excluded from the strip entirely.
+        current_step = int(sj.get("current_step", 1))
+        if current_step < 2:
+            continue
+        wizard_drafts.append(
+            {
+                "tx_id": str(d.tx_id),
+                # DQ-8: name/current_step/target_scenario_id from state_json;
+                # tx_id/updated_at from the ORM row.
+                "name": sj.get("name") or "New scenario",
+                "step": min(current_step, 6),  # upper-clamp only (DQ-1/DA-7)
+                "reestimating": bool(sj.get("target_scenario_id")),
+                "updated_at": d.updated_at,
+            }
+        )
+        if len(wizard_drafts) >= 20:  # cap the MAPPED list at 20 for display
+            break
+
     return templates.TemplateResponse(
         request,
         "scenarios/list.html",
@@ -213,6 +276,7 @@ async def list_scenarios(
             "page": page,
             "page_size": _page_size,
             "status_filter": status,
+            "wizard_drafts": wizard_drafts,
         },
     )
 
@@ -689,6 +753,35 @@ async def view_scenario(
             )
             recommendations = [r for r in all_recs if not r.adopted]  # un-adopted only (§6.3)
 
+    # Drafts-surfaced T4 (spec §2, DA-5): newest current-user draft targeting
+    # THIS scenario, queried by target in SQL (never "the 20 newest,
+    # filtered" — that would inherit the strip's display cap and could miss
+    # a real targeting draft beyond it).
+    reestimate_draft: dict[str, Any] | None = None
+    draft_row = (
+        await db.execute(
+            select(WizardDraft)
+            .where(
+                WizardDraft.user_id == user.id,
+                WizardDraft.organization_id == user.organization_id,
+                WizardDraft.state_json["target_scenario_id"].as_string() == scenario.id.hex,
+            )
+            .order_by(WizardDraft.updated_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if draft_row is not None:
+        draft_sj = draft_row.state_json or {}
+        draft_step = int(draft_sj.get("current_step", 1))
+        if draft_step >= 2:  # DA-1: same never-advanced filter as the strip
+            reestimate_draft = {
+                "tx_id": str(draft_row.tx_id),
+                "name": draft_sj.get("name") or "New scenario",
+                "step": min(draft_step, 6),
+                "reestimating": True,
+                "updated_at": draft_row.updated_at,
+            }
+
     return templates.TemplateResponse(
         request,
         "scenarios/view.html",
@@ -698,6 +791,7 @@ async def view_scenario(
             "scenario": scenario,
             "recommendations": recommendations,
             "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
+            "reestimate_draft": reestimate_draft,
         },
     )
 
@@ -1603,16 +1697,40 @@ async def get_wizard_step(
     tx: str | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
-) -> HTMLResponse:
+) -> Response:
     wiz = WizardStateService(db)
-    resolved_tx = await _resolve_tx(
-        db, user_id=user.id, organization_id=user.organization_id, tx_str=tx
-    )
-    state = await wiz.get_or_create(
-        user_id=user.id,
-        organization_id=user.organization_id,
-        tx_id=resolved_tx,
-    )
+    existing: WizardState | None = None
+    if tx is not None:
+        # Drafts-surfaced T4b (DA-4/DQ-10): an EXPLICITLY-provided tx that
+        # doesn't resolve to a live draft (swept/discarded/malformed/
+        # bookmarked) must NOT mint a phantom draft via get_or_create below
+        # — redirect with a friendly flash instead. Guarded BEFORE
+        # _resolve_tx/get_or_create run. The no-tx entry path (back-button /
+        # bare "+ New scenario") is untouched — it falls through unchanged.
+        try:
+            parsed_tx = uuid.UUID(tx)
+        except ValueError:
+            return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
+        existing = await wiz.get(user_id=user.id, tx_id=parsed_tx)
+        if existing is None:
+            return RedirectResponse(
+                url="/scenarios?draft_expired=1", status_code=status.HTTP_303_SEE_OTHER
+            )
+    if existing is not None:
+        # F-4: the guard above already loaded this exact (user_id, tx_id)
+        # row via wiz.get() and nothing awaits/writes to it in between —
+        # get_or_create's tx_id-provided branch would only re-fetch the same
+        # row via another wiz.get() call. Reuse it instead of re-querying.
+        state = existing
+    else:
+        resolved_tx = await _resolve_tx(
+            db, user_id=user.id, organization_id=user.organization_id, tx_str=tx
+        )
+        state = await wiz.get_or_create(
+            user_id=user.id,
+            organization_id=user.organization_id,
+            tx_id=resolved_tx,
+        )
     await db.commit()
     if n < 1 or n > 6:
         raise HTTPException(status_code=400, detail="invalid step number")
@@ -2568,13 +2686,17 @@ async def cancel_wizard(
     if tx is None:
         return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 
+    # Drafts-surfaced T4b (DA-4/DA-8): guard the parse (malformed tx → 303,
+    # not 500) and call `clear` directly — no more mint-then-delete via
+    # get_or_create on an unknown tx. `clear` is a WHERE-delete, idempotent
+    # on a missing row.
+    try:
+        parsed_tx = uuid.UUID(tx)
+    except ValueError:
+        return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
+
     wiz = WizardStateService(db)
-    state = await wiz.get_or_create(
-        user_id=user.id,
-        organization_id=user.organization_id,
-        tx_id=uuid.UUID(tx),
-    )
-    await wiz.clear(user_id=user.id, tx_id=uuid.UUID(state.tx_id))
+    await wiz.clear(user_id=user.id, tx_id=parsed_tx)
     await db.commit()
     return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 

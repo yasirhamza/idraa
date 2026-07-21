@@ -8,7 +8,9 @@ Lifecycle:
 - ``get_or_create``: fetch by (user_id, tx_id) or create with empty state_json.
 - ``advance_step``: upsert state_json + bump updated_at.
 - ``clear``: delete the row.
-- ``cleanup_expired``: ``DELETE WHERE updated_at < now - 30min``.
+- ``cleanup_expired``: ``DELETE WHERE updated_at < now - max_age_minutes``
+  (caller-supplied; ``Settings.wizard_draft_ttl_days`` in production, swept
+  by ``services.run_reaper.sweep_wizard_drafts``).
 
 PK is composite ``(user_id, tx_id)``. ``state_json`` is the WizardState
 dataclass serialised via ``asdict``; F17 owns the dataclass + service.

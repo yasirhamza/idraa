@@ -118,7 +118,19 @@ class Settings(BaseSettings):
     # #211 Phase 2: cadence of the in-process periodic orphan sweep
     # (services/run_reaper.py::periodic_reaper_loop, spawned from the app
     # lifespan). 0 disables the loop (boot sweep still runs). Operational
-    # knob, not a calibration constant.
+    # knob, not a calibration constant. Also the cadence of the wizard-draft
+    # TTL sweep (drafts-surfaced spec §4) — see wizard_draft_ttl_days below.
+
+    wizard_draft_ttl_days: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "Delete wizard drafts idle longer than this many days "
+            "(drafts-surfaced spec §4). 0 disables the sweep."
+        ),
+    )
+    # The periodic sweep rides the run-reaper loop —
+    # RUN_REAPER_INTERVAL_SECONDS=0 disables it (boot sweep still runs).
 
     export_rate_limit_count: int = Field(
         default=30, ge=0, le=10_000, alias="EXPORT_RATE_LIMIT_COUNT"

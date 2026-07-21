@@ -36,6 +36,23 @@
     <button type="submit" class="btn btn-sm btn-outline">Re-estimate</button>
   </form>
 </div>
+
+{# Drafts-surfaced T4 (spec §2): notice under the Re-estimate row when the
+   current user already has an in-progress re-estimation draft against this
+   scenario (newest only). #}
+{% if reestimate_draft %}
+<div class="flex justify-end items-center gap-3 -mt-2 mb-4 text-sm" data-reestimate-draft-badge>
+  <span class="text-ink-2">
+    Re-estimation in progress (step {{ reestimate_draft.step }} of 6,
+    {{ reestimate_draft.updated_at | format_datetime }})
+  </span>
+  <a class="link" href="/scenarios/new/wizard/step/{{ reestimate_draft.step }}?tx={{ reestimate_draft.tx_id }}">Resume</a>
+  <form method="post" action="/scenarios/new/wizard/cancel?tx={{ reestimate_draft.tx_id }}">
+    {{ csrf_field() }}
+    <button type="submit" class="btn btn-ghost btn-xs text-status-critical">Discard</button>
+  </form>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="max-w-4xl mx-auto">

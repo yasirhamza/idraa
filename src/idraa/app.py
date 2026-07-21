@@ -761,7 +761,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from idraa.config import get_settings as _get_settings
     from idraa.services.org import get_sole_org
     from idraa.services.retention import maybe_sweep_opportunistic, sweep_retention
-    from idraa.services.run_reaper import periodic_reaper_loop, reap_orphaned_runs
+    from idraa.services.run_reaper import (
+        periodic_reaper_loop,
+        reap_orphaned_runs,
+        sweep_wizard_drafts,
+    )
 
     _settings = _get_settings()
 
@@ -787,6 +791,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         logging.getLogger(__name__).exception(
             "Startup orphaned-run reaper / retention sweep failed"
         )
+
+    # Drafts-surfaced spec §4 (DA-3): a boot one-shot TTL sweep of idle
+    # wizard drafts — PRIMARY sweep path on scale-to-zero deploys where the
+    # periodic loop below may not get a full interval before the machine
+    # suspends again. Own session (opened inside sweep_wizard_drafts), own
+    # try/except — a sweep bug must never block startup. Sibling to (NOT
+    # nested inside) the reaper/retention try/except above.
+    try:
+        await sweep_wizard_drafts(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception("Boot wizard-draft sweep failed; continuing startup")
 
     # Task 5 (Arch-B1): a SEPARATE startup-only VACUUM sweep, additive to the
     # throttled opportunistic sweep above — NOT a replacement (replacing it

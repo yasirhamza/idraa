@@ -199,6 +199,28 @@ async def reap_once(settings: Settings) -> int:
         return await reap_orphaned_runs(db, settings)
 
 
+async def sweep_wizard_drafts(settings: Settings) -> None:
+    """Drafts-surfaced spec §4: TTL-sweep idle wizard drafts on the
+    reaper cadence (public name — consumed by both the boot one-shot
+    and the loop, DQ-13). 0 days = disabled."""
+    ttl_days = settings.wizard_draft_ttl_days
+    if ttl_days <= 0:
+        return
+    from idraa.db import get_session
+    from idraa.services.wizard_state import WizardStateService
+
+    async with get_session() as session:  # the exact idiom reap_once uses (run_reaper.py:196-199)
+        deleted = await WizardStateService(session).cleanup_expired(
+            max_age_minutes=ttl_days * 24 * 60
+        )
+        await session.commit()
+    # F-5: cleanup_expired's docstring warns SQLite may report rowcount=-1
+    # (dialect-dependent) — guard against logging a nonsensical negative
+    # "deleted" count.
+    if deleted and deleted > 0:
+        logger.info("Wizard-draft TTL sweep deleted %d idle draft(s)", deleted)
+
+
 async def periodic_reaper_loop(settings: Settings) -> None:
     """#211 Phase 2: sweep orphaned runs every ``run_reaper_interval_seconds``.
 
@@ -224,3 +246,9 @@ async def periodic_reaper_loop(settings: Settings) -> None:
             raise
         except Exception:  # never let a sweep bug kill the loop
             logger.exception("Periodic orphaned-run sweep failed; will retry next interval")
+        try:
+            await sweep_wizard_drafts(settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Wizard-draft TTL sweep failed; will retry next interval")
