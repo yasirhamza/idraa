@@ -50,7 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.config import get_settings
 from idraa.models.wizard_draft import WizardDraft
 from idraa.services.wizard_state import WizardStateService
-from idraa.utils.timeutils import now_utc
+from idraa.models._types import now_utc  # DA-10: the import run_reaper.py:66 uses
 
 pytestmark = pytest.mark.asyncio
 
@@ -248,7 +248,7 @@ head (current head to chain from: `26444158e537`).
 - Produces: template context `wizard_drafts: list[dict]` — each `{"tx_id": str, "name": str, "step": int, "reestimating": bool, "updated_at": datetime}`. Task 4 mirrors the same dict shape.
 
 - [ ] **Step 1: Failing tests** — own-drafts-only isolation (create drafts for two users, assert only the session user's render — the session user is resolved by email `analyst@test.local` via a select on User, since `authed_analyst` yields only (client, org_id) — DQ-3), org isolation (a same-user draft in ANOTHER org does not render — DA-2), step-1 drafts EXCLUDED (DA-1), cap 20 (create 22 qualifying, assert 20 rendered + newest first), name fallback, `data-drafts-strip` pin, absent when zero qualifying drafts.
-- [ ] **Step 2:** Route: query `WizardDraft` where `user_id == user.id` AND `organization_id == user.organization_id` (DA-2) order `updated_at desc` limit 20; then map rows, SKIPPING drafts whose `state_json.get("current_step", 1) < 2` (DA-1 — filter in Python after the fetch; the JSON filter in SQL is not worth the dialect fuss at limit-20 scale) — NOTE this means fewer than 20 may render when step-1 rows pad the fetch; acceptable (they are invisible noise, not content). Context dict per row: name = `state_json.get("name") or "New scenario"`; `reestimating` = bool(`state_json.get("target_scenario_id")`); step = `min(int(state_json.get("current_step", 2)), 6)` (upper clamp only — DQ-1); `tx_id`/`updated_at` from the ORM row (DQ-8). NO N+1: no per-draft scenario lookups.
+- [ ] **Step 2:** Route: query `WizardDraft` where `user_id == user.id` AND `organization_id == user.organization_id` (DA-2) order `updated_at desc` with NO SQL limit (DA-9: a limit-then-filter window lets a burst of step-1 ghosts — one minted per "+ New scenario" GET — EVICT a real draft from view, recreating the invisible-draft failure this feature exists to end; per-user org-scoped rows are TTL-bounded, so the unbounded fetch is production-scale safe). Then map rows, SKIPPING drafts whose `state_json.get("current_step", 1) < 2` (DA-1), and cap the MAPPED list at 20 for display. Context dict per row: name = `state_json.get("name") or "New scenario"`; `reestimating` = bool(`state_json.get("target_scenario_id")`); step = `min(int(state_json.get("current_step", 2)), 6)` (upper clamp only — DQ-1); `tx_id`/`updated_at` from the ORM row (DQ-8). NO N+1: no per-draft scenario lookups.
 - [ ] **Step 3:** Template:
 ```html
 {% if wizard_drafts %}
