@@ -645,9 +645,12 @@ async def post_delete_run(
     hidden field) overrides the in-flight guard for QUEUED / RUNNING runs.
 
     Error mapping: ``RunBusyError`` -> 409, ``RunNotFoundError`` -> 404.
-    Success -> 303 redirect to the dashboard ``/?deleted=1`` (there is no
-    ``GET /runs`` route — run lists live under the dashboard + scenario
-    HTMX partials).
+    Success -> 303 redirect to ``/analyses?deleted=1`` — the org-wide run
+    history page that hosts the delete buttons. (The original #297 redirect
+    went to the dashboard because no run-list page existed yet; ``GET
+    /analyses`` was added later and the redirect was never updated — UAT
+    2026-07-21. The dashboard keeps its legacy ``?deleted=1`` handling for
+    old bookmarks.)
     """
     if not _confirmed(confirm):
         raise HTTPException(status_code=400, detail="confirm: missing or falsey")
@@ -665,7 +668,7 @@ async def post_delete_run(
     except RunNotFoundError as exc:
         raise HTTPException(status_code=404) from exc
 
-    return RedirectResponse(url="/?deleted=1", status_code=303)
+    return RedirectResponse(url="/analyses?deleted=1", status_code=303)
 
 
 @router.post("/runs/{run_id}/purge-samples")
@@ -811,6 +814,10 @@ async def list_analyses(
     user: User = Depends(require_user),
     page: int = 1,
     page_size: int = Query(default=20, ge=1, le=100),
+    deleted: int | None = Query(
+        default=None,
+        description="Post-run-delete flash flag; set to 1 by the run delete redirect.",
+    ),
 ) -> HTMLResponse:
     """Org-wide historical analysis-runs index (full page).
 
@@ -832,11 +839,13 @@ async def list_analyses(
     background_tasks.add_task(
         maybe_sweep_opportunistic, get_settings(), org_id=user.organization_id
     )
+    flash = build_flash("Run deleted.", "success") if deleted == 1 else None
     return templates.TemplateResponse(
         request,
         "analyses/index.html",
         {
             "current_user": user,
+            "flash": flash,
             "run_display_rows": run_display_rows,
             "total": total,
             "page": page,
