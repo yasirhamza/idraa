@@ -95,7 +95,7 @@ async def test_delete_removes_run_and_samples(
         client, f"/runs/{run_id}/delete", {"confirm": "1"}, follow_redirects=False
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/?deleted=1"
+    assert resp.headers["location"] == "/analyses?deleted=1"
 
     db_session.expire_all()
     assert await db_session.get(RiskAnalysisRun, run_id) is None
@@ -322,3 +322,15 @@ async def test_viewer_cannot_delete_403(
         client, f"/runs/{run.id}/delete", {"confirm": "1"}, follow_redirects=False
     )
     assert resp.status_code == 403
+
+
+async def test_analyses_page_renders_deleted_flash(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    client, _org_id = authed_analyst
+    """#297 follow-up: the delete redirect lands on /analyses (the run-history
+    page that hosts the delete buttons), which must render the same
+    "Run deleted." flash the dashboard did when it was the landing page."""
+    resp = await client.get("/analyses?deleted=1")
+    assert resp.status_code == 200
+    assert "Run deleted." in resp.text
