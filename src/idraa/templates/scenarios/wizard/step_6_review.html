@@ -34,6 +34,17 @@
       · Impact
       <a href="/scenarios/new/wizard/step/4?tx={{ state.tx_id }}" class="text-xs link">edit</a>
     </h3>
+    {# Milestone B / #56: surface the step-4 loss-shape decision so the
+       operator gets review-time confirmation the catastrophic toggle took
+       effect (UAT 2026-07-21: the toggle gave no visible feedback). #}
+    <p class="text-sm mt-1" data-loss-shape>
+      Loss magnitude model:
+      {% if state.loss_shape == 'catastrophic' %}
+        <span class="font-medium text-status-warning">Catastrophic — uncapped lognormal</span>
+      {% else %}
+        <span class="font-medium">Capped (bounded PERT)</span>
+      {% endif %}
+    </p>
     {% for fs in review_fair_rows %}
       <p class="font-medium mt-2">{{ fs.label }}:</p>
       {% if fs.rows %}

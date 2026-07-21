@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
+from tests.conftest import csrf_post
 from tests.integration._wizard_step3_test_helpers import (
     _bootstrap_wizard_through_step_2,
     _persist_fair_rows_via_steps_3_and_4,
@@ -95,3 +96,53 @@ async def test_review_renders_entered_sme_rows_not_dashes(
     assert 'href="/scenarios/new/wizard/step/3' in body  # likelihood
     assert 'href="/scenarios/new/wizard/step/4' in body  # impact
     assert 'href="/scenarios/new/wizard/step/5' in body  # controls
+
+
+@pytest.mark.asyncio
+async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """UAT 2026-07-21: the step-4 catastrophic toggle must have a VISIBLE
+    consequence on the review page — data-loss-shape shows Capped by default
+    and flips to Catastrophic after a step-4 POST with loss_catastrophic=1."""
+    client, org_id = authed_analyst
+    user_id = await _resolve_analyst_user_id(db_session)
+    sme_id = await _seed_one_sme(db_session, org_id=org_id, created_by=user_id)
+    await db_session.close()
+
+    tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
+    await _persist_fair_rows_via_steps_3_and_4(
+        client,
+        db_session,
+        tx,
+        tef=[(str(sme_id), 1.0, 12.0)],
+        vuln=[(str(sme_id), 0.05, 0.5)],
+        pl=[(str(sme_id), 100000.0, 5000000.0)],
+        sl=[(str(sme_id), 5000.0, 50000.0)],
+    )
+    await db_session.close()
+
+    body = (await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")).text
+    assert "data-loss-shape" in body
+    assert "Capped (bounded PERT)" in body
+
+    # Re-POST step 4 with the toggle ON (checkbox present == checked).
+    step4_data = {
+        "pl_sme_id_0": str(sme_id),
+        "pl_sme_name_0": "",
+        "pl_low_0": "100000.0",
+        "pl_high_0": "5000000.0",
+        # W-4: the real step-4 form always posts BOTH fieldsets — omitting
+        # sl_* here would silently wipe the persisted SL rows via the merge.
+        "sl_sme_id_0": str(sme_id),
+        "sl_sme_name_0": "",
+        "sl_low_0": "5000.0",
+        "sl_high_0": "50000.0",
+        "loss_catastrophic": "1",
+    }
+    r4 = await csrf_post(client, f"/scenarios/new/wizard/step/4?tx={tx}", data=step4_data)
+    assert r4.status_code in (302, 303), r4.text
+
+    body = (await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")).text
+    assert "Catastrophic — uncapped lognormal" in body
