@@ -281,7 +281,7 @@ a.cv:hover {
    vendor for the dual LEC/EPC cards). Text classes used by macros/chart.html's _lec_figure
    / _epc_figure svg markup; --chart-appetite is the tolerance-marker color
    (SVG-only, see services/chart_palette.py CHART_APPETITE). */
-.chart-tick { font-size: 12px; fill: var(--color-ink-3); }
+.chart-tick { font-family: var(--font-mono); font-size: 10px; fill: var(--color-ink-3); }
 .chart-axis-title { font-size: 12.5px; fill: var(--color-ink-2); }
 .chart-svg { display: block; width: 100%; height: auto; }
 /* `display:block` (author class) would otherwise override the UA

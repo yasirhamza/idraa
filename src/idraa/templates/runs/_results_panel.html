@@ -65,7 +65,7 @@
     </p>
     {%- endif %}
 
-    <h3 class="mt-6 text-lg font-bold">Risk distribution</h3>
+    <h3 class="mt-6 font-mono uppercase tracking-[0.14em] text-[10.5px] text-ink-3">Risk distribution</h3>
     {# overflow-x-auto: 4-column money table exceeds a phone-width card; scroll
        instead of clipping the Δ column. Matches the table-overflow convention. #}
     <div class="overflow-x-auto">
@@ -107,7 +107,7 @@
     <p class="text-caption text-ink-3 mt-1">Where shown, the &ldquo;95% MC interval&rdquo; beside an ES is Monte Carlo sampling error &mdash; how much the estimate would move if the simulation were re-run with a different random seed (a convergence measure), not uncertainty in the loss itself. It narrows as the iteration count rises.</p>
     {%- endif %}
 
-    <h3 class="mt-6 text-lg font-bold">Loss distributions</h3>
+    <h3 class="mt-6 font-mono uppercase tracking-[0.14em] text-[10.5px] text-ink-3">Loss distributions</h3>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div>
         {{ loss_exceedance_curve(display_results.loss_exceedance_curve, tolerance=display_results.loss_tolerance, currency=_currency) }}
