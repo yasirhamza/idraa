@@ -220,6 +220,12 @@ ALLOWED_DIRS = {"macros"}
 #       maxlength="10"; form_field's text variant exposes none of these
 #       (Strong Auth P1 Task 6).
 #
+#   auth/mfa_challenge.html
+#       MFA-challenge code field needs inputmode="text", autocomplete=
+#       "one-time-code" (browser/OS OTP autofill), and maxlength="32" (TOTP
+#       digits or a recovery code); form_field's text variant exposes none of
+#       these (Strong Auth P1 Task 8).
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
@@ -271,6 +277,7 @@ ALLOWLIST: set[str] = {
     "users/edit.html",
     "users/invite.html",
     "account/_totp.html",
+    "auth/mfa_challenge.html",
 }
 
 
@@ -310,7 +317,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     #    + account/_totp.html (Strong Auth P1 Task 6: TOTP code field needs
     #      inputmode/autocomplete/maxlength that form_field's text variant
     #      doesn't expose — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 43, (
+    # 44 = 43 + auth/mfa_challenge.html (Strong Auth P1 Task 8: MFA-challenge
+    #      code field needs inputmode/autocomplete/maxlength that form_field's
+    #      text variant doesn't expose — justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 44, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

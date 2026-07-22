@@ -298,8 +298,8 @@ class Settings(BaseSettings):
     mfa_encryption_key: str | None = None
     # Minimal login throttle — idraa#81 slice pulled into P1 at plan-gate (B1):
     # the reworked login must not ship a rate-limit-free 6-digit second factor.
-    auth_max_failed_logins: int = 5  # 0 disables lockout
-    auth_lockout_seconds: int = 900
+    auth_max_failed_logins: int = Field(default=5, ge=0)  # 0 disables lockout
+    auth_lockout_seconds: int = Field(default=900, ge=0)
 
     @property
     def webauthn_origin_list(self) -> list[str]:

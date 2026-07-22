@@ -12,6 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from idraa.models._types import now_utc
+from idraa.models.audit_log import AuditLog
 from idraa.models.mfa import RecoveryCode, UserTotp
 from idraa.models.user import User
 from idraa.services.mfa_crypto import hash_recovery_code
@@ -176,6 +177,41 @@ async def test_repeated_bad_totp_locks_account(client: AsyncClient, db_session) 
     await db_session.commit()
     locked = (await db_session.execute(select(User))).scalars().first()
     assert locked.locked_until is not None
+
+
+async def test_failed_mfa_attempt_writes_audit_row(client: AsyncClient, db_session) -> None:
+    # PR-gate fix (detection gap): every failed 2nd-factor attempt must be
+    # audited, not just the one that trips the lock — otherwise a phished-
+    # password attacker stuck at the MFA wall is invisible until the 5th miss.
+    from tests.conftest import csrf_post
+
+    await _seed_totp_user(client, db_session)
+    user = (await db_session.execute(select(User))).scalars().first()
+    await csrf_post(
+        client, "/login", {"email": "a@b.c", "password": "pw-12345678"}, follow_redirects=False
+    )  # password login -> mfa_pending
+    r = await csrf_post(
+        client,
+        "/login/mfa",
+        {"code": "000000"},
+        bootstrap_url="/login",
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    await db_session.commit()
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "user.login_mfa_failed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].user_id == user.id
+    assert rows[0].entity_type == "user"
+    assert rows[0].entity_id == user.id
 
 
 async def test_relogin_does_not_reset_mfa_throttle(client: AsyncClient, db_session) -> None:

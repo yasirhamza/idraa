@@ -284,6 +284,20 @@ async def login_mfa_post(
                 break
 
     if method is None:
+        # Audit EVERY failed 2nd-factor attempt (not just the one that trips
+        # the lock) — this is the feature's core detection signal: a phished-
+        # password attacker stuck at the MFA wall is otherwise invisible until
+        # the 5th miss. Bounded by the lockout itself (<= auth_max_failed_logins
+        # rows per lockout window).
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="user.login_mfa_failed",
+            changes={},
+            user_id=user.id,
+            ip_address=client_ip(request),
+        )
         register_failed_login(user)  # counts toward lockout (B1)
         if is_locked(user):  # this miss just tripped the lock -> audit
             await AuditWriter(db).log(
@@ -337,7 +351,7 @@ async def login_passkey_verify(
     if challenge is None:
         return _json_err("challenge expired")
     credential = payload.get("credential")
-    if not isinstance(credential, dict):
+    if not isinstance(credential, dict) or not credential.get("rawId"):
         return _json_err("malformed credential")
     raw_id = webauthn_service.parse_raw_id(credential)
     cred = (
