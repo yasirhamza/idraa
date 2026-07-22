@@ -74,7 +74,7 @@ recovery_code                      (N per user)
 ```
 WEBAUTHN_RP_ID                str          default "idraa.fly.dev"
 WEBAUTHN_RP_NAME              str          default "Idraa"
-WEBAUTHN_ORIGINS             csv->list[str] default "https://idraa.fly.dev,https://idraa.app"
+WEBAUTHN_ORIGINS             csv->list[str] default "https://idraa.fly.dev"   (single registrable domain — see note)
 AUTH_MFA_POLICY              required|optional  default "required"
 AUTH_MAX_FAILED_LOGINS       int          default 5      (0 disables lockout)
 AUTH_LOCKOUT_SECONDS         int          default 900
@@ -84,6 +84,8 @@ MFA_ENCRYPTION_KEY           str|null     default None → derive from SESSION_S
 ```
 
 A prod-gated `model_validator` (mirroring `_check_secret_hardening`) enforces in `environment=="prod"`: `WEBAUTHN_RP_ID` is set and not a placeholder; every entry in `WEBAUTHN_ORIGINS` is an `https://` origin whose host equals or is a subdomain of `WEBAUTHN_RP_ID` (WebAuthn's RP-ID/origin relationship). `dev`/`test` accept defaults. This keeps the software self-hostable — a different deployment sets its own RP-ID/origins and nothing is baked in.
+
+> **Single-RP-ID limitation (plan-gate 2026-07-22).** A WebAuthn credential is bound to ONE RP-ID, which must be a registrable-domain suffix of the origin. `idraa.fly.dev` and `idraa.app` are two distinct registrable domains (neither is a suffix of the other), so **one `WEBAUTHN_RP_ID` cannot serve passkeys on both** — the earlier owner assumption of "RP = idraa.fly.dev + idraa.app" is infeasible under a single static RP-ID, and the old two-origin default would have crash-failed the prod validator. P1 therefore ships a single-domain default (`idraa.fly.dev`). Serving passkeys on a second product domain later requires either its own deployment/RP-ID or WebAuthn **Related Origin Requests** (a `/.well-known/webauthn` file) — tracked as a post-P1 follow-up. **Owner decision needed:** which single domain is canonical for passkeys.
 
 ## Secret handling
 
@@ -109,7 +111,7 @@ New/changed code: `services/mfa.py` (new — ceremony orchestration, TOTP verify
 
 ## Enrollment interstitial
 
-A FastAPI dependency (`require_enrolled`) applied to the authenticated router — when `AUTH_MFA_POLICY=="required"` and `current_user.mfa_enrolled_at is None`, any route except the enrollment endpoints, `/logout`, static, and `/healthz` returns a 303 to `/account/security/enroll`. Dependency (not middleware) matches the existing `require_user`/`require_role` pattern in `routes/deps.py` and avoids a DB-in-the-middleware-chain hop. `mfa_enrolled_at` is stamped once the user has ≥1 confirmed strong factor AND has generated (and acknowledged) recovery codes; the interstitial then clears.
+An HTTP **middleware** (`BaseHTTPMiddleware` subclass, registered via `add_middleware` positioned INNER to `SessionMiddleware` so `request.state.user` is populated) — when `AUTH_MFA_POLICY=="required"` and `current_user.mfa_enrolled_at is None`, any route except the enrollment endpoints (`/account/security*`), `/login`, `/logout`, `/setup`, `/static/*`, and `/healthz` returns a 303 (or `HX-Redirect` for HTMX) to `/account/security`. **Middleware, not a dependency** (revised at plan-gate, 2026-07-22, on the architect's ruling): auth is enforced per-route across ~18 routers with no single chokepoint, so a dependency would be a default-*allow* enumeration where any new router silently escapes enforcement; a middleware with a path allowlist is default-*deny*, the correct posture for a security boundary. There is no DB hop — `SessionMiddleware` already pins the loaded `User` (with `expire_on_commit=False`) onto `request.state`, so the guard reads `mfa_enrolled_at` with zero DB access. `mfa_enrolled_at` is stamped once the user has ≥1 confirmed strong factor AND recovery codes; and **cleared when the last strong factor is removed** (so the interstitial re-fires rather than silently downgrading to password-only).
 
 ## Step-up ("sudo mode") — broad
 
@@ -193,6 +195,9 @@ Every scope decision/addition/cut relative to the originating prompt. The prompt
 9. **Data model shape.** Direction: +decided → **separate per-factor tables** (not one polymorphic table). Justification: user choice at the data-model question.
 10. **TOTP secret at rest.** Direction: +added → **encrypted at rest** (Fernet, key from `MFA_ENCRYPTION_KEY`/`SESSION_SECRET`-HKDF). Justification: resolved by Claude, owner did not object ("the security-auditor would flag plaintext anyway").
 11. **Considered and deferred (no code):** passwordless-only (retire passwords) and password+passkey-as-2nd-factor were both weighed and rejected/deferred at Q1; passkey-as-password-path-2nd-factor sketched in Out-of-scope.
+12. **Minimal login throttle pulled P3 → P1.** Direction: +added to P1. Justification: plan-gate security-auditor BLOCKER — the reworked login ships in P1, and a rate-limit-free 6-digit TOTP defeats the phished-password threat the feature exists to counter. A minimal slice of idraa#81 (the `failed_login_count`/`locked_until` columns + lock-on-failed-password/second-factor + non-recovery-shaped short-circuit) lands in P1; the full #81 (UI, admin unlock, per-IP) stays P3.
+13. **Interstitial: dependency → middleware.** Direction: ↔reframed. Justification: plan-gate architect ruling — no single authed-router chokepoint, so a dependency is default-allow; a path-allowlisted middleware inner to `SessionMiddleware` is default-deny.
+14. **WebAuthn default: two origins → one.** Direction: ↔reframed. Justification: plan-gate (security + architect) — one RP-ID can't span `idraa.fly.dev` + `idraa.app`; the two-origin default failed its own prod validator. See the single-RP-ID note in §Configuration.
 
 ---
 

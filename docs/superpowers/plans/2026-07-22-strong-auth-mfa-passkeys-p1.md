@@ -101,7 +101,9 @@ def _settings(**env: str) -> Settings:
 def test_webauthn_defaults_are_owner_deployment() -> None:
     s = _settings(environment="dev", session_secret="x" * 16)
     assert s.webauthn_rp_id == "idraa.fly.dev"
-    assert s.webauthn_origin_list == ["https://idraa.fly.dev", "https://idraa.app"]
+    # Single registrable domain: one RP-ID cannot span idraa.fly.dev + idraa.app
+    # (plan-gate 2026-07-22). Owner picks the canonical passkey domain.
+    assert s.webauthn_origin_list == ["https://idraa.fly.dev"]
     assert s.auth_mfa_policy == "required"
 
 
@@ -155,10 +157,16 @@ Run: `uv run pytest tests/unit/test_config_webauthn.py -q`
     # operator's domains into WebAuthn. Defaults are the OWNER deployment.
     webauthn_rp_id: str = "idraa.fly.dev"
     webauthn_rp_name: str = "Idraa"
-    webauthn_origins: str = "https://idraa.fly.dev,https://idraa.app"
+    # Single registrable domain (plan-gate): one RP-ID can't span idraa.fly.dev +
+    # idraa.app. A second passkey domain needs its own RP-ID or Related Origin Requests.
+    webauthn_origins: str = "https://idraa.fly.dev"
     auth_mfa_policy: Literal["required", "optional"] = "required"
     totp_issuer: str = "Idraa"
     mfa_encryption_key: str | None = None
+    # Minimal login throttle — idraa#81 slice pulled into P1 at plan-gate (B1):
+    # the reworked login must not ship a rate-limit-free 6-digit second factor.
+    auth_max_failed_logins: int = 5  # 0 disables lockout
+    auth_lockout_seconds: int = 900
 
     @property
     def webauthn_origin_list(self) -> list[str]:
@@ -250,7 +258,11 @@ def test_webauthn_credential_construct_sets_defaults() -> None:
         nickname="YubiKey",
     )
     assert cred.id is not None            # IdMixin populated in __init__
-    assert cred.sign_count == 0
+    # sign_count default=0 is a FLUSH-time SQLAlchemy default, NOT populated at
+    # __init__ (only IdMixin/TimestampMixin fields are, via the instrument_class
+    # init hook). On an unflushed instance cred.sign_count is None — assert the
+    # column default instead.
+    assert WebAuthnCredential.__table__.c.sign_count.default.arg == 0
     assert cred.created_at is not None    # TimestampMixin populated in __init__
     assert cred.last_used_at is None
 
@@ -337,12 +349,22 @@ class RecoveryCode(IdMixin, Base):
     )
 ```
 
-- [ ] **Step 4: Add `mfa_enrolled_at` to `User`.** In `src/idraa/models/user.py`, add after `last_login_at`:
+- [ ] **Step 4: Add `mfa_enrolled_at` + throttle columns to `User`.** In `src/idraa/models/user.py`, add after `last_login_at` (add `Integer` to the sqlalchemy import):
 
 ```python
     mfa_enrolled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Minimal login throttle (idraa#81 slice, plan-gate B1).
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+```
+
+Add a matching column-existence assertion to `test_user_has_nullable_mfa_enrolled_at` (or a sibling test):
+
+```python
+    assert "failed_login_count" in User.__table__.columns
+    assert "locked_until" in User.__table__.columns
 ```
 
 - [ ] **Step 5: Register models.** In `src/idraa/models/__init__.py` add the import and three `__all__` entries:
@@ -358,7 +380,7 @@ Add `"RecoveryCode"`, `"UserTotp"`, `"WebAuthnCredential"` to `__all__` (keep al
 
 Run: `uv run alembic heads` (confirm the head; use it as `down_revision`).
 Run: `uv run alembic revision --autogenerate -m "strong auth p1 mfa tables"`
-Open the generated file: confirm it `create_table`s `webauthn_credentials`, `user_totp`, `recovery_codes` (+ the unique index on `credential_id`, the FK indexes) and `op.add_column("users", sa.Column("mfa_enrolled_at", sa.DateTime(timezone=True), nullable=True))`. `mfa_enrolled_at` is nullable so no `server_default` is needed. Convert the header to the modern style if the template emitted the legacy `Union` import.
+Open the generated file: confirm it `create_table`s `webauthn_credentials`, `user_totp`, `recovery_codes` (+ the unique index on `credential_id`, the FK indexes) and three `op.add_column("users", ...)` calls: `mfa_enrolled_at` (nullable — no server_default), `locked_until` (nullable — no server_default), and `failed_login_count`. **`failed_login_count` is `nullable=False`** — autogenerate omits the server_default, so HAND-ADD it: `op.add_column("users", sa.Column("failed_login_count", sa.Integer(), nullable=False, server_default="0"))` (backfills existing rows). Convert the header to the modern style if the template emitted the legacy `Union` import.
 
 - [ ] **Step 8: Verify migration round-trips.**
 
@@ -422,6 +444,9 @@ git commit -m "feat(auth): MFA factor tables + user.mfa_enrolled_at + migration"
 # tests/unit/test_mfa_crypto.py
 from __future__ import annotations
 
+import pytest
+from cryptography.fernet import InvalidToken
+
 import idraa.config as config
 from idraa.services import mfa_crypto
 
@@ -439,11 +464,14 @@ def test_totp_secret_round_trip(monkeypatch) -> None:
     assert mfa_crypto.decrypt_totp_secret(ct) == "JBSWY3DPEHPK3PXP"
 
 
-def test_encryption_key_override_changes_ciphertext(monkeypatch) -> None:
+def test_encryption_is_key_isolated(monkeypatch) -> None:
     _reset(monkeypatch, ENVIRONMENT="test", SESSION_SECRET="s" * 32, MFA_ENCRYPTION_KEY="k" * 32)
     ct = mfa_crypto.encrypt_totp_secret("SECRETSECRET")
-    # decrypt under the same key works
-    assert mfa_crypto.decrypt_totp_secret(ct) == "SECRETSECRET"
+    assert mfa_crypto.decrypt_totp_secret(ct) == "SECRETSECRET"     # same key round-trips
+    # A DIFFERENT key cannot decrypt it (proves the key actually gates decryption).
+    _reset(monkeypatch, ENVIRONMENT="test", SESSION_SECRET="s" * 32, MFA_ENCRYPTION_KEY="j" * 32)
+    with pytest.raises(InvalidToken):
+        mfa_crypto.decrypt_totp_secret(ct)
 
 
 def test_recovery_codes_generated_hashed_and_verified() -> None:
@@ -467,6 +495,12 @@ TOTP verification needs the plaintext secret, so it cannot be hashed — it is
 symmetric-encrypted at rest with a key derived (HKDF-SHA256) from
 MFA_ENCRYPTION_KEY, falling back to SESSION_SECRET. Recovery codes ARE
 one-way (Argon2, via the shared password context).
+
+OPERATOR NOTE (plan-gate N3): if MFA_ENCRYPTION_KEY is unset, the key derives
+from SESSION_SECRET — so rotating SESSION_SECRET makes every stored TOTP secret
+undecryptable and locks all TOTP users out of that factor. Deployments that
+rotate SESSION_SECRET MUST set a distinct, stable MFA_ENCRYPTION_KEY. (Key
+versioning via MultiFernet + a key-id prefix is a documented post-P1 follow-up.)
 """
 
 from __future__ import annotations
@@ -614,9 +648,60 @@ def load_webauthn_challenge(token: str, max_age: int = 300) -> str | None:
     except BadData:
         return None
     return value
+
+
+def _totp_pending_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-totp-pending")
+
+
+def sign_totp_pending(secret: str) -> str:
+    return _totp_pending_serializer().dumps(secret)
+
+
+def load_totp_pending(token: str, max_age: int = 600) -> str | None:
+    try:
+        value: str = _totp_pending_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+# --- Short-lived MFA cookie helpers (DRY: one place derives the secure flag,
+# mirroring set_session_cookie — plan-gate: prevents a missed secure= flag). ---
+def _secure() -> bool:
+    return get_settings().environment == "prod"
+
+
+def set_mfa_pending_cookie(response: Response, user_id: uuid.UUID) -> None:
+    response.set_cookie("rf_mfa_pending", sign_mfa_pending(user_id), max_age=300,
+                        httponly=True, samesite="lax", secure=_secure(), path="/")
+
+
+def clear_mfa_pending_cookie(response: Response) -> None:
+    response.delete_cookie("rf_mfa_pending", path="/")
+
+
+def set_webauthn_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+    response.set_cookie("rf_webauthn_challenge", sign_webauthn_challenge(challenge_b64url),
+                        max_age=300, httponly=True, samesite="lax", secure=_secure(), path="/")
+
+
+def clear_webauthn_challenge_cookie(response: Response) -> None:
+    response.delete_cookie("rf_webauthn_challenge", path="/")
+
+
+def set_totp_pending_cookie(response: Response, secret: str) -> None:
+    response.set_cookie("rf_totp_pending", sign_totp_pending(secret), max_age=600,
+                        httponly=True, samesite="lax", secure=_secure(), path="/")
+
+
+def clear_totp_pending_cookie(response: Response) -> None:
+    response.delete_cookie("rf_totp_pending", path="/")
 ```
 
-(`BadData` is already imported in `auth.py`. `URLSafeTimedSerializer.loads(..., max_age=)` raises `SignatureExpired`, a `BadData` subclass, on expiry — caught by the same `except`.)
+(`BadData` is already imported in `auth.py`. `URLSafeTimedSerializer.loads(..., max_age=)` raises `SignatureExpired`, a `BadData` subclass, on expiry — caught by the same `except`. `Response` and `get_settings` are already imported in `auth.py`; add `uuid` if not present.)
+
+**All challenge / `mfa_pending` / `totp_pending` cookies MUST be set/cleared via these helpers** — no hand-rolled `set_cookie` in the routes (guarantees the `secure=` flag can't be forgotten on one path).
 
 - [ ] **Step 8: Run — expect pass, then commit.**
 
@@ -817,6 +902,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from webauthn import (
     generate_authentication_options,
@@ -869,17 +955,20 @@ def registration_options(
     return options_to_json(options), bytes_to_base64url(options.challenge)
 
 
-def verify_registration(credential_json: str, challenge_b64url: str) -> RegisteredCredential:
+def verify_registration(
+    credential: dict[str, Any] | str, challenge_b64url: str
+) -> RegisteredCredential:
     s = get_settings()
+    raw = credential if isinstance(credential, str) else json.dumps(credential)
+    parsed = json.loads(credential) if isinstance(credential, str) else credential
     v = verify_registration_response(
-        credential=credential_json,
+        credential=raw,
         expected_challenge=base64url_to_bytes(challenge_b64url),
         expected_rp_id=s.webauthn_rp_id,
         expected_origin=s.webauthn_origin_list,
         require_user_verification=True,
     )
     transports = None
-    parsed = json.loads(credential_json)
     t = parsed.get("response", {}).get("transports")
     if isinstance(t, list) and t:
         transports = ",".join(str(x) for x in t)
@@ -903,14 +992,15 @@ def authentication_options() -> tuple[str, str]:
 
 
 def verify_authentication(
-    credential_json: str,
+    credential: dict[str, Any] | str,
     challenge_b64url: str,
     public_key: bytes,
     current_sign_count: int,
 ) -> int:
     s = get_settings()
+    raw = credential if isinstance(credential, str) else json.dumps(credential)
     v = verify_authentication_response(
-        credential=credential_json,
+        credential=raw,
         expected_challenge=base64url_to_bytes(challenge_b64url),
         expected_rp_id=s.webauthn_rp_id,
         expected_origin=s.webauthn_origin_list,
@@ -929,8 +1019,9 @@ def sign_count_ok(stored: int, new: int) -> bool:
     return new > stored
 
 
-def parse_raw_id(credential_json: str) -> bytes:
-    return base64url_to_bytes(json.loads(credential_json)["rawId"])
+def parse_raw_id(credential: dict[str, Any] | str) -> bytes:
+    parsed = json.loads(credential) if isinstance(credential, str) else credential
+    return base64url_to_bytes(parsed["rawId"])
 ```
 
 - [ ] **Step 4: Run — expect pass, then commit.**
@@ -962,12 +1053,13 @@ git commit -m "feat(auth): py_webauthn service wrapper (options + verify + sign-
 # tests/integration/test_mfa_totp_enrollment.py
 from __future__ import annotations
 
+import re
+
 import pyotp
 from httpx import AsyncClient
 from sqlalchemy import select
 
 from idraa.models.mfa import RecoveryCode, UserTotp
-from idraa.services.mfa_crypto import decrypt_totp_secret
 
 
 async def test_totp_enroll_confirm_and_recovery_stamps_enrolled(
@@ -977,16 +1069,18 @@ async def test_totp_enroll_confirm_and_recovery_stamps_enrolled(
 
     client, _org = authed_admin
 
-    # Begin TOTP enrollment — GET returns the QR + provisions an unconfirmed secret.
+    # GET returns the QR + the manual key; the unconfirmed secret rides a signed
+    # cookie (NO DB write on GET). Extract the secret from the shown manual key.
     r = await client.get("/account/security/totp/enroll")
     assert r.status_code == 200
     assert "<svg" in r.text
+    m = re.search(r"Manual key:\s*([A-Z2-7]+)", r.text)
+    assert m, "manual key not rendered"
+    secret = m.group(1)
+    # No UserTotp row exists yet (GET didn't persist).
+    assert (await db_session.execute(select(UserTotp))).scalars().first() is None
 
-    row = (await db_session.execute(select(UserTotp))).scalars().first()
-    assert row is not None and row.confirmed_at is None
-    secret = decrypt_totp_secret(row.secret_encrypted)
-
-    # Confirm with a live code.
+    # Confirm with a live code (the rf_totp_pending cookie is carried by the client).
     code = pyotp.TOTP(secret).now()
     r2 = await csrf_post(
         client, "/account/security/totp/enroll", {"code": code},
@@ -998,19 +1092,18 @@ async def test_totp_enroll_confirm_and_recovery_stamps_enrolled(
     confirmed = (await db_session.execute(select(UserTotp))).scalars().first()
     assert confirmed is not None and confirmed.confirmed_at is not None
 
-    # Generate recovery codes → this completes enrollment.
+    # Generate recovery codes → completes enrollment.
     r3 = await csrf_post(
         client, "/account/security/recovery-codes/generate", {},
         bootstrap_url="/account/security",
     )
     assert r3.status_code == 200
-    codes_visible = [ln for ln in r3.text.split() if "-" in ln and len(ln) == 11]
-    assert codes_visible, "recovery codes should be shown once"
+    found = re.findall(r"\b[0-9a-f]{5}-[0-9a-f]{5}\b", r3.text)
+    assert len(found) >= 10, "recovery codes should be shown once"
 
     await db_session.commit()
     assert (await db_session.execute(select(RecoveryCode))).scalars().first() is not None
 
-    # mfa_enrolled_at is now stamped → interstitial clears (tested in Task 9).
     r4 = await client.get("/account/security")
     assert "Enrolled" in r4.text or "enrolled" in r4.text
 
@@ -1077,6 +1170,20 @@ async def maybe_stamp_enrolled(db: AsyncSession, user: User) -> None:
         return
     if await user_has_strong_factor(db, user.id) and await user_has_recovery_codes(db, user.id):
         user.mfa_enrolled_at = now_utc()
+
+
+async def maybe_unstamp_enrolled(db: AsyncSession, user: User) -> None:
+    """Clear mfa_enrolled_at when the user no longer has ANY strong factor.
+
+    Plan-gate I4: without this, deleting the last passkey leaves mfa_enrolled_at
+    set, so the next password login takes the 'no strong factor' branch and the
+    interstitial never re-traps — silently downgrading a required account to
+    password-only. Must be called AFTER the delete has been flushed/visible.
+    """
+    if user.mfa_enrolled_at is None:
+        return
+    if not await user_has_strong_factor(db, user.id):
+        user.mfa_enrolled_at = None
 ```
 
 - [ ] **Step 4: Create `src/idraa/routes/mfa.py`** (TOTP + recovery slice; passkey endpoints added in Task 7).
@@ -1094,18 +1201,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.app import templates
 from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, current_user, get_db, require_user
+from idraa.config import get_settings
+from idraa.models._types import now_utc
+from idraa.routes.deps import client_ip, get_db, require_user
 from idraa.services import totp as totp_service
 from idraa.services.audit import AuditWriter
+from idraa.services.auth import (
+    clear_totp_pending_cookie,
+    load_totp_pending,
+    set_totp_pending_cookie,
+)
 from idraa.services.mfa_crypto import (
-    decrypt_totp_secret,
     encrypt_totp_secret,
     generate_recovery_codes,
     hash_recovery_code,
 )
 from idraa.services.mfa_enrollment import maybe_stamp_enrolled
-from idraa.config import get_settings
-from idraa.models._types import now_utc
 
 router = APIRouter()
 
@@ -1146,28 +1257,24 @@ async def security_page(
 @router.get("/account/security/totp/enroll", response_class=HTMLResponse)
 async def totp_enroll_get(
     request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_user)
-) -> HTMLResponse:
-    # Provision (or re-provision) an unconfirmed secret and show the QR.
-    existing = (
-        await db.execute(select(UserTotp).where(UserTotp.user_id == user.id))
+) -> Response:
+    # Already confirmed → just render (no re-provision).
+    confirmed = (
+        await db.execute(select(UserTotp).where(
+            UserTotp.user_id == user.id, UserTotp.confirmed_at.is_not(None)))
     ).scalars().first()
-    secret = totp_service.provision_secret()
-    if existing is None:
-        db.add(UserTotp(user_id=user.id, secret_encrypted=encrypt_totp_secret(secret)))
-    elif existing.confirmed_at is None:
-        existing.secret_encrypted = encrypt_totp_secret(secret)
-    else:
-        # Already confirmed — don't overwrite; render the page instead.
+    if confirmed is not None:
         return templates.TemplateResponse(
-            request, "account/_totp.html", {"already": True, "qr_svg": "", "current_user": user}
-        )
+            request, "account/_totp.html", {"already": True, "qr_svg": "", "current_user": user})
+    # Provision a fresh secret; stash it in a SIGNED cookie — NO DB write on GET.
+    secret = totp_service.provision_secret()
     uri = totp_service.totp_uri(secret, user.email, get_settings().totp_issuer)
-    return templates.TemplateResponse(
-        request,
-        "account/_totp.html",
+    resp = templates.TemplateResponse(
+        request, "account/_totp.html",
         {"already": False, "qr_svg": totp_service.totp_qr_svg(uri), "secret": secret,
-         "current_user": user},
-    )
+         "current_user": user})
+    set_totp_pending_cookie(resp, secret)
+    return resp
 
 
 @router.post("/account/security/totp/enroll")
@@ -1177,23 +1284,32 @@ async def totp_enroll_post(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ) -> Response:
-    row = (
-        await db.execute(select(UserTotp).where(UserTotp.user_id == user.id))
-    ).scalars().first()
-    if row is None:
+    signed = request.cookies.get("rf_totp_pending")
+    secret = load_totp_pending(signed) if signed else None
+    if secret is None:
         return RedirectResponse("/account/security/totp/enroll", status_code=303)
-    secret = decrypt_totp_secret(row.secret_encrypted)
     if not totp_service.verify_totp(secret, code):
         ctx = await _security_context(db, user)
         ctx["error"] = "That code didn't match. Try again."
         return templates.TemplateResponse(request, "account/security.html", ctx, status_code=400)
-    row.confirmed_at = now_utc()
+    # Confirmed — persist the ENCRYPTED secret now (first TOTP DB write).
+    existing = (
+        await db.execute(select(UserTotp).where(UserTotp.user_id == user.id))
+    ).scalars().first()
+    if existing is None:
+        db.add(UserTotp(user_id=user.id, secret_encrypted=encrypt_totp_secret(secret),
+                        confirmed_at=now_utc()))
+    else:
+        existing.secret_encrypted = encrypt_totp_secret(secret)
+        existing.confirmed_at = now_utc()
     await AuditWriter(db).log(
         organization_id=user.organization_id, entity_type="user", entity_id=user.id,
         action="user.mfa_totp_enroll", changes={}, user_id=user.id, ip_address=client_ip(request),
     )
     await maybe_stamp_enrolled(db, user)
-    return RedirectResponse("/account/security", status_code=303)
+    resp = RedirectResponse("/account/security", status_code=303)
+    clear_totp_pending_cookie(resp)
+    return resp
 
 
 @router.post("/account/security/recovery-codes/generate", response_class=HTMLResponse)
@@ -1353,12 +1469,11 @@ def test_credential_views_preserves_all() -> None:
 # tests/integration/test_mfa_passkey_routes.py
 from __future__ import annotations
 
-import json
-
 from httpx import AsyncClient
 from sqlalchemy import select
 
 from idraa.models.mfa import WebAuthnCredential
+from idraa.models.user import User
 
 
 async def test_passkey_options_returns_json_and_sets_challenge_cookie(
@@ -1392,7 +1507,7 @@ async def test_passkey_delete_removes_row(
     from tests.conftest import csrf_post
 
     client, _ = authed_admin
-    me = (await db_session.execute(select(__import__("idraa.models.user", fromlist=["User"]).User))).scalars().first()
+    me = (await db_session.execute(select(User))).scalars().first()
     cred = WebAuthnCredential(user_id=me.id, credential_id=b"\x09\x09", public_key=b"k", nickname="X")
     db_session.add(cred)
     await db_session.commit()
@@ -1420,10 +1535,12 @@ def credential_views(creds: list[WebAuthnCredential]) -> list[dict[str, object]]
     ]
 ```
 
-- [ ] **Step 4: Add passkey endpoints** to `src/idraa/routes/mfa.py`. Add imports (`uuid`, `Response` already present; `from fastapi import Body`; `from idraa.services import webauthn_service`; `from idraa.services.auth import sign_webauthn_challenge, load_webauthn_challenge`) and:
+- [ ] **Step 4: Add passkey endpoints** to `src/idraa/routes/mfa.py`. Add at module top: `import json`, `import uuid`, `from typing import Any`, `from fastapi import Body`, `from sqlalchemy.exc import IntegrityError`, `from idraa.services import webauthn_service`, `from idraa.services.auth import (clear_webauthn_challenge_cookie, load_webauthn_challenge, set_webauthn_challenge_cookie)`, and add `maybe_unstamp_enrolled` to the `mfa_enrollment` import. Add a small JSON-error helper and the endpoints:
 
 ```python
-_CHALLENGE_COOKIE = "rf_webauthn_challenge"
+def _json_error(msg: str, status: int = 400) -> Response:
+    return Response(content=json.dumps({"error": msg}), status_code=status,
+                    media_type="application/json")
 
 
 @router.post("/account/security/passkey/options")
@@ -1440,40 +1557,44 @@ async def passkey_register_options(
         user.id, user.email, user.full_name, existing
     )
     resp = Response(content=options_json, media_type="application/json")
-    resp.set_cookie(
-        _CHALLENGE_COOKIE, sign_webauthn_challenge(challenge), max_age=300, httponly=True,
-        samesite="lax", secure=(get_settings().environment == "prod"), path="/",
-    )
+    set_webauthn_challenge_cookie(resp, challenge)
     return resp
 
 
 @router.post("/account/security/passkey/verify")
 async def passkey_register_verify(
     request: Request,
-    payload: dict = Body(...),
+    payload: dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ) -> Response:
-    signed = request.cookies.get(_CHALLENGE_COOKIE)
+    signed = request.cookies.get("rf_webauthn_challenge")
     challenge = load_webauthn_challenge(signed) if signed else None
     if challenge is None:
-        return Response(content='{"error":"challenge expired"}', status_code=400,
-                        media_type="application/json")
-    import json as _json
-    reg = webauthn_service.verify_registration(_json.dumps(payload["credential"]), challenge)
+        return _json_error("challenge expired")
+    try:
+        reg = webauthn_service.verify_registration(payload["credential"], challenge)
+    except Exception as exc:  # noqa: BLE001 — any bad/tampered ceremony → 400, not 500
+        return _json_error(f"verification failed: {type(exc).__name__}")
     nickname = (payload.get("nickname") or "Passkey")[:64]
-    db.add(WebAuthnCredential(
+    cred = WebAuthnCredential(
         user_id=user.id, credential_id=reg.credential_id, public_key=reg.public_key,
         sign_count=reg.sign_count, aaguid=reg.aaguid, transports=reg.transports, nickname=nickname,
-    ))
+    )
+    db.add(cred)
+    try:
+        await db.flush()  # surface a duplicate credential_id as IntegrityError, not a 500
+    except IntegrityError:
+        await db.rollback()
+        return _json_error("credential already registered")
     await AuditWriter(db).log(
         organization_id=user.organization_id, entity_type="webauthn_credential",
-        entity_id=user.id, action="webauthn_credential.create", changes={"nickname": nickname},
+        entity_id=cred.id, action="webauthn_credential.create", changes={"nickname": nickname},
         user_id=user.id, ip_address=client_ip(request),
     )
     await maybe_stamp_enrolled(db, user)
     resp = Response(content='{"ok":true}', media_type="application/json")
-    resp.delete_cookie(_CHALLENGE_COOKIE, path="/")
+    clear_webauthn_challenge_cookie(resp)
     return resp
 
 
@@ -1490,16 +1611,19 @@ async def passkey_delete(
         )
     ).scalars().first()
     if cred is not None:
+        cred_pk = cred.id
         await db.delete(cred)
+        await db.flush()  # make the delete visible to maybe_unstamp_enrolled's count
         await AuditWriter(db).log(
             organization_id=user.organization_id, entity_type="webauthn_credential",
-            entity_id=user.id, action="webauthn_credential.delete", changes={}, user_id=user.id,
+            entity_id=cred_pk, action="webauthn_credential.delete", changes={}, user_id=user.id,
             ip_address=client_ip(request),
         )
+        # I4: if that was the last strong factor, clear enrollment so the
+        # interstitial re-fires (don't silently downgrade to password-only).
+        await maybe_unstamp_enrolled(db, user)
     return RedirectResponse("/account/security", status_code=303)
 ```
-
-Add `import uuid` at the top of the module. (Verify `verify_registration` accepts a JSON string — it does; we re-serialize the parsed `credential` sub-object.)
 
 - [ ] **Step 5: Create `src/idraa/static/js/webauthn.js`.**
 
@@ -1700,29 +1824,111 @@ async def test_unenrolled_user_password_login_gets_session(client: AsyncClient, 
     assert r.status_code == 303
     set_cookie = "".join(r.headers.get_list("set-cookie"))
     assert "idraa_session" in r.cookies or "idraa_session" in set_cookie
+
+
+async def test_repeated_bad_password_locks_account(client: AsyncClient, db_session) -> None:
+    # B1: minimal throttle. AUTH_MAX_FAILED_LOGINS defaults to 5.
+    from tests.conftest import csrf_post
+    await _seed_setup(client)
+    for _ in range(5):
+        await csrf_post(client, "/login", {"email": "a@b.c", "password": "wrong-pass"},
+                        follow_redirects=False)
+    await db_session.commit()
+    user = (await db_session.execute(select(User))).scalars().first()
+    assert user.locked_until is not None
+    # Even the CORRECT password is denied while locked.
+    r = await csrf_post(client, "/login", {"email": "a@b.c", "password": "pw-12345678"},
+                        follow_redirects=False)
+    assert r.status_code == 400
+
+
+async def test_repeated_bad_totp_locks_account(client: AsyncClient, db_session) -> None:
+    # B1: failed second-factor attempts also count toward lockout.
+    import pyotp
+    from idraa.services.mfa_crypto import encrypt_totp_secret
+    from tests.conftest import csrf_post
+    await _seed_setup(client)
+    user = (await db_session.execute(select(User))).scalars().first()
+    db_session.add(UserTotp(user_id=user.id, secret_encrypted=encrypt_totp_secret(pyotp.random_base32()),
+                            confirmed_at=now_utc()))
+    user.mfa_enrolled_at = now_utc()
+    await db_session.commit()
+    for _ in range(5):
+        await csrf_post(client, "/login", {"email": "a@b.c", "password": "pw-12345678"},
+                        follow_redirects=False)  # reaches mfa challenge
+        await csrf_post(client, "/login/mfa", {"code": "000000"},
+                        bootstrap_url="/login", follow_redirects=False)
+    await db_session.commit()
+    locked = (await db_session.execute(select(User))).scalars().first()
+    assert locked.locked_until is not None
 ```
 
 - [ ] **Step 2: Run — expect fail.** `uv run pytest tests/integration/test_login_mfa_flow.py -q`
 
-- [ ] **Step 3: Rework `POST /login` in `src/idraa/routes/auth.py`.** After the successful `verify_user_password` branch, replace the direct session mint with:
+- [ ] **Step 3a: Add throttle helpers to `src/idraa/services/auth.py`** (B1 — minimal idraa#81 slice). `datetime`, `UTC`, `timedelta`, `get_settings`, and `User` are already imported there:
 
 ```python
-    from idraa.services.mfa_enrollment import user_has_strong_factor
-    from idraa.services.auth import sign_mfa_pending
+def is_locked(user: User) -> bool:
+    lu = user.locked_until
+    if lu is None:
+        return False
+    if lu.tzinfo is None:            # aiosqlite may strip tzinfo on cross-connection read
+        lu = lu.replace(tzinfo=UTC)
+    return lu > datetime.now(UTC)
+
+
+def register_failed_login(user: User) -> None:
+    settings = get_settings()
+    user.failed_login_count += 1
+    if settings.auth_max_failed_logins and user.failed_login_count >= settings.auth_max_failed_logins:
+        user.locked_until = datetime.now(UTC) + timedelta(seconds=settings.auth_lockout_seconds)
+
+
+def reset_login_throttle(user: User) -> None:
+    user.failed_login_count = 0
+    user.locked_until = None
+```
+
+- [ ] **Step 3b: Harden `_safe_next` in `src/idraa/routes/auth.py`** (I3 — backslash open-redirect, now on the auth-critical path):
+
+```python
+def _safe_next(raw: str | None) -> str:
+    """Same-origin absolute path only. Rejects //evil AND /\\evil (browsers
+    normalize backslash to slash for special schemes → protocol-relative)."""
+    if raw and raw.startswith("/") and raw[1:2] not in ("/", "\\"):
+        return raw
+    return "/"
+```
+
+- [ ] **Step 3c: Hoist imports to module top + rework `POST /login`.** Add at the top of `src/idraa/routes/auth.py`: `from fastapi import Body`, `from typing import Any`, `from idraa.config import get_settings`, `from idraa.services.auth import (is_locked, load_mfa_pending, register_failed_login, reset_login_throttle, set_mfa_pending_cookie, clear_mfa_pending_cookie, set_webauthn_challenge_cookie, load_webauthn_challenge)`, `from idraa.services.mfa_enrollment import user_has_strong_factor`, `from idraa.services import webauthn_service, totp as totp_service`, `from idraa.services.mfa_crypto import decrypt_totp_secret, verify_recovery_code`, `from idraa.models.mfa import UserTotp, RecoveryCode, WebAuthnCredential`. `AuditWriter`, `create_session`, `set_session_cookie`, `client_ip` are already imported. Replace `login_post` with the throttled version (the bad-credentials 400 block is unchanged from today; the added lines are the lock check + throttle counters + the MFA branch):
+
+```python
+    user = await load_user_by_email(db, email)
+    password_ok = verify_user_password(user, password)  # always one Argon2 (timing-safe)
+    if user is None or not password_ok:
+        if user is not None and not is_locked(user):
+            register_failed_login(user)                  # count only a real, unlocked user's miss
+        return templates.TemplateResponse(
+            request, "auth/login.html",
+            {"current_user": None, "flash": None, "form": {"email": email},
+             "error": "Invalid email or password", "next": safe_next}, status_code=400)
+    if is_locked(user):                                  # correct password but locked → still deny
+        return templates.TemplateResponse(
+            request, "auth/login.html",
+            {"current_user": None, "flash": None, "form": {"email": email},
+             "error": "Invalid email or password", "next": safe_next}, status_code=400)
+    reset_login_throttle(user)
 
     if await user_has_strong_factor(db, user.id):
         # Hold in the pending-2FA state — NOT a session yet.
         resp = templates.TemplateResponse(
             request, "auth/mfa_challenge.html",
-            {"current_user": None, "error": None, "next": safe_next},
-        )
-        resp.set_cookie(
-            "rf_mfa_pending", sign_mfa_pending(user.id), max_age=300, httponly=True,
-            samesite="lax", secure=(get_settings().environment == "prod"), path="/",
-        )
+            {"current_user": None, "error": None, "next": safe_next})
+        set_mfa_pending_cookie(resp, user.id)
         return resp
-    # No strong factor yet (pre-enrollment) → mint a session; interstitial traps.
-    # ... existing create_session + audit + set_session_cookie code unchanged ...
+    # No strong factor yet (pre-enrollment / migration) → mint a session; the
+    # enrollment interstitial then traps the user. Existing create_session +
+    # audit + set_session_cookie code follows here unchanged.
 ```
 
 Add `POST /login/mfa`:
@@ -1735,110 +1941,113 @@ async def login_mfa_post(
     next: str | None = Form(default=None, max_length=2048),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    from idraa.services.auth import load_mfa_pending
-    from idraa.services import totp as totp_service
-    from idraa.services.mfa_crypto import verify_recovery_code, decrypt_totp_secret
-    from idraa.models.mfa import UserTotp, RecoveryCode
-    from idraa.models._types import now_utc
-    from sqlalchemy import select
-
     signed = request.cookies.get("rf_mfa_pending")
     user_id = load_mfa_pending(signed) if signed else None
     safe_next = _safe_next(next or request.query_params.get("next"))
     if user_id is None:
         return RedirectResponse("/login", status_code=303)
     user = await db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or is_locked(user):
         return RedirectResponse("/login", status_code=303)
 
-    ok = False
+    code = code.strip()
+    method: str | None = None
     totp = (await db.execute(select(UserTotp).where(
         UserTotp.user_id == user.id, UserTotp.confirmed_at.is_not(None)))).scalars().first()
     if totp and totp_service.verify_totp(decrypt_totp_secret(totp.secret_encrypted), code):
-        ok = True
-    if not ok:
+        method = "totp"
+    # Only walk the recovery Argon2 loop when the input is recovery-code-shaped —
+    # a wrong TOTP guess must NOT cost up to 10 Argon2 verifies (CPU-DoS amplifier).
+    if method is None and re.fullmatch(r"[0-9a-f]{5}-[0-9a-f]{5}", code):
         for rc in (await db.execute(select(RecoveryCode).where(
                 RecoveryCode.user_id == user.id, RecoveryCode.used_at.is_(None)))).scalars().all():
-            if verify_recovery_code(code.strip(), rc.code_hash):
+            if verify_recovery_code(code, rc.code_hash):
                 rc.used_at = now_utc()
-                ok = True
+                method = "recovery"
+                await AuditWriter(db).log(
+                    organization_id=user.organization_id, entity_type="user", entity_id=user.id,
+                    action="user.recovery_code_used", changes={}, user_id=user.id,
+                    ip_address=client_ip(request))
                 break
-    if not ok:
-        resp = templates.TemplateResponse(
+
+    if method is None:
+        register_failed_login(user)                       # counts toward lockout (B1)
+        return templates.TemplateResponse(
             request, "auth/mfa_challenge.html",
             {"current_user": None, "error": "Invalid code", "next": safe_next}, status_code=400)
-        return resp
 
+    reset_login_throttle(user)
     sess = await create_session(db, user.id, ip=client_ip(request))
     user.last_login_at = datetime.now(UTC)
     await AuditWriter(db).log(
         organization_id=user.organization_id, entity_type="session", entity_id=sess.id,
-        action="user.login_mfa", changes={}, user_id=user.id, ip_address=client_ip(request))
+        action="user.login_mfa", changes={"method": method}, user_id=user.id,
+        ip_address=client_ip(request))
     resp = RedirectResponse(safe_next, status_code=303)
     set_session_cookie(resp, sess.id)
-    resp.delete_cookie("rf_mfa_pending", path="/")
+    clear_mfa_pending_cookie(resp)
     return resp
+```
+
+(Also add `import re` and `from idraa.models._types import now_utc` and `from sqlalchemy import select` to the top of `routes/auth.py` if not already present.)
 ```
 
 Add the passkey login endpoints:
 
 ```python
+def _json_err(msg: str) -> Response:
+    return Response(content=json.dumps({"error": msg}), status_code=400,
+                    media_type="application/json")
+
+
 @router.post("/login/passkey/options")
 async def login_passkey_options(request: Request) -> Response:
-    from idraa.services import webauthn_service
-    from idraa.services.auth import sign_webauthn_challenge
     options_json, challenge = webauthn_service.authentication_options()
     resp = Response(content=options_json, media_type="application/json")
-    resp.set_cookie("rf_webauthn_challenge", sign_webauthn_challenge(challenge), max_age=300,
-                    httponly=True, samesite="lax",
-                    secure=(get_settings().environment == "prod"), path="/")
+    set_webauthn_challenge_cookie(resp, challenge)
     return resp
 
 
 @router.post("/login/passkey/verify")
 async def login_passkey_verify(
-    request: Request, payload: dict = Body(...), db: AsyncSession = Depends(get_db)
+    request: Request, payload: dict[str, Any] = Body(...), db: AsyncSession = Depends(get_db)
 ) -> Response:
-    import json as _json
-    from sqlalchemy import select
-    from idraa.services import webauthn_service
-    from idraa.services.auth import load_webauthn_challenge
-    from idraa.models.mfa import WebAuthnCredential
-    from idraa.models._types import now_utc
-
     signed = request.cookies.get("rf_webauthn_challenge")
     challenge = load_webauthn_challenge(signed) if signed else None
     if challenge is None:
-        return Response('{"error":"challenge expired"}', status_code=400,
-                        media_type="application/json")
-    cred_json = _json.dumps(payload["credential"])
-    raw_id = webauthn_service.parse_raw_id(cred_json)
+        return _json_err("challenge expired")
+    credential = payload.get("credential")
+    if not isinstance(credential, dict):
+        return _json_err("malformed credential")
+    raw_id = webauthn_service.parse_raw_id(credential)
     cred = (await db.execute(select(WebAuthnCredential).where(
         WebAuthnCredential.credential_id == raw_id))).scalars().first()
     if cred is None:
-        return Response('{"error":"unknown credential"}', status_code=400,
-                        media_type="application/json")
-    new_count = webauthn_service.verify_authentication(
-        cred_json, challenge, cred.public_key, cred.sign_count)
+        return _json_err("unknown credential")
+    try:
+        new_count = webauthn_service.verify_authentication(
+            credential, challenge, cred.public_key, cred.sign_count)
+    except Exception as exc:  # noqa: BLE001 — any bad/tampered assertion → 400, not 500
+        return _json_err(f"verification failed: {type(exc).__name__}")
     if not webauthn_service.sign_count_ok(cred.sign_count, new_count):
-        return Response('{"error":"counter"}', status_code=400, media_type="application/json")
+        return _json_err("counter")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
     user = await db.get(User, cred.user_id)
     if user is None or not user.is_active:
-        return Response('{"error":"inactive"}', status_code=400, media_type="application/json")
+        return _json_err("inactive")
     sess = await create_session(db, user.id, ip=client_ip(request))
     user.last_login_at = datetime.now(UTC)
     await AuditWriter(db).log(
         organization_id=user.organization_id, entity_type="session", entity_id=sess.id,
         action="user.login_passkey", changes={}, user_id=user.id, ip_address=client_ip(request))
-    resp = Response('{"next":"/"}', media_type="application/json")
+    resp = Response(content='{"next":"/"}', media_type="application/json")
     set_session_cookie(resp, sess.id)
-    resp.delete_cookie("rf_webauthn_challenge", path="/")
+    clear_webauthn_challenge_cookie(resp)
     return resp
 ```
 
-Add imports at the top of `routes/auth.py`: `from fastapi import Body`, `from idraa.config import get_settings`, `from idraa.services.audit import AuditWriter` (verify — some already imported). `set_session_cookie`/`create_session`/`client_ip` are already imported.
+Module-top imports for `routes/auth.py` (consolidated, no in-handler imports): `import json`, `import re`, `from typing import Any`, `from fastapi import Body`, `from sqlalchemy import select`, `from idraa.config import get_settings`, `from idraa.models._types import now_utc`, `from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential`, `from idraa.services import totp as totp_service, webauthn_service`, `from idraa.services.mfa_crypto import decrypt_totp_secret, verify_recovery_code`, `from idraa.services.mfa_enrollment import user_has_strong_factor`, plus the `auth` helpers listed in Step 3c (`is_locked`, `register_failed_login`, `reset_login_throttle`, `load_mfa_pending`, `set_/clear_mfa_pending_cookie`, `load_webauthn_challenge`, `set_/clear_webauthn_challenge_cookie`). `AuditWriter`, `create_session`, `set_session_cookie`, `client_ip`, `verify_user_password`, `load_user_by_email` are already imported.
 
 - [ ] **Step 4: Create `src/idraa/templates/auth/mfa_challenge.html`.**
 
@@ -1876,21 +2085,32 @@ Add imports at the top of `routes/auth.py`: `from fastapi import Body`, `from id
 ```bash
 uv run python -m idraa.tasks.build_css
 uv run pytest tests/integration/test_login_mfa_flow.py -q
-git add src/idraa/routes/auth.py src/idraa/templates/auth/ src/idraa/static/css/tailwind.css tests/integration/test_login_mfa_flow.py
-git commit -m "feat(auth): login state machine — passkey + password/TOTP/recovery second factor"
+git add src/idraa/routes/auth.py src/idraa/services/auth.py src/idraa/templates/auth/ src/idraa/static/css/tailwind.css tests/integration/test_login_mfa_flow.py
+git commit -m "feat(auth): login state machine (passkey + password/TOTP/recovery) + minimal login throttle"
 ```
 
 ---
 
-## Task 9: Enrollment interstitial dependency
+## Task 9: Enrollment interstitial (middleware)
 
 **Files:**
-- Modify: `src/idraa/routes/deps.py` (`require_enrolled`)
-- Modify: `src/idraa/app.py` (apply to authed routers or add a middleware)
+- Create: `src/idraa/middleware/enrollment_guard.py` (`EnrollmentGuardMiddleware`)
+- Modify: `src/idraa/app.py` (register it between `MaintenanceBadgeCountMiddleware` and `SessionMiddleware`)
+- Modify: `tests/conftest.py` (default `AUTH_MFA_POLICY=optional` for the HTTP suite)
 - Test: `tests/integration/test_enrollment_interstitial.py`
 
 **Interfaces:**
-- Produces: `require_enrolled(request, user, db) -> User` FastAPI dependency — when `AUTH_MFA_POLICY=="required"` and `user.mfa_enrolled_at is None`, raises a redirect to `/account/security` (except on the enroll/logout/static/health allowlist).
+- Produces: `EnrollmentGuardMiddleware` — a `BaseHTTPMiddleware` subclass. When `AUTH_MFA_POLICY=="required"` and `request.state.user` is set with `mfa_enrolled_at is None`, it returns a 303 to `/account/security` (or an `HX-Redirect` for HTMX requests) unless the path is on the allowlist (`/account/security*`, `/login`, `/logout`, `/setup`, `/healthz`, `/static/*`).
+
+**Plan-gate ruling (architect):** this is a MIDDLEWARE, not a dependency, and NOT the `app.middleware("http")` decorator form. Rationale: auth is enforced per-route via `Depends(require_user)` across ~18 routers with no single chokepoint — a dependency would be default-*allow* (any new router silently escapes enforcement), whereas a path-allowlisted middleware is default-*deny*. There is NO DB hop: `SessionMiddleware` already pins the loaded `User` onto `request.state` (with `expire_on_commit=False`, so `mfa_enrolled_at` is readable), and the guard must run INNER to `SessionMiddleware` so that pin exists. Registering via `add_middleware` positioned right after `MaintenanceBadgeCountMiddleware` (added 2nd → inner to Session) guarantees that ordering deterministically.
+
+- [ ] **Step 0: Default the HTTP test suite to `AUTH_MFA_POLICY=optional`** (plan-gate BLOCKER — otherwise the required-default guard 303-redirects EVERY authed test off its target page and the whole suite goes red). In `tests/conftest.py`, in the `client` fixture, immediately after `monkeypatch.setenv("DATABASE_URL", db_url)` add:
+
+```python
+    monkeypatch.setenv("AUTH_MFA_POLICY", "optional")  # interstitial off by default in tests
+```
+
+The interstitial tests below opt back into `required` per-test (the guard reads `get_settings()` per request, so a `setenv` + `config.reset_for_tests()` in the test body takes effect on the next request).
 
 - [ ] **Step 1: Write the test.**
 
@@ -1898,71 +2118,134 @@ git commit -m "feat(auth): login state machine — passkey + password/TOTP/recov
 # tests/integration/test_enrollment_interstitial.py
 from __future__ import annotations
 
+import idraa.config as config
 from httpx import AsyncClient
 
 
-async def test_unenrolled_required_user_is_redirected_to_security(
-    admin_client: AsyncClient
+def _require_mfa(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_MFA_POLICY", "required")
+    config.reset_for_tests()
+
+
+async def test_unenrolled_required_user_redirected_on_dashboard(
+    admin_client: AsyncClient, monkeypatch
 ) -> None:
-    # authed fixtures create users with mfa_enrolled_at = None; policy defaults to required.
+    _require_mfa(monkeypatch)  # authed fixtures create users with mfa_enrolled_at = None
     r = await admin_client.get("/", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/account/security"
 
 
-async def test_security_page_itself_is_reachable_while_unenrolled(
-    admin_client: AsyncClient
+async def test_unenrolled_required_user_redirected_on_non_dashboard_route(
+    admin_client: AsyncClient, monkeypatch
 ) -> None:
+    # A non-allowlisted authed route (not just the dashboard) must also be trapped.
+    _require_mfa(monkeypatch)
+    r = await admin_client.get("/scenarios", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/account/security"
+
+
+async def test_security_page_reachable_while_unenrolled(
+    admin_client: AsyncClient, monkeypatch
+) -> None:
+    _require_mfa(monkeypatch)
     r = await admin_client.get("/account/security", follow_redirects=False)
     assert r.status_code == 200
 
 
-async def test_logout_reachable_while_unenrolled(admin_client: AsyncClient) -> None:
+async def test_logout_reachable_while_unenrolled(admin_client: AsyncClient, monkeypatch) -> None:
     from tests.conftest import csrf_post
+    _require_mfa(monkeypatch)
     r = await csrf_post(admin_client, "/logout", {}, bootstrap_url="/account/security",
                         follow_redirects=False)
     assert r.status_code == 303
+
+
+def test_enrollment_guard_runs_inner_to_session() -> None:
+    # Ordering is the security-critical invariant: the guard MUST run after
+    # SessionMiddleware so request.state.user is populated. Higher index in
+    # user_middleware = added earlier = inner (runs later inbound).
+    from idraa.app import create_app
+    from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
+    from idraa.middleware.session import SessionMiddleware
+
+    app = create_app()
+    classes = [m.cls for m in app.user_middleware]
+    assert classes.index(EnrollmentGuardMiddleware) > classes.index(SessionMiddleware)
 ```
 
-- [ ] **Step 2: Run — expect fail** (GET `/` returns 200, not a redirect).
+- [ ] **Step 2: Run — expect fail** (module `enrollment_guard` doesn't exist; GET `/` returns 200).
 
 Run: `uv run pytest tests/integration/test_enrollment_interstitial.py -q`
 
-- [ ] **Step 3: Implement as a middleware** in `src/idraa/app.py` (a middleware covers every router uniformly; place it just inside `SessionMiddleware` so `request.state.user` is populated). Add after the `MaintenanceBadgeCountMiddleware` add-line — remember LIFO, so to run AFTER Session it must be added BEFORE Session:
+- [ ] **Step 3: Create `src/idraa/middleware/enrollment_guard.py`.**
 
 ```python
-    _ENROLL_ALLOWLIST = ("/account/security", "/logout", "/login", "/setup", "/healthz", "/static")
+"""Blocking MFA-enrollment interstitial.
 
-    async def enrollment_guard(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+When AUTH_MFA_POLICY == "required" and the logged-in user has no strong factor
+(mfa_enrolled_at is None), redirect every non-allowlisted request to
+/account/security. Runs INNER to SessionMiddleware so request.state.user is
+already populated; reads it with zero DB access (Session pinned the loaded
+User, expire_on_commit=False).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import RedirectResponse, Response
+
+from idraa.config import get_settings
+
+_ALLOWLIST = ("/account/security", "/login", "/logout", "/setup", "/healthz", "/static")
+
+
+def _allowed(path: str) -> bool:
+    # Segment-aware: "/static" or "/static/..." match, but "/staticfoo" does NOT
+    # (don't regress the repo's anti-prefix-abuse convention).
+    return any(path == p or path.startswith(p + "/") for p in _ALLOWLIST)
+
+
+class EnrollmentGuardMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        settings = get_settings()
-        if settings.auth_mfa_policy != "required":
+        if get_settings().auth_mfa_policy != "required":
             return await call_next(request)
         user = getattr(request.state, "user", None)
-        path = request.url.path
         if (
             user is not None
             and getattr(user, "mfa_enrolled_at", None) is None
-            and not any(path == p or path.startswith(p + "/") or path.startswith("/static")
-                        for p in _ENROLL_ALLOWLIST)
+            and not _allowed(request.url.path)
         ):
+            if request.headers.get("HX-Request") == "true":
+                # Tell HTMX to redirect the whole page, not swap a fragment.
+                return Response(status_code=204, headers={"HX-Redirect": "/account/security"})
             return RedirectResponse("/account/security", status_code=303)
         return await call_next(request)
-
-    app.middleware("http")(enrollment_guard)
 ```
 
-Because `app.middleware("http")` registrations run OUTERMOST-first relative to `add_middleware` ones, and `enrollment_guard` needs `request.state.user`, verify ordering in a test: `SessionMiddleware` must have run before this guard. If the decorator-registered guard ends up outside `SessionMiddleware`, instead implement `require_enrolled` as a router dependency and attach it via `dependencies=[Depends(require_enrolled)]` on each authed router's `include_router`. (The middleware form is preferred; fall back to the dependency form only if ordering fights you — the test above is the arbiter.)
+- [ ] **Step 4: Register it INNER to `SessionMiddleware`.** In `src/idraa/app.py`, add the import (`from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware`) and insert the add-line BETWEEN `MaintenanceBadgeCountMiddleware` and `SessionMiddleware` (added 2nd → inner to Session, so Session runs first inbound and populates `request.state.user`):
 
-- [ ] **Step 4: Run — expect pass, then commit.**
+```python
+    app.add_middleware(MaintenanceBadgeCountMiddleware)
+    app.add_middleware(EnrollmentGuardMiddleware)   # <-- new; inner to Session
+    app.add_middleware(SessionMiddleware)
+```
+
+- [ ] **Step 5: Run — expect pass, then commit.**
 
 ```bash
 uv run pytest tests/integration/test_enrollment_interstitial.py -q
-# Full auth regression: existing login/session/users tests must stay green.
+# Full auth regression: existing login/session/users tests must stay green (they
+# run under AUTH_MFA_POLICY=optional from the conftest default, so the guard no-ops).
 uv run pytest tests/integration/test_login_flow.py tests/integration/test_users_admin.py tests/middleware -q
-git add src/idraa/app.py src/idraa/routes/deps.py tests/integration/test_enrollment_interstitial.py
-git commit -m "feat(auth): blocking enrollment interstitial when AUTH_MFA_POLICY=required"
+git add src/idraa/middleware/enrollment_guard.py src/idraa/app.py tests/conftest.py tests/integration/test_enrollment_interstitial.py
+git commit -m "feat(auth): blocking enrollment interstitial middleware (AUTH_MFA_POLICY=required)"
 ```
 
 ---
@@ -1977,9 +2260,50 @@ git commit -m "feat(auth): blocking enrollment interstitial when AUTH_MFA_POLICY
 **Interfaces:**
 - Consumes: `live_server_url` fixture (launches uvicorn subprocess); Playwright async API; CDP `WebAuthn.addVirtualAuthenticator`.
 
-**Note:** This repo has NO existing virtual-authenticator or real-login e2e (the `seed_admin_login_e2e` fixture is a `pytest.skip` stub). This task is greenfield: it uses a raw CDP session for the virtual authenticator and bootstraps the account through the live app itself (setup → enroll → login). It runs only under `-m e2e`, outside the fast gate — per the "run full e2e on auth/JS changes" convention, it MUST be run explicitly before shipping.
+**Note:** This repo has NO existing virtual-authenticator or real-login e2e (the `seed_admin_login_e2e` fixture is a `pytest.skip` stub). This task is greenfield: it uses a raw CDP session for the virtual authenticator and bootstraps the account through the live app itself (setup → enroll → login). It runs only under `-m e2e`, outside the fast gate — per the "run full e2e on auth/JS changes" convention, it MUST be run explicitly before shipping. **Critical env requirement:** WebAuthn's origin↔RP-ID check means the server's origin must match `WEBAUTHN_RP_ID`. The default RP-ID (`idraa.fly.dev`) won't match a local server, so this task launches a DEDICATED server bound to `localhost` with `WEBAUTHN_RP_ID=localhost`, `WEBAUTHN_ORIGINS=http://localhost:<port>`, and `AUTH_MFA_POLICY=optional` (so the interstitial doesn't complicate the passkey-only flow), and the browser navigates to `http://localhost:<port>`.
 
-- [ ] **Step 1: Write the e2e test.**
+- [ ] **Step 1: Add the passkey e2e server fixture** to `tests/e2e/conftest.py` (schema-migrated, localhost-bound, WebAuthn env set):
+
+```python
+@pytest.fixture(scope="module")
+def passkey_server_url() -> Iterator[str]:
+    import os, socket, subprocess, sys, time
+    import httpx
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    url = f"http://localhost:{port}"
+    env = {
+        **os.environ,
+        "ENVIRONMENT": "dev",
+        "SESSION_SECRET": "e2e-passkey-secret-0123456789abcdefghij",
+        "DATABASE_URL": f"sqlite+aiosqlite:///./e2e-passkey-{port}.db",
+        "WEBAUTHN_RP_ID": "localhost",
+        "WEBAUTHN_ORIGINS": url,
+        "AUTH_MFA_POLICY": "optional",
+    }
+    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], env=env, check=True)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "idraa.app:app",
+         "--host", "localhost", "--port", str(port), "--log-level", "warning"], env=env)
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        try:
+            if httpx.get(f"{url}/healthz", timeout=0.5).status_code == 200:
+                break
+        except httpx.HTTPError:
+            time.sleep(0.2)
+    else:
+        proc.terminate(); raise RuntimeError("passkey e2e server did not come up")
+    try:
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+```
+
+- [ ] **Step 2: Write the e2e test.**
 
 ```python
 # tests/e2e/test_passkey_e2e.py
@@ -2001,8 +2325,8 @@ async def _csrf_and_post(base: str, path: str, data: dict[str, str]) -> httpx.Re
 
 
 @pytest.mark.e2e
-async def test_passkey_register_then_usernameless_login(live_server_url: str) -> None:
-    base = live_server_url
+async def test_passkey_register_then_usernameless_login(passkey_server_url: str) -> None:
+    base = passkey_server_url
     # Bootstrap the first admin via the live /setup so we have a logged-in cookie jar.
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -2056,12 +2380,12 @@ async def test_passkey_register_then_usernameless_login(live_server_url: str) ->
         await browser.close()
 ```
 
-- [ ] **Step 2: Run the e2e test explicitly.**
+- [ ] **Step 3: Run the e2e test explicitly.**
 
 Run: `uv run pytest -m e2e tests/e2e/test_passkey_e2e.py -q`
-Expected: PASS. If the virtual-authenticator credential doesn't persist across the logout/login (Chromium keeps it on the authenticator, which lives on the CDP session/context — keep the same `context` across the whole flow, as written), debug with `WebAuthn.getCredentials`.
+Expected: PASS. If the virtual-authenticator credential doesn't persist across the logout/login (Chromium keeps it on the authenticator, which lives on the CDP session/context — keep the same `context` across the whole flow, as written), debug with `WebAuthn.getCredentials`. The test also navigates to `passkey_server_url` (localhost), which matches `WEBAUTHN_RP_ID=localhost`.
 
-- [ ] **Step 3: Commit.**
+- [ ] **Step 4: Commit.**
 
 ```bash
 git add tests/e2e/test_passkey_e2e.py tests/e2e/conftest.py
@@ -2083,5 +2407,26 @@ git commit -m "test(auth): e2e passkey register + usernameless login via CDP vir
 ## Self-review notes (author)
 
 - **Spec coverage:** §Factor semantics → Tasks 4/5/8; §Data model → Task 2; §Config → Task 1; §Secret handling → Task 3; §Login state machine → Task 8; §Enrollment interstitial → Task 9; §Browser JS/CSP → Task 7; §Testing incl. virtual-authenticator → Tasks throughout + 10. **Deferred to P2/P3 (correctly out of this plan):** step-up / `reauthenticated_at` (P2), admin reset + CLI + session-revocation (P2), throttle/lockout idraa#81 (P3), revoke-on-deactivation idraa#80 L13 (P2/P3), HSTS idraa#82 (P3). The audit-action set here is the P1 subset; P2/P3 add `mfa_admin_reset`, `sessions_revoked`, `login_locked_out`, `step_up`.
-- **Known implementation checkpoints for the implementer** (not placeholders — verify-at-build): (a) exact `py_webauthn` symbol names against the installed version (Task 5 Step 3 note); (b) middleware ordering for the enrollment guard vs `SessionMiddleware` — the Task 9 test is the arbiter.
-- **Security note carried to the PR-gate:** `rf_mfa_pending` is a stateless TTL-bounded cookie (replayable within 300 s); the security-auditor decides whether P1 needs a server-side nonce or can defer that to a follow-up.
+- **Known implementation checkpoints for the implementer** (not placeholders — verify-at-build): (a) exact `py_webauthn` symbol names against the installed version (Task 5 Step 3 note); (b) the enrollment guard is now definitively a middleware inner to `SessionMiddleware` (Task 9), with an ordering-assertion test — no ambiguity remains.
+- **Security note carried to the PR-gate:** `rf_mfa_pending` / `rf_webauthn_challenge` are stateless TTL-bounded cookies (replayable within their window; synced passkeys report `sign_count=0`, so counter-replay protection is null for those). Accepted for P1 (replay requires capturing the TLS-protected request); a server-side single-use nonce is the documented post-P1 hardening.
+
+## Plan-gate applied (2026-07-22)
+
+3-reviewer plan-gate (security-auditor + architect + code-quality). Applied to convergence:
+
+- **B1 [BLOCKER] rate-limit-free 2nd factor** → pulled a minimal idraa#81 throttle into P1: `failed_login_count`/`locked_until` on `users` (Task 2), `AUTH_MAX_FAILED_LOGINS`/`AUTH_LOCKOUT_SECONDS` (Task 1), lock + increment/reset on failed password AND `/login/mfa` (Task 8), plus a recovery-code-shape short-circuit so a wrong TOTP can't cost 10 Argon2 verifies. Tests added.
+- **[BLOCKER] interstitial** → rewritten as `EnrollmentGuardMiddleware` (Task 9), inner to `SessionMiddleware`, segment-aware allowlist, `HX-Redirect` for HTMX; false ordering rationale + dependency hedge deleted; ordering-assertion + non-dashboard tests added. Design doc corrected.
+- **[BLOCKER] suite-wide test breakage** → `conftest.py` defaults `AUTH_MFA_POLICY=optional`; interstitial tests opt into `required` (Task 9 Step 0).
+- **[BLOCKER] `dict` `Body` mypy** → `dict[str, Any]` in Tasks 7/8.
+- **[IMPORTANT] single-domain WEBAUTHN default** → `WEBAUTHN_ORIGINS="https://idraa.fly.dev"` (Task 1); design notes the one-RP-ID-per-domain limitation + Related Origin Requests follow-up. **Owner input needed: canonical passkey domain.**
+- **[IMPORTANT] `_safe_next` backslash open-redirect** → hardened (Task 8 Step 3b).
+- **[IMPORTANT] last-factor un-stamp downgrade (I4)** → `maybe_unstamp_enrolled` after passkey delete (Tasks 6/7).
+- **[IMPORTANT] missing `recovery_code_used` audit** → emitted on burn (Task 8).
+- **[IMPORTANT] two non-passing tests** → Task 2 `sign_count` (flush-time default) + Task 6 recovery-code parser (regex) fixed.
+- **[IMPORTANT] duplicated cookie logic** → centralized `set_/clear_*_cookie` helpers in `services/auth.py` (Task 3), used everywhere.
+- **NICE applied:** verify wrappers accept `dict|str` (drop triple-JSON); verify wrapped → 400 not 500; `IntegrityError` guard on duplicate credential; `entity_id=cred.id`; inline imports hoisted; dynamic-import test fixed; key-isolation crypto test strengthened; TOTP GET side-effect removed (signed `rf_totp_pending` cookie); `MFA_ENCRYPTION_KEY` rotation note.
+- **NICE accepted/deferred:** stateless-nonce for `mfa_pending`/challenge (post-P1, documented); `MultiFernet` key-versioning (post-P1).
+
+## Scope budget — addendum (plan-gate)
+
+B1 pulled a **minimal login-throttle slice** from P3 into P1 (the design's own `failed_login_count`/`locked_until` columns + lock-on-failed-attempt). This adds ~1 column-pair, 2 config keys, ~25 LOC of login logic, and 2 tests to P1 — folded into existing Tasks 1/2/8, not a new task. P1 task count stays 10; the full idraa#81 (management UI, admin unlock, per-IP throttle) remains P3. No other scope change.
