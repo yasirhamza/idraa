@@ -32,6 +32,11 @@ services:
       # ENVIRONMENT is explicit so the config guard's env-dependent
       # hardening (32-char minimum secret in prod) is predictable.
       ENVIRONMENT: ${ENVIRONMENT:-dev}
+      # Reverse-proxy header trust for uvicorn (bare env var — uvicorn's Config
+      # reads FORWARDED_ALLOW_IPS directly when no CLI flag is given). Default
+      # mirrors uvicorn's own loopback-only default; operators behind a TLS
+      # proxy opt in via .env (see .env.example).
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     depends_on:
       db:
         condition: service_healthy
