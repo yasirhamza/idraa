@@ -442,7 +442,11 @@ class Settings(BaseSettings):
         dev/test keep the fallback (documented above and at
         ``services/mfa_crypto.py:32``) — convenient for local/CI boot where
         no operator has provisioned a dedicated key. prod must set a
-        distinct, stable ``MFA_ENCRYPTION_KEY`` before first boot.
+        distinct, stable ``MFA_ENCRYPTION_KEY`` before first boot, at least
+        ``_PROD_MIN_SECRET_LEN`` characters — the same floor as
+        ``SESSION_SECRET`` in ``_check_secret_hardening``, since both are
+        Fernet/HKDF key material and a short value is low-entropy key
+        material either way.
         """
         if self.environment != "prod":
             return self
@@ -456,6 +460,13 @@ class Settings(BaseSettings):
                 "`python -c 'import secrets; print(secrets.token_urlsafe(48))'` "
                 "and set it via the MFA_ENCRYPTION_KEY environment variable "
                 "(or your .env file)."
+            )
+        if len(self.mfa_encryption_key) < _PROD_MIN_SECRET_LEN:
+            raise ValueError(
+                f"MFA_ENCRYPTION_KEY must be at least {_PROD_MIN_SECRET_LEN} "
+                f"characters in environment={self.environment!r} "
+                f"(got {len(self.mfa_encryption_key)}). Regenerate the "
+                "MFA_ENCRYPTION_KEY environment variable."
             )
         return self
 

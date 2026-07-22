@@ -50,3 +50,21 @@ def test_dev_boots_with_empty_mfa_key() -> None:
     """dev keeps the SESSION_SECRET-derived fallback (services/mfa_crypto.py:32)."""
     s = _settings(environment="dev", session_secret="x" * 16)
     assert s.mfa_encryption_key is None
+
+
+def test_prod_rejects_short_mfa_key() -> None:
+    """prod must refuse a too-short MFA_ENCRYPTION_KEY, mirroring the
+    SESSION_SECRET length floor in _check_secret_hardening — both are
+    Fernet/HKDF key material and a short value is weak key material
+    regardless of which var it lives in."""
+    with pytest.raises(ValueError, match="32") as exc:
+        _settings(
+            environment="prod",
+            session_secret="x" * 40,
+            webauthn_rp_id="risk.example.com",
+            webauthn_origins="https://risk.example.com",
+            mfa_encryption_key="k" * 8,
+        )
+    msg = str(exc.value)
+    assert "MFA_ENCRYPTION_KEY" in msg
+    assert "32" in msg
