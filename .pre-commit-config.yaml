@@ -125,8 +125,11 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
-      # GHA is billing-disabled — pre-push IS the CI. Runs ruff check,
-      # ruff format --check, mypy, and the fast pytest suite (~3-4 min).
+      # Fast local mirror of CI, run before the push lands. Runs ruff check,
+      # ruff format --check, mypy, a css-staleness check, and the fast pytest
+      # suite (~4-7 min). On the public repo GitHub Actions is FREE and CI
+      # (ci.yml) re-runs this same gate verbatim + is the branch-protection
+      # merge authority — this stage just catches failures locally first.
       # IDRAA_GATE_SKIP_TESTS=1 skips pytest only; `git push --no-verify`
       # skips the whole stage (document the reason in the next commit).
       #

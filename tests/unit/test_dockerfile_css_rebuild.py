@@ -1,7 +1,8 @@
 """#491 structural guard: the Docker builder stage rebuilds tailwind.css from
 THIS image's templates, so a merge-order race between branches can never ship
-a stale committed sheet to prod (the per-branch pre-push gate only ever sees
-one branch's tree; GHA is billing-disabled so nothing checks the merged tree).
+a stale committed sheet to prod (the per-branch pre-push gate and CI's per-PR
+merge-ref check each only see one branch merged with main-at-that-time, so a
+merge-order race between two branches can still slip a stale sheet through).
 
 The committed tailwind.css + the pre-push staleness gate remain the DEV
 workflow; the Dockerfile RUN is the deploy-boundary backstop. These are

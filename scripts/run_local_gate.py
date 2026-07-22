@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Local verification gate — pre-push hook running the real quality tools.
 
-GitHub Actions is billing-disabled for this repo, so the pre-push stage IS
-the CI. Before this script existed the pre-push gate only checked test-count
+On the public repo GitHub Actions is free and CI (.github/workflows/ci.yml)
+re-runs this gate verbatim as the branch-protection merge authority; this
+pre-push stage is the fast local mirror. Before this script existed the pre-push gate only checked test-count
 regression + working-tree cleanliness (scripts/lint_branch_state.py) — it
 never executed pytest, ruff, or mypy, so a broken push was caught only by
 the developer remembering to run them. This gate makes that deterministic.
