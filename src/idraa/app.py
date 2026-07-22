@@ -29,6 +29,7 @@ from idraa.config import get_settings
 from idraa.db import get_session
 from idraa.help_content import help_url as _help_url
 from idraa.middleware.csrf import CSRFMiddleware
+from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
 from idraa.middleware.maintenance_count import MaintenanceBadgeCountMiddleware
 from idraa.middleware.security_headers import SecurityHeadersMiddleware
 from idraa.middleware.session import SessionMiddleware
@@ -848,12 +849,17 @@ def create_app() -> FastAPI:
 
     # Middleware is LIFO. Final wire order (outermost to innermost):
     #   request -> uat_basic_auth -> setup_guard -> SecurityHeaders ->
-    #              CSRF -> Session -> MaintenanceBadgeCount -> route
+    #              CSRF -> Session -> EnrollmentGuard -> MaintenanceBadgeCount -> route
     #   response <- (reverse)
     #
     # LIFO add-order; uat_basic_auth registered last (after setup_guard
     # below) → outermost overall.
+    #
+    # EnrollmentGuard MUST be added after Maintenance but before Session so it
+    # ends up inner to Session (Session runs first inbound and populates
+    # request.state.user, which the guard reads with zero DB access).
     app.add_middleware(MaintenanceBadgeCountMiddleware)
+    app.add_middleware(EnrollmentGuardMiddleware)
     app.add_middleware(SessionMiddleware)
     app.add_middleware(
         CSRFMiddleware,

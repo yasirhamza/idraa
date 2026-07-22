@@ -1,4 +1,4 @@
-"""Regression test: middleware must stay in uat_basic_auth -> setup_guard -> SecurityHeaders -> CSRF -> Session -> MaintenanceBadgeCount order."""
+"""Regression test: middleware must stay in uat_basic_auth -> setup_guard -> SecurityHeaders -> CSRF -> Session -> EnrollmentGuard -> MaintenanceBadgeCount order."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from idraa.app import create_app
 from idraa.middleware.csrf import CSRFMiddleware
+from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
 from idraa.middleware.maintenance_count import MaintenanceBadgeCountMiddleware
 from idraa.middleware.security_headers import SecurityHeadersMiddleware
 from idraa.middleware.session import SessionMiddleware
@@ -16,12 +17,12 @@ from idraa.middleware.session import SessionMiddleware
 def test_middleware_wire_order() -> None:
     """user_middleware is ordered outermost-first (last add_middleware runs first on request).
 
-    Required order on the wire (Phase 1.5.5):
+    Required order on the wire (Phase 1.5.5, extended by Strong Auth P1 Task 9):
         request  -> uat_basic_auth -> setup_guard -> SecurityHeaders ->
-                    CSRF -> Session -> MaintenanceBadgeCount -> route
+                    CSRF -> Session -> EnrollmentGuard -> MaintenanceBadgeCount -> route
         response <- (reverse)
 
-    Six entries — one per ``add_middleware`` call plus two ``app.middleware("http")``
+    Seven entries — one per ``add_middleware`` call plus two ``app.middleware("http")``
     decorators (``setup_guard`` and ``uat_basic_auth``). Both function-style
     middlewares are wrapped as ``BaseHTTPMiddleware`` by Starlette's decorator,
     so indices 0 and 1 are both ``BaseHTTPMiddleware``.
@@ -40,13 +41,19 @@ def test_middleware_wire_order() -> None:
     - It short-circuits unseeded-app requests with a 307 redirect before
       the downstream stack burns DB round trips.
 
-    Why MaintenanceBadgeCount is INNERMOST (index 5, registered first):
+    Why EnrollmentGuard sits between Session and MaintenanceBadgeCount (index 5):
 
     - It reads ``request.state.user`` set by SessionMiddleware, so it MUST
       run AFTER Session on the request path (i.e., be INNER to Session).
+    - LIFO: ``add_middleware(EnrollmentGuardMiddleware)`` is called AFTER
+      ``add_middleware(MaintenanceBadgeCountMiddleware)`` but BEFORE
+      ``add_middleware(Session)``, so it lands between the two.
+
+    Why MaintenanceBadgeCount is INNERMOST (index 6, registered first):
+
     - LIFO: ``add_middleware(MaintenanceBadgeCountMiddleware)`` is called BEFORE
-      ``add_middleware(Session)``, so MaintenanceBadgeCount ends up at the
-      innermost position (highest index, closest to the route).
+      every other ``add_middleware`` call, so it ends up at the innermost
+      position (highest index, closest to the route).
     """
     app = create_app()
     # ``Middleware.cls`` is typed as ``_MiddlewareFactory[P]`` (a Protocol); at
@@ -62,5 +69,6 @@ def test_middleware_wire_order() -> None:
         SecurityHeadersMiddleware,
         CSRFMiddleware,
         SessionMiddleware,
+        EnrollmentGuardMiddleware,
         MaintenanceBadgeCountMiddleware,
     ], classes
