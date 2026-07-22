@@ -89,11 +89,21 @@ def verify_registration(
     )
 
 
-def authentication_options() -> tuple[str, str]:
+def authentication_options(
+    allow_credential_ids: list[bytes] | None = None,
+) -> tuple[str, str]:
+    """Login (usernameless, default) or step-up (scoped) assertion options.
+
+    An empty allow-list means discoverable/usernameless (the login flow).
+    Step-up passes the CURRENT user's credential ids so the browser only
+    offers that user's passkeys.
+    """
     s = get_settings()
     options = generate_authentication_options(
         rp_id=s.webauthn_rp_id,
-        allow_credentials=[],  # usernameless / discoverable
+        allow_credentials=[
+            PublicKeyCredentialDescriptor(id=cid) for cid in (allow_credential_ids or [])
+        ],
         user_verification=UserVerificationRequirement.REQUIRED,
     )
     return options_to_json(options), bytes_to_base64url(options.challenge)

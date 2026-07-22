@@ -49,6 +49,15 @@ def test_authentication_options_usernameless(monkeypatch) -> None:
     assert len(challenge) > 0
 
 
+def test_authentication_options_scopes_allow_credentials(monkeypatch) -> None:
+    _reset(monkeypatch)
+    options_json, _challenge = ws.authentication_options(
+        allow_credential_ids=[b"cred-one", b"cred-two"]
+    )
+    parsed = json.loads(options_json)
+    assert len(parsed["allowCredentials"]) == 2
+
+
 def test_sign_count_ok() -> None:
     assert ws.sign_count_ok(5, 6) is True
     assert ws.sign_count_ok(5, 5) is False  # non-increasing → cloned

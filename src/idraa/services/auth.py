@@ -183,6 +183,43 @@ def clear_totp_pending_cookie(response: Response) -> None:
     response.delete_cookie("rf_totp_pending", path="/")
 
 
+# --- Step-up WebAuthn challenge: DISTINCT salt + cookie from the login/
+# registration ceremony (P2 plan-gate Sec-N1). Same payload shape, different
+# PURPOSE: a challenge minted for the anonymous login ceremony must never
+# validate for an authenticated step-up re-verify, per the salt convention
+# above _serializer. ---
+def _webauthn_stepup_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-stepup")
+
+
+def sign_webauthn_stepup_challenge(challenge_b64url: str) -> str:
+    return _webauthn_stepup_serializer().dumps(challenge_b64url)
+
+
+def load_webauthn_stepup_challenge(token: str, max_age: int = 300) -> str | None:
+    try:
+        value: str = _webauthn_stepup_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+def set_webauthn_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+    response.set_cookie(
+        "rf_webauthn_stepup",
+        sign_webauthn_stepup_challenge(challenge_b64url),
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_webauthn_stepup_challenge_cookie(response: Response) -> None:
+    response.delete_cookie("rf_webauthn_stepup", path="/")
+
+
 async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -> AuthSession:
     now = datetime.now(UTC)
     # Invariant: load_active_session assumes expires_at is UTC-aware (see auth.py

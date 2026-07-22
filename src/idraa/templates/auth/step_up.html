@@ -8,6 +8,15 @@
   {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
   <p class="text-sm text-ink-2">This action is sensitive, so we need you to re-verify.</p>
   {% if has_strong_factor %}
+  {% if has_passkeys %}
+  {# SINGLE-quoted onclick: |tojson emits raw double-quotes, which would
+     terminate a double-quoted attribute (repo precedent: the Sec-B1 note in
+     macros/action_menu.html and analyses/new.html — plan-gate CQ-B1). #}
+  <button class="btn btn-outline btn-sm w-full" type="button"
+          onclick='idraaWebAuthn.stepUp({{ next | default("/") | tojson }}).catch(function(e){alert(e.message)})'
+          x-show="!!window.PublicKeyCredential">Use your passkey</button>
+  <div class="divider text-xs text-ink-3">or</div>
+  {% endif %}
   <form method="post" action="/auth/step-up/verify" class="space-y-4">
     {{ csrf_field() }}
     <input type="hidden" name="next" value="{{ next | default('/') }}">
