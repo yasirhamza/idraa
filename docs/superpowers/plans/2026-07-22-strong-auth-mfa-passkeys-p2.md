@@ -857,29 +857,23 @@ git commit -m "feat(auth): step-up challenge + require_recent_auth dependency (P
 - Consumes: Task 1's `is_step_up_fresh` semantics, `_challenge_context`, `webauthn_service.verify_authentication` / `sign_count_ok` / `parse_raw_id`.
 - Produces:
   - `webauthn_service.authentication_options(allow_credential_ids: list[bytes] | None = None) -> tuple[str, str]` (default `None` ⇒ empty list ⇒ usernameless; EXISTING callers unchanged)
-  - `services/auth.py`: `sign_stepup_challenge(challenge_b64url: str) -> str`, `load_stepup_challenge(token: str, max_age: int = 300) -> str | None`, `set_stepup_challenge_cookie(response, challenge_b64url) -> None`, `clear_stepup_challenge_cookie(response) -> None` — salt `rf-webauthn-stepup`, cookie `rf_webauthn_stepup` (Sec-N1: the login/registration challenge and the step-up challenge are different PURPOSES and must not be interchangeable)
+  - `services/auth.py`: `sign_webauthn_stepup_challenge(challenge_b64url: str) -> str`, `load_webauthn_stepup_challenge(token: str, max_age: int = 300) -> str | None`, `set_webauthn_stepup_challenge_cookie(response, challenge_b64url) -> None`, `clear_webauthn_stepup_challenge_cookie(response) -> None` — salt `rf-webauthn-stepup`, cookie `rf_webauthn_stepup` (Sec-N1: the login/registration challenge and the step-up challenge are different PURPOSES and must not be interchangeable)
   - Routes: `POST /auth/step-up/passkey/options`, `POST /auth/step-up/passkey/verify` (JSON: `{"credential": ..., "next": ...}` → `{"next": "<safe>"}`)
   - `window.idraaWebAuthn.stepUp(next)` in `webauthn.js`
   - `post()` in `webauthn.js` sends `Accept: application/json` and follows a 401 `{"error":"step_up_required","redirect":...}` by navigating — this is what makes Task 3's gating of the ENROLLMENT fetch endpoints degrade gracefully.
 
 **Security invariants:**
 1. The step-up verify must ONLY accept a credential whose `user_id` equals the CURRENT session's user — another user's valid passkey must be rejected before signature verification is even attempted.
-2. Sec-I1: the forensically-meaningful failure branches (`unknown credential` — hijacker probing with a foreign passkey; `verification failed`; `counter` — cloned-authenticator signal) each write a `user.step_up_failed` audit row with `{"method": "passkey", "reason": <branch>}`. Pre-crypto shape/staleness branches (`challenge expired`, `malformed credential`, `no session`) are NOT audited — indistinguishable from benign client bugs. Passkey failures deliberately do NOT call `register_failed_login`: there is no guessable secret space to throttle (matches P1's lockout-exempt passkey login).
+2. Sec-I1: the forensically-meaningful failure branches (`unknown credential` — hijacker probing with a foreign passkey; `verification failed`; `counter` — cloned-authenticator signal) each write a `user.step_up_failed` audit row with `{"method": "passkey", "reason": <branch>}`. NOT audited: the pre-crypto shape/staleness branches (`challenge expired`, `malformed credential` — indistinguishable from benign client bugs) and the POST-crypto `no session` branch (a revoked-session race after a cryptographically valid assertion — not attacker signal; the sign-count update it persists is harmless-to-correct — round-2 Sec2-N2). Passkey failures deliberately do NOT call `register_failed_login`: there is no guessable secret space to throttle (matches P1's lockout-exempt passkey login). ACCEPTED trade-off (round-2 Sec2-N1): a hostile session-holder can loop garbage verifies to append unbounded `user.step_up_failed` rows, diluting the forensic stream — bounded rate-limiting of passkey failures rides the P3 idraa#81 throttle work.
 
 - [ ] **Step 1: Write the failing unit test for the options extension**
 
-Append to `tests/unit/test_webauthn_service.py` — mirror the file's existing `_reset(monkeypatch)` env-pinning helper so the settings singleton is deterministic (plan-gate CQ-N3), and do NOT add a default-usernameless test (the existing `test_authentication_options_usernameless` already pins that; the extension leaves the default byte-identical):
+Append to `tests/unit/test_webauthn_service.py` — mirror the file's existing conventions EXACTLY (plan-gate CQ-N3 + round-2 CQ2-I1/N1): bare `monkeypatch` parameter (the file imports no `pytest` and its tests annotate none), the module-level `import json` and `from idraa.services import webauthn_service as ws` aliases, and the `_reset(monkeypatch)` settings-pinning helper. Do NOT add a default-usernameless test (the existing `test_authentication_options_usernameless` already pins that; the extension leaves the default byte-identical):
 
 ```python
-def test_authentication_options_scopes_allow_credentials(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import json
-
-    from idraa.services import webauthn_service
-
-    _reset(monkeypatch)  # the file's existing settings-pinning helper
-    options_json, _challenge = webauthn_service.authentication_options(
+def test_authentication_options_scopes_allow_credentials(monkeypatch) -> None:
+    _reset(monkeypatch)
+    options_json, _challenge = ws.authentication_options(
         allow_credential_ids=[b"cred-one", b"cred-two"]
     )
     parsed = json.loads(options_json)
@@ -1032,7 +1026,7 @@ async def test_verify_success_stamps_session_and_sanitizes_next(
     """Full success path with the crypto verification monkeypatched (a real
     assertion needs a real authenticator — the e2e covers that; this pins the
     session-stamping + next-sanitizing behavior). Pattern from
-    test_mfa_passkey_routes.py::test_passkey_verify_duplicate_credential_id."""
+    test_mfa_passkey_routes.py::test_passkey_verify_duplicate_credential_id_returns_400."""
     from idraa.services import webauthn_service
 
     sess = await _client_session(db_session, admin_client)
@@ -1086,11 +1080,11 @@ def _webauthn_stepup_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-stepup")
 
 
-def sign_stepup_challenge(challenge_b64url: str) -> str:
+def sign_webauthn_stepup_challenge(challenge_b64url: str) -> str:
     return _webauthn_stepup_serializer().dumps(challenge_b64url)
 
 
-def load_stepup_challenge(token: str, max_age: int = 300) -> str | None:
+def load_webauthn_stepup_challenge(token: str, max_age: int = 300) -> str | None:
     try:
         value: str = _webauthn_stepup_serializer().loads(token, max_age=max_age)
     except BadData:
@@ -1098,10 +1092,10 @@ def load_stepup_challenge(token: str, max_age: int = 300) -> str | None:
     return value
 
 
-def set_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+def set_webauthn_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
     response.set_cookie(
         "rf_webauthn_stepup",
-        sign_stepup_challenge(challenge_b64url),
+        sign_webauthn_stepup_challenge(challenge_b64url),
         max_age=300,
         httponly=True,
         samesite="lax",
@@ -1110,11 +1104,11 @@ def set_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> No
     )
 
 
-def clear_stepup_challenge_cookie(response: Response) -> None:
+def clear_webauthn_stepup_challenge_cookie(response: Response) -> None:
     response.delete_cookie("rf_webauthn_stepup", path="/")
 ```
 
-Then append to `src/idraa/routes/step_up.py` (add imports: `Any` from typing, `Body` from fastapi, `json`, `webauthn_service` from idraa.services, `set_stepup_challenge_cookie` / `load_stepup_challenge` / `clear_stepup_challenge_cookie` from idraa.services.auth):
+Then append to `src/idraa/routes/step_up.py` (add imports: `Any` from typing, `Body` from fastapi, `json`, `webauthn_service` from idraa.services, `set_webauthn_stepup_challenge_cookie` / `load_webauthn_stepup_challenge` / `clear_webauthn_stepup_challenge_cookie` from idraa.services.auth):
 
 ```python
 def _json_err(msg: str) -> Response:
@@ -1144,7 +1138,7 @@ async def step_up_passkey_options(
         allow_credential_ids=[c.credential_id for c in creds]
     )
     resp = Response(content=options_json, media_type="application/json")
-    set_stepup_challenge_cookie(resp, challenge)
+    set_webauthn_stepup_challenge_cookie(resp, challenge)
     return resp
 
 
@@ -1173,7 +1167,7 @@ async def step_up_passkey_verify(
         )
 
     signed = request.cookies.get("rf_webauthn_stepup")
-    challenge = load_stepup_challenge(signed) if signed else None
+    challenge = load_webauthn_stepup_challenge(signed) if signed else None
     if challenge is None:
         return _json_err("challenge expired")
     credential = payload.get("credential")
@@ -1230,7 +1224,7 @@ async def step_up_passkey_verify(
     resp = Response(
         content=json.dumps({"next": target}), media_type="application/json"
     )
-    clear_stepup_challenge_cookie(resp)
+    clear_webauthn_stepup_challenge_cookie(resp)
     return resp
 ```
 
@@ -1313,7 +1307,7 @@ Expected: ALL PASS.
 
 - [ ] **Step 10: Extend the e2e (virtual authenticator)**
 
-First, in `tests/e2e/conftest.py`, refactor `passkey_server_url` so the DB path is reachable: extract the body into a module-scoped fixture `passkey_server` yielding `tuple[str, Path]` (`(url, db_file)`), and keep `passkey_server_url` as a thin alias returning `passkey_server[0]`. No env changes — same `WEBAUTHN_RP_ID=localhost` / `AUTH_MFA_POLICY=optional` block.
+First, in `tests/e2e/conftest.py`, RENAME `passkey_server_url` to `passkey_server` and change its yield to `tuple[str, Path]` (`(url, db_file)`). No alias fixture — the folded-in test below is the sole consumer, so an alias would ship with zero users (round-2 Arch2-N1; kill-dead-optionality). No env changes — same `WEBAUTHN_RP_ID=localhost` / `AUTH_MFA_POLICY=optional` block.
 
 Then EXTEND the EXISTING `test_passkey_register_then_usernameless_login` in `tests/e2e/test_passkey_e2e.py` — do NOT write a separate test. Plan-gate CQ-B3: the CDP virtual authenticator (and its resident private key) dies with the browser at the end of the existing test, so a new test's fresh authenticator has NO discoverable credential and "Sign in with a passkey" would `NotAllowedError`. The step-up leg must run inside the SAME browser/authenticator session, right after the usernameless sign-in assertions (this also removes any file-order coupling — Arch-N3).
 
@@ -2080,7 +2074,7 @@ git commit -m "feat(auth): admin factor-reset + revoke-on-deactivation + CLI bac
 2. **Catalog widened beyond the design's four named deletes** (library entry, control soft-delete, qualitative band, register-import profile, run purge-samples, user delete, overlay deactivate). Direction: +added — default-deny uniformity (purge-samples/user-delete trace to the design's destructive/admin categories — Spec-N1; overlay deactivate is the delete-less overlay family's terminal action — Sec-N2); plan-gate may trim.
 3. **Password fallback for factor-less users at step-up.** Direction: ↔resolved — the design left the factor-less case implicit; without it, step-up-gated enrollment endpoints deadlock un-enrolled users. Password is never offered to strong-factor accounts.
 4. **`user.step_up_failed` audit action.** Direction: +added — mirrors P1's `user.login_mfa_failed` detection-signal rationale; failures also count toward the B1 lockout.
-5. **`safe_next` relocated** from `routes/auth.py` (private) to `routes/deps.py` (shared). Direction: ↔refactor — avoids a cross-module private import; call sites renamed.
+5. **`safe_next` relocated** from `routes/auth.py` (private) to `routes/deps.py` (shared). Direction: ↔refactor — avoids a cross-module private import; `routes/auth.py` re-imports it as `from idraa.routes.deps import safe_next as _safe_next` with call sites UNTOUCHED (renaming would shadow the `safe_next` locals and raise `UnboundLocalError` — see Task 1 Step 8 / plan-gate CQ-B2).
 6. **POST `next` = sanitized Referer, actions not replayed.** Direction: ↔resolved — the design says "lets the action proceed"; a redirect cannot replay a POST body, so the user re-triggers inside the fresh window (GitHub-sudo-style). Recorded as the intended UX.
 7. **Distinct `rf-webauthn-stepup` salt** (plan-gate Sec-N1). Direction: +added — P2 DOES add one signed-token type, honoring P1's purpose-separation salt convention instead of waiving it by fiat.
 8. **Passkey step-up failure audits + locked-user audit silence** (plan-gate Sec-I1 + Sec-N3). Direction: +added/↔aligned — `user.step_up_failed {method: passkey, reason}` on the forensic branches; already-locked users bounce un-audited on the code/password path, mirroring `/login/mfa` and bounding append-only audit growth.
