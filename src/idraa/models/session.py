@@ -40,4 +40,10 @@ class AuthSession(Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, nullable=False
     )
+    # P2 step-up: stamped at login and on every successful step-up re-verify.
+    # NULLABLE: rows created before the P2 migration have no value; readers
+    # treat None as stale (fail closed — one challenge, then stamped).
+    reauthenticated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=now_utc
+    )
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)

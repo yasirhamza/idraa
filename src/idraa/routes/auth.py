@@ -38,7 +38,6 @@ auto-commits on successful exit. Handlers here do NOT call
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -49,7 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.models._types import now_utc
-from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
+from idraa.models.mfa import WebAuthnCredential
 from idraa.models.session import AuthSession
 from idraa.models.user import User
 from idraa.routes.deps import (
@@ -58,7 +57,6 @@ from idraa.routes.deps import (
     current_user,
     get_db,
 )
-from idraa.services import totp as totp_service
 from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
 from idraa.services.auth import (
@@ -77,8 +75,8 @@ from idraa.services.auth import (
     set_webauthn_challenge_cookie,
     verify_user_password,
 )
-from idraa.services.mfa_crypto import decrypt_totp_secret, verify_recovery_code
 from idraa.services.mfa_enrollment import user_has_strong_factor
+from idraa.services.second_factor import verify_totp_or_recovery
 
 router = APIRouter()
 
@@ -239,49 +237,7 @@ async def login_mfa_post(
     if user is None or not user.is_active or is_locked(user):
         return RedirectResponse("/login", status_code=303)
 
-    code = code.strip()
-    method: str | None = None
-    totp = (
-        (
-            await db.execute(
-                select(UserTotp).where(
-                    UserTotp.user_id == user.id, UserTotp.confirmed_at.is_not(None)
-                )
-            )
-        )
-        .scalars()
-        .first()
-    )
-    if totp and totp_service.verify_totp(decrypt_totp_secret(totp.secret_encrypted), code):
-        method = "totp"
-    # Only walk the recovery Argon2 loop when the input is recovery-code-shaped
-    # — a wrong TOTP guess must NOT cost up to 10 Argon2 verifies (CPU-DoS
-    # amplifier).
-    if method is None and re.fullmatch(r"[0-9a-f]{5}-[0-9a-f]{5}", code):
-        for rc in (
-            (
-                await db.execute(
-                    select(RecoveryCode).where(
-                        RecoveryCode.user_id == user.id, RecoveryCode.used_at.is_(None)
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        ):
-            if verify_recovery_code(code, rc.code_hash):
-                rc.used_at = now_utc()
-                method = "recovery"
-                await AuditWriter(db).log(
-                    organization_id=user.organization_id,
-                    entity_type="user",
-                    entity_id=user.id,
-                    action="user.recovery_code_used",
-                    changes={},
-                    user_id=user.id,
-                    ip_address=client_ip(request),
-                )
-                break
+    method = await verify_totp_or_recovery(db, user, code, ip_address=client_ip(request))
 
     if method is None:
         # Audit EVERY failed 2nd-factor attempt (not just the one that trips

@@ -301,6 +301,11 @@ class Settings(BaseSettings):
     auth_max_failed_logins: int = Field(default=5, ge=0)  # 0 disables lockout
     auth_lockout_seconds: int = Field(default=900, ge=0)
 
+    # Step-up ("sudo mode") freshness window — P2. Sensitive actions require a
+    # re-auth within this many seconds. 0 disables step-up entirely (mirrors
+    # auth_max_failed_logins' 0-disables convention).
+    auth_step_up_max_age_seconds: int = Field(default=600, ge=0)
+
     @property
     def webauthn_origin_list(self) -> list[str]:
         """WEBAUTHN_ORIGINS parsed: comma-split, trimmed, blanks dropped."""

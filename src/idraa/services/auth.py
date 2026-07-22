@@ -196,6 +196,7 @@ async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -
         last_seen_at=now,
         expires_at=now + SESSION_TTL,
         ip_address=ip,
+        reauthenticated_at=now,  # login IS a re-auth (design §Step-up)
     )
     db.add(sess)
     return sess
@@ -286,6 +287,24 @@ def register_failed_login(user: User) -> None:
 def reset_login_throttle(user: User) -> None:
     user.failed_login_count = 0
     user.locked_until = None
+
+
+def is_step_up_fresh(sess: AuthSession) -> bool:
+    """True when the session's last re-auth is inside the step-up window.
+
+    max_age == 0 disables step-up (operator opt-out, mirrors
+    auth_max_failed_logins). A NULL reauthenticated_at (pre-P2 row) is
+    stale — fail closed, the user re-verifies once and gets stamped.
+    """
+    max_age = get_settings().auth_step_up_max_age_seconds
+    if max_age == 0:
+        return True
+    ra = sess.reauthenticated_at
+    if ra is None:
+        return False
+    if ra.tzinfo is None:  # aiosqlite may strip tzinfo on cross-connection read
+        ra = ra.replace(tzinfo=UTC)
+    return datetime.now(UTC) - ra <= timedelta(seconds=max_age)
 
 
 async def load_user_by_email(db: AsyncSession, email: str) -> User | None:
