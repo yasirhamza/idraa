@@ -66,7 +66,7 @@ Every task's requirements implicitly include this section. Values are verbatim f
 - Test: `tests/unit/test_config_webauthn.py`
 
 **Interfaces:**
-- Produces: `Settings.webauthn_rp_id: str`, `Settings.webauthn_rp_name: str`, `Settings.webauthn_origins: str`, `Settings.webauthn_origin_list -> list[str]` (property), `Settings.auth_mfa_policy: Literal["required","optional"]`, `Settings.totp_issuer: str`, `Settings.mfa_encryption_key: str | None`.
+- Produces: `Settings.webauthn_rp_id: str`, `Settings.webauthn_rp_name: str`, `Settings.webauthn_origins: str`, `Settings.webauthn_origin_list -> list[str]` (property), `Settings.auth_mfa_policy: Literal["required","optional"]`, `Settings.totp_issuer: str`, `Settings.mfa_encryption_key: str | None`, `Settings.auth_max_failed_logins: int`, `Settings.auth_lockout_seconds: int`.
 
 - [ ] **Step 1: Add dependencies.**
 
@@ -101,8 +101,9 @@ def _settings(**env: str) -> Settings:
 def test_webauthn_defaults_are_owner_deployment() -> None:
     s = _settings(environment="dev", session_secret="x" * 16)
     assert s.webauthn_rp_id == "idraa.fly.dev"
-    # Single registrable domain: one RP-ID cannot span idraa.fly.dev + idraa.app
-    # (plan-gate 2026-07-22). Owner picks the canonical passkey domain.
+    # The default is one coherent example; RP-ID/origins are per-deployment config.
+    # (A single RP-ID binds to one registrable domain — a WebAuthn protocol rule —
+    # and the default must be self-consistent or the prod validator rejects it.)
     assert s.webauthn_origin_list == ["https://idraa.fly.dev"]
     assert s.auth_mfa_policy == "required"
 
@@ -812,11 +813,11 @@ git commit -m "feat(auth): TOTP service (provision/verify/URI/QR-SVG)"
 **Interfaces:**
 - Produces:
   - `registration_options(user_id: uuid.UUID, user_email: str, user_display_name: str, existing_credential_ids: list[bytes]) -> tuple[str, str]` → `(options_json, challenge_b64url)`.
-  - `verify_registration(credential_json: str, challenge_b64url: str) -> RegisteredCredential` (dataclass: `credential_id: bytes`, `public_key: bytes`, `sign_count: int`, `aaguid: str`, `transports: str | None`).
+  - `verify_registration(credential: dict[str, Any] | str, challenge_b64url: str) -> RegisteredCredential` (dataclass: `credential_id: bytes`, `public_key: bytes`, `sign_count: int`, `aaguid: str`, `transports: str | None`).
   - `authentication_options() -> tuple[str, str]` → `(options_json, challenge_b64url)` (usernameless).
-  - `verify_authentication(credential_json: str, challenge_b64url: str, public_key: bytes, current_sign_count: int) -> int` → `new_sign_count`.
+  - `verify_authentication(credential: dict[str, Any] | str, challenge_b64url: str, public_key: bytes, current_sign_count: int) -> int` → `new_sign_count`.
   - `sign_count_ok(stored: int, new: int) -> bool` (pure).
-  - `parse_raw_id(credential_json: str) -> bytes`.
+  - `parse_raw_id(credential: dict[str, Any] | str) -> bytes`.
 
 - [ ] **Step 1: Write the test.** (Full ceremony verify needs a real authenticator — covered by the e2e virtual-authenticator test in Task 10. Here: options generation is deterministic enough to assert structure, and the sign-count + raw-id helpers are pure.)
 
