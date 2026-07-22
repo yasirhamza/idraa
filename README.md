@@ -2,7 +2,7 @@
 
 Quantitative cyber-risk analysis platform — FAIR methodology, control-aware modeling (FAIR-CAM), Monte Carlo simulation, financial impact analysis, and executive reporting.
 
-**Status:** in production UAT on Fly.io; evaluation self-hosting supported via Docker Compose. See [ROADMAP.md](ROADMAP.md) and the [intro deck](https://yasirhamza.github.io/idraa).
+**Status:** in production UAT; evaluation self-hosting supported via Docker Compose. See [ROADMAP.md](ROADMAP.md) and the [intro deck](https://yasirhamza.github.io/idraa).
 
 ## Screenshots
 

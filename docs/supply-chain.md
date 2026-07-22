@@ -21,6 +21,15 @@ This is the standard GitHub-native toolkit, wired so the local gate stays the
 actual merge authority and CI is its drift-proof mirror, not a second,
 independently-maintained copy of the same rules.
 
+**Enforcement keystone (branch protection, armed 2026-07-19):** merging to
+`main` requires three status checks — `ci-success` (an aggregator over the
+deterministic core: `gate`, `secrets`, `sast`), `secrets (gitleaks, full
+history)`, and `dependency-review`. `docker-build` (image build exercised on
+every PR against the digest-pinned base) and `notebook-smoke` run
+visible-but-advisory so a flaky job can never wedge merges; the advisory
+Playwright e2e job and the Windows matrix job were retired 2026-07-19
+(rationale recorded in `ci.yml`).
+
 ## 2. SCA triage policy
 
 Two SCA layers, deliberately different rules — they will not always agree.
@@ -53,7 +62,7 @@ commit that uses it.
 
 ## 3. Outbound-leak surface
 
-- **gitleaks**, three points: staged-content at commit; a genuine full-history scan at push (a dedicated pre-push hook running `gitleaks git`); and full-history again in CI as the backstop against a bypassed local hook.
+- **gitleaks**, three points: staged-content at commit; a genuine full-history scan at push (a dedicated pre-push hook running `gitleaks git`); and full-history again in CI as the backstop against a bypassed local hook. False positives are suppressed via the tracked `.gitleaks.toml` allowlist — reason-annotated, so suppressions are reviewable diffs rather than lost knowledge.
 - **Tracked-path denylist** (`scripts/lint_tracked_paths.py`): fails if any
   *tracked* file matches local tool/agent state, secrets-shaped files, or
   databases — content-independent, catches whole-file/dir accidents gitleaks
@@ -63,6 +72,10 @@ commit that uses it.
   siblings, agent/tool state dirs (`.claude/`, `.superpowers/`,
   `.memsearch/`, `.design-sync/`, `docs/memory/`), and key material (`.pem`,
   `.p12`, `.jks`, `.keystore`, `local.properties`).
+- **Image build context:** `.dockerignore` excludes `.env`, so local secrets
+  cannot enter a built image even on a machine with a populated `.env` —
+  runtime secrets reach the container exclusively through compose's
+  `env_file`/`environment` delivery, never baked into layers.
 - **Licensed-material rule.** Nothing enters this tree unless first-party or
   under a verifiably permissive license, vendored deliberately with
   provenance recorded (§7). This repo is source-visible with no license
@@ -72,22 +85,16 @@ commit that uses it.
 
 ## 4. Deliberate keeps (with rationale)
 
-- **Fly-built images are not provenance-attested.** Production images build
-  on Fly's remote builder, not public Actions. Provenance would mean either
-  running the build in public CI or putting a Fly deploy token in
-  public-repo secrets — both judged worse than the status quo. The SBOM
-  (layer 4) gives dependency transparency without image attestation;
-  revisit if the deploy architecture changes.
+- **Production images are not provenance-attested.** Deployable images are
+  built outside public Actions; attestation would require either building
+  them in public CI or granting this public repository deploy credentials —
+  both judged worse than the status quo. The SBOM (layer 4) gives dependency
+  transparency without image attestation; SBOM publication + SLSA
+  attestation is tracked publicly as issue #91.
 - **CodeQL stays advisory.** A prior project's `code_scanning`
   required-check ruleset wedged permanently on a path-filtered workflow.
   CodeQL here runs via GitHub's default setup and posts to the Security tab;
   nothing in branch protection depends on it.
-- **`/data/riskflow.db` filename in production** (`fly.toml`'s
-  `DATABASE_URL`) **— a legacy name retained through the project rename to
-  Idraa, not reverted.** WAL-mode SQLite keeps `-wal`/`-shm` sidecars matched
-  to the base filename; the denylist covers `*.db` plus the `-journal`/`-shm`/`-wal` sidecars and `*.sqlite*` explicitly, so any
-  name works with the guard — the specific name is a rename-cleanup item,
-  not a security control.
 
 ## 5. "Am I affected?" runbook
 
@@ -137,7 +144,9 @@ commit that uses it.
   moment integrity isn't independently cross-checked. From then on, the
   recorded sha384 is the tamper/drift guard, read by byte-pin tests on every
   run. Re-vendoring repeats trust-on-first-use and produces a new pin, with
-  the diff as the human review checkpoint.
+  the diff as the human review checkpoint. The vendored versions are also
+  declared in a build-inert `package.json` solely so Dependabot's alert
+  coverage extends to the front-end assets — it drives no build step.
 
 Neither mechanism substitutes for upstream-signed provenance (not offered by
 Tailwind's release process or the vendored CDNs today); both are the best

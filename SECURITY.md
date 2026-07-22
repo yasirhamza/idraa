@@ -11,8 +11,8 @@ steps and the commit/version you tested against.
 ## Scope
 
 - The application code in this repository (`src/idraa/`, `fair_cam/`).
-- The deployed UAT instance is access-gated and not a bug-bounty target;
-  please test against a local checkout instead.
+- Hosted deployments of Idraa are not a bug-bounty target; please test
+  against a local checkout instead.
 
 ## Supply-chain posture (summary)
 

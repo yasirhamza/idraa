@@ -29,9 +29,9 @@ MVP shipped and in production UAT. Delivered beyond MVP:
 - First-party server-rendered SVG charts (no charting dependency)
 - Mobile-responsive UI with an installable web-app manifest; multi-currency
   support; product design language (graphite palette, sonar-arcs identity)
-- Supply-chain gates in CI — dependency review, secret scanning, and workflow
-  SAST behind branch protection; CycloneDX SBOM generated on every merge to
-  main
+- Supply-chain gates in CI — dependency review, secret scanning, and SAST
+  (ruff security rules over application code, zizmor over workflows) behind
+  branch protection; CycloneDX SBOM generated on every merge to main
 
 ## Where it is going
 
