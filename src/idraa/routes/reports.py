@@ -40,7 +40,7 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.user import User
 from idraa.repositories.run_repo import RunRepo
-from idraa.routes.deps import client_ip, get_db, require_user
+from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_user
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.org import require_sole_org
 from idraa.services.pdf_report import render_executive_pdf
@@ -107,7 +107,7 @@ async def list_reports(
     )
 
 
-@router.get("/reports/export.csv")
+@router.get("/reports/export.csv", dependencies=[Depends(require_recent_auth)])
 async def reports_export_csv(
     request: Request,
     user: User = Depends(require_user),
@@ -147,7 +147,7 @@ async def reports_export_csv(
     return csv_response(filename="reports.csv", header=header, rows_iter=rows)
 
 
-@router.get("/reports/run/{run_id}")
+@router.get("/reports/run/{run_id}", dependencies=[Depends(require_recent_auth)])
 async def download_run_pdf(
     request: Request,
     run_id: uuid.UUID,
@@ -271,7 +271,10 @@ def _build_xlsx_filename(run: RiskAnalysisRun, org: Organization) -> str:
     return f"idraa-verification-{org_slug}-{run_slug}-{date}.xlsx"
 
 
-@router.get("/reports/run/{run_id}/verification.xlsx")
+@router.get(
+    "/reports/run/{run_id}/verification.xlsx",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def download_verification_workbook(
     request: Request,
     run_id: uuid.UUID,

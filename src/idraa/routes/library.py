@@ -31,7 +31,13 @@ from idraa.models.enums import (
 from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
-from idraa.routes.deps import client_ip, get_db, require_role, require_user
+from idraa.routes.deps import (
+    client_ip,
+    get_db,
+    require_recent_auth,
+    require_role,
+    require_user,
+)
 from idraa.services.audit import log_bulk_export
 from idraa.services.library_bundle_export import export_bundle_response
 from idraa.services.scenario_control_recommendations import recommended_controls_for
@@ -123,7 +129,7 @@ async def get_library(
     )
 
 
-@router.get("/library/export.csv")
+@router.get("/library/export.csv", dependencies=[Depends(require_recent_auth)])
 async def library_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -176,7 +182,7 @@ async def library_export_csv(
     return csv_response(filename="library.csv", header=header, rows_iter=rows)
 
 
-@router.get("/library/export")
+@router.get("/library/export", dependencies=[Depends(require_recent_auth)])
 async def library_export(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -296,7 +302,10 @@ async def get_library_entry(
     )
 
 
-@router.post("/library/entries/{entry_id}/delete")
+@router.post(
+    "/library/entries/{entry_id}/delete",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def delete_library_entry(
     entry_id: uuid.UUID,
     request: Request,

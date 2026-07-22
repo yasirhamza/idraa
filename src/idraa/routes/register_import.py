@@ -73,7 +73,13 @@ from idraa.app import templates
 from idraa.errors import NotFoundError, ValidationError
 from idraa.models.enums import ThreatCategory, UserRole
 from idraa.models.user import User
-from idraa.routes.deps import MAX_UPLOAD_BYTES, client_ip, get_db, require_role
+from idraa.routes.deps import (
+    MAX_UPLOAD_BYTES,
+    client_ip,
+    get_db,
+    require_recent_auth,
+    require_role,
+)
 from idraa.routes.scenario_form_helpers import THREAT_CATEGORY_CHOICES
 from idraa.services.flash import build_flash
 from idraa.services.qualitative_bands import EffectiveBand, QualitativeBandService
@@ -786,7 +792,10 @@ async def register_import_convert_post(
     )
 
 
-@router.post("/register-import/profiles/{profile_id}/delete")
+@router.post(
+    "/register-import/profiles/{profile_id}/delete",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def delete_profile(
     request: Request,
     profile_id: uuid.UUID,

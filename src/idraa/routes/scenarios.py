@@ -81,6 +81,7 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     client_ip,
     get_db,
+    require_recent_auth,
     require_role,
     require_user,
 )
@@ -571,7 +572,10 @@ async def create_scenario(
 # ---- export ----------------------------------------------------------
 
 
-@router.get("/scenarios/export")  # B5: MUST be declared before /scenarios/{scenario_id}
+@router.get(
+    "/scenarios/export",  # B5: MUST be declared before /scenarios/{scenario_id}
+    dependencies=[Depends(require_recent_auth)],
+)
 async def scenarios_export(
     request: Request,
     format: str = "csv",
@@ -1093,7 +1097,7 @@ async def update_scenario(
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 
-@router.post("/scenarios/{scenario_id}/delete")
+@router.post("/scenarios/{scenario_id}/delete", dependencies=[Depends(require_recent_auth)])
 async def delete_scenario(
     request: Request,
     scenario_id: uuid.UUID,

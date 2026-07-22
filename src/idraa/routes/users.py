@@ -32,7 +32,7 @@ from idraa.errors import UserDeleteError
 from idraa.formatting import utc_isoformat
 from idraa.models.enums import UserRole
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role
+from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.org import require_sole_org
 from idraa.services.users import (
@@ -102,7 +102,7 @@ async def users_list(
     )
 
 
-@router.get("/users/export.csv")
+@router.get("/users/export.csv", dependencies=[Depends(require_recent_auth)])
 async def users_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -152,7 +152,7 @@ async def invite_get(
     )
 
 
-@router.post("/users/invite")
+@router.post("/users/invite", dependencies=[Depends(require_recent_auth)])
 async def invite_post(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -237,7 +237,7 @@ async def edit_get(
     )
 
 
-@router.post("/users/{user_id}/edit")
+@router.post("/users/{user_id}/edit", dependencies=[Depends(require_recent_auth)])
 async def edit_post(
     user_id: uuid.UUID,
     request: Request,
@@ -317,7 +317,7 @@ async def edit_post(
     return RedirectResponse("/users", status_code=303)
 
 
-@router.post("/users/{user_id}/set-active")
+@router.post("/users/{user_id}/set-active", dependencies=[Depends(require_recent_auth)])
 async def set_active_post(
     user_id: uuid.UUID,
     request: Request,
@@ -378,7 +378,7 @@ async def set_active_post(
     return RedirectResponse("/users", status_code=303)
 
 
-@router.post("/users/{user_id}/delete")
+@router.post("/users/{user_id}/delete", dependencies=[Depends(require_recent_auth)])
 async def delete_post(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
