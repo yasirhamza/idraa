@@ -427,6 +427,38 @@ class Settings(BaseSettings):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _check_mfa_key_hardening(self) -> Settings:
+        """Refuse to boot in prod with no dedicated MFA_ENCRYPTION_KEY.
+
+        ``services/mfa_crypto.py:32`` falls back to deriving the TOTP-secret
+        encryption key from ``SESSION_SECRET`` when ``MFA_ENCRYPTION_KEY`` is
+        unset — a key-separation violation, and a rotation trap: rotating
+        ``SESSION_SECRET`` (a routine cookie-signing-key rotation) then
+        silently re-derives a different Fernet key and permanently bricks
+        every already-stored TOTP secret, locking those users out of that
+        factor with no recovery short of disabling TOTP for them.
+
+        dev/test keep the fallback (documented above and at
+        ``services/mfa_crypto.py:32``) — convenient for local/CI boot where
+        no operator has provisioned a dedicated key. prod must set a
+        distinct, stable ``MFA_ENCRYPTION_KEY`` before first boot.
+        """
+        if self.environment != "prod":
+            return self
+        if not self.mfa_encryption_key:
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be set in environment='prod'. Without "
+                "it, TOTP secrets are encrypted with a key derived from "
+                "SESSION_SECRET (a key-separation violation) — and rotating "
+                "SESSION_SECRET would then permanently brick every stored TOTP "
+                "secret. Generate one with "
+                "`python -c 'import secrets; print(secrets.token_urlsafe(48))'` "
+                "and set it via the MFA_ENCRYPTION_KEY environment variable "
+                "(or your .env file)."
+            )
+        return self
+
 
 _cached: Settings | None = None
 

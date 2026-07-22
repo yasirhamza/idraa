@@ -130,6 +130,10 @@ default change, no adapter/math surface).
   WEBAUTHN_RP_ID/ORIGINS were found already set as Fly secrets (2026-07-22),
   which override defaults; adding [env] duplicates would create a second,
   shadowed source of truth.
+- ADDED by security-audit wave (2026-07-22): env_file delivery + commented-optional
+  .env.example restructure (B1); corrected proxy-trust guidance + loopback 5432
+  (I1/I4); MFA_ENCRYPTION_KEY prod boot guard + docs (I2); network⇒prod guidance
+  (I3); .dockerignore .env.
 
 ## Risks
 

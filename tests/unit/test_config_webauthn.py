@@ -52,11 +52,16 @@ def test_prod_rejects_origin_not_covering_rp_id() -> None:
 
 
 def test_prod_accepts_subdomain_origin() -> None:
+    # mfa_encryption_key set so this isolates the WebAuthn origin-matching
+    # guard being exercised here — a bare prod Settings() now also trips
+    # _check_mfa_key_hardening (security-audit wave, 2026-07-22), covered
+    # separately in tests/unit/test_config_mfa_key.py.
     s = _settings(
         environment="prod",
         session_secret="y" * 40,
         webauthn_rp_id="example.com",
         webauthn_origins="https://app.example.com,https://example.com",
+        mfa_encryption_key="k" * 32,
     )
     assert s.webauthn_rp_id == "example.com"
 
@@ -75,11 +80,15 @@ def test_prod_refuses_localhost_webauthn_default() -> None:
 
 
 def test_prod_boots_with_real_rp_id_and_origins() -> None:
+    # mfa_encryption_key set — a bare prod Settings() now also trips
+    # _check_mfa_key_hardening (security-audit wave, 2026-07-22); see
+    # tests/unit/test_config_mfa_key.py for that guard in isolation.
     s = _settings(
         environment="prod",
         session_secret="x" * 40,
         webauthn_rp_id="risk.example.com",
         webauthn_origins="https://risk.example.com",
+        mfa_encryption_key="k" * 32,
     )
     assert s.webauthn_rp_id == "risk.example.com"
 
