@@ -21,39 +21,44 @@ import sys
 
 async def _reset_mfa(email: str) -> int:
     # Imports deferred so ``--help`` never touches DB/config.
-    from idraa.db import get_session
+    from idraa.db import get_engine, get_session
     from idraa.services.audit import AuditWriter
     from idraa.services.auth import load_user_by_email, revoke_user_sessions
     from idraa.services.mfa_enrollment import reset_user_mfa
 
-    async with get_session() as db:
-        user = await load_user_by_email(db, email)
-        if user is None:
-            print(f"error: no user with email {email!r}", file=sys.stderr)
-            return 1
-        counts = await reset_user_mfa(db, user)
-        revoked = await revoke_user_sessions(db, user.id)
-        await AuditWriter(db).log(
-            organization_id=user.organization_id,
-            entity_type="user",
-            entity_id=user.id,
-            action="user.mfa_admin_reset",
-            changes={"factors_cleared": counts, "via": "cli"},
-            user_id=None,  # host operator, no web actor
-            ip_address=None,
-        )
-        await AuditWriter(db).log(
-            organization_id=user.organization_id,
-            entity_type="user",
-            entity_id=user.id,
-            action="user.sessions_revoked",
-            changes={"count": revoked, "via": "cli"},
-            user_id=None,
-            ip_address=None,
-        )
-    # get_session auto-commits on clean context exit (db.py convention).
-    print(f"reset MFA for {email}: {counts}; sessions revoked: {revoked}")
-    return 0
+    try:
+        async with get_session() as db:
+            user = await load_user_by_email(db, email)
+            if user is None:
+                print(f"error: no user with email {email!r}", file=sys.stderr)
+                return 1
+            counts = await reset_user_mfa(db, user)
+            revoked = await revoke_user_sessions(db, user.id)
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.mfa_admin_reset",
+                changes={"factors_cleared": counts, "via": "cli"},
+                user_id=None,  # host operator, no web actor
+                ip_address=None,
+            )
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.sessions_revoked",
+                changes={"count": revoked, "via": "cli"},
+                user_id=None,
+                ip_address=None,
+            )
+        # get_session auto-commits on clean context exit (db.py convention).
+        print(f"reset MFA for {email}: {counts}; sessions revoked: {revoked}")
+        return 0
+    finally:
+        # One-shot process: dispose the engine so aiosqlite's pool tears down
+        # cleanly (no lingering-connection warning on exit).
+        await get_engine().dispose()
 
 
 def main(argv: list[str] | None = None) -> int:

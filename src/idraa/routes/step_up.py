@@ -267,7 +267,8 @@ async def step_up_passkey_verify(
         user_id=user.id,
         ip_address=client_ip(request),
     )
-    target = safe_next(payload.get("next") if isinstance(payload.get("next"), str) else None)
+    raw_next = payload.get("next")
+    target = safe_next(raw_next if isinstance(raw_next, str) else None)
     resp = Response(content=json.dumps({"next": target}), media_type="application/json")
     clear_webauthn_stepup_challenge_cookie(resp)
     return resp
