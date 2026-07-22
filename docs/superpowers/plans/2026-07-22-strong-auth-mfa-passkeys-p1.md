@@ -2309,7 +2309,7 @@ def passkey_server_url() -> Iterator[str]:
     env = {
         **os.environ,
         "ENVIRONMENT": "dev",
-        "SESSION_SECRET": "e2e-passkey-secret-0123456789abcdefghij",
+        "SESSION_SECRET": "e2e-not-a-real-secret-set-me-in-your-env",  # placeholder, not a credential
         "DATABASE_URL": f"sqlite+aiosqlite:///./e2e-passkey-{port}.db",
         "WEBAUTHN_RP_ID": "localhost",
         "WEBAUTHN_ORIGINS": url,
