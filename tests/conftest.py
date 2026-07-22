@@ -219,6 +219,7 @@ async def client(db_url: str, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
     accounting for cross-teardown ordering.
     """
     monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("AUTH_MFA_POLICY", "optional")  # interstitial off by default in tests
     # Force settings + engine singletons to re-read the monkeypatched DATABASE_URL.
     config.reset_for_tests()
 

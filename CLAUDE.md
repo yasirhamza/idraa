@@ -11,6 +11,12 @@ leaders. Single Python codebase: FastAPI + Jinja2 + HTMX/Alpine (no JS build
 step), SQLAlchemy 2.x + Alembic, SQLite (Postgres-compatible), reportlab /
 xlsxwriter reports, first-party server-rendered SVG charts.
 
+## Canonical repository (READ FIRST)
+
+**All work is committed and tracked on the PUBLIC repo `github.com/yasirhamza/idraa`, local checkout `~/projects/Idraa`.** Before the first commit of any session, run `git remote get-url origin` and confirm it is idraa. If it is `…/riskflow.git`, STOP — you are in the wrong checkout (`~/projects/RiskFlow` is a trap: its dir name says RiskFlow and its CLAUDE.md says Idraa, but its remote is the private archive). A `check-canonical-remote` pre-commit hook enforces this and blocks commits to the riskflow remote unless `IDRAA_ALLOW_PRIVATE_COMMIT=1` is set.
+
+The private `github.com/yasirhamza/riskflow` archive receives **only** the sanctioned sensitive security issues (`#555`, `#487`, `#246`, `#245`, `#6`), and only under embargo. **Prefer GitHub Security Advisories on idraa** (which spin up a temporary private fork of the public repo) for embargoed fixes rather than maintaining a parallel private repo. **Do NOT continuously mirror riskflow with idraa** — that makes the two checkouts indistinguishable (worsening the wrong-remote trap) and defeats the private archive's purpose; sync one-way on demand only when actively working a sanctioned sensitive issue.
+
 This repo was seeded 2026-07-17 from the private development repo
 (`yasirhamza/riskflow`, the project's full history archive). Docstrings citing
 `docs/superpowers/...` or `docs/plans/...` refer to design documents in that

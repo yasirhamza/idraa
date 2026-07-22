@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Two-step verification{% endblock %}
+{% block container_class %}max-w-md mx-auto{% endblock %}
+{% block content %}
+<div class="pt-8 space-y-4">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-display text-ink-1 pl-16 md:pl-0">Enter your code</h1>
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <p class="text-sm text-ink-2">Enter the 6-digit code from your authenticator, or a recovery code.</p>
+  <form method="post" action="/login/mfa" class="space-y-4">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ next | default('/') }}">
+    <input name="code" inputmode="text" autocomplete="one-time-code" maxlength="32"
+           class="input input-bordered w-full" placeholder="123456" required autofocus>
+    <button class="btn btn-primary btn-sm" type="submit">Verify</button>
+  </form>
+</div>
+{% endblock %}

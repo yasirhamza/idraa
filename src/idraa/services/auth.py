@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from itsdangerous import BadData, URLSafeSerializer
+from itsdangerous import BadData, URLSafeSerializer, URLSafeTimedSerializer
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
 from sqlalchemy import select
@@ -72,6 +72,115 @@ def unsign_session_id(signed: str) -> uuid.UUID | None:
         return uuid.UUID(raw)
     except ValueError:
         return None
+
+
+# --- Short-lived signed MFA tokens. Each type gets its OWN salt (see the
+# salt-convention note above _serializer) so a leaked/expired token of one
+# kind can never validate as another. Timed (not plain) serializers, since
+# these represent an in-progress login/enrollment step that must expire. ---
+def _mfa_pending_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-mfa-pending")
+
+
+def sign_mfa_pending(user_id: uuid.UUID) -> str:
+    return _mfa_pending_serializer().dumps(str(user_id))
+
+
+def load_mfa_pending(token: str, max_age: int = 300) -> uuid.UUID | None:
+    try:
+        raw: str = _mfa_pending_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        return None
+
+
+def _webauthn_challenge_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-challenge")
+
+
+def sign_webauthn_challenge(challenge_b64url: str) -> str:
+    return _webauthn_challenge_serializer().dumps(challenge_b64url)
+
+
+def load_webauthn_challenge(token: str, max_age: int = 300) -> str | None:
+    try:
+        value: str = _webauthn_challenge_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+def _totp_pending_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-totp-pending")
+
+
+def sign_totp_pending(secret: str) -> str:
+    return _totp_pending_serializer().dumps(secret)
+
+
+def load_totp_pending(token: str, max_age: int = 600) -> str | None:
+    try:
+        value: str = _totp_pending_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+# --- Short-lived MFA cookie helpers (DRY: one place derives the secure flag,
+# mirroring set_session_cookie — plan-gate: prevents a missed secure= flag). ---
+def _secure() -> bool:
+    return get_settings().environment == "prod"
+
+
+def set_mfa_pending_cookie(response: Response, user_id: uuid.UUID) -> None:
+    response.set_cookie(
+        "rf_mfa_pending",
+        sign_mfa_pending(user_id),
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_mfa_pending_cookie(response: Response) -> None:
+    response.delete_cookie("rf_mfa_pending", path="/")
+
+
+def set_webauthn_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+    response.set_cookie(
+        "rf_webauthn_challenge",
+        sign_webauthn_challenge(challenge_b64url),
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_webauthn_challenge_cookie(response: Response) -> None:
+    response.delete_cookie("rf_webauthn_challenge", path="/")
+
+
+def set_totp_pending_cookie(response: Response, secret: str) -> None:
+    response.set_cookie(
+        "rf_totp_pending",
+        sign_totp_pending(secret),
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_totp_pending_cookie(response: Response) -> None:
+    response.delete_cookie("rf_totp_pending", path="/")
 
 
 async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -> AuthSession:
@@ -150,6 +259,33 @@ async def load_active_session(db: AsyncSession, session_id: uuid.UUID) -> AuthSe
     if expires_at <= datetime.now(UTC):
         return None
     return sess
+
+
+# --- Minimal login throttle (idraa#81 slice, plan-gate B1). Per-account only
+# (no per-IP dimension yet — full idraa#81 management UI/admin unlock/per-IP
+# throttle stays P3). ---
+def is_locked(user: User) -> bool:
+    lu = user.locked_until
+    if lu is None:
+        return False
+    if lu.tzinfo is None:  # aiosqlite may strip tzinfo on cross-connection read
+        lu = lu.replace(tzinfo=UTC)
+    return lu > datetime.now(UTC)
+
+
+def register_failed_login(user: User) -> None:
+    settings = get_settings()
+    user.failed_login_count += 1
+    if (
+        settings.auth_max_failed_logins
+        and user.failed_login_count >= settings.auth_max_failed_logins
+    ):
+        user.locked_until = datetime.now(UTC) + timedelta(seconds=settings.auth_lockout_seconds)
+
+
+def reset_login_throttle(user: User) -> None:
+    user.failed_login_count = 0
+    user.locked_until = None
 
 
 async def load_user_by_email(db: AsyncSession, email: str) -> User | None:

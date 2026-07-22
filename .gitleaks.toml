@@ -1,0 +1,14 @@
+# gitleaks config — keep ALL default detection rules, add a narrow allowlist
+# for a documentation placeholder that trips the generic-api-key rule.
+# gitleaks scans full history, so a forward doc edit can't retract the finding
+# from the commit that introduced it; this allowlist is the correct fix.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders (made-up example values, not real credentials)."
+regexes = [
+  # Example SESSION_SECRET in the strong-auth P1 plan/design docs (the real e2e
+  # fixture uses the low-entropy \"s\" * 32 convention). Not a credential.
+  '''e2e-passkey-secret-0123456789abcdefghij''',
+]

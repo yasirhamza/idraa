@@ -8,10 +8,16 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+
+# Repo root — subprocess launches (alembic, uvicorn) are pinned to this cwd so
+# they resolve alembic.ini / the idraa package the same way regardless of the
+# directory pytest itself was invoked from.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Shared-runner CI boxes are slow enough that chart hydration / JS-driven UI
 # intermittently exceeds 15s (test_curve_hover_tooltip flaked 3x with zero code
@@ -45,6 +51,7 @@ def live_server_url() -> Iterator[str]:
             "--log-level",
             "warning",
         ],
+        env={**os.environ, "AUTH_MFA_POLICY": "optional"},
     )
 
     # Wait up to 10s for the server to respond
@@ -81,6 +88,88 @@ def live_server_url() -> Iterator[str]:
 def e2e_base_url(live_server_url: str) -> str:
     """Alias for ``live_server_url`` used by plan-named fixtures."""
     return live_server_url
+
+
+# ---------------------------------------------------------------------------
+# Dedicated passkey e2e server — Task 10 (strong-auth P1).
+#
+# WebAuthn enforces origin == WEBAUTHN_RP_ID (or a subdomain of it), so
+# ``live_server_url`` (RP-ID defaults to idraa.fly.dev) can't be reused for
+# passkey ceremonies. This fixture launches a SEPARATE uvicorn bound to
+# localhost, against a fresh per-run SQLite file (migrated via `alembic
+# upgrade head` — the app does not auto-create tables), with
+# WEBAUTHN_RP_ID=localhost / WEBAUTHN_ORIGINS=http://localhost:<port> and
+# AUTH_MFA_POLICY=optional (so the blocking enrollment interstitial doesn't
+# complicate a passkey-only register/login flow). module-scoped: cheap to
+# share across the (currently single) passkey e2e test in this module, and
+# each test still gets an isolated DB because the whole server is per-module.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def passkey_server_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    port = _free_port()
+    url = f"http://localhost:{port}"
+    db_dir = tmp_path_factory.mktemp("passkey-e2e")
+    db_file = db_dir / f"passkey-e2e-{port}.db"
+    env = {
+        **os.environ,
+        "ENVIRONMENT": "dev",
+        # Low-entropy repeated-char placeholder — same convention as
+        # tests/unit/test_webauthn_service.py etc. A "real"-looking random
+        # string here trips the pre-commit gitleaks generic-api-key rule.
+        "SESSION_SECRET": "s" * 32,
+        "DATABASE_URL": f"sqlite+aiosqlite:///{db_file.as_posix()}",
+        "WEBAUTHN_RP_ID": "localhost",
+        "WEBAUTHN_ORIGINS": url,
+        "AUTH_MFA_POLICY": "optional",
+    }
+
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        env=env,
+        cwd=_REPO_ROOT,
+        check=True,
+    )
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "idraa.app:app",
+            "--host",
+            "localhost",
+            "--port",
+            str(port),
+            "--log-level",
+            "warning",
+        ],
+        env=env,
+        cwd=_REPO_ROOT,
+    )
+
+    deadline = time.time() + 15
+    ready = False
+    while time.time() < deadline:
+        try:
+            if httpx.get(f"{url}/healthz", timeout=0.5).status_code == 200:
+                ready = True
+                break
+        except httpx.HTTPError:
+            time.sleep(0.2)
+    if not ready:
+        proc.terminate()
+        raise RuntimeError("passkey e2e server did not come up")
+
+    try:
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 
 # ---------------------------------------------------------------------------
