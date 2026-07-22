@@ -52,8 +52,11 @@ repos:
           - numpy>=2.0
           - pydantic>=2.8
           - pydantic-settings>=2.4
+          - pyotp>=2.10.0
+          - segno>=1.6.6
           - sqlalchemy>=2.0
           - types-passlib
+          - webauthn>=3.0.0
         args: [--config-file=pyproject.toml]
         files: ^src/idraa/
 

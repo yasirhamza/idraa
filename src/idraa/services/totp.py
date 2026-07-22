@@ -9,11 +9,11 @@ import segno
 
 
 def provision_secret() -> str:
-    return str(pyotp.random_base32())
+    return pyotp.random_base32()
 
 
 def totp_uri(secret: str, account_name: str, issuer: str) -> str:
-    return str(pyotp.TOTP(secret).provisioning_uri(name=account_name, issuer_name=issuer))
+    return pyotp.TOTP(secret).provisioning_uri(name=account_name, issuer_name=issuer)
 
 
 def verify_totp(secret: str, code: str, valid_window: int = 1) -> bool:
