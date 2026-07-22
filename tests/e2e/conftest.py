@@ -51,6 +51,7 @@ def live_server_url() -> Iterator[str]:
             "--log-level",
             "warning",
         ],
+        env={**os.environ, "AUTH_MFA_POLICY": "optional"},
     )
 
     # Wait up to 10s for the server to respond

@@ -50,7 +50,7 @@ def migrated_server_url() -> Iterator[str]:
     """
     db_path = tempfile.mktemp(suffix=".db", prefix="rf_e2e_")  # noqa: S306 — test-local ephemeral DB
     db_url = f"sqlite+aiosqlite:///{db_path}"
-    env = {**os.environ, "DATABASE_URL": db_url}
+    env = {**os.environ, "DATABASE_URL": db_url, "AUTH_MFA_POLICY": "optional"}
 
     mig = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
