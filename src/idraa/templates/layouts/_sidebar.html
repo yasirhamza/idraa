@@ -173,8 +173,16 @@
     {% endif %}
   </nav>
 
-  {# Footer: theme toggle + sign-out #}
+  {# Footer: account security + theme toggle + sign-out. The security link is
+     the ONLY nav entry point to MFA/passkey enrollment while
+     AUTH_MFA_POLICY=optional — under `required` the interstitial redirects
+     there, but the soft-launch relies on users finding this link. #}
   <div class="border-t border-border-subtle px-4 py-3 space-y-2" x-show="!collapsed">
+    <a href="/account/security"
+       class="flex items-center py-1.5 text-body text-ink-1 hover:bg-surface-2"
+       {% if request.url.path.startswith('/account/security') %}aria-current="page"{% endif %}>
+      Account security
+    </a>
     {% include "layouts/_theme_toggle.html" %}
     <form action="/logout" method="post">
       {{ csrf_field() }}
