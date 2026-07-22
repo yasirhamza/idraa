@@ -226,6 +226,13 @@ ALLOWED_DIRS = {"macros"}
 #       digits or a recovery code); form_field's text variant exposes none of
 #       these (Strong Auth P1 Task 8).
 #
+#   account/security.html
+#       Passkey-nickname inline <input>: replaces prompt() (which steals
+#       document focus and makes iOS WebKit reject the WebAuthn ceremony
+#       with "The document is not focused"); the field pairs with an
+#       onclick ceremony button, not a submitted form — no form_field
+#       variant for a non-form JS-consumed input.
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
@@ -278,6 +285,7 @@ ALLOWLIST: set[str] = {
     "users/invite.html",
     "account/_totp.html",
     "auth/mfa_challenge.html",
+    "account/security.html",
 }
 
 
@@ -320,7 +328,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 44 = 43 + auth/mfa_challenge.html (Strong Auth P1 Task 8: MFA-challenge
     #      code field needs inputmode/autocomplete/maxlength that form_field's
     #      text variant doesn't expose — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 44, (
+    # 45 = 44 + account/security.html (iOS passkey-register fix: inline
+    #      nickname <input> replacing the focus-stealing prompt() — justified
+    #      inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 45, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )
