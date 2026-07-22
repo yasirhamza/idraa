@@ -286,13 +286,17 @@ class Settings(BaseSettings):
     weight_rank_indistinguishable_threshold: float = Field(default=0.10, ge=0.0, le=0.5)
 
     # --- Strong auth / MFA (2026-07-22 design) ---
-    # Config-driven so the software stays self-hostable — never hardcode an
-    # operator's domains into WebAuthn. Defaults are the OWNER deployment.
-    webauthn_rp_id: str = "idraa.fly.dev"
+    # WebAuthn Relying-Party identity — DEPLOYMENT-SPECIFIC, never hardcode a
+    # real domain here (OSS rule): localhost works for dev/compose evaluation
+    # out of the box; prod boot REFUSES the localhost default (see
+    # _check_webauthn_hardening). Passkeys are permanently bound to the RP-ID
+    # they were enrolled under — production values live in deployment config
+    # (Fly secrets for the reference deployment).
+    webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "Idraa"
-    # Single registrable domain (plan-gate): one RP-ID can't span idraa.fly.dev +
-    # idraa.app. A second passkey domain needs its own RP-ID or Related Origin Requests.
-    webauthn_origins: str = "https://idraa.fly.dev"
+    # Comma-separated allowed origins; must be https:// and host-match the
+    # RP-ID in prod (validator below).
+    webauthn_origins: str = "http://localhost:8000"
     auth_mfa_policy: Literal["required", "optional"] = "required"
     totp_issuer: str = "Idraa"
     mfa_encryption_key: str | None = None
@@ -394,6 +398,15 @@ class Settings(BaseSettings):
                 "WEBAUTHN_RP_ID must be set to the deployment's domain in "
                 f"environment={self.environment!r} (e.g. app.example.com)."
             )
+        if self.webauthn_rp_id == "localhost":
+            raise ValueError(
+                "WEBAUTHN_RP_ID is still the localhost default in "
+                f"environment={self.environment!r}. Set WEBAUTHN_RP_ID to the "
+                "deployment's registrable domain and WEBAUTHN_ORIGINS to its "
+                "https:// origin(s). Passkeys enrolled under a wrong RP-ID are "
+                "permanently bound to it — this must be correct before the "
+                "first user enrolls."
+            )
         origins = self.webauthn_origin_list
         if not origins:
             raise ValueError(
@@ -412,6 +425,57 @@ class Settings(BaseSettings):
                     f"WEBAUTHN_RP_ID {rp!r} nor a subdomain of it — WebAuthn "
                     "requires every origin's host to equal or be under the RP-ID."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _check_mfa_key_hardening(self) -> Settings:
+        """Refuse to boot in prod with no dedicated MFA_ENCRYPTION_KEY.
+
+        ``services/mfa_crypto.py:32`` falls back to deriving the TOTP-secret
+        encryption key from ``SESSION_SECRET`` when ``MFA_ENCRYPTION_KEY`` is
+        unset — a key-separation violation, and a rotation trap: rotating
+        ``SESSION_SECRET`` (a routine cookie-signing-key rotation) then
+        silently re-derives a different Fernet key and permanently bricks
+        every already-stored TOTP secret, locking those users out of that
+        factor with no recovery short of disabling TOTP for them.
+
+        dev/test keep the fallback (documented above and at
+        ``services/mfa_crypto.py:32``) — convenient for local/CI boot where
+        no operator has provisioned a dedicated key. prod must set a
+        distinct, stable ``MFA_ENCRYPTION_KEY`` before first boot, at least
+        ``_PROD_MIN_SECRET_LEN`` characters — the same floor as
+        ``SESSION_SECRET`` in ``_check_secret_hardening``, since both are
+        Fernet/HKDF key material and a short value is low-entropy key
+        material either way.
+        """
+        if self.environment != "prod":
+            return self
+        if not self.mfa_encryption_key:
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be set in environment='prod'. Without "
+                "it, TOTP secrets are encrypted with a key derived from "
+                "SESSION_SECRET (a key-separation violation) — and rotating "
+                "SESSION_SECRET would then permanently brick every stored TOTP "
+                "secret. Generate one with "
+                "`python -c 'import secrets; print(secrets.token_urlsafe(48))'` "
+                "and set it via the MFA_ENCRYPTION_KEY environment variable "
+                "(or your .env file)."
+            )
+        if len(self.mfa_encryption_key) < _PROD_MIN_SECRET_LEN:
+            raise ValueError(
+                f"MFA_ENCRYPTION_KEY must be at least {_PROD_MIN_SECRET_LEN} "
+                f"characters in environment={self.environment!r} "
+                f"(got {len(self.mfa_encryption_key)}). Regenerate the "
+                "MFA_ENCRYPTION_KEY environment variable."
+            )
+        if self.mfa_encryption_key == self.session_secret:
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be DISTINCT from SESSION_SECRET in "
+                f"environment={self.environment!r}. Reusing the session secret "
+                "re-creates the rotation trap this guard exists to prevent: "
+                "rotating SESSION_SECRET would then permanently brick every "
+                "stored TOTP secret. Generate a separate value."
+            )
         return self
 
 

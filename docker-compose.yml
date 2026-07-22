@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: idraa
       POSTGRES_DB: idraa
     ports:
-      - "5432:5432"
+      # Loopback-only (I4): Postgres has no business being reachable off-host;
+      # the app container reaches it via the compose network regardless.
+      - "127.0.0.1:5432:5432"
     volumes:
       - riskflow_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +23,13 @@ services:
       context: .
       dockerfile: Dockerfile
     image: idraa:dev
+    env_file:
+      # Injects every UNCOMMENTED line in .env.example (copied to .env) into
+      # the app container. required: false means compose does not error if
+      # .env is absent (the ${VAR:?...} guards below still enforce the
+      # secrets that matter).
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://idraa:idraa@db:5432/idraa
       # SESSION_SECRET MUST be set by the operator (generate via:
@@ -32,10 +41,18 @@ services:
       # ENVIRONMENT is explicit so the config guard's env-dependent
       # hardening (32-char minimum secret in prod) is predictable.
       ENVIRONMENT: ${ENVIRONMENT:-dev}
+      # Reverse-proxy header trust for uvicorn (bare env var — uvicorn's Config
+      # reads FORWARDED_ALLOW_IPS directly when no CLI flag is given). Default
+      # mirrors uvicorn's own loopback-only default; operators behind a TLS
+      # proxy opt in via .env (see .env.example).
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     depends_on:
       db:
         condition: service_healthy
     ports:
+      # Exposed on all interfaces for LAN evaluation. Anything internet-facing
+      # needs a TLS proxy in front of this port PLUS a firewall — see the
+      # FORWARDED_ALLOW_IPS guidance in .env.example.
       - "8000:8000"
 
 volumes:

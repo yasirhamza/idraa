@@ -11,4 +11,6 @@ echo "[entrypoint] alembic upgrade head ..."
 alembic upgrade head
 
 echo "[entrypoint] starting uvicorn on :8000 ..."
+# NB: FORWARDED_ALLOW_IPS is honored via uvicorn's env fallback (Config reads
+# the bare variable when --forwarded-allow-ips is not passed).
 exec uvicorn idraa.app:app --host 0.0.0.0 --port 8000

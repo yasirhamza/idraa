@@ -32,3 +32,9 @@ docs
 # (sha256-pinned, Linux) binary into a BuildKit cache mount; never ship or
 # upload the host's cached binaries in the build context.
 .tailwind-bin
+
+# Security-audit wave (2026-07-22, B1/NTH): never bake operator secrets
+# (SESSION_SECRET, MFA_ENCRYPTION_KEY, ...) into the image build context —
+# secrets reach the container exclusively via docker-compose.yml's env_file:
+# entry at run time, not the build.
+.env
