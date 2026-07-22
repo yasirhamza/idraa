@@ -18,7 +18,7 @@
 - **Detached-instance rebind:** `request.state.user` / `request.state.session` were loaded by `SessionMiddleware`'s own (now-closed) session. Any handler that MUTATES them must rebind first: `user = await db.get(User, user.id) or user` (P1 convention, see `routes/mfa.py::totp_enroll_post`).
 - **aiosqlite tz-strip:** `DateTime(timezone=True)` values read cross-connection may come back naive; re-attach UTC before comparing (`services/auth.py::is_locked` pattern).
 - **Audit everything:** every auth decision writes an `AuditLog` row via `services/audit.py::AuditWriter` (`await AuditWriter(db).log(organization_id=..., entity_type=..., entity_id=..., action=..., changes=..., user_id=..., ip_address=client_ip(request))`).
-- **Signed-payload salt convention** (`services/auth.py`): every new signed-token type gets its own itsdangerous salt. (P2 adds NO new token types — the WebAuthn step-up ceremony reuses the existing `rf-webauthn-challenge` cookie helpers.)
+- **Signed-payload salt convention** (`services/auth.py`): every new signed-token type gets its own itsdangerous salt. P2 adds ONE new type: the step-up WebAuthn challenge (`rf-webauthn-stepup` salt, `rf_webauthn_stepup` cookie, Task 2) — a challenge minted for the ANONYMOUS login ceremony must never validate for an authenticated step-up re-verify, per the convention's purpose-separation rule (plan-gate Sec-N1).
 - **Tests default `AUTH_MFA_POLICY=optional`** (the root `client` fixture sets it); tests that exercise the interstitial set `required` + `config.reset_for_tests()` themselves.
 - **Python 3.11+, ruff + ruff-format + mypy clean, fast gate green** (`uv run python scripts/run_local_gate.py` locally ≈ CI's `gate` job). E2E (`-m e2e`) runs OUTSIDE the fast gate — run explicitly when `webauthn.js`/templates change.
 - **Alembic:** current head is `2fa98364de58`. This plan adds exactly ONE migration (Task 1). `uv run alembic heads` must show a single head afterward.
@@ -62,8 +62,9 @@
 2. `max_age == 0` disables step-up entirely (operator escape hatch, same convention as lockout's `auth_max_failed_logins=0`).
 3. Users WITH a strong factor re-verify via TOTP/recovery (or passkey, Task 2) — NEVER via password (a phished password must not satisfy step-up). Users WITHOUT any strong factor (policy=optional migration window, or mid-enrollment) re-verify via password — this also prevents an enrollment deadlock: enrollment endpoints are themselves step-up-gated (Task 3), and a factor-less user must be able to pass the challenge to enroll their first factor.
 4. Interrupted POST actions are NOT replayed. The challenge's `next` is the original URL for GETs and the sanitized Referer for POSTs; after verify the user lands back and re-triggers the action, which now passes (window 600 s).
-5. Failed step-up attempts audit `user.step_up_failed` AND count toward the per-account lockout (`register_failed_login`) — same B1 discipline as `/login/mfa`. Success resets the throttle. A locked user gets the same generic "Invalid code" 400 (no lockout oracle).
+5. Failed code/password step-up attempts audit `user.step_up_failed` AND count toward the per-account lockout (`register_failed_login`) — same B1 discipline as `/login/mfa`. Success resets the throttle. An ALREADY-locked user short-circuits to the same generic "Invalid code or password" 400 with NO audit row and NO counter bump (mirrors `/login/mfa`'s locked path; prevents unbounded append-only audit growth from a hostile session-holder — Sec-N3). No lockout oracle either way.
 6. `/auth/step-up` is added to the enrollment-guard allowlist — without it, a `required`-policy un-enrolled user with a stale session loops forever between the interstitial and the challenge.
+7. TOTP replay-within-window (pyotp `valid_window=1`, no last-used-step column) is a P1-shipped property that step-up inherits via the shared verifier — acknowledged, NOT fixed here; it belongs to the same P3 "strict single-use" backlog item as the design's `mfa_pending` replay acceptance (Sec-N4).
 
 - [ ] **Step 1: Write the failing unit tests**
 
@@ -124,9 +125,9 @@ def test_zero_disables_step_up(monkeypatch: pytest.MonkeyPatch) -> None:
         config.reset_for_tests()
 
 
-def test_create_session_stamps_reauthenticated_at() -> None:
-    # create_session is async; exercised via the DB-backed integration tests.
-    # Here: the column exists and defaults are wired on the model.
+def test_model_has_reauthenticated_at_column() -> None:
+    # Pins column existence only (AttributeError if dropped). The actual
+    # create_session stamping is covered by the DB-backed integration tests.
     assert AuthSession.reauthenticated_at is not None
 ```
 
@@ -312,7 +313,7 @@ async def verify_totp_or_recovery(
     method = await verify_totp_or_recovery(db, user, code, ip_address=client_ip(request))
 ```
 
-and add the import `from idraa.services.second_factor import verify_totp_or_recovery`; drop the now-unused `re` import, the `decrypt_totp_secret` / `verify_recovery_code` imports, and the `UserTotp` / `RecoveryCode` model imports IF nothing else in the module uses them (check before deleting — `user_has_strong_factor` lives in services, not here). The existing `tests/integration/test_login_mfa_flow.py` (241 lines) is the regression net for this refactor — zero behavior change expected.
+and add the import `from idraa.services.second_factor import verify_totp_or_recovery`; drop the now-unused imports: `re`, `totp_service` (its only use is the extracted line — plan-gate CQ-I3), `decrypt_totp_secret` / `verify_recovery_code`, and the `UserTotp` / `RecoveryCode` model imports IF nothing else in the module uses them (check before deleting — `select` and `now_utc` STAY, still used by the passkey login path). The existing `tests/integration/test_login_mfa_flow.py` (241 lines) is the regression net for this refactor — zero behavior change expected.
 
 - [ ] **Step 4: Run the unit tests + the login regression suite**
 
@@ -333,7 +334,6 @@ git commit -m "feat(auth): reauthenticated_at + step-up freshness + shared secon
 ```python
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
 
 import pyotp
@@ -574,7 +574,7 @@ def require_recent_auth(
         raise StepUpRequired(next_url=_step_up_next(request))
 ```
 
-`src/idraa/routes/auth.py` — replace the module-level `_safe_next` definition with `from idraa.routes.deps import safe_next` and rename the call sites (`_safe_next(` → `safe_next(`, 4 sites). Keep behavior identical.
+`src/idraa/routes/auth.py` — delete the module-level `_safe_next` definition and import the relocated helper under the SAME private name: `from idraa.routes.deps import safe_next as _safe_next`. Call sites stay UNTOUCHED (there are 3: ~lines 116, 134, 235). Do NOT rename them: two call sites assign a LOCAL variable already named `safe_next` (`safe_next = _safe_next(...)`), so renaming the callable to bare `safe_next` would make Python compile the name as a function-local self-reference and raise `UnboundLocalError` on every `POST /login` / `POST /login/mfa` (plan-gate Arch-I1 / CQ-B2). Keep behavior identical.
 
 Create `src/idraa/routes/step_up.py`:
 
@@ -674,9 +674,15 @@ async def step_up_verify(
     if live_sess is None:
         return RedirectResponse("/login", status_code=303)
 
-    async def _fail() -> Response:
-        # Same generic body for wrong-code, wrong-password, and locked —
+    async def _render_error() -> Response:
+        # ONE generic body for wrong-code, wrong-password, AND locked —
         # no lockout oracle (mirrors /login's anti-enumeration posture).
+        ctx = await _challenge_context(db, user, target, error="Invalid code or password")
+        return templates.TemplateResponse(
+            request, "auth/step_up.html", ctx, status_code=400
+        )
+
+    async def _fail() -> Response:
         await AuditWriter(db).log(
             organization_id=user.organization_id,
             entity_type="user",
@@ -686,25 +692,26 @@ async def step_up_verify(
             user_id=user.id,
             ip_address=client_ip(request),
         )
-        if not is_locked(user):
-            register_failed_login(user)
-            if is_locked(user):  # this miss just tripped the lock -> audit
-                await AuditWriter(db).log(
-                    organization_id=user.organization_id,
-                    entity_type="user",
-                    entity_id=user.id,
-                    action="user.login_locked_out",
-                    changes={},
-                    user_id=user.id,
-                    ip_address=client_ip(request),
-                )
-        ctx = await _challenge_context(db, user, target, error="Invalid code or password")
-        return templates.TemplateResponse(
-            request, "auth/step_up.html", ctx, status_code=400
-        )
+        register_failed_login(user)
+        if is_locked(user):  # this miss just tripped the lock -> audit
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.login_locked_out",
+                changes={},
+                user_id=user.id,
+                ip_address=client_ip(request),
+            )
+        return await _render_error()
 
     if is_locked(user):
-        return await _fail()
+        # Already locked: generic bounce with NO audit row and NO counter
+        # bump — mirrors /login/mfa's locked short-circuit. Auditing here
+        # would let a hostile session-holder grow the append-only audit_log
+        # without bound (plan-gate Sec-N3; the 2026-06-29 outage was
+        # SQLite-volume exhaustion).
+        return await _render_error()
 
     method: str | None = None
     if await user_has_strong_factor(db, user.id):
@@ -838,6 +845,7 @@ git commit -m "feat(auth): step-up challenge + require_recent_auth dependency (P
 
 **Files:**
 - Modify: `src/idraa/services/webauthn_service.py` (`authentication_options` gains `allow_credential_ids`)
+- Modify: `src/idraa/services/auth.py` (step-up challenge cookie helpers, DISTINCT salt — Sec-N1)
 - Modify: `src/idraa/routes/step_up.py` (ceremony endpoints)
 - Modify: `src/idraa/static/js/webauthn.js` (shared assertion helper + `stepUp` + step-up-aware `post()`)
 - Modify: `src/idraa/templates/auth/step_up.html` (passkey button)
@@ -846,40 +854,36 @@ git commit -m "feat(auth): step-up challenge + require_recent_auth dependency (P
 - Test: `tests/e2e/test_passkey_e2e.py` (extend — virtual authenticator step-up)
 
 **Interfaces:**
-- Consumes: Task 1's `is_step_up_fresh` semantics, `_challenge_context`, `set_webauthn_challenge_cookie` / `load_webauthn_challenge` / `clear_webauthn_challenge_cookie` (`services/auth.py`), `webauthn_service.verify_authentication` / `sign_count_ok` / `parse_raw_id`.
+- Consumes: Task 1's `is_step_up_fresh` semantics, `_challenge_context`, `webauthn_service.verify_authentication` / `sign_count_ok` / `parse_raw_id`.
 - Produces:
   - `webauthn_service.authentication_options(allow_credential_ids: list[bytes] | None = None) -> tuple[str, str]` (default `None` ⇒ empty list ⇒ usernameless; EXISTING callers unchanged)
+  - `services/auth.py`: `sign_stepup_challenge(challenge_b64url: str) -> str`, `load_stepup_challenge(token: str, max_age: int = 300) -> str | None`, `set_stepup_challenge_cookie(response, challenge_b64url) -> None`, `clear_stepup_challenge_cookie(response) -> None` — salt `rf-webauthn-stepup`, cookie `rf_webauthn_stepup` (Sec-N1: the login/registration challenge and the step-up challenge are different PURPOSES and must not be interchangeable)
   - Routes: `POST /auth/step-up/passkey/options`, `POST /auth/step-up/passkey/verify` (JSON: `{"credential": ..., "next": ...}` → `{"next": "<safe>"}`)
   - `window.idraaWebAuthn.stepUp(next)` in `webauthn.js`
   - `post()` in `webauthn.js` sends `Accept: application/json` and follows a 401 `{"error":"step_up_required","redirect":...}` by navigating — this is what makes Task 3's gating of the ENROLLMENT fetch endpoints degrade gracefully.
 
-**Security invariant:** the step-up verify must ONLY accept a credential whose `user_id` equals the CURRENT session's user — another user's valid passkey must be rejected before signature verification is even attempted.
+**Security invariants:**
+1. The step-up verify must ONLY accept a credential whose `user_id` equals the CURRENT session's user — another user's valid passkey must be rejected before signature verification is even attempted.
+2. Sec-I1: the forensically-meaningful failure branches (`unknown credential` — hijacker probing with a foreign passkey; `verification failed`; `counter` — cloned-authenticator signal) each write a `user.step_up_failed` audit row with `{"method": "passkey", "reason": <branch>}`. Pre-crypto shape/staleness branches (`challenge expired`, `malformed credential`, `no session`) are NOT audited — indistinguishable from benign client bugs. Passkey failures deliberately do NOT call `register_failed_login`: there is no guessable secret space to throttle (matches P1's lockout-exempt passkey login).
 
 - [ ] **Step 1: Write the failing unit test for the options extension**
 
-Append to `tests/unit/test_webauthn_service.py`:
+Append to `tests/unit/test_webauthn_service.py` — mirror the file's existing `_reset(monkeypatch)` env-pinning helper so the settings singleton is deterministic (plan-gate CQ-N3), and do NOT add a default-usernameless test (the existing `test_authentication_options_usernameless` already pins that; the extension leaves the default byte-identical):
 
 ```python
-def test_authentication_options_scopes_allow_credentials() -> None:
+def test_authentication_options_scopes_allow_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import json
 
     from idraa.services import webauthn_service
 
+    _reset(monkeypatch)  # the file's existing settings-pinning helper
     options_json, _challenge = webauthn_service.authentication_options(
         allow_credential_ids=[b"cred-one", b"cred-two"]
     )
     parsed = json.loads(options_json)
     assert len(parsed["allowCredentials"]) == 2
-
-
-def test_authentication_options_default_stays_usernameless() -> None:
-    import json
-
-    from idraa.services import webauthn_service
-
-    options_json, _challenge = webauthn_service.authentication_options()
-    parsed = json.loads(options_json)
-    assert parsed.get("allowCredentials", []) == []
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1070,7 +1074,47 @@ Expected: FAIL — 404 (endpoints missing).
 
 - [ ] **Step 7: Implement the ceremony endpoints**
 
-Append to `src/idraa/routes/step_up.py` (add imports: `Any` from typing, `Body` from fastapi, `json`, `webauthn_service` from idraa.services, `set_webauthn_challenge_cookie` / `load_webauthn_challenge` / `clear_webauthn_challenge_cookie` from idraa.services.auth):
+First append the step-up challenge cookie helpers to `src/idraa/services/auth.py`, directly after `clear_totp_pending_cookie` (Sec-N1 — distinct salt per the module's own convention; payload identical to the login challenge, purpose is not):
+
+```python
+# --- Step-up WebAuthn challenge: DISTINCT salt + cookie from the login/
+# registration ceremony (P2 plan-gate Sec-N1). Same payload shape, different
+# PURPOSE: a challenge minted for the anonymous login ceremony must never
+# validate for an authenticated step-up re-verify, per the salt convention
+# above _serializer. ---
+def _webauthn_stepup_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-stepup")
+
+
+def sign_stepup_challenge(challenge_b64url: str) -> str:
+    return _webauthn_stepup_serializer().dumps(challenge_b64url)
+
+
+def load_stepup_challenge(token: str, max_age: int = 300) -> str | None:
+    try:
+        value: str = _webauthn_stepup_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+def set_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+    response.set_cookie(
+        "rf_webauthn_stepup",
+        sign_stepup_challenge(challenge_b64url),
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_stepup_challenge_cookie(response: Response) -> None:
+    response.delete_cookie("rf_webauthn_stepup", path="/")
+```
+
+Then append to `src/idraa/routes/step_up.py` (add imports: `Any` from typing, `Body` from fastapi, `json`, `webauthn_service` from idraa.services, `set_stepup_challenge_cookie` / `load_stepup_challenge` / `clear_stepup_challenge_cookie` from idraa.services.auth):
 
 ```python
 def _json_err(msg: str) -> Response:
@@ -1100,7 +1144,7 @@ async def step_up_passkey_options(
         allow_credential_ids=[c.credential_id for c in creds]
     )
     resp = Response(content=options_json, media_type="application/json")
-    set_webauthn_challenge_cookie(resp, challenge)
+    set_stepup_challenge_cookie(resp, challenge)
     return resp
 
 
@@ -1112,15 +1156,31 @@ async def step_up_passkey_verify(
     user: User = Depends(require_user),
     sess: AuthSession | None = Depends(current_session),
 ) -> Response:
-    signed = request.cookies.get("rf_webauthn_challenge")
-    challenge = load_webauthn_challenge(signed) if signed else None
+    async def _audit_failure(reason: str) -> None:
+        # Sec-I1: unknown-credential (hijacker probing with a foreign
+        # passkey) and counter (cloned-authenticator signal) are this
+        # feature's highest-value forensic events. No register_failed_login
+        # for passkey misses — no guessable secret space to throttle
+        # (deliberate; matches P1's lockout-exempt passkey login).
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="user.step_up_failed",
+            changes={"method": "passkey", "reason": reason},
+            user_id=user.id,
+            ip_address=client_ip(request),
+        )
+
+    signed = request.cookies.get("rf_webauthn_stepup")
+    challenge = load_stepup_challenge(signed) if signed else None
     if challenge is None:
         return _json_err("challenge expired")
     credential = payload.get("credential")
     if not isinstance(credential, dict) or not credential.get("rawId"):
         return _json_err("malformed credential")
     raw_id = webauthn_service.parse_raw_id(credential)
-    # OWNERSHIP CHECK (security invariant): only the CURRENT user's
+    # OWNERSHIP CHECK (security invariant #1): only the CURRENT user's
     # credential may satisfy step-up — filter by user_id in the query so
     # another user's passkey is "unknown" before any crypto runs.
     cred = (
@@ -1136,14 +1196,17 @@ async def step_up_passkey_verify(
         .first()
     )
     if cred is None:
+        await _audit_failure("unknown credential")
         return _json_err("unknown credential")
     try:
         new_count = webauthn_service.verify_authentication(
             credential, challenge, cred.public_key, cred.sign_count
         )
     except Exception as exc:  # any bad/tampered assertion -> 400, not 500
+        await _audit_failure(f"verification failed: {type(exc).__name__}")
         return _json_err(f"verification failed: {type(exc).__name__}")
     if not webauthn_service.sign_count_ok(cred.sign_count, new_count):
+        await _audit_failure("counter")
         return _json_err("counter")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
@@ -1167,7 +1230,7 @@ async def step_up_passkey_verify(
     resp = Response(
         content=json.dumps({"next": target}), media_type="application/json"
     )
-    clear_webauthn_challenge_cookie(resp)
+    clear_stepup_challenge_cookie(resp)
     return resp
 ```
 
@@ -1233,8 +1296,11 @@ async def step_up_passkey_verify(
 
 ```html
   {% if has_passkeys %}
+  {# SINGLE-quoted onclick: |tojson emits raw double-quotes, which would
+     terminate a double-quoted attribute (repo precedent: the Sec-B1 note in
+     macros/action_menu.html and analyses/new.html — plan-gate CQ-B1). #}
   <button class="btn btn-outline btn-sm w-full" type="button"
-          onclick="idraaWebAuthn.stepUp({{ next | default('/') | tojson }}).catch(function(e){alert(e.message)})"
+          onclick='idraaWebAuthn.stepUp({{ next | default("/") | tojson }}).catch(function(e){alert(e.message)})'
           x-show="!!window.PublicKeyCredential">Use your passkey</button>
   <div class="divider text-xs text-ink-3">or</div>
   {% endif %}
@@ -1247,50 +1313,19 @@ Expected: ALL PASS.
 
 - [ ] **Step 10: Extend the e2e (virtual authenticator)**
 
-First, in `tests/e2e/conftest.py`, refactor `passkey_server_url` so the DB path is reachable: extract the body into a module-scoped fixture `passkey_server` yielding `tuple[str, Path]` (`(url, db_file)`), and keep `passkey_server_url` as a thin alias returning `passkey_server[0]` (the P1 test keeps working untouched). No env changes — same `WEBAUTHN_RP_ID=localhost` / `AUTH_MFA_POLICY=optional` block.
+First, in `tests/e2e/conftest.py`, refactor `passkey_server_url` so the DB path is reachable: extract the body into a module-scoped fixture `passkey_server` yielding `tuple[str, Path]` (`(url, db_file)`), and keep `passkey_server_url` as a thin alias returning `passkey_server[0]`. No env changes — same `WEBAUTHN_RP_ID=localhost` / `AUTH_MFA_POLICY=optional` block.
 
-Then append to `tests/e2e/test_passkey_e2e.py` (same CDP virtual-authenticator setup as the existing test — no biometric/TCC prompt EVER, hard requirement on the remote Mac):
+Then EXTEND the EXISTING `test_passkey_register_then_usernameless_login` in `tests/e2e/test_passkey_e2e.py` — do NOT write a separate test. Plan-gate CQ-B3: the CDP virtual authenticator (and its resident private key) dies with the browser at the end of the existing test, so a new test's fresh authenticator has NO discoverable credential and "Sign in with a passkey" would `NotAllowedError`. The step-up leg must run inside the SAME browser/authenticator session, right after the usernameless sign-in assertions (this also removes any file-order coupling — Arch-N3).
+
+1. Change the test's fixture parameter from `passkey_server_url: str` to `passkey_server: "tuple[str, Path]"` and unpack at the top: `base, db_file = passkey_server`. Add `import sqlite3` and `from pathlib import Path` to the file's imports.
+
+2. Append INSIDE the `async with` block, after the final `assert "e2e@example.test" in content` and before `await browser.close()`:
 
 ```python
-@pytest.mark.e2e
-async def test_passkey_step_up_challenge(passkey_server: tuple[str, "Path"]) -> None:
-    """Stale session -> gated GET redirects to /auth/step-up -> passkey re-verify.
-
-    Runs on the SAME per-module server as the register/login test above, so
-    execute AFTER it (pytest runs file order): the passkey + enrolled user
-    already exist. Staleness is induced by backdating auth_sessions directly
-    in the server's SQLite file — sqlite3 stdlib, one short write txn.
-    """
-    import sqlite3
-
-    base, db_file = passkey_server
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(base_url=base)
-        page = await context.new_page()
-        cdp = await context.new_cdp_session(page)
-        await cdp.send("WebAuthn.enable")
-        await cdp.send(
-            "WebAuthn.addVirtualAuthenticator",
-            {
-                "options": {
-                    "protocol": "ctap2",
-                    "transport": "internal",
-                    "hasResidentKey": True,
-                    "hasUserVerification": True,
-                    "isUserVerified": True,
-                    "automaticPresenceSimulation": True,
-                }
-            },
-        )
-
-        # Sign in with the passkey registered by the previous test.
-        await page.goto("/login")
-        await page.click("text=Sign in with a passkey")
-        await page.wait_for_url(re.compile(rf"^{re.escape(base)}/?$"), timeout=10_000)
-
-        # Backdate EVERY session (only ours exists) past the 600s window.
-        # datetime('now') is UTC and naive — is_step_up_fresh reattaches UTC.
+        # --- Step-up ("sudo mode") re-verify with the SAME passkey. ---
+        # Backdate every session (only ours exists) past the 600 s window by
+        # writing the server's SQLite directly. datetime('now') is UTC and
+        # naive — is_step_up_fresh reattaches UTC on read.
         conn = sqlite3.connect(db_file)
         try:
             conn.execute(
@@ -1300,19 +1335,15 @@ async def test_passkey_step_up_challenge(passkey_server: tuple[str, "Path"]) -> 
         finally:
             conn.close()
 
-        # Drive the challenge page directly (Task 3's catalog test covers the
-        # redirect-into-it path; keeping Task 2's e2e self-contained).
+        # Drive the challenge page directly (the integration catalog test
+        # covers the redirect-into-it path; this pins the browser ceremony).
         await page.goto("/auth/step-up?next=/account/security")
         await page.click("text=Use your passkey")
         await page.wait_for_url(re.compile(r".*/account/security$"), timeout=10_000)
-
-        await browser.close()
 ```
 
-Add `from pathlib import Path` to the file's imports if not already present (the annotation above is string-quoted so a bare copy also works).
-
 Run: `uv run pytest tests/e2e/test_passkey_e2e.py -m e2e -v`
-Expected: BOTH tests PASS (run explicitly — the fast gate skips e2e).
+Expected: PASS (run explicitly — the fast gate skips e2e).
 
 - [ ] **Step 11: Commit**
 
@@ -1337,7 +1368,7 @@ git commit -m "feat(auth): passkey step-up ceremony + webauthn.js stepUp (P2 Tas
 - `src/idraa/routes/register_import.py` — `delete_profile` (:789)
 - `src/idraa/routes/control_library.py` — `control_library_export_csv` (:141)
 - `src/idraa/routes/reports.py` — `reports_export_csv` (:110), `download_run_pdf` (:150), `download_verification_workbook` (:274)
-- `src/idraa/routes/overlays.py` — `overlays_export_csv` (:215)
+- `src/idraa/routes/overlays.py` — `overlays_export_csv` (:215), `overlay_deactivate` (:592 — plan-gate Sec-N2: overlays have no delete route; deactivate is their lifecycle-terminal destructive action and the un-gated sibling of the gated override delete)
 - Test: `tests/integration/test_step_up_catalog.py`
 
 **Interfaces:**
@@ -1351,7 +1382,7 @@ git commit -m "feat(auth): passkey step-up ceremony + webauthn.js stepUp (P2 Tas
 4. Existing tests stay green because `create_session` stamps `reauthenticated_at = now` (Task 1) — every fixture-made session is fresh inside the 600 s window.
 5. Decorator dependencies run before handler-parameter dependencies, so a stale session is challenged before `require_role` runs. A wrong-role user therefore steps up first and only then sees 403 — no information leak beyond endpoint existence (which 403 leaks anyway).
 6. Single exports (`/library/entries/{id}/export`, `/scenarios/{id}/export`, `/runs/{id}/control-matrix.csv`) and the static `/overlays/template.csv` are NOT bulk egress and stay ungated (matches the design's "bulk exports" scope and `log_bulk_export`'s own boundary).
-7. The design catalog's "change password" entry is satisfied VACUOUSLY: no change-password route exists in the app (P1 did not build one; grep `change.password|password_changed` over `src/idraa/` is empty). When one is built, it MUST take `require_recent_auth` — record as a design note, not a P2 task.
+7. The design catalog's "change password" AND "disable TOTP" entries are satisfied VACUOUSLY: neither route exists in the app (P1 built TOTP enroll but no disable; there is no change-password route — grep-verified). When either is built, it MUST take `require_recent_auth` — record as a design note, not a P2 task (plan-gate Spec-I1).
 
 - [ ] **Step 1: Write the failing table-driven integration test**
 
@@ -1403,11 +1434,15 @@ POST_TARGETS = [
     f"/controls/{_UUID}/delete",
     f"/qualitative-bands/{_UUID}/delete",
     f"/register-import/profiles/{_UUID}/delete",
+    f"/overlays/{_UUID}/deactivate",
     "/account/security/totp/enroll",
     "/account/security/recovery-codes/generate",
     "/account/security/passkey/options",
+    "/account/security/passkey/verify",
     f"/account/security/passkey/{_UUID}/delete",
 ]
+# Task 4 appends f"/users/{_UUID}/reset-mfa" here when the route lands
+# (plan-gate Arch-I2) — the table is the default-deny regression net.
 
 
 async def _make_stale(db_session: AsyncSession, client: AsyncClient) -> None:
@@ -1887,11 +1922,33 @@ async def reset_mfa_post(
 
 `src/idraa/routes/users.py::set_active_post` — after `user.is_active = new_active` (before the existing audit call), add the same block verbatim.
 
-`src/idraa/templates/users/edit.html` — add near the existing form actions (match the surrounding card/button classes; `onsubmit`-confirm mirrors `library/overrides/form.html:158`):
+`tests/integration/test_step_up_catalog.py` — append the new route to the default-deny table (plan-gate Arch-I2; the dependency fires before the handler's 404, so the random UUID works like every other row):
+
+```python
+    f"/users/{_UUID}/reset-mfa",
+```
+
+`src/idraa/routes/users.py::edit_get` — consume the redirect's `?mfa_reset=1` so the admin gets feedback after the destructive action (plan-gate CQ-I4). Add to the template context dict:
+
+```python
+            "mfa_reset_done": request.query_params.get("mfa_reset") == "1",
+```
+
+`src/idraa/templates/users/edit.html` — two additions. Placement (plan-gate CQ-N4): the reset form goes AFTER the main edit form's closing `</form>` tag — do NOT nest it inside (browsers reparent nested forms and both break). The confirm banner goes at the top of the content block:
 
 ```html
+{% if mfa_reset_done %}
+<div class="alert alert-success">MFA reset — the user must re-enroll at their next sign-in.</div>
+{% endif %}
+```
+
+```html
+{# SINGLE-quoted onsubmit wrapping a double-quoted JS string with |tojson
+   interpolation — autoescape turns a raw ' in an email into &#39;, which the
+   HTML parser hands back to JS as ' and breaks a single-quoted literal
+   (plan-gate CQ-I5). Mirrors overlays/view.html:97. #}
 <form method="post" action="/users/{{ user.id }}/reset-mfa"
-      onsubmit="return confirm('Reset MFA for {{ user.email }}? All passkeys, authenticator apps and recovery codes are removed and their sessions are signed out.');">
+      onsubmit='return confirm("Reset MFA for " + {{ user.email | tojson }} + "? All passkeys, authenticator apps and recovery codes are removed and their sessions are signed out.");'>
   {{ csrf_field() }}
   <input type="hidden" name="confirm" value="1">
   <button class="btn btn-outline btn-sm" type="submit">Reset MFA</button>
@@ -1906,10 +1963,13 @@ Create `src/idraa/__main__.py`:
 """Operational CLI: ``python -m idraa <command>``.
 
 Deliberately DISTINCT from the dev task runner (``python -m idraa.tasks`` —
-lint/test/ci). Commands here are app-level operations run on the host
-against the live DB (``DATABASE_URL``), for corners the web UI cannot
-reach. First command: the sole-admin-locked-out backstop from the
-strong-auth design (§Recovery):
+lint/test/ci). NOTE the adjacency trap: the installed console script
+``idraa`` maps to the TASK runner (pyproject ``[project.scripts]``), so
+``idraa auth reset-mfa`` fails loudly with "invalid choice" — operational
+commands must be invoked as ``python -m idraa ...`` (Arch-N2). Commands here
+are app-level operations run on the host against the live DB
+(``DATABASE_URL``), for corners the web UI cannot reach. First command: the
+sole-admin-locked-out backstop from the strong-auth design (§Recovery):
 
     python -m idraa auth reset-mfa <email>
 """
@@ -1969,10 +2029,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     reset.add_argument("email")
     args = parser.parse_args(argv)
-    if args.command == "auth" and args.auth_command == "reset-mfa":
-        return asyncio.run(_reset_mfa(args.email))
-    parser.error("unknown command")  # pragma: no cover — argparse exits first
-    return 2
+    # Both subparser levels are required=True, so parse_args only returns for
+    # the sole leaf command (auth reset-mfa) — no fallthrough branch exists.
+    # (A parser.error() tail here would be mypy-unreachable under
+    # warn_unreachable=true — plan-gate CQ-I1/Arch-N1.)
+    return asyncio.run(_reset_mfa(args.email))
 
 
 if __name__ == "__main__":
@@ -2004,7 +2065,7 @@ git commit -m "feat(auth): admin factor-reset + revoke-on-deactivation + CLI bac
 - [ ] `uv run pytest tests/ -m "not e2e" -q` → all green.
 - [ ] `uv run pytest tests/e2e/test_passkey_e2e.py -m e2e -v` → green (webauthn.js changed — the fast gate does NOT cover this; run explicitly per the chart-e2e lesson).
 - [ ] `uv run python scripts/run_local_gate.py` → green.
-- [ ] Grep sanity: `grep -rn "idraa.app\|idraa.fly.dev" src/idraa/` → no NEW hits from this branch (config defaults from P1 are the only allowed occurrences).
+- [ ] Grep sanity: `grep -rnE "https://idraa\.app|idraa\.fly\.dev" src/idraa/` → no NEW hits from this branch (P1's config-default examples are the only allowed occurrences; the pattern is domain-anchored so `from idraa.app import templates` lines don't false-positive — plan-gate CQ-N6).
 - [ ] 3-reviewer PR-gate (security-auditor + architect + code-quality/spec-adherence) on the whole branch, iterate to 0/0, then push and open the PR (CI `ci-success` is the merge authority).
 
 ## Scope budget
@@ -2016,8 +2077,10 @@ git commit -m "feat(auth): admin factor-reset + revoke-on-deactivation + CLI bac
 ## Scope drift log (P2 plan-writing)
 
 1. **Shared second-factor verifier** (`services/second_factor.py`). Direction: +added refactor — `login_mfa_post`'s TOTP/recovery block extracted so step-up cannot drift from login semantics. Behavior-neutral; guarded by `test_login_mfa_flow.py`.
-2. **Catalog widened beyond the design's four named deletes** (library entry, control soft-delete, qualitative band, register-import profile). Direction: +added — default-deny uniformity; plan-gate may trim.
+2. **Catalog widened beyond the design's four named deletes** (library entry, control soft-delete, qualitative band, register-import profile, run purge-samples, user delete, overlay deactivate). Direction: +added — default-deny uniformity (purge-samples/user-delete trace to the design's destructive/admin categories — Spec-N1; overlay deactivate is the delete-less overlay family's terminal action — Sec-N2); plan-gate may trim.
 3. **Password fallback for factor-less users at step-up.** Direction: ↔resolved — the design left the factor-less case implicit; without it, step-up-gated enrollment endpoints deadlock un-enrolled users. Password is never offered to strong-factor accounts.
 4. **`user.step_up_failed` audit action.** Direction: +added — mirrors P1's `user.login_mfa_failed` detection-signal rationale; failures also count toward the B1 lockout.
 5. **`safe_next` relocated** from `routes/auth.py` (private) to `routes/deps.py` (shared). Direction: ↔refactor — avoids a cross-module private import; call sites renamed.
 6. **POST `next` = sanitized Referer, actions not replayed.** Direction: ↔resolved — the design says "lets the action proceed"; a redirect cannot replay a POST body, so the user re-triggers inside the fresh window (GitHub-sudo-style). Recorded as the intended UX.
+7. **Distinct `rf-webauthn-stepup` salt** (plan-gate Sec-N1). Direction: +added — P2 DOES add one signed-token type, honoring P1's purpose-separation salt convention instead of waiving it by fiat.
+8. **Passkey step-up failure audits + locked-user audit silence** (plan-gate Sec-I1 + Sec-N3). Direction: +added/↔aligned — `user.step_up_failed {method: passkey, reason}` on the forensic branches; already-locked users bounce un-audited on the code/password path, mirroring `/login/mfa` and bounding append-only audit growth.
