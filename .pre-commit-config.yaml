@@ -89,6 +89,18 @@ repos:
         always_run: true
         pass_filenames: false
 
+      # Canonical-remote guard (2026-07-22): block commits whose origin is the
+      # PRIVATE riskflow archive — all work goes to public yasirhamza/idraa.
+      # A whole feature was once built on the wrong remote by accident. Set
+      # IDRAA_ALLOW_PRIVATE_COMMIT=1 for a sanctioned sensitive-issue commit.
+      # See CLAUDE.md "Canonical repository".
+      - id: check-canonical-remote
+        name: Block commits to the private riskflow archive
+        language: system
+        entry: python3 scripts/check_canonical_remote.py
+        always_run: true
+        pass_filenames: false
+
       # Deterministic scope-discipline gate — enforces required ## Scope budget
       # and ## Scope drift log sections in every new design spec. Scope creep
       # killed both prior project versions; this lint converts implicit drift
