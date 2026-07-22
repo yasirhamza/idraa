@@ -468,6 +468,14 @@ class Settings(BaseSettings):
                 f"(got {len(self.mfa_encryption_key)}). Regenerate the "
                 "MFA_ENCRYPTION_KEY environment variable."
             )
+        if self.mfa_encryption_key == self.session_secret:
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be DISTINCT from SESSION_SECRET in "
+                f"environment={self.environment!r}. Reusing the session secret "
+                "re-creates the rotation trap this guard exists to prevent: "
+                "rotating SESSION_SECRET would then permanently brick every "
+                "stored TOTP secret. Generate a separate value."
+            )
         return self
 
 

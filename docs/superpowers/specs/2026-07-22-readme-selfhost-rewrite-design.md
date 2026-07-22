@@ -134,6 +134,8 @@ default change, no adapter/math surface).
   .env.example restructure (B1); corrected proxy-trust guidance + loopback 5432
   (I1/I4); MFA_ENCRYPTION_KEY prod boot guard + docs (I2); network⇒prod guidance
   (I3); .dockerignore .env.
+- ADDED during Task-2 review loop (9ed268f): compose threading of FORWARDED_ALLOW_IPS into the app container + DATABASE_URL compose-inert scoping note.
+- ADDED at Task 4 (3f4c42d): MFA key min-length parity guard + Compose >=2.24 and bridge-gateway-IP notes; and final-review fix: MFA key distinctness guard.
 
 ## Risks
 

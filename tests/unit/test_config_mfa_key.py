@@ -68,3 +68,24 @@ def test_prod_rejects_short_mfa_key() -> None:
     msg = str(exc.value)
     assert "MFA_ENCRYPTION_KEY" in msg
     assert "32" in msg
+
+
+def test_prod_rejects_mfa_key_identical_to_session_secret() -> None:
+    """prod must refuse MFA_ENCRYPTION_KEY == SESSION_SECRET even when both
+    independently satisfy the length floor — reusing the session secret
+    re-creates the exact rotation trap this guard exists to prevent:
+    rotating SESSION_SECRET would then silently re-derive (rather than keep
+    stable) the Fernet key protecting stored TOTP secrets, bricking them."""
+    shared = "s" * 40
+    with pytest.raises(ValueError, match="DISTINCT") as exc:
+        _settings(
+            environment="prod",
+            session_secret=shared,
+            webauthn_rp_id="risk.example.com",
+            webauthn_origins="https://risk.example.com",
+            mfa_encryption_key=shared,
+        )
+    msg = str(exc.value)
+    assert "MFA_ENCRYPTION_KEY" in msg
+    assert "SESSION_SECRET" in msg
+    assert "DISTINCT" in msg

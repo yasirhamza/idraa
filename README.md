@@ -26,7 +26,7 @@ This is the v3 ground-up rebuild, succeeding a Streamlit prototype (v1 RiskFlux)
 ```bash
 git clone https://github.com/yasirhamza/idraa && cd idraa
 cp .env.example .env   # then set SESSION_SECRET + MFA_ENCRYPTION_KEY (see file)
-docker compose up -d --build
+docker compose up -d --build   # (Docker Compose ≥ 2.24)
 open http://localhost:8000/setup   # first-run admin creation
 ```
 
@@ -34,7 +34,7 @@ That's a Postgres + app stack: the `app` container runs `alembic upgrade head` b
 
 ## How it's built
 
-**Stack:** FastAPI + Jinja2 + HTMX/Alpine for the UI (no JS build step), SQLAlchemy 2 + Alembic for persistence, SQLite for dev/test and Postgres for compose/production.
+**Stack:** FastAPI + Jinja2 + HTMX/Alpine for the UI (no JS build step), SQLAlchemy 2 + Alembic for persistence, SQLite for dev/test, Postgres for compose, and SQLite or Postgres in production (the reference production deployment runs SQLite on a persistent volume).
 
 **Engine:** a native Monte Carlo simulator drives FAIR-CAM Boolean control composition (with κ meta-reliability coupling for meta-controls), per-control Shapley and if-removed attribution, and weight-robustness ensembles that express FAIR-CAM's composition-weight uncertainty as ranges rather than a single point estimate. `fair_cam` is first-party and is the only place FAIR math is computed — the app layer never re-derives it.
 
