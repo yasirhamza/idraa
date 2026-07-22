@@ -173,7 +173,7 @@ Numeric ceilings against which the implementation plan and PR(s) will be measure
 - **RECOMMENDED SUB-SPLIT:** ~16 tasks is too large for one PR. Split into three milestone PRs, EACH with its own 3-reviewer plan-gate + PR-gate (per "every P-series deliverable is a milestone"):
   - **P1 — Core factors + login:** config, data model, secret handling, WebAuthn register/auth, TOTP, recovery codes, login state machine, enrollment interstitial, `webauthn.js`, e2e. (~9–10 tasks)
   - **P2 — Step-up + recovery ops:** step-up dependency + broad catalog wiring, admin reset, CLI backstop, session revocation. (~4 tasks)
-  - **P3 — Folded sweep findings:** idraa#81 throttle/lockout, idraa#80 L13 revoke-on-deactivation (if not already pulled into P2), idraa#82 HSTS/headers. (~3 tasks)
+  - **P3 — Folded sweep findings:** idraa#81 throttle/lockout — the FULL feature (management UI, admin unlock, per-IP throttle); a MINIMAL per-account lockout slice was pulled into P1 at plan-gate (see drift-log #12) — idraa#80 L13 revoke-on-deactivation (if not already pulled into P2), idraa#82 HSTS/headers. (~3 tasks)
 - **target_loc_delta:** ~3000 LOC across the epic (test-heavy: WebAuthn/TOTP/lockout/step-up all need dense unit + integration coverage, plus virtual-authenticator e2e).
 - **review_budget:** per owner override — 3-reviewer (**security-auditor + architect + code-quality**, code-quality also carrying spec-adherence) at EACH milestone's plan-gate AND PR-gate, iterated to 0/0. Per-task two-stage review during execution. Methodology reviewer dropped (no FAIR surface).
 - **timeline_budget:** 3 heavy sessions, one per sub-split milestone (P1/P2/P3).

@@ -1842,25 +1842,46 @@ async def test_repeated_bad_password_locks_account(client: AsyncClient, db_sessi
     assert r.status_code == 400
 
 
-async def test_repeated_bad_totp_locks_account(client: AsyncClient, db_session) -> None:
-    # B1: failed second-factor attempts also count toward lockout.
+async def _seed_totp_user(client: AsyncClient, db_session) -> None:
     import pyotp
     from idraa.services.mfa_crypto import encrypt_totp_secret
-    from tests.conftest import csrf_post
     await _seed_setup(client)
     user = (await db_session.execute(select(User))).scalars().first()
     db_session.add(UserTotp(user_id=user.id, secret_encrypted=encrypt_totp_secret(pyotp.random_base32()),
                             confirmed_at=now_utc()))
     user.mfa_enrolled_at = now_utc()
     await db_session.commit()
+
+
+async def test_repeated_bad_totp_locks_account(client: AsyncClient, db_session) -> None:
+    # B1: failed second-factor attempts count toward lockout, within one window.
+    from tests.conftest import csrf_post
+    await _seed_totp_user(client, db_session)
+    await csrf_post(client, "/login", {"email": "a@b.c", "password": "pw-12345678"},
+                    follow_redirects=False)                 # ONE password login → mfa_pending
     for _ in range(5):
-        await csrf_post(client, "/login", {"email": "a@b.c", "password": "pw-12345678"},
-                        follow_redirects=False)  # reaches mfa challenge
         await csrf_post(client, "/login/mfa", {"code": "000000"},
                         bootstrap_url="/login", follow_redirects=False)
     await db_session.commit()
     locked = (await db_session.execute(select(User))).scalars().first()
     assert locked.locked_until is not None
+
+
+async def test_relogin_does_not_reset_mfa_throttle(client: AsyncClient, db_session) -> None:
+    # Regression (plan-gate round 2): a correct password must NOT reset the 2FA
+    # failure counter while a second factor is still pending — otherwise an
+    # attacker who has the password bypasses the TOTP rate limit by re-POSTing
+    # /login before each guess.
+    from tests.conftest import csrf_post
+    await _seed_totp_user(client, db_session)
+    for _ in range(5):
+        await csrf_post(client, "/login", {"email": "a@b.c", "password": "pw-12345678"},
+                        follow_redirects=False)             # correct password each time
+        await csrf_post(client, "/login/mfa", {"code": "000000"},
+                        bootstrap_url="/login", follow_redirects=False)
+    await db_session.commit()
+    locked = (await db_session.execute(select(User))).scalars().first()
+    assert locked.locked_until is not None                  # re-login did NOT wipe the counter
 ```
 
 - [ ] **Step 2: Run — expect fail.** `uv run pytest tests/integration/test_login_mfa_flow.py -q`
@@ -1908,6 +1929,11 @@ def _safe_next(raw: str | None) -> str:
     if user is None or not password_ok:
         if user is not None and not is_locked(user):
             register_failed_login(user)                  # count only a real, unlocked user's miss
+            if is_locked(user):                          # this miss just tripped the lock → audit
+                await AuditWriter(db).log(
+                    organization_id=user.organization_id, entity_type="user", entity_id=user.id,
+                    action="user.login_locked_out", changes={}, user_id=user.id,
+                    ip_address=client_ip(request))
         return templates.TemplateResponse(
             request, "auth/login.html",
             {"current_user": None, "flash": None, "form": {"email": email},
@@ -1917,18 +1943,21 @@ def _safe_next(raw: str | None) -> str:
             request, "auth/login.html",
             {"current_user": None, "flash": None, "form": {"email": email},
              "error": "Invalid email or password", "next": safe_next}, status_code=400)
-    reset_login_throttle(user)
 
     if await user_has_strong_factor(db, user.id):
-        # Hold in the pending-2FA state — NOT a session yet.
+        # Correct password but a 2nd factor is still required. Do NOT reset the
+        # throttle here — password-verify is NOT full auth, and resetting would let
+        # an attacker who has the password wipe the /login/mfa rate limit at will
+        # (the exact hole B1 closes). Reset happens only on full-auth success.
         resp = templates.TemplateResponse(
             request, "auth/mfa_challenge.html",
             {"current_user": None, "error": None, "next": safe_next})
         set_mfa_pending_cookie(resp, user.id)
         return resp
-    # No strong factor yet (pre-enrollment / migration) → mint a session; the
-    # enrollment interstitial then traps the user. Existing create_session +
-    # audit + set_session_cookie code follows here unchanged.
+    # No strong factor (pre-enrollment / migration) → password IS full auth here;
+    # reset the throttle, then mint a session (interstitial traps the user). The
+    # existing create_session + audit + set_session_cookie code follows unchanged.
+    reset_login_throttle(user)
 ```
 
 Add `POST /login/mfa`:
@@ -1972,6 +2001,11 @@ async def login_mfa_post(
 
     if method is None:
         register_failed_login(user)                       # counts toward lockout (B1)
+        if is_locked(user):                               # this miss just tripped the lock → audit
+            await AuditWriter(db).log(
+                organization_id=user.organization_id, entity_type="user", entity_id=user.id,
+                action="user.login_locked_out", changes={}, user_id=user.id,
+                ip_address=client_ip(request))
         return templates.TemplateResponse(
             request, "auth/mfa_challenge.html",
             {"current_user": None, "error": "Invalid code", "next": safe_next}, status_code=400)
@@ -2406,7 +2440,7 @@ git commit -m "test(auth): e2e passkey register + usernameless login via CDP vir
 
 ## Self-review notes (author)
 
-- **Spec coverage:** §Factor semantics → Tasks 4/5/8; §Data model → Task 2; §Config → Task 1; §Secret handling → Task 3; §Login state machine → Task 8; §Enrollment interstitial → Task 9; §Browser JS/CSP → Task 7; §Testing incl. virtual-authenticator → Tasks throughout + 10. **Deferred to P2/P3 (correctly out of this plan):** step-up / `reauthenticated_at` (P2), admin reset + CLI + session-revocation (P2), throttle/lockout idraa#81 (P3), revoke-on-deactivation idraa#80 L13 (P2/P3), HSTS idraa#82 (P3). The audit-action set here is the P1 subset; P2/P3 add `mfa_admin_reset`, `sessions_revoked`, `login_locked_out`, `step_up`.
+- **Spec coverage:** §Factor semantics → Tasks 4/5/8; §Data model → Task 2; §Config → Task 1; §Secret handling → Task 3; §Login state machine → Task 8; §Enrollment interstitial → Task 9; §Browser JS/CSP → Task 7; §Testing incl. virtual-authenticator → Tasks throughout + 10. **Deferred to P2/P3 (correctly out of this plan):** step-up / `reauthenticated_at` (P2), admin reset + CLI + session-revocation (P2), the FULL throttle/lockout idraa#81 — management UI, admin unlock, per-IP throttle (P3; a MINIMAL per-account lockout slice ships in P1 per the plan-gate addendum, and it emits `login_locked_out`), revoke-on-deactivation idraa#80 L13 (P2/P3), HSTS idraa#82 (P3). The audit-action set here is the P1 subset plus `login_locked_out`; P2/P3 add `mfa_admin_reset`, `sessions_revoked`, `step_up`.
 - **Known implementation checkpoints for the implementer** (not placeholders — verify-at-build): (a) exact `py_webauthn` symbol names against the installed version (Task 5 Step 3 note); (b) the enrollment guard is now definitively a middleware inner to `SessionMiddleware` (Task 9), with an ordering-assertion test — no ambiguity remains.
 - **Security note carried to the PR-gate:** `rf_mfa_pending` / `rf_webauthn_challenge` are stateless TTL-bounded cookies (replayable within their window; synced passkeys report `sign_count=0`, so counter-replay protection is null for those). Accepted for P1 (replay requires capturing the TLS-protected request); a server-side single-use nonce is the documented post-P1 hardening.
 
@@ -2426,6 +2460,11 @@ git commit -m "test(auth): e2e passkey register + usernameless login via CDP vir
 - **[IMPORTANT] duplicated cookie logic** → centralized `set_/clear_*_cookie` helpers in `services/auth.py` (Task 3), used everywhere.
 - **NICE applied:** verify wrappers accept `dict|str` (drop triple-JSON); verify wrapped → 400 not 500; `IntegrityError` guard on duplicate credential; `entity_id=cred.id`; inline imports hoisted; dynamic-import test fixed; key-isolation crypto test strengthened; TOTP GET side-effect removed (signed `rf_totp_pending` cookie); `MFA_ENCRYPTION_KEY` rotation note.
 - **NICE accepted/deferred:** stateless-nonce for `mfa_pending`/challenge (post-P1, documented); `MultiFernet` key-versioning (post-P1).
+
+**Round 2 (re-gate) — the throttle pull-forward introduced findings, now fixed:**
+- **[BLOCKER] `reset_login_throttle` defeated the 2FA lockout** (caught independently by architect + code-quality; the security-auditor's trace missed it) → reset removed from the password gate; it now fires ONLY on full-auth success (`login_mfa_post` success + the no-strong-factor branch of `login_post`). Added a regression test (`test_relogin_does_not_reset_mfa_throttle`) proving re-POSTing `/login` no longer resets the counter, and reshaped the lockout test to one `mfa_pending` window.
+- **[IMPORTANT] lockout shipped unaudited** → `login_post` and `login_mfa_post` now emit `user.login_locked_out` when a failed attempt trips a new lock (generic 400 response unchanged).
+- **[IMPORTANT] #81 P1/P3 doc contradiction** → reconciled: design Scope-budget P3 line + plan self-review now both say "minimal per-account lockout slice in P1; full idraa#81 in P3."
 
 ## Scope budget — addendum (plan-gate)
 
