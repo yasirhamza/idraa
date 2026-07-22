@@ -12,6 +12,10 @@
                breadcrumb=breadcrumb_for(request),
                actions=[]) }}
 
+{% if mfa_reset_done %}
+<div class="alert alert-success">MFA reset — the user must re-enroll at their next sign-in.</div>
+{% endif %}
+
 {%- set errors_dict = {"_form": error} if error else {} -%}
 
 <form method="post" action="/users/{{ user.id }}/edit"
@@ -58,6 +62,17 @@
     <a href="/users" class="btn btn-outline btn-sm">Cancel</a>
     <button type="submit" class="btn btn-primary btn-sm">Save</button>
   </div>
+</form>
+
+{# SINGLE-quoted onsubmit wrapping a double-quoted JS string with |tojson
+   interpolation — autoescape turns a raw ' in an email into &#39;, which the
+   HTML parser hands back to JS as ' and breaks a single-quoted literal
+   (plan-gate CQ-I5). Mirrors overlays/view.html:97. #}
+<form method="post" action="/users/{{ user.id }}/reset-mfa"
+      onsubmit='return confirm("Reset MFA for " + {{ user.email | tojson }} + "? All passkeys, authenticator apps and recovery codes are removed and their sessions are signed out.");'>
+  {{ csrf_field() }}
+  <input type="hidden" name="confirm" value="1">
+  <button class="btn btn-outline btn-sm" type="submit">Reset MFA</button>
 </form>
 
 {% endblock %}

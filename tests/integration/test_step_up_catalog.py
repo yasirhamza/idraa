@@ -49,9 +49,8 @@ POST_TARGETS = [
     "/account/security/passkey/options",
     "/account/security/passkey/verify",
     f"/account/security/passkey/{_UUID}/delete",
+    f"/users/{_UUID}/reset-mfa",
 ]
-# Task 4 appends f"/users/{_UUID}/reset-mfa" here when the route lands
-# (plan-gate Arch-I2) — the table is the default-deny regression net.
 
 
 async def _make_stale(db_session: AsyncSession, client: AsyncClient) -> None:

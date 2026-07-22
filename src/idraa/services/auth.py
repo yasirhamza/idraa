@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from itsdangerous import BadData, URLSafeSerializer, URLSafeTimedSerializer
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
@@ -350,3 +352,16 @@ async def load_user_by_email(db: AsyncSession, email: str) -> User | None:
     # constraint at insert time and the equality lookup here.
     result = await db.execute(select(User).where(User.email == email.lower().strip()))
     return result.scalars().first()
+
+
+async def revoke_user_sessions(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Delete every AuthSession row for user_id (idraa#80 L13). Returns count.
+
+    Effective immediately: SessionMiddleware resolves the cookie against the
+    DB on every request, so a deleted row means the very next request is
+    anonymous. Callers audit `user.sessions_revoked` with the count.
+    """
+    result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+        delete(AuthSession).where(AuthSession.user_id == user_id)
+    )
+    return int(result.rowcount or 0)

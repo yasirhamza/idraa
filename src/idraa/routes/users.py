@@ -34,6 +34,8 @@ from idraa.models.enums import UserRole
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
 from idraa.services.audit import AuditWriter, log_bulk_export
+from idraa.services.auth import revoke_user_sessions
+from idraa.services.mfa_enrollment import reset_user_mfa
 from idraa.services.org import require_sole_org
 from idraa.services.users import (
     _authored_count,
@@ -233,7 +235,13 @@ async def edit_get(
     return templates.TemplateResponse(
         request,
         "users/edit.html",
-        {"current_user": me, "flash": None, "user": user, "roles": list(UserRole)},
+        {
+            "current_user": me,
+            "flash": None,
+            "user": user,
+            "roles": list(UserRole),
+            "mfa_reset_done": request.query_params.get("mfa_reset") == "1",
+        },
     )
 
 
@@ -303,6 +311,17 @@ async def edit_post(
     if user.is_active != new_active:
         changes["is_active"] = [user.is_active, new_active]
         user.is_active = new_active
+        if not new_active:  # idraa#80 L13 — deactivation kills live sessions
+            revoked = await revoke_user_sessions(db, user.id)
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.sessions_revoked",
+                changes={"count": revoked, "via": "ui"},
+                user_id=me.id,
+                ip_address=client_ip(request),
+            )
     if changes:
         await AuditWriter(db).log(
             organization_id=user.organization_id,
@@ -365,6 +384,17 @@ async def set_active_post(
 
     changes: dict[str, list[object]] = {"is_active": [user.is_active, new_active]}
     user.is_active = new_active
+    if not new_active:  # idraa#80 L13 — deactivation kills live sessions
+        revoked = await revoke_user_sessions(db, user.id)
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="user.sessions_revoked",
+            changes={"count": revoked, "via": "ui"},
+            user_id=me.id,
+            ip_address=client_ip(request),
+        )
     await AuditWriter(db).log(
         organization_id=user.organization_id,
         entity_type="user",
@@ -417,3 +447,48 @@ async def delete_post(
         raise HTTPException(404)
 
     return RedirectResponse("/users?deleted=1", status_code=303)
+
+
+@router.post("/users/{user_id}/reset-mfa", dependencies=[Depends(require_recent_auth)])
+async def reset_mfa_post(
+    user_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(require_role(UserRole.ADMIN)),
+    confirm: str | None = Form(default=None),
+) -> Response:
+    """Audited admin factor-reset (design §Recovery).
+
+    Clears the target's passkeys + TOTP + recovery codes, clears
+    mfa_enrolled_at (interstitial re-traps at next login under
+    policy=required), and revokes the target's live sessions. Never
+    authenticates the admin as the target. SELF-reset is allowed — it
+    revokes the admin's own sessions too, landing them on /login to
+    re-enroll.
+    """
+    if confirm is None or confirm in ("", "0", "false", "False"):
+        raise HTTPException(status_code=400, detail="confirm: missing or falsey")
+    user = await get_user(db, user_id, me.organization_id)
+    if user is None:
+        raise HTTPException(404)
+    counts = await reset_user_mfa(db, user)
+    revoked = await revoke_user_sessions(db, user.id)
+    await AuditWriter(db).log(
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        action="user.mfa_admin_reset",
+        changes={"factors_cleared": counts, "via": "ui"},
+        user_id=me.id,
+        ip_address=client_ip(request),
+    )
+    await AuditWriter(db).log(
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        action="user.sessions_revoked",
+        changes={"count": revoked, "via": "ui"},
+        user_id=me.id,
+        ip_address=client_ip(request),
+    )
+    return RedirectResponse(f"/users/{user.id}/edit?mfa_reset=1", status_code=303)
