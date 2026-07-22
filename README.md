@@ -12,12 +12,12 @@ Quantitative cyber-risk analysis platform — FAIR methodology, control-aware mo
 
 ## What it does
 
-- **Scenarios** — FAIR-grounded risk scenarios (Threat / Asset / Method / Effect), authored via a guided SME-elicitation wizard, cloned from the curated library, or imported from CSV/JSON.
+- **Scenarios** — FAIR-grounded risk scenarios (Threat / Asset / Method / Effect), authored via a guided SME-elicitation wizard with mixture-pooled multi-SME estimates, cloned from the curated library, imported from CSV/JSON, or drafted from an existing qualitative risk register (converter output is a prior for analyst review, never auto-final).
 - **Library** — 102 curated scenario archetypes with primary-cited FAIR distributions (IRIS sector anchors), three-tier provenance, and a per-org override layer with versioning + audit.
-- **Controls** — FAIR-CAM control modeling with sub-function assignments, framework crosswalks (NIST CSF, CIS v8, MITRE ATT&CK), and a curated control library.
-- **Analysis** — native Monte Carlo engine (single-scenario and portfolio AGGREGATE runs), full sample persistence, VaR/ES tail ladder, loss-exceedance curves, and per-control Shapley attribution.
+- **Controls** — FAIR-CAM control modeling with sub-function assignments, framework crosswalks (NIST CSF, CIS v8, MITRE ATT&CK), an ATT&CK coverage view, and a curated control library.
+- **Analysis** — native Monte Carlo engine (single-scenario and portfolio AGGREGATE runs), full sample persistence, VaR/ES tail ladder, loss-exceedance curves, and per-control Shapley + if-removed attribution with control values reported as weight-robustness ranges.
 - **Reporting** — executive web dashboards and tiered PDF reports with snapshot provenance; audited CSV/JSON exports.
-- **Platform** — session auth with passkey/TOTP MFA, RBAC (analyst / reviewer / admin), a first-class audit log, and a mobile-responsive UI.
+- **Platform** — session auth with passkey/TOTP MFA and step-up re-authentication for sensitive operations, RBAC (analyst / reviewer / admin), a first-class audit log, multi-currency support, and a mobile-responsive, installable UI.
 
 This is the v3 ground-up rebuild, succeeding a Streamlit prototype (v1 RiskFlux) that validated the FAIR math but whose UI didn't survive, and an unfinished Node/Remix/MongoDB attempt (v2 RiskFlow). The validated `fair_cam` engine from v1 carries forward as v3's calculation core.
 
