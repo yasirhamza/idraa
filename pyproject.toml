@@ -25,6 +25,7 @@ dependencies = [
   # production install) so openpyxl's XML-entity-expansion guard
   # (openpyxl.xml.DEFUSEDXML, auto-detected at import time) is genuinely
   # active in production, not just in the dev/test venv.
+  "cryptography>=49.0.0",
   "defusedxml>=0.7.1",
   "fair-cam",
   "fastapi>=0.139.2",
@@ -35,10 +36,13 @@ dependencies = [
   "passlib[argon2]>=1.7.4",
   "pydantic>=2.13.4",
   "pydantic-settings>=2.4",
+  "pyotp>=2.10.0",
   "python-multipart>=0.0.26",
   "reportlab>=5.0.0",
+  "segno>=1.6.6",
   "sqlalchemy>=2.0.51",
   "uvicorn[standard]>=0.51.0",
+  "webauthn>=3.0.0",
   "xlsxwriter>=3.2,<4",
 ]
 
@@ -326,3 +330,7 @@ allowlist = [
     "created_at",    # TimestampMixin
     "updated_at",    # TimestampMixin
 ]
+
+[[tool.mypy.overrides]]
+module = ["pyotp", "segno"]
+ignore_missing_imports = true

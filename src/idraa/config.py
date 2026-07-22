@@ -285,6 +285,27 @@ class Settings(BaseSettings):
     weight_rank_stable_threshold: float = Field(default=0.90, ge=0.5, le=1.0)
     weight_rank_indistinguishable_threshold: float = Field(default=0.10, ge=0.0, le=0.5)
 
+    # --- Strong auth / MFA (2026-07-22 design) ---
+    # Config-driven so the software stays self-hostable — never hardcode an
+    # operator's domains into WebAuthn. Defaults are the OWNER deployment.
+    webauthn_rp_id: str = "idraa.fly.dev"
+    webauthn_rp_name: str = "Idraa"
+    # Single registrable domain (plan-gate): one RP-ID can't span idraa.fly.dev +
+    # idraa.app. A second passkey domain needs its own RP-ID or Related Origin Requests.
+    webauthn_origins: str = "https://idraa.fly.dev"
+    auth_mfa_policy: Literal["required", "optional"] = "required"
+    totp_issuer: str = "Idraa"
+    mfa_encryption_key: str | None = None
+    # Minimal login throttle — idraa#81 slice pulled into P1 at plan-gate (B1):
+    # the reworked login must not ship a rate-limit-free 6-digit second factor.
+    auth_max_failed_logins: int = 5  # 0 disables lockout
+    auth_lockout_seconds: int = 900
+
+    @property
+    def webauthn_origin_list(self) -> list[str]:
+        """WEBAUTHN_ORIGINS parsed: comma-split, trimmed, blanks dropped."""
+        return [o.strip() for o in self.webauthn_origins.split(",") if o.strip()]
+
     @model_validator(mode="after")
     def _ensemble_budget_bootable(self) -> Settings:
         """Sec-N5/Arch-B-Budget1: budget must cover at least min_draws representative passes.
@@ -357,6 +378,40 @@ class Settings(BaseSettings):
                 f"in environment={self.environment!r} (got {len(self.session_secret)}). "
                 "Regenerate the SESSION_SECRET environment variable."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _check_webauthn_hardening(self) -> Settings:
+        """Refuse to boot in prod with an unusable WebAuthn RP-ID / origins.
+
+        A placeholder RP-ID or origins that don't cover it silently breaks
+        passkeys for the deployment. dev/test accept the defaults.
+        """
+        if self.environment != "prod":
+            return self
+        if not self.webauthn_rp_id.strip():
+            raise ValueError(
+                "WEBAUTHN_RP_ID must be set to the deployment's domain in "
+                f"environment={self.environment!r} (e.g. app.example.com)."
+            )
+        origins = self.webauthn_origin_list
+        if not origins:
+            raise ValueError(
+                "WEBAUTHN_ORIGINS must list at least one https:// origin in "
+                f"environment={self.environment!r} "
+                "(e.g. https://app.example.com,https://example.com)."
+            )
+        rp = self.webauthn_rp_id
+        for origin in origins:
+            if not origin.startswith("https://"):
+                raise ValueError(f"WEBAUTHN_ORIGINS entry {origin!r} must be https://")
+            host = origin.removeprefix("https://").split("/", 1)[0].split(":", 1)[0]
+            if not (host == rp or host.endswith("." + rp)):
+                raise ValueError(
+                    f"WEBAUTHN_ORIGINS entry {origin!r} (host {host!r}) is not "
+                    f"WEBAUTHN_RP_ID {rp!r} nor a subdomain of it — WebAuthn "
+                    "requires every origin's host to equal or be under the RP-ID."
+                )
         return self
 
 
