@@ -212,7 +212,7 @@ async def test_releases_db_connection_before_build(
         order.append("close")
         await real_close(self)
 
-    def spy_build(run: Any, org: Any) -> bytes:
+    def spy_build(run: Any, org: Any, *, base_url: str = "") -> bytes:
         order.append("build")
         return b"PK\x03\x04stub"
 
@@ -232,3 +232,38 @@ async def test_releases_db_connection_before_build(
     assert order.index("close") < order.index("build"), (
         f"connection must be released before the build; got order={order}"
     )
+
+
+# ---------- workbook-labels PR: help-link base derives from the serving request ----------
+
+
+async def test_route_threads_request_base_url_to_builder(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The route must pass the serving request's base URL to the builder so the
+    in-sheet help link matches the deployment host (idraa.app / per-tester
+    instances / localhost) instead of a hardcoded domain."""
+    import idraa.routes.reports as reports_mod
+
+    seen: list[str] = []
+
+    def spy_build(run: Any, org: Any, *, base_url: str = "") -> bytes:
+        seen.append(base_url)
+        return b"PK\x03\x04stub"
+
+    monkeypatch.setattr(reports_mod, "build_verification_workbook", spy_build)
+
+    client, org_id = authed_admin
+    organization = await _org_for(db_session, org_id)
+    run = await _make_completed_single_run(db_session, organization, name="base-url")
+    await db_session.commit()
+
+    r = await client.get(f"/reports/run/{run.id}/verification.xlsx")
+    assert r.status_code == 200
+    assert len(seen) == 1
+    # Non-empty, scheme-qualified, no trailing slash — exactly what the sheet
+    # concatenates with /help/control-value-robustness.
+    assert seen[0].startswith("http"), seen
+    assert not seen[0].endswith("/"), seen

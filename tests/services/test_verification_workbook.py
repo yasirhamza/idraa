@@ -2759,3 +2759,121 @@ def test_aggregate_let_attributeerror_contained_to_summary_only(monkeypatch):
     assert "let emit failed at build" in flat
     assert fail_name.lower() in flat
     assert f"scenario block: {fail_name.lower()}" not in flat
+
+
+# --- Controls-sheet labeling fixes (workbook-labels PR) ----------------------
+# Four label fixes + configurable help-link base surfaced by the 2026-07-22
+# Acme workbook review: (1) the standalone-formula fallback caption claimed
+# "CURRENCY-only or all ELAPSED_TIME" even when pair-gated PROBABILITY
+# assignments were present; (2) the Typical-case point row never named its
+# basis; (3) elapsed-time capability cells displayed bare day-counts on a
+# 0-1-looking column; (4) neither workbook stated its dollar-value scope
+# (scenario-scoped vs summed-across-scenarios); (5) the help link hardcoded
+# idraa.fly.dev while deployments serve idraa.app and per-tester hosts.
+
+
+def _v3_snap_dict_pair_gated():
+    """Detection-only control: pair-gated PROBABILITY leg + ELAPSED_TIME leg —
+    emits no standalone formula, so the fallback caption fires."""
+    model = ControlSnapshotV3(
+        control_id="c9",
+        name="DetOnly",
+        domains=["loss_event"],
+        type="detective",
+        assignments=[
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_det_recognition"),
+                capability_value=0.7,
+                coverage=0.8,
+                reliability=0.8,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+            ),
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_det_monitoring"),
+                capability_value=3.0,
+                coverage=0.8,
+                reliability=0.8,
+                unit_type=v3_enums.UnitType.ELAPSED_TIME,
+            ),
+        ],
+    )
+    return model.model_dump(mode="json")
+
+
+def test_controls_fallback_caption_names_gating_not_currency():
+    """A pair-gated PROBABILITY assignment is opeff-bearing — the fallback line
+    must say WHY no standalone formula exists, not claim there are none."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict_pair_gated()])
+    strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
+    assert "no standalone-formula assignments" in strings
+    assert "currency-only or all elapsed_time" not in strings
+
+
+def test_controls_typical_point_basis_note_in_preamble():
+    """The deduped preamble must state the Typical-case point uses a different
+    basis (typical mode/median chain) than the average-basis range rows."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict()])
+    run.weight_robustness = _WR_MEAN
+    strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
+    assert "different basis" in strings
+    assert "mode/median" in strings
+
+
+def test_controls_elapsed_capability_cell_displays_days_suffix():
+    """ELAPSED_TIME capability cells keep their numeric value but render with a
+    day-suffix number format; PROBABILITY capability cells keep plain 0.0000."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict_pair_gated()])
+    wb = _open(build_single_run_let_workbook(run, _make_org()))
+    ws = wb["Controls"]
+    fmts = {}
+    for r in ws.iter_rows():
+        for cell in r:
+            if cell.data_type == "n" and isinstance(cell.value, (int, float)):
+                fmts.setdefault(round(float(cell.value), 4), cell.number_format)
+    assert '"d"' in fmts.get(3.0, ""), f"elapsed capability 3.0 format: {fmts.get(3.0)!r}"
+    # Fail-close: prove the probability cell exists before asserting its format
+    # (bundled-review NTH-3 — `.get` default "" made the negative assert
+    # trivially true if the cell ever vanished).
+    assert 0.7 in fmts, f"probability capability 0.7 cell missing: {sorted(fmts)}"
+    assert '"d"' not in fmts[0.7], f"probability capability 0.7 format: {fmts[0.7]!r}"
+
+
+def test_controls_scope_note_single_vs_aggregate():
+    """Single-run Controls sheet states values are scenario-scoped; the
+    aggregate sheet states they are summed across the run's scenarios."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict()])
+    single = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
+    assert "this run's single scenario only" in single
+    assert "summed across" not in single
+
+    agg_run, _ = _make_aggregate_let_run()
+    agg = " ".join(_all_cell_strings(build_aggregate_let_workbook(agg_run, _make_org()))).lower()
+    assert "summed across" in agg
+    assert "this run's single scenario only" not in agg
+
+
+def test_controls_help_url_uses_caller_base_url_never_hardcoded():
+    """The help link derives from the caller-supplied deployment base URL;
+    no build path hardcodes idraa.fly.dev."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict()])
+    with_base = " ".join(
+        _all_cell_strings(
+            build_single_run_let_workbook(run, _make_org(), base_url="https://idraa.app")
+        )
+    )
+    assert "https://idraa.app/help/control-value-robustness" in with_base
+
+    default = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org())))
+    assert "idraa.fly.dev" not in default
+    assert "/help/control-value-robustness" in default
+
+
+def test_controls_basis_note_absent_on_insufficient_budget_blob():
+    """run_executor stamps basis=="mean" even on insufficient_budget blobs, but
+    those render only the skip note and NO Typical-case point row — the preamble
+    must not describe a row that never appears (bundled-review NTH-1)."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict()])
+    run.weight_robustness = {**_WR_MEAN, "state": "insufficient_budget"}
+    strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
+    assert "different basis" not in strings
+    assert "typical-case point" not in strings
