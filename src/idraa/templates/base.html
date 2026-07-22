@@ -137,6 +137,9 @@
   {# Help slide-over drawer store. Non-defer, like sub_function_combobox.js, so
      its alpine:init listener registers before Alpine initializes. #}
   <script src="/static/js/help_drawer.js?v={{ static_version }}"></script>
+  {# Passkey (WebAuthn) ceremonies — window.idraaWebAuthn.register()/.authenticate().
+     `defer` since it's only invoked from inline onclick handlers after load. #}
+  <script src="/static/js/webauthn.js?v={{ static_version }}" defer></script>
 </head>
 <body class="min-h-screen bg-surface-2" hx-boost="true">
   {% include "layouts/_sidebar.html" %}

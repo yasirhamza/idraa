@@ -29,8 +29,13 @@
 
   <section class="card bg-surface-0 p-4" id="passkey-section">
     <h2 class="font-semibold">Passkeys</h2>
-    <ul>{% for p in passkeys %}<li>{{ p.nickname }}</li>{% endfor %}</ul>
-    {# Passkey add/remove UI wired in Task 7. #}
+    <ul>{% for p in passkeys %}<li>{{ p.nickname }}
+      <form method="post" action="/account/security/passkey/{{ p.id }}/delete" class="inline">
+        {{ csrf_field() }}<button class="btn btn-ghost btn-xs" type="submit">Remove</button>
+      </form></li>{% endfor %}</ul>
+    <button class="btn btn-primary btn-sm" type="button"
+            onclick="idraaWebAuthn.register(prompt('Name this passkey','Passkey')).catch(function(e){alert(e.message)})"
+            x-show="!!window.PublicKeyCredential">Add a passkey</button>
   </section>
 
   <section class="card bg-surface-0 p-4">

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,3 +54,16 @@ async def maybe_unstamp_enrolled(db: AsyncSession, user: User) -> None:
         return
     if not await user_has_strong_factor(db, user.id):
         user.mfa_enrolled_at = None
+
+
+def credential_views(creds: Sequence[WebAuthnCredential]) -> list[dict[str, object]]:
+    """Map passkey ORM rows to template-safe view dicts. Preserves order + count."""
+    return [
+        {
+            "id": str(c.id),
+            "nickname": c.nickname,
+            "last_used_at": c.last_used_at,
+            "created_at": c.created_at,
+        }
+        for c in creds
+    ]

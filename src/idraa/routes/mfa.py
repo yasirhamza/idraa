@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Request
+import json
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
@@ -14,20 +19,34 @@ from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_user
 from idraa.services import totp as totp_service
+from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
 from idraa.services.auth import (
     clear_totp_pending_cookie,
+    clear_webauthn_challenge_cookie,
     load_totp_pending,
+    load_webauthn_challenge,
     set_totp_pending_cookie,
+    set_webauthn_challenge_cookie,
 )
 from idraa.services.mfa_crypto import (
     encrypt_totp_secret,
     generate_recovery_codes,
     hash_recovery_code,
 )
-from idraa.services.mfa_enrollment import maybe_stamp_enrolled
+from idraa.services.mfa_enrollment import (
+    credential_views,
+    maybe_stamp_enrolled,
+    maybe_unstamp_enrolled,
+)
 
 router = APIRouter()
+
+
+def _json_error(msg: str, status: int = 400) -> Response:
+    return Response(
+        content=json.dumps({"error": msg}), status_code=status, media_type="application/json"
+    )
 
 
 async def _security_context(db: AsyncSession, user: User) -> dict[str, object]:
@@ -48,7 +67,7 @@ async def _security_context(db: AsyncSession, user: User) -> dict[str, object]:
     )
     return {
         "current_user": user,
-        "passkeys": passkeys,
+        "passkeys": credential_views(passkeys),
         "totp_confirmed": bool(totp and totp.confirmed_at),
         "recovery_remaining": recovery_remaining,
         "enrolled": user.mfa_enrolled_at is not None,
@@ -183,3 +202,118 @@ async def recovery_codes_generate(
         "account/security.html",
         {**(await _security_context(db, user)), "shown_recovery_codes": codes},
     )
+
+
+@router.post("/account/security/passkey/options")
+async def passkey_register_options(
+    request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_user)
+) -> Response:
+    # Read-only (no mutation of `user`) — no rebind needed here, unlike
+    # passkey_register_verify / passkey_delete below.
+    existing = [
+        c.credential_id
+        for c in (
+            await db.execute(
+                select(WebAuthnCredential).where(WebAuthnCredential.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    ]
+    options_json, challenge = webauthn_service.registration_options(
+        user.id, user.email, user.full_name, existing
+    )
+    resp = Response(content=options_json, media_type="application/json")
+    set_webauthn_challenge_cookie(resp, challenge)
+    return resp
+
+
+@router.post("/account/security/passkey/verify")
+async def passkey_register_verify(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+) -> Response:
+    # See the rebind comment on totp_enroll_post — `user` from require_user is
+    # detached from this handler's `db` session; maybe_stamp_enrolled below
+    # mutates user.mfa_enrolled_at, which would silently no-op without this.
+    user = await db.get(User, user.id) or user
+    signed = request.cookies.get("rf_webauthn_challenge")
+    challenge = load_webauthn_challenge(signed) if signed else None
+    if challenge is None:
+        return _json_error("challenge expired")
+    try:
+        reg = webauthn_service.verify_registration(payload["credential"], challenge)
+    except Exception as exc:  # any bad/tampered ceremony → 400, not 500
+        return _json_error(f"verification failed: {type(exc).__name__}")
+    nickname = (payload.get("nickname") or "Passkey")[:64]
+    cred = WebAuthnCredential(
+        user_id=user.id,
+        credential_id=reg.credential_id,
+        public_key=reg.public_key,
+        sign_count=reg.sign_count,
+        aaguid=reg.aaguid,
+        transports=reg.transports,
+        nickname=nickname,
+    )
+    db.add(cred)
+    try:
+        await db.flush()  # surface a duplicate credential_id as IntegrityError, not a 500
+    except IntegrityError:
+        await db.rollback()
+        return _json_error("credential already registered")
+    await AuditWriter(db).log(
+        organization_id=user.organization_id,
+        entity_type="webauthn_credential",
+        entity_id=cred.id,
+        action="webauthn_credential.create",
+        changes={"nickname": nickname},
+        user_id=user.id,
+        ip_address=client_ip(request),
+    )
+    await maybe_stamp_enrolled(db, user)
+    resp = Response(content='{"ok":true}', media_type="application/json")
+    clear_webauthn_challenge_cookie(resp)
+    return resp
+
+
+@router.post("/account/security/passkey/{cred_id}/delete")
+async def passkey_delete(
+    cred_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+) -> Response:
+    # See the rebind comment on totp_enroll_post — `user` from require_user is
+    # detached from this handler's `db` session; maybe_unstamp_enrolled below
+    # mutates user.mfa_enrolled_at, which would silently no-op without this.
+    user = await db.get(User, user.id) or user
+    cred = (
+        (
+            await db.execute(
+                select(WebAuthnCredential).where(
+                    WebAuthnCredential.id == cred_id, WebAuthnCredential.user_id == user.id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if cred is not None:
+        cred_pk = cred.id
+        await db.delete(cred)
+        await db.flush()  # make the delete visible to maybe_unstamp_enrolled's count
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="webauthn_credential",
+            entity_id=cred_pk,
+            action="webauthn_credential.delete",
+            changes={},
+            user_id=user.id,
+            ip_address=client_ip(request),
+        )
+        # I4: if that was the last strong factor, clear enrollment so the
+        # interstitial re-fires (don't silently downgrade to password-only).
+        await maybe_unstamp_enrolled(db, user)
+    return RedirectResponse("/account/security", status_code=303)
