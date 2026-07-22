@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models._types import now_utc
@@ -54,6 +56,32 @@ async def maybe_unstamp_enrolled(db: AsyncSession, user: User) -> None:
         return
     if not await user_has_strong_factor(db, user.id):
         user.mfa_enrolled_at = None
+
+
+async def reset_user_mfa(db: AsyncSession, user: User) -> dict[str, int]:
+    """Clear ALL of a user's strong-auth state (admin/CLI factor reset).
+
+    Deletes passkeys, TOTP, and recovery codes and clears mfa_enrolled_at so
+    the enrollment interstitial re-traps at next login (policy=required).
+    NEVER yields the caller a usable credential (design §Recovery). Session
+    revocation is deliberately NOT done here — callers pair this with
+    services.auth.revoke_user_sessions so each side is audited separately.
+    """
+    counts: dict[str, int] = {}
+    result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+        delete(WebAuthnCredential).where(WebAuthnCredential.user_id == user.id)
+    )
+    counts["passkeys"] = int(result.rowcount or 0)
+    result = await db.execute(  # type: ignore[assignment]
+        delete(UserTotp).where(UserTotp.user_id == user.id)
+    )
+    counts["totp"] = int(result.rowcount or 0)
+    result = await db.execute(  # type: ignore[assignment]
+        delete(RecoveryCode).where(RecoveryCode.user_id == user.id)
+    )
+    counts["recovery_codes"] = int(result.rowcount or 0)
+    user.mfa_enrolled_at = None
+    return counts
 
 
 def credential_views(creds: Sequence[WebAuthnCredential]) -> list[dict[str, object]]:

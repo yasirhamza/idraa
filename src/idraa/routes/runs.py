@@ -61,6 +61,7 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     client_ip,
     get_db,
+    require_recent_auth,
     require_role,
     require_user,
 )
@@ -626,7 +627,7 @@ def _confirmed(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "on", "true", "yes"}
 
 
-@router.post("/runs/{run_id}/delete")
+@router.post("/runs/{run_id}/delete", dependencies=[Depends(require_recent_auth)])
 async def post_delete_run(
     run_id: uuid.UUID,
     request: Request,
@@ -671,7 +672,7 @@ async def post_delete_run(
     return RedirectResponse(url="/analyses?deleted=1", status_code=303)
 
 
-@router.post("/runs/{run_id}/purge-samples")
+@router.post("/runs/{run_id}/purge-samples", dependencies=[Depends(require_recent_auth)])
 async def post_purge_run_samples(
     run_id: uuid.UUID,
     request: Request,
@@ -854,7 +855,7 @@ async def list_analyses(
     )
 
 
-@router.get("/analyses/export.csv")
+@router.get("/analyses/export.csv", dependencies=[Depends(require_recent_auth)])
 async def analyses_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),

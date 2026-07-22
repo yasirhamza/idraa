@@ -17,7 +17,15 @@ from starlette.responses import RedirectResponse, Response
 
 from idraa.config import get_settings
 
-_ALLOWLIST = ("/account/security", "/login", "/logout", "/setup", "/healthz", "/static")
+_ALLOWLIST = (
+    "/account/security",
+    "/auth/step-up",
+    "/login",
+    "/logout",
+    "/setup",
+    "/healthz",
+    "/static",
+)
 
 
 def _allowed(path: str) -> bool:

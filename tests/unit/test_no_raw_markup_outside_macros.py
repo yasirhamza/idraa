@@ -233,6 +233,12 @@ ALLOWED_DIRS = {"macros"}
 #       onclick ceremony button, not a submitted form — no form_field
 #       variant for a non-form JS-consumed input.
 #
+#   auth/step_up.html
+#       Step-up challenge (P2 Task 1): same code-field constraint as
+#       auth/mfa_challenge.html (inputmode/autocomplete/maxlength) PLUS a
+#       password variant for factor-less accounts; form_field's text variant
+#       exposes neither.
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
@@ -286,6 +292,7 @@ ALLOWLIST: set[str] = {
     "account/_totp.html",
     "auth/mfa_challenge.html",
     "account/security.html",
+    "auth/step_up.html",
 }
 
 
@@ -331,7 +338,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 45 = 44 + account/security.html (iOS passkey-register fix: inline
     #      nickname <input> replacing the focus-stealing prompt() — justified
     #      inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 45, (
+    # 46 = 45 + auth/step_up.html (Strong Auth P2 Task 1: step-up challenge
+    #      code/password fields need the same attrs form_field's text variant
+    #      doesn't expose — justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 46, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

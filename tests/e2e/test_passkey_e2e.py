@@ -1,10 +1,11 @@
 """E2E — virtual-authenticator passkey register + usernameless login.
 
 Drives the full ceremony through a REAL headless Chromium against a
-dedicated localhost server (see ``passkey_server_url`` in conftest.py):
+dedicated localhost server (see ``passkey_server`` in conftest.py):
 first-run /setup -> register a passkey via ``navigator.credentials.create``
 -> regenerate recovery codes -> log out -> usernameless passkey sign-in via
-``navigator.credentials.get``.
+``navigator.credentials.get`` -> step-up ("sudo mode") re-verify with the
+SAME passkey.
 
 The WebAuthn ceremonies are satisfied by Chrome's CDP *virtual authenticator*
 (``WebAuthn.addVirtualAuthenticator`` with ``automaticPresenceSimulation``),
@@ -31,14 +32,18 @@ server before being encoded here — notably:
 from __future__ import annotations
 
 import re
+import sqlite3
+from pathlib import Path
 
 import pytest
 from playwright.async_api import async_playwright
 
 
 @pytest.mark.e2e
-async def test_passkey_register_then_usernameless_login(passkey_server_url: str) -> None:
-    base = passkey_server_url
+async def test_passkey_register_then_usernameless_login(
+    passkey_server: tuple[str, Path],
+) -> None:
+    base, db_file = passkey_server
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(base_url=base)
@@ -109,5 +114,22 @@ async def test_passkey_register_then_usernameless_login(passkey_server_url: str)
         content = await page.content()
         assert "Sign out" in content
         assert "e2e@example.test" in content
+
+        # --- Step-up ("sudo mode") re-verify with the SAME passkey. ---
+        # Backdate every session (only ours exists) past the 600 s window by
+        # writing the server's SQLite directly. datetime('now') is UTC and
+        # naive — is_step_up_fresh reattaches UTC on read.
+        conn = sqlite3.connect(db_file)
+        try:
+            conn.execute("UPDATE auth_sessions SET reauthenticated_at = datetime('now', '-1 hour')")
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Drive the challenge page directly (the integration catalog test
+        # covers the redirect-into-it path; this pins the browser ceremony).
+        await page.goto("/auth/step-up?next=/account/security")
+        await page.click("text=Use your passkey")
+        await page.wait_for_url(re.compile(r".*/account/security$"), timeout=10_000)
 
         await browser.close()

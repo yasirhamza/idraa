@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -27,6 +28,7 @@ from starlette.types import Scope
 
 from idraa.config import get_settings
 from idraa.db import get_session
+from idraa.errors import StepUpRequired
 from idraa.help_content import help_url as _help_url
 from idraa.middleware.csrf import CSRFMiddleware
 from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
@@ -742,6 +744,24 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     )
 
 
+async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Response:
+    """StepUpRequired -> the /auth/step-up challenge.
+
+    Browsers get a 303; HTMX callers get 204 + HX-Redirect (mirrors
+    EnrollmentGuardMiddleware); fetch/JSON callers (Accept:
+    application/json — webauthn.js sets it) get a structured 401 whose
+    `redirect` the client follows. The next target inside `dest` was
+    sanitized by routes/deps.py::_step_up_next before it reached the
+    exception.
+    """
+    dest = f"/auth/step-up?next={quote(exc.next_url, safe='/')}"
+    if request.headers.get("HX-Request") == "true":
+        return Response(status_code=204, headers={"HX-Redirect": dest})
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"error": "step_up_required", "redirect": dest}, status_code=401)
+    return RedirectResponse(dest, status_code=303)
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup hook: reap orphaned runs (issue #211).
@@ -935,6 +955,7 @@ def create_app() -> FastAPI:
     from idraa.routes import scenarios as scenarios_router
     from idraa.routes import setup as setup_router
     from idraa.routes import sme_directory as sme_directory_router
+    from idraa.routes import step_up as step_up_router
     from idraa.routes import users as users_router
     from idraa.routes.scenario_form_helpers import (
         asset_class_choices as _asset_class_choices,
@@ -955,6 +976,7 @@ def create_app() -> FastAPI:
     app.include_router(organization_router.router)
     app.include_router(users_router.router)
     app.include_router(mfa_router.router)
+    app.include_router(step_up_router.router)
     # Arch-B1: control_library MUST be included BEFORE controls_router. The
     # latter owns GET /controls/{control_id:uuid}; FastAPI resolves routes in
     # registration order across routers, so if controls_router went first,
@@ -992,6 +1014,7 @@ def create_app() -> FastAPI:
     # on dispatch precedence. See ``_auth_redirect_handler`` for details.
     app.add_exception_handler(HTTPException, _auth_redirect_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ExportRateLimitedError, _export_rate_limited_handler)
+    app.add_exception_handler(StepUpRequired, _step_up_handler)  # type: ignore[arg-type]
 
     # Static assets: serve with `Cache-Control: no-cache` so the browser
     # ALWAYS revalidates with the server before reusing a cached copy.

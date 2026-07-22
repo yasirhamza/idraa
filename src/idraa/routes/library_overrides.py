@@ -27,7 +27,7 @@ from idraa.errors import (
 from idraa.models.enums import UserRole
 from idraa.models.scenario_library import ScenarioLibraryOverride
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role
+from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
 from idraa.services.flash import build_flash
 from idraa.services.scenario_library import (
     OverrideDraft,
@@ -311,7 +311,10 @@ async def update_override(
 # ---- delete ----------------------------------------------------------
 
 
-@router.post("/library/overrides/{override_id}/delete")
+@router.post(
+    "/library/overrides/{override_id}/delete",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def delete_override(
     request: Request,
     override_id: uuid.UUID,

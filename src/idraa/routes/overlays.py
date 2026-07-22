@@ -64,6 +64,7 @@ from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
     client_ip,
     get_db,
+    require_recent_auth,
     require_role,
     require_user,
 )
@@ -212,7 +213,7 @@ async def overlays_list(
 # ---- export + import (must come before /{overlay_id} to avoid path-collision) ---
 
 
-@router.get("/overlays/export.csv")
+@router.get("/overlays/export.csv", dependencies=[Depends(require_recent_auth)])
 async def overlays_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -589,7 +590,10 @@ async def overlay_edit_post(
     return RedirectResponse(f"/overlays/{od.id}", status_code=303)
 
 
-@router.post("/overlays/{overlay_id}/deactivate")
+@router.post(
+    "/overlays/{overlay_id}/deactivate",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def overlay_deactivate(
     overlay_id: uuid.UUID,
     request: Request,

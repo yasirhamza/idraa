@@ -44,7 +44,14 @@ from idraa.models.enums import (
 )
 from idraa.models.user import User
 from idraa.routes._htmx import is_htmx_request
-from idraa.routes.deps import MAX_UPLOAD_BYTES, client_ip, get_db, require_role, require_user
+from idraa.routes.deps import (
+    MAX_UPLOAD_BYTES,
+    client_ip,
+    get_db,
+    require_recent_auth,
+    require_role,
+    require_user,
+)
 from idraa.schemas.control import ControlForm
 from idraa.services import controls as svc
 from idraa.services.audit import log_bulk_export
@@ -757,7 +764,7 @@ async def control_assignment_row_partial(
     )
 
 
-@router.get("/controls/export.csv")
+@router.get("/controls/export.csv", dependencies=[Depends(require_recent_auth)])
 async def controls_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -1016,7 +1023,7 @@ async def control_edit_post(
     return RedirectResponse(f"/controls/{control.id}", status_code=303)
 
 
-@router.post("/controls/{control_id}/delete")
+@router.post("/controls/{control_id}/delete", dependencies=[Depends(require_recent_auth)])
 async def control_delete(
     control_id: uuid.UUID,
     request: Request,

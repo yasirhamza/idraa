@@ -17,7 +17,7 @@ from idraa.config import get_settings
 from idraa.models._types import now_utc
 from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_user
+from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_user
 from idraa.services import totp as totp_service
 from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
@@ -82,7 +82,11 @@ async def security_page(
     return templates.TemplateResponse(request, "account/security.html", ctx)
 
 
-@router.get("/account/security/totp/enroll", response_class=HTMLResponse)
+@router.get(
+    "/account/security/totp/enroll",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_recent_auth)],
+)
 async def totp_enroll_get(
     request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_user)
 ) -> Response:
@@ -119,7 +123,7 @@ async def totp_enroll_get(
     return resp
 
 
-@router.post("/account/security/totp/enroll")
+@router.post("/account/security/totp/enroll", dependencies=[Depends(require_recent_auth)])
 async def totp_enroll_post(
     request: Request,
     code: str = Form(..., max_length=10),
@@ -169,7 +173,11 @@ async def totp_enroll_post(
     return resp
 
 
-@router.post("/account/security/recovery-codes/generate", response_class=HTMLResponse)
+@router.post(
+    "/account/security/recovery-codes/generate",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_recent_auth)],
+)
 async def recovery_codes_generate(
     request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_user)
 ) -> HTMLResponse:
@@ -204,7 +212,7 @@ async def recovery_codes_generate(
     )
 
 
-@router.post("/account/security/passkey/options")
+@router.post("/account/security/passkey/options", dependencies=[Depends(require_recent_auth)])
 async def passkey_register_options(
     request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_user)
 ) -> Response:
@@ -228,7 +236,7 @@ async def passkey_register_options(
     return resp
 
 
-@router.post("/account/security/passkey/verify")
+@router.post("/account/security/passkey/verify", dependencies=[Depends(require_recent_auth)])
 async def passkey_register_verify(
     request: Request,
     payload: dict[str, Any] = Body(...),
@@ -278,7 +286,10 @@ async def passkey_register_verify(
     return resp
 
 
-@router.post("/account/security/passkey/{cred_id}/delete")
+@router.post(
+    "/account/security/passkey/{cred_id}/delete",
+    dependencies=[Depends(require_recent_auth)],
+)
 async def passkey_delete(
     cred_id: uuid.UUID,
     request: Request,

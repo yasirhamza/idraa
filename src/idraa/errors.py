@@ -199,3 +199,16 @@ class FAIRCAMValidationError(ValidationError):
     def __init__(self, message: str, errors: list[tuple[str, object]] | None = None) -> None:
         super().__init__(message)
         self.errors = errors or []
+
+
+class StepUpRequired(IdraaError):  # noqa: N818 (name is a P2 plan-gate-locked interface; later tasks import it verbatim)
+    """Sensitive action attempted with a stale session (step-up / sudo mode).
+
+    Raised by routes/deps.py::require_recent_auth; translated by
+    app.py::_step_up_handler into the /auth/step-up challenge. Carries the
+    URL to return to after re-verification.
+    """
+
+    def __init__(self, next_url: str) -> None:
+        super().__init__(next_url)
+        self.next_url = next_url

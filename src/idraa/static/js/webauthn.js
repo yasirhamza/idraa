@@ -20,12 +20,25 @@
     return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function post(url, body) {
-    var opts = { method: "POST", headers: { "X-CSRF-Token": csrf() }, credentials: "same-origin" };
+    var opts = {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf(), "Accept": "application/json" },
+      credentials: "same-origin",
+    };
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);
     }
-    return fetch(url, opts);
+    return fetch(url, opts).then(function (resp) {
+      if (resp.status !== 401) return resp;
+      return resp.clone().json().then(function (data) {
+        if (data && data.error === "step_up_required" && data.redirect) {
+          window.location.assign(data.redirect);
+          return new Promise(function () {}); // navigation takes over
+        }
+        return resp;
+      }, function () { return resp; });
+    });
   }
   function encodeRegistration(cred) {
     return {
@@ -61,17 +74,26 @@
     if (!verifyResp.ok) throw new Error("verification failed");
     window.location.assign("/account/security");
   }
-  async function authenticate() {
-    var optsResp = await post("/login/passkey/options");
+  async function assertionCeremony(optionsUrl, verifyUrl, extra) {
+    var optsResp = await post(optionsUrl);
     if (!optsResp.ok) throw new Error("options request failed");
     var options = await optsResp.json();
     options.challenge = b64urlToBuf(options.challenge);
     (options.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
     var cred = await navigator.credentials.get({ publicKey: options });
-    var verifyResp = await post("/login/passkey/verify", { credential: encodeAssertion(cred) });
-    if (!verifyResp.ok) throw new Error("passkey sign-in failed");
-    var data = await verifyResp.json();
+    var body = Object.assign({ credential: encodeAssertion(cred) }, extra || {});
+    var verifyResp = await post(verifyUrl, body);
+    if (!verifyResp.ok) throw new Error("verification failed");
+    return verifyResp.json();
+  }
+  async function authenticate() {
+    var data = await assertionCeremony("/login/passkey/options", "/login/passkey/verify");
     window.location.assign(data.next || "/");
   }
-  window.idraaWebAuthn = { register: register, authenticate: authenticate };
+  async function stepUp(next) {
+    var data = await assertionCeremony(
+      "/auth/step-up/passkey/options", "/auth/step-up/passkey/verify", { next: next || "/" });
+    window.location.assign(data.next || "/");
+  }
+  window.idraaWebAuthn = { register: register, authenticate: authenticate, stepUp: stepUp };
 })();

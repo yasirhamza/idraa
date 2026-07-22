@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from urllib.parse import urlsplit
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.db import get_session
+from idraa.errors import StepUpRequired
 from idraa.models.enums import UserRole
 from idraa.models.session import AuthSession
 from idraa.models.user import User
+from idraa.services.auth import is_step_up_fresh
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB — caps bulk-import uploads across all endpoints
 
@@ -86,3 +89,61 @@ def require_role(*roles: UserRole) -> Callable[[User], User]:
         return user
 
     return _checker
+
+
+def safe_next(raw: str | None) -> str:
+    """Sanitize a ``?next=`` redirect target (relocated from routes/auth.py).
+
+    Returns ``raw`` only when it is a same-origin absolute path: must start
+    with a single ``/`` and NOT with ``//`` or ``/\\`` (browsers normalize a
+    leading backslash to a forward slash for special schemes, so ``/\\evil``
+    is an equivalent protocol-relative open-redirect vector to ``//evil``).
+    Anything else falls back to ``/``.
+    """
+    if raw and raw.startswith("/") and raw[1:2] not in ("/", "\\"):
+        return raw
+    return "/"
+
+
+def _step_up_next(request: Request) -> str:
+    """The URL the user should land on after passing the step-up challenge.
+
+    GET targets round-trip themselves (path + query — safe to re-issue).
+    POST targets cannot be replayed by a redirect, so fall back to the
+    same-origin Referer path (the page holding the form/button); the user
+    re-triggers the action, which then passes the fresh check.
+    """
+    if request.method == "GET":
+        target = request.url.path
+        if request.url.query:
+            target = f"{target}?{request.url.query}"
+        return safe_next(target)
+    ref = request.headers.get("referer", "")
+    parts = urlsplit(ref)
+    if parts.netloc and parts.netloc != request.url.netloc:
+        return "/"
+    target = parts.path or "/"
+    if parts.query:
+        target = f"{target}?{parts.query}"
+    return safe_next(target)
+
+
+def require_recent_auth(
+    request: Request,
+    user: User | None = Depends(current_user),
+    sess: AuthSession | None = Depends(current_session),
+) -> None:
+    """Step-up ("sudo mode") gate for sensitive actions.
+
+    Wire as a ROUTE-DECORATOR dependency so it runs before handler params::
+
+        @router.post("/x/delete", dependencies=[Depends(require_recent_auth)])
+
+    Anonymous callers get the same 401 as require_user (-> /login redirect
+    via _auth_redirect_handler). Stale sessions raise StepUpRequired, which
+    app.py::_step_up_handler turns into the /auth/step-up challenge.
+    """
+    if user is None or sess is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not is_step_up_fresh(sess):
+        raise StepUpRequired(next_url=_step_up_next(request))

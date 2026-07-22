@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from itsdangerous import BadData, URLSafeSerializer, URLSafeTimedSerializer
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
@@ -183,6 +185,43 @@ def clear_totp_pending_cookie(response: Response) -> None:
     response.delete_cookie("rf_totp_pending", path="/")
 
 
+# --- Step-up WebAuthn challenge: DISTINCT salt + cookie from the login/
+# registration ceremony (P2 plan-gate Sec-N1). Same payload shape, different
+# PURPOSE: a challenge minted for the anonymous login ceremony must never
+# validate for an authenticated step-up re-verify, per the salt convention
+# above _serializer. ---
+def _webauthn_stepup_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-stepup")
+
+
+def sign_webauthn_stepup_challenge(challenge_b64url: str) -> str:
+    return _webauthn_stepup_serializer().dumps(challenge_b64url)
+
+
+def load_webauthn_stepup_challenge(token: str, max_age: int = 300) -> str | None:
+    try:
+        value: str = _webauthn_stepup_serializer().loads(token, max_age=max_age)
+    except BadData:
+        return None
+    return value
+
+
+def set_webauthn_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+    response.set_cookie(
+        "rf_webauthn_stepup",
+        sign_webauthn_stepup_challenge(challenge_b64url),
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=_secure(),
+        path="/",
+    )
+
+
+def clear_webauthn_stepup_challenge_cookie(response: Response) -> None:
+    response.delete_cookie("rf_webauthn_stepup", path="/")
+
+
 async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -> AuthSession:
     now = datetime.now(UTC)
     # Invariant: load_active_session assumes expires_at is UTC-aware (see auth.py
@@ -196,6 +235,7 @@ async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -
         last_seen_at=now,
         expires_at=now + SESSION_TTL,
         ip_address=ip,
+        reauthenticated_at=now,  # login IS a re-auth (design §Step-up)
     )
     db.add(sess)
     return sess
@@ -288,9 +328,40 @@ def reset_login_throttle(user: User) -> None:
     user.locked_until = None
 
 
+def is_step_up_fresh(sess: AuthSession) -> bool:
+    """True when the session's last re-auth is inside the step-up window.
+
+    max_age == 0 disables step-up (operator opt-out, mirrors
+    auth_max_failed_logins). A NULL reauthenticated_at (pre-P2 row) is
+    stale — fail closed, the user re-verifies once and gets stamped.
+    """
+    max_age = get_settings().auth_step_up_max_age_seconds
+    if max_age == 0:
+        return True
+    ra = sess.reauthenticated_at
+    if ra is None:
+        return False
+    if ra.tzinfo is None:  # aiosqlite may strip tzinfo on cross-connection read
+        ra = ra.replace(tzinfo=UTC)
+    return datetime.now(UTC) - ra <= timedelta(seconds=max_age)
+
+
 async def load_user_by_email(db: AsyncSession, email: str) -> User | None:
     # Normalize email: lowercase + strip whitespace. Trailing spaces from form
     # input would otherwise false-mismatch the (organization_id, email) unique
     # constraint at insert time and the equality lookup here.
     result = await db.execute(select(User).where(User.email == email.lower().strip()))
     return result.scalars().first()
+
+
+async def revoke_user_sessions(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Delete every AuthSession row for user_id (idraa#80 L13). Returns count.
+
+    Effective immediately: SessionMiddleware resolves the cookie against the
+    DB on every request, so a deleted row means the very next request is
+    anonymous. Callers audit `user.sessions_revoked` with the count.
+    """
+    result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+        delete(AuthSession).where(AuthSession.user_id == user_id)
+    )
+    return int(result.rowcount or 0)

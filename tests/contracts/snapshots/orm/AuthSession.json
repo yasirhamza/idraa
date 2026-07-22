@@ -40,6 +40,14 @@
       "primary_key": false,
       "type": "DATETIME"
     },
+    "reauthenticated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
     "user_id": {
       "foreign_key": true,
       "has_default": false,

@@ -103,11 +103,15 @@ def e2e_base_url(live_server_url: str) -> str:
 # complicate a passkey-only register/login flow). module-scoped: cheap to
 # share across the (currently single) passkey e2e test in this module, and
 # each test still gets an isolated DB because the whole server is per-module.
+#
+# Yields (url, db_file) — P2 Task 2's step-up leg backdates every session by
+# writing the server's SQLite directly (no HTTP endpoint exists to fast-
+# forward wall-clock time), so the db file path travels alongside the URL.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
-def passkey_server_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+def passkey_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[str, Path]]:
     port = _free_port()
     url = f"http://localhost:{port}"
     db_dir = tmp_path_factory.mktemp("passkey-e2e")
@@ -163,7 +167,7 @@ def passkey_server_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str
         raise RuntimeError("passkey e2e server did not come up")
 
     try:
-        yield url
+        yield url, db_file
     finally:
         proc.terminate()
         try:
