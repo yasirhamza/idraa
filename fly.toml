@@ -24,6 +24,10 @@ primary_region = "fra"
 
 [env]
   ENVIRONMENT = "prod"
+  # Trust X-Forwarded-* from fly-proxy so request.base_url reports https + the
+  # public host (workbook help-link fix). Safe: internal_port 8000 is reachable
+  # ONLY via fly-proxy — there is no direct path that could spoof the headers.
+  FORWARDED_ALLOW_IPS = "*"
   # Belt-and-suspenders with the Dockerfile ENV (issue #33): byte-reproducible
   # weight_robustness blobs require a pinned interpreter hash seed.
   PYTHONHASHSEED = "0"

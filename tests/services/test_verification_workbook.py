@@ -2831,7 +2831,11 @@ def test_controls_elapsed_capability_cell_displays_days_suffix():
             if cell.data_type == "n" and isinstance(cell.value, (int, float)):
                 fmts.setdefault(round(float(cell.value), 4), cell.number_format)
     assert '"d"' in fmts.get(3.0, ""), f"elapsed capability 3.0 format: {fmts.get(3.0)!r}"
-    assert '"d"' not in fmts.get(0.7, ""), f"probability capability 0.7 format: {fmts.get(0.7)!r}"
+    # Fail-close: prove the probability cell exists before asserting its format
+    # (bundled-review NTH-3 — `.get` default "" made the negative assert
+    # trivially true if the cell ever vanished).
+    assert 0.7 in fmts, f"probability capability 0.7 cell missing: {sorted(fmts)}"
+    assert '"d"' not in fmts[0.7], f"probability capability 0.7 format: {fmts[0.7]!r}"
 
 
 def test_controls_scope_note_single_vs_aggregate():
@@ -2862,3 +2866,14 @@ def test_controls_help_url_uses_caller_base_url_never_hardcoded():
     default = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org())))
     assert "idraa.fly.dev" not in default
     assert "/help/control-value-robustness" in default
+
+
+def test_controls_basis_note_absent_on_insufficient_budget_blob():
+    """run_executor stamps basis=="mean" even on insufficient_budget blobs, but
+    those render only the skip note and NO Typical-case point row — the preamble
+    must not describe a row that never appears (bundled-review NTH-1)."""
+    run = _let_run(controls_snapshot=[_v3_snap_dict()])
+    run.weight_robustness = {**_WR_MEAN, "state": "insufficient_budget"}
+    strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
+    assert "different basis" not in strings
+    assert "typical-case point" not in strings

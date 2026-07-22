@@ -1606,7 +1606,12 @@ def _write_controls_sheet(
     # 'Typical-case point' row, so only they get the two-bases sentence — a
     # legacy (typical-basis) run must keep its labels verbatim (see the
     # test_workbook_legacy_basis_keeps_original_labels_verbatim guard).
-    if bool(weight_robustness) and (weight_robustness or {}).get("basis") == "mean":
+    # insufficient_budget blobs are stamped basis=="mean" too (run_executor
+    # stamps unconditionally) but render only the skip note and NO typical row,
+    # so they must not get a sentence describing a row that never appears
+    # (bundled-review NTH-1).
+    _wr = weight_robustness or {}
+    if _wr.get("basis") == "mean" and _wr.get("state") != "insufficient_budget":
         range_explainer += (
             " The 'Typical-case point' row uses a DIFFERENT basis by design: it "
             "prices the typical chain — mode/median point estimates, the "
@@ -1695,9 +1700,10 @@ def _write_controls_sheet(
                     unit_str,
                     # Capability may be null (ELAPSED_TIME back-fill path).
                     # ELAPSED_TIME capabilities are day-counts (converted via
-                    # exp(-t/τ)), not 0-1 scores — day-suffixed display format
-                    # (numeric value unchanged; cells are never formula-referenced
-                    # for elapsed-time assignments).
+                    # exp(-t/τ)), not 0-1 scores — day-suffixed display format.
+                    # Numeric value unchanged; blocks 2/3 skip elapsed-time
+                    # before touching cap_cell today, and a number format is
+                    # display-only either way (bundled-review NTH-2).
                     (
                         float(cap_val) if cap_val is not None else "null",
                         styles.days
