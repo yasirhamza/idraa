@@ -261,6 +261,33 @@ async def load_active_session(db: AsyncSession, session_id: uuid.UUID) -> AuthSe
     return sess
 
 
+# --- Minimal login throttle (idraa#81 slice, plan-gate B1). Per-account only
+# (no per-IP dimension yet — full idraa#81 management UI/admin unlock/per-IP
+# throttle stays P3). ---
+def is_locked(user: User) -> bool:
+    lu = user.locked_until
+    if lu is None:
+        return False
+    if lu.tzinfo is None:  # aiosqlite may strip tzinfo on cross-connection read
+        lu = lu.replace(tzinfo=UTC)
+    return lu > datetime.now(UTC)
+
+
+def register_failed_login(user: User) -> None:
+    settings = get_settings()
+    user.failed_login_count += 1
+    if (
+        settings.auth_max_failed_logins
+        and user.failed_login_count >= settings.auth_max_failed_logins
+    ):
+        user.locked_until = datetime.now(UTC) + timedelta(seconds=settings.auth_lockout_seconds)
+
+
+def reset_login_throttle(user: User) -> None:
+    user.failed_login_count = 0
+    user.locked_until = None
+
+
 async def load_user_by_email(db: AsyncSession, email: str) -> User | None:
     # Normalize email: lowercase + strip whitespace. Trailing spaces from form
     # input would otherwise false-mismatch the (organization_id, email) unique

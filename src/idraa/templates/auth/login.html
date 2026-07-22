@@ -22,6 +22,11 @@
   #}
   {{ form_error_summary({"_form": error} if error else {}) }}
 
+  <button class="btn btn-outline btn-sm w-full mb-4" type="button"
+          onclick="idraaWebAuthn.authenticate().catch(function(e){alert(e.message)})"
+          x-show="!!window.PublicKeyCredential">Sign in with a passkey</button>
+  <div class="divider text-xs text-ink-3">or</div>
+
   <form method="post" action="/login" class="space-y-5">
     {{ csrf_field() }}
     {# next round-trips the post-login redirect target. Already sanitized
