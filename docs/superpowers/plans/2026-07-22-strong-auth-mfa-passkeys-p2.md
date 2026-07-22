@@ -1311,7 +1311,7 @@ First, in `tests/e2e/conftest.py`, RENAME `passkey_server_url` to `passkey_serve
 
 Then EXTEND the EXISTING `test_passkey_register_then_usernameless_login` in `tests/e2e/test_passkey_e2e.py` — do NOT write a separate test. Plan-gate CQ-B3: the CDP virtual authenticator (and its resident private key) dies with the browser at the end of the existing test, so a new test's fresh authenticator has NO discoverable credential and "Sign in with a passkey" would `NotAllowedError`. The step-up leg must run inside the SAME browser/authenticator session, right after the usernameless sign-in assertions (this also removes any file-order coupling — Arch-N3).
 
-1. Change the test's fixture parameter from `passkey_server_url: str` to `passkey_server: "tuple[str, Path]"` and unpack at the top: `base, db_file = passkey_server`. Add `import sqlite3` and `from pathlib import Path` to the file's imports.
+1. Change the test's fixture parameter from `passkey_server_url: str` to `passkey_server: "tuple[str, Path]"` and unpack at the top: `base, db_file = passkey_server`. Add `import sqlite3` and `from pathlib import Path` to the file's imports, and update the module docstring's stale `passkey_server_url` fixture reference to `passkey_server` (round-3 CQ3-N1).
 
 2. Append INSIDE the `async with` block, after the final `assert "e2e@example.test" in content` and before `await browser.close()`:
 
