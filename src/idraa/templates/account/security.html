@@ -33,9 +33,18 @@
       <form method="post" action="/account/security/passkey/{{ p.id }}/delete" class="inline">
         {{ csrf_field() }}<button class="btn btn-ghost btn-xs" type="submit">Remove</button>
       </form></li>{% endfor %}</ul>
-    <button class="btn btn-primary btn-sm" type="button"
-            onclick="idraaWebAuthn.register(prompt('Name this passkey','Passkey')).catch(function(e){alert(e.message)})"
-            x-show="!!window.PublicKeyCredential">Add a passkey</button>
+    {# Inline nickname input, NOT prompt(): a native prompt() dialog steals
+       document focus, and WebKit then rejects navigator.credentials.create()
+       with NotAllowedError "The document is not focused" on iOS — focus is
+       not restored in time after the dialog closes. Desktop (and Android
+       Chromium) refocus fast enough, so this only broke on iPhone. #}
+    <div class="flex gap-2" x-show="!!window.PublicKeyCredential">
+      <input id="passkey-nickname" maxlength="64" value="Passkey"
+             class="input input-bordered flex-1"
+             aria-label="Passkey name">
+      <button class="btn btn-primary btn-sm" type="button"
+              onclick='idraaWebAuthn.register(document.getElementById("passkey-nickname").value).catch(function(e){alert(e.message)})'>Add a passkey</button>
+    </div>
   </section>
 
   <section class="card bg-surface-0 p-4">

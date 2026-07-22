@@ -79,9 +79,10 @@ async def test_passkey_register_then_usernameless_login(passkey_server_url: str)
 
         # --- Register a passkey. ---
         await page.goto("/account/security")
-        # register(nickname) reads the nickname from a native prompt() in the
-        # onclick handler — must be armed before the click fires it.
-        page.on("dialog", lambda d: d.accept("My Passkey"))
+        # Nickname comes from the inline #passkey-nickname input (NOT a native
+        # prompt() — that dialog steals document focus and iOS WebKit then
+        # rejects credentials.create() with "The document is not focused").
+        await page.fill("#passkey-nickname", "My Passkey")
         await page.click("text=Add a passkey")
         # "Passkeys" (plural, the section heading) is present even with zero
         # credentials — wait for the per-credential "Remove" button instead,
