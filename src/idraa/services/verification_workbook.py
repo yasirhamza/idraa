@@ -875,6 +875,9 @@ class _Styles:
         )
         self.money = wb.add_format({"num_format": "$#,##0"})
         self.multiplier = wb.add_format({"num_format": "0.0000"})
+        # ELAPSED_TIME capability cells: day-counts, not 0-1 scores — a display
+        # suffix so 70.0 on the Capability column can't read as a corrupt score.
+        self.days = wb.add_format({"num_format": '0.0000 "d"'})
         self.pct = wb.add_format({"num_format": "0.0%"})
         self.flag_ok = wb.add_format(
             {
@@ -1455,6 +1458,18 @@ def _write_let_documentation_sheet(
             ws.write_string(row0, 0, neutral, styles.doc_body)
 
 
+_SCOPE_NOTE_SINGLE = (
+    "Scope: the dollar values in the 'Estimated value range' sections are for "
+    "this run's single scenario only — the same control can earn additional "
+    "value in other scenarios (an aggregate run's workbook shows the "
+    "portfolio-wide figure)."
+)
+_SCOPE_NOTE_AGGREGATE = (
+    "Scope: the dollar values in the 'Estimated value range' sections are "
+    "summed across every scenario in this run that the control participates in."
+)
+
+
 def _write_controls_sheet(
     ws: Any,
     *,
@@ -1462,6 +1477,8 @@ def _write_controls_sheet(
     weight_robustness: dict[str, Any] | None = None,
     styles: _Styles,
     combined_effect_hint: str = "the MC sheet INPUTS section",
+    scope_note: str = _SCOPE_NOTE_SINGLE,
+    help_base_url: str = "",
 ) -> None:
     """Write the Control Audit sheet (Task 6 / issue #419).
 
@@ -1541,10 +1558,14 @@ def _write_controls_sheet(
         "server-computed dollar ranges from the weight-uncertainty simulations (these are "
         "not recomputed in Excel — there are no raw simulation draws here). The per-formula "
         "figures assume each control acts alone; the engine's actual result combines all "
-        "controls together (see the INPUTS section of the MC sheet).",
+        f"controls together (see {combined_effect_hint}).",
         styles.body_wrap,
         span=5,
     )
+    # Scope disclosure (workbook-labels PR): single-run values are scenario-scoped
+    # while aggregate values sum across the run's scenarios — say so, since the
+    # same control legitimately shows different dollars in the two workbooks.
+    rows.prose(scope_note, styles.note_wrap, span=5)
     # Plain-text URL (NOT write_url): the workbook keeps a zero-hyperlink
     # invariant (strings_to_urls=False, write_string everywhere) so no user
     # string can ever become a clickable URL. The help link is shown as
@@ -1552,7 +1573,7 @@ def _write_controls_sheet(
     rows.row(
         [
             (
-                "Learn how to read this: https://idraa.fly.dev/help/control-value-robustness",
+                f"Learn how to read this: {help_base_url}/help/control-value-robustness",
                 styles.note_muted,
             )
         ]
@@ -1573,16 +1594,27 @@ def _write_controls_sheet(
     # computed from the weight-uncertainty simulations" paragraph used to repeat in
     # EVERY control block. It is rendered ONCE here; each block keeps only its
     # "Estimated value range (from N ...)" header + the p5/p50/p95 rows.
-    rows.prose(
+    range_explainer = (
         "About the 'Estimated value range' sections below: each is the estimated "
         "dollar-value range for that control, computed server-side from the "
         "weight-uncertainty simulations. These come from the server and are NOT "
         "recomputed in Excel (there are no raw simulation draws here), so they differ "
         "from the low/typical/high deterministic sensitivity, which IS recomputed from "
-        "the formulas.",
-        styles.note_wrap,
-        span=5,
+        "the formulas."
     )
+    # Basis disclosure (workbook-labels PR): only mean-basis blobs render a
+    # 'Typical-case point' row, so only they get the two-bases sentence — a
+    # legacy (typical-basis) run must keep its labels verbatim (see the
+    # test_workbook_legacy_basis_keeps_original_labels_verbatim guard).
+    if bool(weight_robustness) and (weight_robustness or {}).get("basis") == "mean":
+        range_explainer += (
+            " The 'Typical-case point' row uses a DIFFERENT basis by design: it "
+            "prices the typical chain — mode/median point estimates, the "
+            "most-likely-year outcome — while the p5/p50/p95 rows price the average "
+            "(mean) chain; on tail-heavy portfolios the typical point sits far "
+            "below the range."
+        )
+    rows.prose(range_explainer, styles.note_wrap, span=5)
     rows.blank()
 
     if not controls_snapshot:
@@ -1661,8 +1693,17 @@ def _write_controls_sheet(
                 [
                     sf_label,
                     unit_str,
-                    # Capability may be null (ELAPSED_TIME back-fill path)
-                    (float(cap_val) if cap_val is not None else "null", styles.multiplier),
+                    # Capability may be null (ELAPSED_TIME back-fill path).
+                    # ELAPSED_TIME capabilities are day-counts (converted via
+                    # exp(-t/τ)), not 0-1 scores — day-suffixed display format
+                    # (numeric value unchanged; cells are never formula-referenced
+                    # for elapsed-time assignments).
+                    (
+                        float(cap_val) if cap_val is not None else "null",
+                        styles.days
+                        if unit_str == UnitType.ELAPSED_TIME.value
+                        else styles.multiplier,
+                    ),
                     (cov_val, styles.multiplier),
                     (rel_val, styles.multiplier),
                 ]
@@ -1800,7 +1841,13 @@ def _write_controls_sheet(
             rows.row(
                 [
                     (
-                        "(No opeff-bearing assignments — CURRENCY-only or all ELAPSED_TIME.)",
+                        # Workbook-labels PR: the old "CURRENCY-only or all
+                        # ELAPSED_TIME" wording was wrong for pair-gated /
+                        # conditional PROBABILITY assignments (they ARE
+                        # opeff-bearing — they just emit no standalone formula).
+                        f"(No standalone-formula assignments — every assignment "
+                        f"above is pair-gated, conditional, elapsed-time, or "
+                        f"currency; the combined effect is in {combined_effect_hint}.)",
                         styles.note_muted,
                     )
                 ]
@@ -2004,7 +2051,7 @@ def _write_controls_sheet(
         rows.blank()
 
 
-def build_single_run_let_workbook(run: Any, org: Any) -> bytes:
+def build_single_run_let_workbook(run: Any, org: Any, *, base_url: str = "") -> bytes:
     """Build the single-run verification workbook via the LET-spill path (.xlsx bytes).
 
     Parallel to ``build_verification_workbook`` but uses ONE self-contained LET
@@ -2093,6 +2140,8 @@ def build_single_run_let_workbook(run: Any, org: Any) -> bytes:
         controls_snapshot=controls_snapshot,
         weight_robustness=getattr(run, "weight_robustness", None),
         styles=styles,
+        scope_note=_SCOPE_NOTE_SINGLE,
+        help_base_url=base_url,
     )
 
     wb.close()  # serializes the workbook into buf
@@ -2667,7 +2716,7 @@ def build_aggregate_let_sheet(
         ws.set_column(_c, _c, 18)
 
 
-def build_aggregate_let_workbook(run: Any, org: Any) -> bytes:
+def build_aggregate_let_workbook(run: Any, org: Any, *, base_url: str = "") -> bytes:
     """Build the AGGREGATE verification workbook via the LET-spill path (.xlsx bytes).
 
     Parallel to ``build_single_run_let_workbook`` but emits ONE self-contained LET
@@ -2768,6 +2817,8 @@ def build_aggregate_let_workbook(run: Any, org: Any) -> bytes:
         # VWB2-1: the aggregate workbook has no "MC" sheet — point the caveats
         # at where its composed effects actually live.
         combined_effect_hint=("the Aggregate sheet's per-scenario blocks (composed multipliers)"),
+        scope_note=_SCOPE_NOTE_AGGREGATE,
+        help_base_url=base_url,
     )
 
     wb.close()  # serializes the workbook into buf
@@ -2777,7 +2828,7 @@ def build_aggregate_let_workbook(run: Any, org: Any) -> bytes:
     return out
 
 
-def build_verification_workbook(run: Any, org: Any) -> bytes:
+def build_verification_workbook(run: Any, org: Any, *, base_url: str = "") -> bytes:
     """Public entry point: build the verification workbook (.xlsx bytes) for a
     COMPLETED run, routing single vs aggregate runs to the LET-spill path.
 
@@ -2807,8 +2858,8 @@ def build_verification_workbook(run: Any, org: Any) -> bytes:
     """
     sim_results: dict[str, Any] = run.simulation_results or {}
     if _is_aggregate(run, sim_results):
-        return build_aggregate_let_workbook(run, org)
-    return build_single_run_let_workbook(run, org)
+        return build_aggregate_let_workbook(run, org, base_url=base_url)
+    return build_single_run_let_workbook(run, org, base_url=base_url)
 
 
 # --- Aggregate-run shared helpers (K-of-M ordering / App-stat extraction) ------
