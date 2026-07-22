@@ -126,6 +126,10 @@ default change, no adapter/math surface).
   image) — explicitly deferred.
 - CONSTRAINED via owner Q&A: license stays all-rights-reserved; README scopes
   self-hosting claims to evaluation.
+- CHANGED at plan time (Task 1): fly.toml gets a comment, NOT env entries —
+  WEBAUTHN_RP_ID/ORIGINS were found already set as Fly secrets (2026-07-22),
+  which override defaults; adding [env] duplicates would create a second,
+  shadowed source of truth.
 
 ## Risks
 

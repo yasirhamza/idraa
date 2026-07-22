@@ -286,13 +286,17 @@ class Settings(BaseSettings):
     weight_rank_indistinguishable_threshold: float = Field(default=0.10, ge=0.0, le=0.5)
 
     # --- Strong auth / MFA (2026-07-22 design) ---
-    # Config-driven so the software stays self-hostable — never hardcode an
-    # operator's domains into WebAuthn. Defaults are the OWNER deployment.
-    webauthn_rp_id: str = "idraa.fly.dev"
+    # WebAuthn Relying-Party identity — DEPLOYMENT-SPECIFIC, never hardcode a
+    # real domain here (OSS rule): localhost works for dev/compose evaluation
+    # out of the box; prod boot REFUSES the localhost default (see
+    # _check_webauthn_hardening). Passkeys are permanently bound to the RP-ID
+    # they were enrolled under — production values live in deployment config
+    # (Fly secrets for the reference deployment).
+    webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "Idraa"
-    # Single registrable domain (plan-gate): one RP-ID can't span idraa.fly.dev +
-    # idraa.app. A second passkey domain needs its own RP-ID or Related Origin Requests.
-    webauthn_origins: str = "https://idraa.fly.dev"
+    # Comma-separated allowed origins; must be https:// and host-match the
+    # RP-ID in prod (validator below).
+    webauthn_origins: str = "http://localhost:8000"
     auth_mfa_policy: Literal["required", "optional"] = "required"
     totp_issuer: str = "Idraa"
     mfa_encryption_key: str | None = None
@@ -393,6 +397,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "WEBAUTHN_RP_ID must be set to the deployment's domain in "
                 f"environment={self.environment!r} (e.g. app.example.com)."
+            )
+        if self.webauthn_rp_id == "localhost":
+            raise ValueError(
+                "WEBAUTHN_RP_ID is still the localhost default in "
+                f"environment={self.environment!r}. Set WEBAUTHN_RP_ID to the "
+                "deployment's registrable domain and WEBAUTHN_ORIGINS to its "
+                "https:// origin(s). Passkeys enrolled under a wrong RP-ID are "
+                "permanently bound to it — this must be correct before the "
+                "first user enrolls."
             )
         origins = self.webauthn_origin_list
         if not origins:

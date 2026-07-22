@@ -48,6 +48,10 @@ primary_region = "fra"
   # SQLite file until VACUUM rewrites it). AUTOCOMMIT, SQLite-only, gated on
   # no-active-runs — see src/idraa/services/retention.py:_run_vacuum.
   RETENTION_VACUUM_ENABLED = "1"
+  # WEBAUTHN_RP_ID / WEBAUTHN_ORIGINS are Fly SECRETS (set 2026-07-22), NOT
+  # [env] entries — do not add them here (two sources of truth would shadow).
+  # Their values must NEVER drift from the RP-ID passkeys were enrolled under.
+  # See docs/superpowers/specs/2026-07-22-readme-selfhost-rewrite-design.md.
 
 # Durability posture (decided in the whole-project-eval hygiene pass):
 # - Commit durability: SQLite WAL + PRAGMA synchronous=FULL (src/idraa/db.py)

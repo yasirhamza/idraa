@@ -52,7 +52,17 @@ def test_prod_short_secret_rejected() -> None:
 
 
 def test_prod_long_secret_ok() -> None:
-    s = Settings(environment="prod", session_secret="x" * 32)
+    # webauthn_rp_id/origins set to a real domain so this test isolates the
+    # session-secret guard being exercised here — a bare prod Settings() now
+    # also trips _check_webauthn_hardening's localhost-default guard (Task 1,
+    # readme-selfhost-rewrite), which is covered separately in
+    # tests/unit/test_config_webauthn.py.
+    s = Settings(
+        environment="prod",
+        session_secret="x" * 32,
+        webauthn_rp_id="example.com",
+        webauthn_origins="https://example.com",
+    )
     assert s.environment == "prod"
 
 
