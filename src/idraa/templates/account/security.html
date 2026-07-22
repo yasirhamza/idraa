@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Account security{% endblock %}
+{% block container_class %}max-w-2xl mx-auto{% endblock %}
+{% block content %}
+<div class="pt-8 space-y-8">
+  <h1 class="text-display text-ink-1">Account security</h1>
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  {% if enrolled %}<div class="badge badge-success">Enrolled</div>{% endif %}
+
+  {% if shown_recovery_codes %}
+  <section class="card bg-surface-0 p-4">
+    <h2 class="font-semibold">Save your recovery codes</h2>
+    <p class="text-sm text-ink-2">Shown once. Store them somewhere safe.</p>
+    <ul class="font-mono text-sm mt-2">
+      {% for c in shown_recovery_codes %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="card bg-surface-0 p-4" id="totp-section">
+    <h2 class="font-semibold">Authenticator app (TOTP)</h2>
+    {% if totp_confirmed %}
+      <p class="text-sm text-ink-2">Enabled.</p>
+    {% else %}
+      <a class="btn btn-primary btn-sm" href="/account/security/totp/enroll">Set up authenticator</a>
+    {% endif %}
+  </section>
+
+  <section class="card bg-surface-0 p-4" id="passkey-section">
+    <h2 class="font-semibold">Passkeys</h2>
+    <ul>{% for p in passkeys %}<li>{{ p.nickname }}</li>{% endfor %}</ul>
+    {# Passkey add/remove UI wired in Task 7. #}
+  </section>
+
+  <section class="card bg-surface-0 p-4">
+    <h2 class="font-semibold">Recovery codes</h2>
+    <p class="text-sm text-ink-2">{{ recovery_remaining }} unused.</p>
+    <form method="post" action="/account/security/recovery-codes/generate">
+      {{ csrf_field() }}
+      <button class="btn btn-sm" type="submit">Regenerate recovery codes</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

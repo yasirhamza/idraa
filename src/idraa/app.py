@@ -918,6 +918,7 @@ def create_app() -> FastAPI:
     from idraa.routes import library as library_router
     from idraa.routes import library_import as library_import_router
     from idraa.routes import library_overrides as library_overrides_router
+    from idraa.routes import mfa as mfa_router
     from idraa.routes import organization as organization_router
     from idraa.routes import overlays as overlays_router
     from idraa.routes import qualitative_bands as qualitative_bands_router
@@ -947,6 +948,7 @@ def create_app() -> FastAPI:
     app.include_router(help_router.router)
     app.include_router(organization_router.router)
     app.include_router(users_router.router)
+    app.include_router(mfa_router.router)
     # Arch-B1: control_library MUST be included BEFORE controls_router. The
     # latter owns GET /controls/{control_id:uuid}; FastAPI resolves routes in
     # registration order across routers, so if controls_router went first,

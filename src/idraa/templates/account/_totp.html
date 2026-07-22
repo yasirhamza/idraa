@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Set up authenticator{% endblock %}
+{% block container_class %}max-w-md mx-auto{% endblock %}
+{% block content %}
+<div class="pt-8 space-y-4">
+  <h1 class="text-display text-ink-1">Set up authenticator</h1>
+  {% if already %}
+    <p>An authenticator is already enabled.</p>
+  {% else %}
+    <p class="text-sm text-ink-2">Scan this with your authenticator app, then enter the 6-digit code.</p>
+    <div class="bg-white inline-block p-2">{{ qr_svg | safe }}</div>
+    <p class="text-xs font-mono text-ink-2">Manual key: {{ secret }}</p>
+    <form method="post" action="/account/security/totp/enroll" class="space-y-3">
+      {{ csrf_field() }}
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10"
+             class="input input-bordered" placeholder="123456" required>
+      <button class="btn btn-primary btn-sm" type="submit">Confirm</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
