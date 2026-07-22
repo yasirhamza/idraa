@@ -214,6 +214,12 @@ ALLOWED_DIRS = {"macros"}
 #   users/invite.html
 #       Role <select> on invite form; same constraint as users/edit.html.
 #
+#   account/_totp.html
+#       TOTP enrollment code field needs inputmode="numeric" (mobile numeric
+#       keypad), autocomplete="one-time-code" (browser/OS OTP autofill), and
+#       maxlength="10"; form_field's text variant exposes none of these
+#       (Strong Auth P1 Task 6).
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
@@ -264,6 +270,7 @@ ALLOWLIST: set[str] = {
     "setup/wizard.html",
     "users/edit.html",
     "users/invite.html",
+    "account/_totp.html",
 }
 
 
@@ -297,10 +304,13 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 39 = 38 + step_4_impact.html (Milestone B #loss-pert-overhaul: the
     # catastrophic toggle needs Alpine x-model/custom value the form_field
     # toggle variant doesn't support — justified inline in ALLOWLIST).
-    # 42 = 41 + register_import/upload.html (epic #34 P1c Task 4: file input,
-    # same file-variant gap as its scenarios/controls/library import.html
-    # siblings — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 42, (
+    # 43 = 41 + register_import/upload.html (epic #34 P1c Task 4: file input,
+    #      same file-variant gap as its scenarios/controls/library import.html
+    #      siblings — justified inline in ALLOWLIST)
+    #    + account/_totp.html (Strong Auth P1 Task 6: TOTP code field needs
+    #      inputmode/autocomplete/maxlength that form_field's text variant
+    #      doesn't expose — justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 43, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )
