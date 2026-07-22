@@ -33,7 +33,7 @@ uv run python -m ipykernel install --sys-prefix --name=python3
 uv run pre-commit install                       # per-commit lints
 uv run pre-commit install --hook-type pre-push  # branch gates + local verification gate
 
-# Local verification gate (GHA is billing-disabled — pre-push IS the CI):
+# Local verification gate (a fast local mirror of the CI gate; runs on push):
 # ruff check + ruff format --check + mypy + fast pytest. Runs automatically
 # on `git push`; run manually with:
 uv run python scripts/run_local_gate.py
