@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Confirm it's you{% endblock %}
+{% block container_class %}max-w-md mx-auto{% endblock %}
+{% block content %}
+<div class="pt-8 space-y-4">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <h1 class="text-display text-ink-1 pl-16 md:pl-0">Confirm it's you</h1>
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <p class="text-sm text-ink-2">This action is sensitive, so we need you to re-verify.</p>
+  {% if has_strong_factor %}
+  <form method="post" action="/auth/step-up/verify" class="space-y-4">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ next | default('/') }}">
+    <input name="code" inputmode="text" autocomplete="one-time-code" maxlength="32"
+           class="input input-bordered w-full" placeholder="123456" required autofocus>
+    <button class="btn btn-primary btn-sm" type="submit">Verify code</button>
+  </form>
+  <p class="text-xs text-ink-3">Enter the 6-digit code from your authenticator, or a recovery code.</p>
+  {% else %}
+  <form method="post" action="/auth/step-up/verify" class="space-y-4">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ next | default('/') }}">
+    <input type="password" name="password" autocomplete="current-password" maxlength="1024"
+           class="input input-bordered w-full" placeholder="Your password" required autofocus>
+    <button class="btn btn-primary btn-sm" type="submit">Verify password</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

@@ -57,6 +57,7 @@ from idraa.routes.deps import (
     current_user,
     get_db,
 )
+from idraa.routes.deps import safe_next as _safe_next
 from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
 from idraa.services.auth import (
@@ -79,20 +80,6 @@ from idraa.services.mfa_enrollment import user_has_strong_factor
 from idraa.services.second_factor import verify_totp_or_recovery
 
 router = APIRouter()
-
-
-def _safe_next(raw: str | None) -> str:
-    """Sanitize a ``?next=`` redirect target.
-
-    Returns ``raw`` only when it is a same-origin absolute path: must start
-    with a single ``/`` and NOT with ``//`` or ``/\\`` (browsers normalize a
-    leading backslash to a forward slash for special schemes, so ``/\\evil``
-    is an equivalent protocol-relative open-redirect vector to ``//evil``).
-    Anything else falls back to ``/``.
-    """
-    if raw and raw.startswith("/") and raw[1:2] not in ("/", "\\"):
-        return raw
-    return "/"
 
 
 def _json_err(msg: str) -> Response:
