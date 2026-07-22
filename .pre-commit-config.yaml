@@ -44,6 +44,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies:
+          - cryptography>=49.0.0
           - fastapi>=0.115
           - itsdangerous>=2.2
           - jinja2>=3.1
