@@ -45,6 +45,13 @@ _FAIR_CAM_VALIDATOR = FAIRCAMValidator()
 # sigma is a user-controllable OOM/DoS path to the engine sampler at the 100k cap.
 _SIGMA_MAX: float = 10.0
 
+# Sec-L8/#84: float32-representable ceiling (np.float32 max finite ~3.4028e38);
+# no legitimate FAIR frequency or USD loss approaches this. A finite-but-enormous
+# distribution parameter overflows the float32 sample-array codec (sample_codec.py)
+# on encode, producing inf/nan and silently corrupting the stored run. This is a
+# representability guard, NOT a semantic loss ceiling.
+_MAGNITUDE_MAX: float = 1e38
+
 
 def _validate_vulnerability(vuln: dict[str, Any]) -> list[str]:
     """Return a list of human-readable error strings for an invalid vuln PERT.
@@ -73,31 +80,41 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
     distributions before storage (Meth-B1 #307; Epic B #326 extends to lognormal;
     #27 extends to lognormal_mixture).
 
-    PERT/uniform/triangular: low/mode/high must be finite.
-    Lognormal: mean must be finite; sigma must be finite AND 0 < sigma <= 10
-    (an unbounded right tail makes a non-finite mean or non-positive sigma
-    catastrophic; an extreme-but-finite sigma is a user-controllable OOM/DoS
-    path to the engine sampler at the 100k cap — Sec-I2. sigma=10 already spans
-    ~17 orders of magnitude p5->p95, beyond any defensible cyber-loss range).
-    lognormal_mixture: same per-component finiteness + sigma bound as
-    lognormal, PLUS weight > 0 per component, weights summing to 1 (±1e-9),
+    PERT/uniform/triangular: low/mode/high must be finite AND |v| <= _MAGNITUDE_MAX.
+    Lognormal: mean must be finite AND |mean| <= _MAGNITUDE_MAX; sigma must be
+    finite AND 0 < sigma <= 10 (an unbounded right tail makes a non-finite mean
+    or non-positive sigma catastrophic; an extreme-but-finite sigma is a
+    user-controllable OOM/DoS path to the engine sampler at the 100k cap —
+    Sec-I2. sigma=10 already spans ~17 orders of magnitude p5->p95, beyond any
+    defensible cyber-loss range).
+    lognormal_mixture: same per-component finiteness + magnitude + sigma bound
+    as lognormal, PLUS weight > 0 per component, weights summing to 1 (±1e-9),
     and 1 <= len(components) <= Settings.max_smes_per_fieldset (Sec-N1: the
     component count is deliberately coupled to the same cap that already
     bounds SME-estimate fan-out into the wizard finalize pipeline — a mixture
     can never carry more components than a single fieldset could ever
     legitimately produce).
+
+    The magnitude cap (Sec-L8/#84) rejects finite-but-enormous values that
+    would overflow the float32 sample-array codec on write (sample_codec.py),
+    which otherwise silently corrupts the stored run with inf. Applied to ALL
+    fields validated here (TEF, primary_loss, secondary_loss) since it is a
+    float32-representability guard, not a semantic loss ceiling — a 1e38
+    events/yr TEF is equally absurd and also feeds the codec via risk=LEF*LM.
     """
     errs: list[str] = []
     kind = str(dist.get("distribution", "pert")).lower()
     if kind == "lognormal":
         mean = dist.get("mean")
         sigma = dist.get("sigma")
-        if (
-            isinstance(mean, (int, float))
-            and not isinstance(mean, bool)
-            and not math.isfinite(mean)
-        ):
-            errs.append(f"{field_name}.mean must be finite, got {mean!r}")
+        if isinstance(mean, (int, float)) and not isinstance(mean, bool):
+            if not math.isfinite(mean):
+                errs.append(f"{field_name}.mean must be finite, got {mean!r}")
+            elif abs(mean) > _MAGNITUDE_MAX:
+                errs.append(
+                    f"{field_name}.mean magnitude exceeds the representable ceiling "
+                    f"{_MAGNITUDE_MAX:g}, got {mean!r}"
+                )
         if isinstance(sigma, (int, float)) and not isinstance(sigma, bool):
             if not math.isfinite(sigma):
                 errs.append(f"{field_name}.sigma must be finite, got {sigma!r}")
@@ -136,12 +153,14 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
             # check ran before the finiteness check (Sec-B1 BLOCKER; mirrors
             # the scalar lognormal branch's finite-first ordering above
             # exactly, applied per component).
-            if (
-                isinstance(c_mean, (int, float))
-                and not isinstance(c_mean, bool)
-                and not math.isfinite(c_mean)
-            ):
-                errs.append(f"{field_name}.components[{i}].mean must be finite, got {c_mean!r}")
+            if isinstance(c_mean, (int, float)) and not isinstance(c_mean, bool):
+                if not math.isfinite(c_mean):
+                    errs.append(f"{field_name}.components[{i}].mean must be finite, got {c_mean!r}")
+                elif abs(c_mean) > _MAGNITUDE_MAX:
+                    errs.append(
+                        f"{field_name}.components[{i}].mean magnitude exceeds the "
+                        f"representable ceiling {_MAGNITUDE_MAX:g}, got {c_mean!r}"
+                    )
             if isinstance(c_sigma, (int, float)) and not isinstance(c_sigma, bool):
                 if not math.isfinite(c_sigma):
                     errs.append(
@@ -180,6 +199,11 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
             continue  # non-numeric handled by fair_cam's type validation
         if not math.isfinite(v):
             errs.append(f"{field_name}.{key} must be finite, got {v!r}")
+        elif abs(v) > _MAGNITUDE_MAX:
+            errs.append(
+                f"{field_name}.{key} magnitude exceeds the representable ceiling "
+                f"{_MAGNITUDE_MAX:g}, got {v!r}"
+            )
     return errs
 
 
