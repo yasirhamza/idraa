@@ -1,13 +1,13 @@
 import pathlib
 import re
 
-# 32 refactored route WIRINGS after Task 4. NOTE: Task 6 adds settings.py with
-# its own require_step_up(ADMIN) POST gate -> bump this to 33 when Task 6 lands
-# (flagged in Task 6 Step 3.6). Count only `Depends(require_step_up(` call sites
-# and EXCLUDE deps.py (which holds the `def require_step_up(` definition AND a
-# docstring example `Depends(require_step_up(...))` — neither is a wiring). This
-# tripwire fails loudly if an auth decorator is silently dropped.
-_EXPECTED_STEP_UP_WIRINGS = 32  # Task 6 -> 33
+# 33 refactored route WIRINGS after Task 6 (routes/settings.py's POST
+# /settings/security is the 33rd — see Task 6 Step 3.6). Count only
+# `Depends(require_step_up(` call sites and EXCLUDE deps.py (which holds the
+# `def require_step_up(` definition AND a docstring example
+# `Depends(require_step_up(...))` — neither is a wiring). This tripwire fails
+# loudly if an auth decorator is silently dropped.
+_EXPECTED_STEP_UP_WIRINGS = 33
 
 # Built dynamically (not a literal) so this guard itself never contains the
 # retired token — a raw repo-wide grep for it (the feature's final acceptance

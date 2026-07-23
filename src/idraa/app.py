@@ -1052,6 +1052,7 @@ def create_app() -> FastAPI:
     from idraa.routes import runs as runs_router
     from idraa.routes import scenario_import as scenario_import_router
     from idraa.routes import scenarios as scenarios_router
+    from idraa.routes import settings as settings_router
     from idraa.routes import setup as setup_router
     from idraa.routes import sme_directory as sme_directory_router
     from idraa.routes import step_up as step_up_router
@@ -1102,6 +1103,7 @@ def create_app() -> FastAPI:
     app.include_router(qualitative_bands_router.router)
     app.include_router(reports_router.router)
     app.include_router(sme_directory_router.router)
+    app.include_router(settings_router.router)
     app.include_router(
         dev_styleguide_router.router
     )  # Arch-7: always mounted; in-handler 404 gate checks the flag
