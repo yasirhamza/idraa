@@ -208,7 +208,7 @@ async def test_set_mitigating_controls_inserts(
     c2 = await seed_control_factory(name="B")
 
     repo = ScenarioRepo(db_session)
-    await repo.set_mitigating_controls(
+    diff = await repo.set_mitigating_controls(
         scenario_id=scenario.id,
         organization_id=scenario.organization_id,
         control_ids=[c1.id, c2.id],
@@ -217,6 +217,11 @@ async def test_set_mitigating_controls_inserts(
     await db_session.refresh(scenario, attribute_names=["mitigating_controls"])
     names = sorted(c.name for c in scenario.mitigating_controls)
     assert names == ["A", "B"]
+    # Issue #79 L6: callers (route/service) need changed + before/after ids
+    # to emit the scenario.controls_changed audit row.
+    assert diff.changed is True
+    assert diff.before_ids == frozenset()
+    assert diff.after_ids == frozenset({c1.id, c2.id})
 
 
 @pytest.mark.asyncio
@@ -236,7 +241,7 @@ async def test_set_mitigating_controls_diff_apply(
     await db_session.commit()
 
     repo = ScenarioRepo(db_session)
-    await repo.set_mitigating_controls(
+    diff = await repo.set_mitigating_controls(
         scenario_id=scenario.id,
         organization_id=scenario.organization_id,
         control_ids=[c_keep.id, c_add.id],
@@ -245,6 +250,41 @@ async def test_set_mitigating_controls_diff_apply(
     await db_session.refresh(scenario, attribute_names=["mitigating_controls"])
     names = sorted(c.name for c in scenario.mitigating_controls)
     assert names == ["Add", "Keep"]
+    assert diff.changed is True
+    assert diff.before_ids == frozenset({c_keep.id, c_drop.id})
+    assert diff.after_ids == frozenset({c_keep.id, c_add.id})
+
+
+@pytest.mark.asyncio
+async def test_set_mitigating_controls_no_change_reports_unchanged(
+    db_session: AsyncSession,
+    seed_scenario_with_no_controls: Scenario,
+    seed_control_factory: Callable[..., Awaitable[Control]],
+) -> None:
+    """Re-submitting the exact same control set reports changed=False.
+
+    Issue #79 L6: callers use this to skip the ``scenario.controls_changed``
+    audit row on a true no-op (e.g. re-POSTing the same form unchanged).
+    """
+    scenario = seed_scenario_with_no_controls
+    c1 = await seed_control_factory(name="A")
+
+    repo = ScenarioRepo(db_session)
+    await repo.set_mitigating_controls(
+        scenario_id=scenario.id,
+        organization_id=scenario.organization_id,
+        control_ids=[c1.id],
+    )
+    await db_session.commit()
+
+    diff = await repo.set_mitigating_controls(
+        scenario_id=scenario.id,
+        organization_id=scenario.organization_id,
+        control_ids=[c1.id],
+    )
+    assert diff.changed is False
+    assert diff.before_ids == frozenset({c1.id})
+    assert diff.after_ids == frozenset({c1.id})
 
 
 @pytest.mark.asyncio

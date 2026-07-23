@@ -111,7 +111,7 @@ from idraa.services.attack_mappings import (
     ensure_attack_techniques_addable,
     set_scenario_attack_mappings,
 )
-from idraa.services.audit import log_bulk_export
+from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.calibration import (
     calibration_context_from_org,
 )
@@ -1052,7 +1052,6 @@ async def update_scenario(
 
     # PR pi F12: mc_iterations dropped from scenario form (run-form now
     # owns it). Mitigating-controls join still applies.
-    _ = updated  # consumed via repo update below; service.update returns it for tests
     # Issue #217: the edit form renders checkboxes ONLY for ACTIVE controls
     # (ControlRepo.list_for_org filters to EntityStatus.ACTIVE). A control
     # that became DRAFT/DEPRECATED while still linked has no checkbox, so its
@@ -1061,12 +1060,36 @@ async def update_scenario(
     # (the controls the form could actually render) so links to non-ACTIVE
     # controls survive the edit.
     eligible_control_ids = {c.id for c in available_controls}
-    await ScenarioRepo(db).set_mitigating_controls(
+    control_change = await ScenarioRepo(db).set_mitigating_controls(
         scenario_id=scenario_id,
         organization_id=user.organization_id,
         control_ids=parsed_control_ids,
         eligible_control_ids=eligible_control_ids,
     )
+    # Issue #79 L6: ScenarioService.update() is a silent no-op (no audit, no
+    # row_version bump) when only the control set changed — the descriptive
+    # field diff it computes never sees ScenarioControl join rows. Emit the
+    # audit here (repo stays audit-agnostic, mirrors ScenarioService owning
+    # audit) and close the lost-update window: if update() didn't already
+    # bump row_version (i.e. it took the no-op-fields path), bump it now so a
+    # concurrent field edit can't silently clobber this control change.
+    if control_change.changed:
+        if updated.row_version == expected_row_version:
+            updated.row_version += 1
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="scenario",
+            entity_id=scenario_id,
+            action="scenario.controls_changed",
+            changes={
+                "mitigating_controls": [
+                    sorted(str(c) for c in control_change.before_ids),
+                    sorted(str(c) for c in control_change.after_ids),
+                ]
+            },
+            user_id=user.id,
+            ip_address=client_ip(request),
+        )
 
     # Issue #475 T9: pre-validation above means this should never raise on
     # user input — the except block is defense-in-depth only. Placed BEFORE
@@ -2624,12 +2647,30 @@ async def finalize_wizard(
             eligible_control_ids = {
                 c.id for c in await ControlRepo(db).list_for_org(user.organization_id)
             }
-            await ScenarioRepo(db).set_mitigating_controls(
+            control_change = await ScenarioRepo(db).set_mitigating_controls(
                 scenario_id=scenario.id,
                 organization_id=user.organization_id,
                 control_ids=mitigating_uuids,
                 eligible_control_ids=eligible_control_ids,
             )
+            # Issue #79 L6: update_from_wizard() already bumps row_version
+            # unconditionally, so no lost-update window here (unlike the
+            # plain edit path) — just the audit row is missing.
+            if control_change.changed:
+                await AuditWriter(db).log(
+                    organization_id=user.organization_id,
+                    entity_type="scenario",
+                    entity_id=scenario.id,
+                    action="scenario.controls_changed",
+                    changes={
+                        "mitigating_controls": [
+                            sorted(str(c) for c in control_change.before_ids),
+                            sorted(str(c) for c in control_change.after_ids),
+                        ]
+                    },
+                    user_id=user.id,
+                    ip_address=client_ip(request),
+                )
         elif state.mitigating_control_ids:
             mitigating_uuids = [uuid.UUID(s) for s in state.mitigating_control_ids]
             await ScenarioRepo(db).set_mitigating_controls(
@@ -2653,6 +2694,43 @@ async def finalize_wizard(
                 entry_version=int(library_pin.get("version") or 1),
             )
         if is_reestimate:
+            # Issue #79 L11: the replace-all delete below silently discarded
+            # the analyst's prior elicited SME estimates with no audit trail —
+            # the only anti-pattern here besides L6's controls_changed gap.
+            # Load-then-log BEFORE the delete, mirroring
+            # set_scenario_attack_mappings's before/after shape
+            # (attack_mappings.py:169-177) and sme_estimate.recorded's
+            # entity_type/entity_id convention (wizard_finalize.py:723).
+            # Payload is compact (id + low/high, not full rows) per the
+            # full-disk-outage constraint on audit_log growth.
+            existing_estimates = (
+                (
+                    await db.execute(
+                        select(ScenarioSMEEstimate).where(
+                            ScenarioSMEEstimate.scenario_id == scenario.id,
+                            ScenarioSMEEstimate.organization_id == user.organization_id,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if existing_estimates:
+                await AuditWriter(db).log(
+                    organization_id=user.organization_id,
+                    entity_type="scenario_sme_estimate",
+                    entity_id=scenario.id,
+                    action="sme_estimate.replaced",
+                    changes={
+                        "removed": [
+                            {"id": str(row.id), "low": row.low, "high": row.high}
+                            for row in existing_estimates
+                        ],
+                        "added": None,
+                    },
+                    user_id=user.id,
+                    ip_address=client_ip(request),
+                )
             # #56: SME rows are replace-all on re-estimation — the target's
             # prior estimates no longer reflect the re-elicited values. Scoped
             # to this org (defense in depth; scenario is already org-checked).

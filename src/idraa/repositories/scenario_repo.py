@@ -13,6 +13,7 @@ happens in the same DB session as the business write.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,23 @@ from idraa.models.control import Control
 from idraa.models.enums import EntityStatus
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
+
+
+@dataclass(frozen=True)
+class MitigatingControlsDiff:
+    """Result of :meth:`ScenarioRepo.set_mitigating_controls` (issue #79 L6).
+
+    The repo stays audit-agnostic (``AuditWriter`` calls belong at the
+    service/route layer, mirroring ``ScenarioService`` owning audit), but
+    callers that need to emit a ``scenario.controls_changed`` audit row —
+    or decide whether a companion field-update was a true no-op — need to
+    know (a) whether the join actually changed and (b) the full before/after
+    id sets to put in the diff.
+    """
+
+    changed: bool
+    before_ids: frozenset[uuid.UUID]
+    after_ids: frozenset[uuid.UUID]
 
 
 class ScenarioRepo:
@@ -134,7 +152,7 @@ class ScenarioRepo:
         organization_id: uuid.UUID,
         control_ids: list[uuid.UUID],
         eligible_control_ids: set[uuid.UUID] | None = None,
-    ) -> None:
+    ) -> MitigatingControlsDiff:
         """Reconcile the scenario_controls join.
 
         Validates every ``control_id`` belongs to the org; raises
@@ -159,6 +177,13 @@ class ScenarioRepo:
         NOT a status filter applied here — keeping the repo agnostic to the
         control-lifecycle policy and letting the route own "what the form
         could show".
+
+        Returns a :class:`MitigatingControlsDiff` — ``changed`` is
+        ``bool(to_add or to_remove)`` (issue #79 L6); ``before_ids`` /
+        ``after_ids`` are the FULL link sets (not just the delta), mirroring
+        the before/after snapshot shape ``set_scenario_attack_mappings``
+        already emits into ``scenario.update`` audit rows. This method never
+        writes an audit row itself — that stays at the service/route layer.
         """
         if control_ids:
             existing = (
@@ -218,6 +243,12 @@ class ScenarioRepo:
             )
 
         await self._db.flush()
+
+        return MitigatingControlsDiff(
+            changed=bool(to_add or to_remove),
+            before_ids=frozenset(current_set),
+            after_ids=frozenset((current_set - to_remove) | to_add),
+        )
 
     async def get_for_org_or_raise(
         self,
