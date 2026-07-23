@@ -2768,8 +2768,8 @@ def test_aggregate_let_attributeerror_contained_to_summary_only(monkeypatch):
 # assignments were present; (2) the Typical-case point row never named its
 # basis; (3) elapsed-time capability cells displayed bare day-counts on a
 # 0-1-looking column; (4) neither workbook stated its dollar-value scope
-# (scenario-scoped vs summed-across-scenarios); (5) the help link hardcoded
-# idraa.fly.dev while deployments serve arbitrary hosts.
+# (scenario-scoped vs summed-across-scenarios); (5) the help link hardcoded a
+# deployment host while deployments serve arbitrary hosts.
 
 
 def _v3_snap_dict_pair_gated():
