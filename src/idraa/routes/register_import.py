@@ -323,7 +323,9 @@ async def register_import_sheet_get(
 ) -> Response:
     svc = RegisterImportService(db)
     try:
-        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
+        preview = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
 
@@ -359,12 +361,17 @@ async def register_import_sheet_post(
     svc = RegisterImportService(db)
     try:
         await svc.set_sheet(
-            organization_id=user.organization_id, token=token, sheet_name=sheet_name
+            organization_id=user.organization_id,
+            token=token,
+            sheet_name=sheet_name,
+            created_by_user_id=user.id,
         )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
     except ValidationError as exc:
-        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
+        preview = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
         sheet_names = list_sheet_names(preview.csv_bytes)
         filename = (preview.state_json or {}).get("filename")
         return templates.TemplateResponse(
@@ -396,8 +403,12 @@ async def register_import_columns_get(
 ) -> Response:
     svc = RegisterImportService(db)
     try:
-        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
-        headers = await svc.get_headers(organization_id=user.organization_id, token=token)
+        preview = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
+        headers = await svc.get_headers(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
 
@@ -436,12 +447,17 @@ async def register_import_columns_post(
     svc = RegisterImportService(db)
     try:
         await svc.set_column_map(
-            organization_id=user.organization_id, token=token, column_map=column_map
+            organization_id=user.organization_id,
+            token=token,
+            column_map=column_map,
+            created_by_user_id=user.id,
         )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
     except ValidationError as exc:
-        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
+        preview = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
         state = preview.state_json or {}
         return templates.TemplateResponse(
             request,
@@ -451,7 +467,9 @@ async def register_import_columns_post(
                 "flash": build_flash(str(exc), "error"),
                 "token": token,
                 "filename": state.get("filename"),
-                "headers": await svc.get_headers(organization_id=user.organization_id, token=token),
+                "headers": await svc.get_headers(
+                    organization_id=user.organization_id, token=token, created_by_user_id=user.id
+                ),
                 "column_map": column_map,
                 "targets": _TARGET_OPTIONS,
             },
@@ -502,8 +520,12 @@ async def register_import_bind_get(
 ) -> Response:
     svc = RegisterImportService(db)
     try:
-        preview = await svc.get_staged(organization_id=user.organization_id, token=token)
-        distinct = await svc.distinct_values(organization_id=user.organization_id, token=token)
+        preview = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
+        distinct = await svc.distinct_values(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
     except ValidationError as exc:
@@ -558,7 +580,9 @@ async def register_import_bind_post(
     raw = await request.form()
     svc = RegisterImportService(db)
     try:
-        distinct = await svc.distinct_values(organization_id=user.organization_id, token=token)
+        distinct = await svc.distinct_values(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
     except ValidationError as exc:
@@ -597,7 +621,10 @@ async def register_import_bind_post(
 
     try:
         await svc.set_value_bindings(
-            organization_id=user.organization_id, token=token, bindings=bindings
+            organization_id=user.organization_id,
+            token=token,
+            bindings=bindings,
+            created_by_user_id=user.id,
         )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
@@ -638,7 +665,10 @@ async def register_import_apply_profile_post(
     svc = RegisterImportService(db)
     try:
         warnings = await svc.apply_profile(
-            organization_id=user.organization_id, token=token, profile_id=profile_id
+            organization_id=user.organization_id,
+            token=token,
+            profile_id=profile_id,
+            created_by_user_id=user.id,
         )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
@@ -707,8 +737,12 @@ async def register_import_preview_get(
 ) -> Response:
     svc = RegisterImportService(db)
     try:
-        preview_row = await svc.get_staged(organization_id=user.organization_id, token=token)
-        classified = await svc.preview(organization_id=user.organization_id, token=token)
+        preview_row = await svc.get_staged(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
+        classified = await svc.preview(
+            organization_id=user.organization_id, token=token, created_by_user_id=user.id
+        )
     except PreviewExpiredError as exc:
         return _expired_response(request, user, exc)
     except ValidationError as exc:

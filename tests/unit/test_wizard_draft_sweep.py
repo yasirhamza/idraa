@@ -93,7 +93,14 @@ async def test_sweep_exception_does_not_kill_reaper_loop(
     ``run_reaper_interval_seconds`` is read by the loop itself; the
     monkeypatched ``reap_once``/``sweep_wizard_drafts`` never touch the real
     Settings shape), lets it complete >=2 iterations, then cancels and
-    asserts clean cancellation."""
+    asserts clean cancellation.
+
+    Issue #80: the loop also fires ``sweep_expired_previews`` /
+    ``sweep_expired_sessions`` each iteration (own sibling try/except,
+    tested separately in ``test_store_lifecycle_reaper.py``) — stub both to
+    no-ops here so this wizard-draft-focused test doesn't fall through to
+    the REAL ``get_session()`` (which would open/cache an unrelated DB
+    engine singleton and leak state into later tests)."""
 
     class _StubSettings:
         run_reaper_interval_seconds = 0.01
@@ -108,8 +115,13 @@ async def test_sweep_exception_does_not_kill_reaper_loop(
     async def _raising_sweep(settings: Any) -> None:
         raise RuntimeError("boom — simulated wizard-draft sweep failure")
 
+    async def _noop_sweep(settings: Any) -> None:
+        return None
+
     monkeypatch.setattr(run_reaper, "reap_once", _counting_reap_once)
     monkeypatch.setattr(run_reaper, "sweep_wizard_drafts", _raising_sweep)
+    monkeypatch.setattr(run_reaper, "sweep_expired_previews", _noop_sweep)
+    monkeypatch.setattr(run_reaper, "sweep_expired_sessions", _noop_sweep)
 
     task = asyncio.create_task(run_reaper.periodic_reaper_loop(_StubSettings()))  # type: ignore[arg-type]
     await asyncio.sleep(0.05)  # >= 2 intervals at 0.01s each
