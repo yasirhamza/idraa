@@ -154,10 +154,16 @@ async def _staged_and_mapped(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
     await svc.set_value_bindings(
-        organization_id=org.id, token=staged.token, bindings=_FULL_VALUE_BINDINGS
+        organization_id=org.id,
+        token=staged.token,
+        bindings=_FULL_VALUE_BINDINGS,
+        created_by_user_id=user.id,
     )
     return staged.token
 
@@ -275,20 +281,22 @@ async def test_stage_upload_format_conflict_rejected(
 async def test_get_staged_malformed_token_raises_expired(
     db_session: AsyncSession, seed_org_user: SeedOrgUser
 ) -> None:
-    org, _user = await seed_org_user(db_session)
+    org, user = await seed_org_user(db_session)
     svc = RegisterImportService(db_session)
     with pytest.raises(PreviewExpiredError):
-        await svc.get_staged(organization_id=org.id, token="not-a-uuid")
+        await svc.get_staged(organization_id=org.id, token="not-a-uuid", created_by_user_id=user.id)
 
 
 @pytest.mark.asyncio
 async def test_get_staged_missing_token_raises_expired(
     db_session: AsyncSession, seed_org_user: SeedOrgUser
 ) -> None:
-    org, _user = await seed_org_user(db_session)
+    org, user = await seed_org_user(db_session)
     svc = RegisterImportService(db_session)
     with pytest.raises(PreviewExpiredError):
-        await svc.get_staged(organization_id=org.id, token=str(uuid.uuid4()))
+        await svc.get_staged(
+            organization_id=org.id, token=str(uuid.uuid4()), created_by_user_id=user.id
+        )
 
 
 @pytest.mark.asyncio
@@ -296,7 +304,7 @@ async def test_get_staged_cross_org_raises_expired(
     db_session: AsyncSession, seed_org_user: SeedOrgUser
 ) -> None:
     org_a, user_a = await seed_org_user(db_session, org_name="Org A", email="ga@example.com")
-    org_b, _user_b = await seed_org_user(db_session, org_name="Org B", email="gb@example.com")
+    org_b, user_b = await seed_org_user(db_session, org_name="Org B", email="gb@example.com")
     svc = RegisterImportService(db_session)
     staged = await svc.stage_upload(
         organization_id=org_a.id,
@@ -306,7 +314,52 @@ async def test_get_staged_cross_org_raises_expired(
         user=user_a,
     )
     with pytest.raises(PreviewExpiredError):
-        await svc.get_staged(organization_id=org_b.id, token=staged.token)
+        await svc.get_staged(
+            organization_id=org_b.id, token=staged.token, created_by_user_id=user_b.id
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_staged_same_org_different_user_raises_expired(
+    db_session: AsyncSession, seed_org_user: SeedOrgUser
+) -> None:
+    """Issue #80 (L10): a second ADMIN in the SAME org must not be able to
+    resume another admin's in-flight upload via its token — user-scope is
+    enforced in addition to org-scope. Same uniform ``PreviewExpiredError``
+    (no existence oracle) as the cross-org / expired / malformed cases."""
+    from idraa.models.user import User
+
+    org, user_a = await seed_org_user(db_session, org_name="Org A", email="ua@example.com")
+    user_b = User(
+        organization_id=org.id,
+        email="ub@example.com",
+        password_hash="x",
+        full_name="ub",
+        role=user_a.role,
+    )
+    db_session.add(user_b)
+    await db_session.flush()
+
+    svc = RegisterImportService(db_session)
+    staged = await svc.stage_upload(
+        organization_id=org.id,
+        filename="register.csv",
+        content_type="text/csv",
+        data=_csv_bytes(),
+        user=user_a,
+    )
+    # user_a can resolve its own token.
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user_a.id
+    )
+    assert row.id == uuid.UUID(staged.token)
+
+    # user_b — SAME org, different user — cannot, even though the token is
+    # otherwise valid (not expired, correct org, correct entity_type).
+    with pytest.raises(PreviewExpiredError):
+        await svc.get_staged(
+            organization_id=org.id, token=staged.token, created_by_user_id=user_b.id
+        )
 
 
 @pytest.mark.asyncio
@@ -323,7 +376,7 @@ async def test_get_staged_rejects_scenario_import_token(
 
     svc = RegisterImportService(db_session)
     with pytest.raises(PreviewExpiredError):
-        await svc.get_staged(organization_id=org.id, token=token)
+        await svc.get_staged(organization_id=org.id, token=token, created_by_user_id=user.id)
 
 
 @pytest.mark.asyncio
@@ -356,7 +409,7 @@ async def test_get_staged_expired_row_raises_and_deletes(
     row.expires_at = past
     await db_session.flush()
     with pytest.raises(PreviewExpiredError):
-        await svc.get_staged(organization_id=org.id, token=token)
+        await svc.get_staged(organization_id=org.id, token=token, created_by_user_id=user.id)
 
     remaining = (
         await db_session.execute(select(CSVImportPreview).where(CSVImportPreview.id == row.id))
@@ -384,9 +437,13 @@ async def test_set_sheet_valid_updates_state(
     staged = await svc.stage_upload(
         organization_id=org.id, filename="r.xlsx", content_type=None, data=data, user=user
     )
-    await svc.set_sheet(organization_id=org.id, token=staged.token, sheet_name="Q2")
+    await svc.set_sheet(
+        organization_id=org.id, token=staged.token, sheet_name="Q2", created_by_user_id=user.id
+    )
 
-    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     assert row.state_json is not None
     assert row.state_json["sheet_name"] == "Q2"
     assert row.state_json["filename"] == "r.xlsx"  # earlier key preserved
@@ -403,7 +460,12 @@ async def test_set_sheet_unknown_name_rejected(
         organization_id=org.id, filename="r.xlsx", content_type=None, data=data, user=user
     )
     with pytest.raises(ValidationError, match="unknown sheet"):
-        await svc.set_sheet(organization_id=org.id, token=staged.token, sheet_name="NoSuchSheet")
+        await svc.set_sheet(
+            organization_id=org.id,
+            token=staged.token,
+            sheet_name="NoSuchSheet",
+            created_by_user_id=user.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -420,7 +482,12 @@ async def test_set_sheet_on_csv_rejected(
         user=user,
     )
     with pytest.raises(ValidationError, match="only applies to xlsx"):
-        await svc.set_sheet(organization_id=org.id, token=staged.token, sheet_name="Sheet1")
+        await svc.set_sheet(
+            organization_id=org.id,
+            token=staged.token,
+            sheet_name="Sheet1",
+            created_by_user_id=user.id,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -442,9 +509,14 @@ async def test_set_column_map_happy_path(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
-    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     assert row.state_json is not None
     assert row.state_json["column_map"] == _FULL_COLUMN_MAP
 
@@ -465,7 +537,12 @@ async def test_set_column_map_unknown_target_rejected(
     bad_map = dict(_FULL_COLUMN_MAP)
     bad_map["Title"] = "not_a_real_target"
     with pytest.raises(ValidationError, match="unknown column target"):
-        await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=bad_map)
+        await svc.set_column_map(
+            organization_id=org.id,
+            token=staged.token,
+            column_map=bad_map,
+            created_by_user_id=user.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -484,7 +561,12 @@ async def test_set_column_map_missing_required_target_rejected(
     bad_map = dict(_FULL_COLUMN_MAP)
     bad_map["Likelihood"] = "ignore"  # no header maps to "likelihood" anymore
     with pytest.raises(ValidationError, match="exactly one column must map to 'likelihood'"):
-        await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=bad_map)
+        await svc.set_column_map(
+            organization_id=org.id,
+            token=staged.token,
+            column_map=bad_map,
+            created_by_user_id=user.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -505,7 +587,12 @@ async def test_set_column_map_ambiguous_single_valued_target_rejected(
     # category joined _REQUIRED_EXACTLY_ONE (UAT fix): duplicates now trip the
     # exactly-one check rather than the optional at-most-one check.
     with pytest.raises(ValidationError, match="exactly one column must map to 'category'"):
-        await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=bad_map)
+        await svc.set_column_map(
+            organization_id=org.id,
+            token=staged.token,
+            column_map=bad_map,
+            created_by_user_id=user.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -531,7 +618,12 @@ async def test_set_column_map_rejects_duplicated_header(
         "Category": "category",
     }
     with pytest.raises(ValidationError, match="blank or duplicated"):
-        await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=column_map)
+        await svc.set_column_map(
+            organization_id=org.id,
+            token=staged.token,
+            column_map=column_map,
+            created_by_user_id=user.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -550,7 +642,12 @@ async def test_set_column_map_rejects_blank_header(
     )
     column_map = {"Title": "title", "": "likelihood", "Impact": "impact", "Category": "category"}
     with pytest.raises(ValidationError, match="blank or duplicated"):
-        await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=column_map)
+        await svc.set_column_map(
+            organization_id=org.id,
+            token=staged.token,
+            column_map=column_map,
+            created_by_user_id=user.id,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -572,10 +669,15 @@ async def test_distinct_values_sorted_non_empty(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
 
-    distinct = await svc.distinct_values(organization_id=org.id, token=staged.token)
+    distinct = await svc.distinct_values(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     assert distinct["likelihood"] == ["Likely", "Rare"]
     assert distinct["impact"] == ["High", "Low"]
     assert distinct["category"] == ["Legal", "Malware", "Phishing"]
@@ -595,7 +697,9 @@ async def test_distinct_values_before_column_map_rejected(
         user=user,
     )
     with pytest.raises(ValidationError, match="column map"):
-        await svc.distinct_values(organization_id=org.id, token=staged.token)
+        await svc.distinct_values(
+            organization_id=org.id, token=staged.token, created_by_user_id=user.id
+        )
 
 
 @pytest.mark.asyncio
@@ -621,10 +725,17 @@ async def test_distinct_values_over_cap_rejected(
         "Impact": "impact",
         "Category": "category",
     }
-    await svc.set_column_map(organization_id=org.id, token=staged.token, column_map=column_map)
+    await svc.set_column_map(
+        organization_id=org.id,
+        token=staged.token,
+        column_map=column_map,
+        created_by_user_id=user.id,
+    )
 
     with pytest.raises(ValidationError, match="distinct values"):
-        await svc.distinct_values(organization_id=org.id, token=staged.token)
+        await svc.distinct_values(
+            organization_id=org.id, token=staged.token, created_by_user_id=user.id
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -647,12 +758,20 @@ async def test_set_value_bindings_happy_path(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
     await svc.set_value_bindings(
-        organization_id=org.id, token=staged.token, bindings=_FULL_VALUE_BINDINGS
+        organization_id=org.id,
+        token=staged.token,
+        bindings=_FULL_VALUE_BINDINGS,
+        created_by_user_id=user.id,
     )
-    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     assert row.state_json is not None
     assert row.state_json["value_bindings"] == _FULL_VALUE_BINDINGS
 
@@ -674,7 +793,10 @@ async def test_set_value_bindings_invalid_category_target_rejected(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
 
     bad_bindings = {
@@ -688,11 +810,16 @@ async def test_set_value_bindings_invalid_category_target_rejected(
     }
     with pytest.raises(ValidationError, match="not a valid target"):
         await svc.set_value_bindings(
-            organization_id=org.id, token=staged.token, bindings=bad_bindings
+            organization_id=org.id,
+            token=staged.token,
+            bindings=bad_bindings,
+            created_by_user_id=user.id,
         )
 
     # And it never made it into state_json.
-    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     assert "value_bindings" not in (row.state_json or {})
 
 
@@ -711,7 +838,10 @@ async def test_set_value_bindings_invalid_likelihood_label_rejected(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
 
     bad_bindings = {
@@ -721,7 +851,10 @@ async def test_set_value_bindings_invalid_likelihood_label_rejected(
     }
     with pytest.raises(ValidationError, match="not a valid target"):
         await svc.set_value_bindings(
-            organization_id=org.id, token=staged.token, bindings=bad_bindings
+            organization_id=org.id,
+            token=staged.token,
+            bindings=bad_bindings,
+            created_by_user_id=user.id,
         )
 
 
@@ -740,7 +873,10 @@ async def test_set_value_bindings_unbound_distinct_value_rejected(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
 
     incomplete_bindings = {
@@ -750,7 +886,10 @@ async def test_set_value_bindings_unbound_distinct_value_rejected(
     }
     with pytest.raises(ValidationError, match=r"Rare.*not bound"):
         await svc.set_value_bindings(
-            organization_id=org.id, token=staged.token, bindings=incomplete_bindings
+            organization_id=org.id,
+            token=staged.token,
+            bindings=incomplete_bindings,
+            created_by_user_id=user.id,
         )
 
 
@@ -802,7 +941,9 @@ async def test_build_bound_rows_happy_path(
     token = await _staged_and_mapped(db_session, org, user)
 
     svc = RegisterImportService(db_session)
-    rows = await svc.build_bound_rows(organization_id=org.id, token=token)
+    rows = await svc.build_bound_rows(
+        organization_id=org.id, token=token, created_by_user_id=user.id
+    )
     assert [r.source_row for r in rows] == [2, 3, 4]
 
     phishing = rows[0]
@@ -835,7 +976,9 @@ async def test_build_bound_rows_blank_likelihood_auto_parks(
     token = await _staged_and_mapped(db_session, org, user, data=data)
 
     svc = RegisterImportService(db_session)
-    rows = await svc.build_bound_rows(organization_id=org.id, token=token)
+    rows = await svc.build_bound_rows(
+        organization_id=org.id, token=token, created_by_user_id=user.id
+    )
     assert len(rows) == 1
     assert rows[0].category is None
     assert rows[0].park_reason == "blank_cells"  # UAT fix: reason pinned for report labels
@@ -857,10 +1000,15 @@ async def test_build_bound_rows_before_value_bindings_rejected(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
     with pytest.raises(ValidationError, match="value bindings"):
-        await svc.build_bound_rows(organization_id=org.id, token=staged.token)
+        await svc.build_bound_rows(
+            organization_id=org.id, token=staged.token, created_by_user_id=user.id
+        )
 
 
 @pytest.mark.asyncio
@@ -885,7 +1033,7 @@ async def test_build_bound_rows_stale_binding_after_band_deleted_rejected(
     # in-band defense by binding to a value that is valid at bind time but
     # forging state_json to a NOW-invalid label directly.
     svc = RegisterImportService(db_session)
-    row = await svc.get_staged(organization_id=org.id, token=token)
+    row = await svc.get_staged(organization_id=org.id, token=token, created_by_user_id=user.id)
     forged = dict(row.state_json or {})
     forged["value_bindings"] = {
         **forged["value_bindings"],
@@ -895,7 +1043,7 @@ async def test_build_bound_rows_stale_binding_after_band_deleted_rejected(
     await db_session.flush()
 
     with pytest.raises(ValidationError, match="not bound to a valid frequency band"):
-        await svc.build_bound_rows(organization_id=org.id, token=token)
+        await svc.build_bound_rows(organization_id=org.id, token=token, created_by_user_id=user.id)
 
 
 # ---------------------------------------------------------------------------
@@ -912,7 +1060,7 @@ async def test_preview_classifies_without_writing(
     token = await _staged_and_mapped(db_session, org, user)
 
     svc = RegisterImportService(db_session)
-    classified = await svc.preview(organization_id=org.id, token=token)
+    classified = await svc.preview(organization_id=org.id, token=token, created_by_user_id=user.id)
 
     assert [r.source_row for r in classified.would_create] == [2, 3]
     assert [(p.source_row, p.reason) for p in classified.parked] == [(4, "category")]
@@ -1089,7 +1237,12 @@ async def test_apply_profile_cross_org_raises_not_found(
 
     token_b = await _staged_and_mapped(db_session, org_b, user_b)
     with pytest.raises(NotFoundError):
-        await svc.apply_profile(organization_id=org_b.id, token=token_b, profile_id=profile.id)
+        await svc.apply_profile(
+            organization_id=org_b.id,
+            token=token_b,
+            profile_id=profile.id,
+            created_by_user_id=user_b.id,
+        )
 
 
 @pytest.mark.asyncio
@@ -1111,18 +1264,25 @@ async def test_apply_profile_no_drift_pre_fills_state(
         user=user,
     )
     warnings = await svc.apply_profile(
-        organization_id=org.id, token=staged2.token, profile_id=profile.id
+        organization_id=org.id,
+        token=staged2.token,
+        profile_id=profile.id,
+        created_by_user_id=user.id,
     )
     assert warnings == []
 
-    row = await svc.get_staged(organization_id=org.id, token=staged2.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged2.token, created_by_user_id=user.id
+    )
     assert row.state_json is not None
     assert row.state_json["column_map"] == _FULL_COLUMN_MAP
     assert row.state_json["value_bindings"] == _FULL_VALUE_BINDINGS
     assert row.state_json["applied_profile_id"] == str(profile.id)
 
     # And the pre-filled state is immediately usable end to end.
-    bound_rows = await svc.build_bound_rows(organization_id=org.id, token=staged2.token)
+    bound_rows = await svc.build_bound_rows(
+        organization_id=org.id, token=staged2.token, created_by_user_id=user.id
+    )
     assert len(bound_rows) == 3
 
 
@@ -1162,13 +1322,18 @@ async def test_apply_profile_drift_warns_and_leaves_stale_binding_unbound(
         user=user,
     )
     warnings = await svc.apply_profile(
-        organization_id=org.id, token=staged2.token, profile_id=profile.id
+        organization_id=org.id,
+        token=staged2.token,
+        profile_id=profile.id,
+        created_by_user_id=user.id,
     )
     assert any("frequency:moderate" in w for w in warnings)
 
     # The likelihood binding for "moderate" is STILL valid (org override
     # replaces, doesn't remove, the (kind,label) — value carries forward).
-    row = await svc.get_staged(organization_id=org.id, token=staged2.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged2.token, created_by_user_id=user.id
+    )
     assert row.state_json is not None
     assert row.state_json["value_bindings"]["likelihood"]["Likely"] == "moderate"
 
@@ -1199,7 +1364,10 @@ async def test_state_json_reassignment_persists_across_fresh_session(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=_FULL_COLUMN_MAP
+        organization_id=org.id,
+        token=staged.token,
+        column_map=_FULL_COLUMN_MAP,
+        created_by_user_id=user.id,
     )
     await db_session.commit()
 
@@ -1208,7 +1376,9 @@ async def test_state_json_reassignment_persists_across_fresh_session(
         sm = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with sm() as fresh:
             fresh_svc = RegisterImportService(fresh)
-            row = await fresh_svc.get_staged(organization_id=org.id, token=staged.token)
+            row = await fresh_svc.get_staged(
+                organization_id=org.id, token=staged.token, created_by_user_id=user.id
+            )
             assert row.state_json is not None
             assert row.state_json["column_map"] == _FULL_COLUMN_MAP
             assert row.state_json["filename"] == "r.csv"
@@ -1235,10 +1405,16 @@ async def test_apply_profile_with_incomplete_column_map_does_not_clobber(
         user=user,
     )
     await svc.set_column_map(
-        organization_id=org.id, token=staged.token, column_map=dict(_FULL_COLUMN_MAP)
+        organization_id=org.id,
+        token=staged.token,
+        column_map=dict(_FULL_COLUMN_MAP),
+        created_by_user_id=user.id,
     )
     await svc.set_value_bindings(
-        organization_id=org.id, token=staged.token, bindings=_FULL_VALUE_BINDINGS
+        organization_id=org.id,
+        token=staged.token,
+        bindings=_FULL_VALUE_BINDINGS,
+        created_by_user_id=user.id,
     )
     legacy_cm = {k: ("carry_along" if v == "category" else v) for k, v in _FULL_COLUMN_MAP.items()}
     profile = await svc.save_profile(
@@ -1248,10 +1424,15 @@ async def test_apply_profile_with_incomplete_column_map_does_not_clobber(
     await db_session.flush()
 
     warnings = await svc.apply_profile(
-        organization_id=org.id, token=staged.token, profile_id=profile.id
+        organization_id=org.id,
+        token=staged.token,
+        profile_id=profile.id,
+        created_by_user_id=user.id,
     )
     assert any("'category'" in w and "NOT applied" in w for w in warnings)
-    row = await svc.get_staged(organization_id=org.id, token=staged.token)
+    row = await svc.get_staged(
+        organization_id=org.id, token=staged.token, created_by_user_id=user.id
+    )
     cm = (row.state_json or {}).get("column_map") or {}
     assert "category" in cm.values()  # the manual mapping SURVIVED
 

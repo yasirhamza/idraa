@@ -58,13 +58,15 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.config import Settings
 from idraa.models._types import now_utc
+from idraa.models.csv_import_preview import CSVImportPreview
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
+from idraa.models.session import AuthSession
 from idraa.services.audit import AuditWriter
 
 logger = logging.getLogger(__name__)
@@ -221,6 +223,48 @@ async def sweep_wizard_drafts(settings: Settings) -> None:
         logger.info("Wizard-draft TTL sweep deleted %d idle draft(s)", deleted)
 
 
+async def sweep_expired_previews(settings: Settings) -> None:
+    """Issue #80 (L9): TTL-sweep expired ``csv_import_preview`` rows.
+
+    Mirrors :func:`sweep_wizard_drafts` exactly. The table has a TTL
+    (``expires_at``, default 10 minutes — see
+    ``models/csv_import_preview.py``) and an
+    ``ix_csv_import_preview_expires_at`` index for this purpose, but no
+    consumer ever swept it: an abandoned upload (never confirmed/applied)
+    left its raw bytes in the DB forever. Uses the SQLAlchemy ``delete()``
+    construct (cross-dialect) rather than raw SQL."""
+    from idraa.db import get_session
+
+    async with get_session() as session:
+        result: CursorResult[Any] = await session.execute(  # type: ignore[assignment]
+            delete(CSVImportPreview).where(CSVImportPreview.expires_at < now_utc())
+        )
+        await session.commit()
+    deleted = result.rowcount
+    # SQLite may report rowcount=-1 (dialect-dependent) — same guard as
+    # sweep_wizard_drafts (run_reaper.py:220-221).
+    if deleted and deleted > 0:
+        logger.info("CSV import-preview TTL sweep deleted %d expired row(s)", deleted)
+
+
+async def sweep_expired_sessions(settings: Settings) -> None:
+    """Issue #80 (I2): TTL-sweep expired ``auth_sessions`` rows.
+
+    Security-neutral housekeeping (expired sessions are already rejected at
+    auth time) — this only bounds table growth. Mirrors
+    :func:`sweep_expired_previews` / :func:`sweep_wizard_drafts`."""
+    from idraa.db import get_session
+
+    async with get_session() as session:
+        result: CursorResult[Any] = await session.execute(  # type: ignore[assignment]
+            delete(AuthSession).where(AuthSession.expires_at < now_utc())
+        )
+        await session.commit()
+    deleted = result.rowcount
+    if deleted and deleted > 0:
+        logger.info("Expired auth_sessions TTL sweep deleted %d row(s)", deleted)
+
+
 async def periodic_reaper_loop(settings: Settings) -> None:
     """#211 Phase 2: sweep orphaned runs every ``run_reaper_interval_seconds``.
 
@@ -252,3 +296,15 @@ async def periodic_reaper_loop(settings: Settings) -> None:
             raise
         except Exception:
             logger.exception("Wizard-draft TTL sweep failed; will retry next interval")
+        try:
+            await sweep_expired_previews(settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("CSV import-preview TTL sweep failed; will retry next interval")
+        try:
+            await sweep_expired_sessions(settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Expired auth_sessions TTL sweep failed; will retry next interval")

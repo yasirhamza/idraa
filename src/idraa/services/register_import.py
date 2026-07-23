@@ -21,8 +21,10 @@ Every setter in this module REASSIGNS the whole dict —
 ``preview.state_json[key] = value``.
 
 Every step method resolves the staging row via :meth:`get_staged` (Sec-N):
-no method takes a ``CSVImportPreview`` row directly, so org-scoping, TTL,
-and the ``entity_type`` gate are enforced uniformly at one call site.
+no method takes a ``CSVImportPreview`` row directly, so org-scoping,
+user-scoping (issue #80 L10 — a token is only resumable by the admin who
+staged it), TTL, and the ``entity_type`` gate are enforced uniformly at one
+call site.
 
 Actual FAIR-CAM conversion happens ONLY via
 :class:`~idraa.services.qualitative_converter.QualitativeConverterService`
@@ -345,14 +347,20 @@ class RegisterImportService:
         await self._db.flush()
         return StagedRegister(token=str(row.id), fmt=fmt, sheet_names=sheet_names)
 
-    async def get_staged(self, *, organization_id: uuid.UUID, token: str) -> CSVImportPreview:
-        """Resolve ``token`` -> row, enforcing org-scope + TTL + entity-type.
+    async def get_staged(
+        self, *, organization_id: uuid.UUID, token: str, created_by_user_id: uuid.UUID
+    ) -> CSVImportPreview:
+        """Resolve ``token`` -> row, enforcing org-scope + user-scope + TTL +
+        entity-type.
 
         Raises :class:`PreviewExpiredError` uniformly for malformed/missing/
-        expired/wrong-org/wrong-flow tokens (no existence oracle) — a
-        scenario-import token (``entity_type="scenario:..."``) is REJECTED
-        here just as a register-import token would be rejected by
-        ``services/scenario_import.py`` (Sec-N).
+        expired/wrong-org/wrong-user/wrong-flow tokens (no existence oracle)
+        — a scenario-import token (``entity_type="scenario:..."``) is
+        REJECTED here just as a register-import token would be rejected by
+        ``services/scenario_import.py`` (Sec-N). The user-scope check
+        (issue #80 L10) keeps a second admin in the SAME org from resuming
+        another admin's in-flight upload via a guessed/observed token —
+        defense in depth, since the token itself is a uuid4 CSPRNG value.
         """
         try:
             token_uuid = uuid.UUID(token)
@@ -364,7 +372,11 @@ class RegisterImportService:
                 select(CSVImportPreview).where(CSVImportPreview.id == token_uuid)
             )
         ).scalar_one_or_none()
-        if row is None or row.organization_id != organization_id:
+        if (
+            row is None
+            or row.organization_id != organization_id
+            or row.created_by_user_id != created_by_user_id
+        ):
             raise PreviewExpiredError("preview not found; please re-upload")
         if not row.entity_type.startswith(f"{ENTITY_TYPE}:"):
             raise PreviewExpiredError("preview not found; please re-upload")
@@ -392,16 +404,20 @@ class RegisterImportService:
         mag = {label for (kind, label) in effective if kind == "magnitude"}
         return freq, mag
 
-    async def get_headers(self, *, organization_id: uuid.UUID, token: str) -> list[str]:
+    async def get_headers(
+        self, *, organization_id: uuid.UUID, token: str, created_by_user_id: uuid.UUID
+    ) -> list[str]:
         """Parsed file headers for the token's current sheet selection.
 
         Task 4 addition: the column-map GET route needs the raw headers to
         render one target ``<select>`` per header BEFORE ``column_map``
         exists in ``state_json`` — every other read in this module assumes
         ``column_map`` is already set. Resolves via :meth:`get_staged` like
-        every other step (org+TTL+entity-type enforced uniformly).
+        every other step (org+user+TTL+entity-type enforced uniformly).
         """
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         state = preview.state_json or {}
         parsed = self._parse_staged(preview, state)
         return parsed.headers
@@ -410,8 +426,17 @@ class RegisterImportService:
     # Step setters — each reassigns the WHOLE state_json dict (Arch-I1)
     # ------------------------------------------------------------------
 
-    async def set_sheet(self, *, organization_id: uuid.UUID, token: str, sheet_name: str) -> None:
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+    async def set_sheet(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        token: str,
+        sheet_name: str,
+        created_by_user_id: uuid.UUID,
+    ) -> None:
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         fmt = _fmt_from_entity_type(preview.entity_type)
         if fmt != "xlsx":
             raise ValidationError("sheet selection only applies to xlsx uploads")
@@ -426,7 +451,12 @@ class RegisterImportService:
         await self._db.flush()
 
     async def set_column_map(
-        self, *, organization_id: uuid.UUID, token: str, column_map: dict[str, str]
+        self,
+        *,
+        organization_id: uuid.UUID,
+        token: str,
+        column_map: dict[str, str],
+        created_by_user_id: uuid.UUID,
     ) -> None:
         """Validate + persist the file-header -> target map.
 
@@ -443,7 +473,9 @@ class RegisterImportService:
           parse time, so binding it would read whichever column happened to
           win the collision.
         """
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         state = preview.state_json or {}
         parsed = self._parse_staged(preview, state)
         header_counts = Counter(parsed.headers)
@@ -470,14 +502,16 @@ class RegisterImportService:
         await self._db.flush()
 
     async def distinct_values(
-        self, *, organization_id: uuid.UUID, token: str
+        self, *, organization_id: uuid.UUID, token: str, created_by_user_id: uuid.UUID
     ) -> dict[str, list[str]]:
         """Distinct NON-EMPTY values per bound column (likelihood/impact/
         category), sorted. Raises :class:`ValidationError` if any column has
         more than :data:`_MAX_DISTINCT_VALUES` distinct values — almost
         certainly a wrong column mapping (e.g. a free-text field bound as
         "likelihood")."""
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         state = preview.state_json or {}
         column_map = state.get("column_map")
         if not column_map:
@@ -506,6 +540,7 @@ class RegisterImportService:
         organization_id: uuid.UUID,
         token: str,
         bindings: dict[str, dict[str, str]],
+        created_by_user_id: uuid.UUID,
     ) -> None:
         """Validate + persist value bindings for the three bound columns.
 
@@ -516,7 +551,9 @@ class RegisterImportService:
         Every distinct file value (per :meth:`distinct_values`) must be
         bound, or this raises — never a silent partial bind.
         """
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         freq_labels, mag_labels = await self._band_labels(organization_id)
         category_targets = _category_targets()
 
@@ -532,7 +569,9 @@ class RegisterImportService:
             category, valid_targets=category_targets, group_name="category"
         )
 
-        distinct = await self.distinct_values(organization_id=organization_id, token=token)
+        distinct = await self.distinct_values(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         groups = {"likelihood": likelihood, "impact": impact, "category": category}
         for target, group in groups.items():
             for value in distinct.get(target, []):
@@ -559,7 +598,9 @@ class RegisterImportService:
     # Bound-row assembly + preview + apply
     # ------------------------------------------------------------------
 
-    async def build_bound_rows(self, *, organization_id: uuid.UUID, token: str) -> list[BoundRow]:
+    async def build_bound_rows(
+        self, *, organization_id: uuid.UUID, token: str, created_by_user_id: uuid.UUID
+    ) -> list[BoundRow]:
         """Assemble ``list[BoundRow]`` from the staged bytes + accumulated
         state_json. Re-validates every likelihood/impact/category binding
         against the CURRENT effective bands / ThreatCategory members (Sec-I2)
@@ -574,7 +615,9 @@ class RegisterImportService:
         (``category=None``), same bucket as an explicitly-parked category
         (D5's existing park semantic, extended to "nothing to score").
         """
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         state = preview.state_json or {}
         column_map = state.get("column_map")
         if not column_map:
@@ -698,12 +741,18 @@ class RegisterImportService:
     def _carry_along(row: dict[str, str], carry_headers: list[str]) -> dict[str, str]:
         return {h: row[h] for h in carry_headers if row.get(h, "").strip()}
 
-    async def preview(self, *, organization_id: uuid.UUID, token: str) -> ClassifiedRows:
+    async def preview(
+        self, *, organization_id: uuid.UUID, token: str, created_by_user_id: uuid.UUID
+    ) -> ClassifiedRows:
         """``build_bound_rows`` + a dry ``classify_rows`` pass (Task 3
         amendment — replaces inlining both calls at the route layer)."""
-        preview_row = await self.get_staged(organization_id=organization_id, token=token)
+        preview_row = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         filename = (preview_row.state_json or {}).get("filename") or "register"
-        rows = await self.build_bound_rows(organization_id=organization_id, token=token)
+        rows = await self.build_bound_rows(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         return await QualitativeConverterService(self._db).classify_rows(
             organization_id=organization_id, source_file=filename, rows=rows
         )
@@ -718,13 +767,17 @@ class RegisterImportService:
     ) -> ConversionReport:
         """Re-parse + rebuild + convert, then delete the staging row
         (single-use — a re-POST of ``convert`` on the same token 409s)."""
-        preview_row = await self.get_staged(organization_id=organization_id, token=token)
+        preview_row = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=user.id
+        )
         state = preview_row.state_json or {}
         filename = state.get("filename") or "register"
         profile_id_str = state.get("applied_profile_id")
         binding_profile_id = uuid.UUID(profile_id_str) if profile_id_str else None
 
-        rows = await self.build_bound_rows(organization_id=organization_id, token=token)
+        rows = await self.build_bound_rows(
+            organization_id=organization_id, token=token, created_by_user_id=user.id
+        )
         report = await QualitativeConverterService(self._db).convert(
             organization_id=organization_id,
             user=user,
@@ -758,7 +811,9 @@ class RegisterImportService:
                 f"profile name must be at most {_MAX_PROFILE_NAME_LEN} characters"
             )
 
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=user.id
+        )
         state = preview.state_json or {}
         column_map = state.get("column_map")
         value_bindings = state.get("value_bindings")
@@ -864,6 +919,7 @@ class RegisterImportService:
         organization_id: uuid.UUID,
         token: str,
         profile_id: uuid.UUID,
+        created_by_user_id: uuid.UUID,
     ) -> list[str]:
         """Pre-fill ``column_map``/``value_bindings`` from a saved profile.
 
@@ -876,7 +932,9 @@ class RegisterImportService:
         :meth:`set_value_bindings`'s own validation, which the /bind route
         still runs when the admin submits the (possibly-edited) pre-fill.
         """
-        preview = await self.get_staged(organization_id=organization_id, token=token)
+        preview = await self.get_staged(
+            organization_id=organization_id, token=token, created_by_user_id=created_by_user_id
+        )
         profile = await self._get_profile(organization_id=organization_id, profile_id=profile_id)
 
         band_service = QualitativeBandService(self._db)

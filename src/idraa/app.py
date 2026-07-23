@@ -785,6 +785,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from idraa.services.run_reaper import (
         periodic_reaper_loop,
         reap_orphaned_runs,
+        sweep_expired_previews,
+        sweep_expired_sessions,
         sweep_wizard_drafts,
     )
 
@@ -823,6 +825,27 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await sweep_wizard_drafts(_settings)
     except Exception:
         logging.getLogger(__name__).exception("Boot wizard-draft sweep failed; continuing startup")
+
+    # Issue #80 (L9): boot one-shot TTL sweep of expired csv_import_preview
+    # rows — same "primary sweep path on scale-to-zero deploys" rationale as
+    # the wizard-draft sweep above. Sibling try/except (a sweep bug must
+    # never block startup).
+    try:
+        await sweep_expired_previews(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Boot CSV import-preview sweep failed; continuing startup"
+        )
+
+    # Issue #80 (I2): boot one-shot TTL sweep of expired auth_sessions rows —
+    # security-neutral housekeeping (bounded table growth), same sibling
+    # try/except pattern.
+    try:
+        await sweep_expired_sessions(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Boot expired-session sweep failed; continuing startup"
+        )
 
     # Task 5 (Arch-B1): a SEPARATE startup-only VACUUM sweep, additive to the
     # throttled opportunistic sweep above — NOT a replacement (replacing it
