@@ -265,6 +265,28 @@ async def sweep_expired_sessions(settings: Settings) -> None:
         logger.info("Expired auth_sessions TTL sweep deleted %d row(s)", deleted)
 
 
+async def sweep_expired_login_attempts(settings: Settings) -> None:
+    """idraa#81: purge inactive login_attempt rows (no live block + stale
+    window) so the per-source throttle table stays bounded. Mirrors
+    :func:`sweep_expired_sessions`."""
+    from idraa.db import get_session
+    from idraa.models.login_attempt import LoginAttempt
+
+    max_age = max(settings.auth_ip_window_seconds, settings.auth_ip_lockout_seconds)
+    cutoff = now_utc() - datetime.timedelta(seconds=max_age)
+    async with get_session() as session:
+        result: CursorResult[Any] = await session.execute(  # type: ignore[assignment]
+            delete(LoginAttempt).where(
+                (LoginAttempt.blocked_until.is_(None)) | (LoginAttempt.blocked_until < now_utc()),
+                LoginAttempt.updated_at < cutoff,
+            )
+        )
+        await session.commit()
+    deleted = result.rowcount
+    if deleted and deleted > 0:
+        logger.info("login_attempt TTL sweep deleted %d inactive row(s)", deleted)
+
+
 async def periodic_reaper_loop(settings: Settings) -> None:
     """#211 Phase 2: sweep orphaned runs every ``run_reaper_interval_seconds``.
 
@@ -308,3 +330,9 @@ async def periodic_reaper_loop(settings: Settings) -> None:
             raise
         except Exception:
             logger.exception("Expired auth_sessions TTL sweep failed; will retry next interval")
+        try:
+            await sweep_expired_login_attempts(settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("login_attempt TTL sweep failed; will retry next interval")

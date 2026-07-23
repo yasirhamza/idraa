@@ -818,6 +818,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from idraa.services.run_reaper import (
         periodic_reaper_loop,
         reap_orphaned_runs,
+        sweep_expired_login_attempts,
         sweep_expired_previews,
         sweep_expired_sessions,
         sweep_wizard_drafts,
@@ -879,6 +880,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         logging.getLogger(__name__).exception(
             "Boot expired-session sweep failed; continuing startup"
         )
+
+    # Issue #81: boot one-shot TTL sweep of inactive login_attempt rows — same
+    # "primary sweep path on scale-to-zero deploys" rationale as the sweeps
+    # above. Sibling try/except (a sweep bug must never block startup).
+    try:
+        await sweep_expired_login_attempts(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception("Boot login_attempt sweep failed; continuing startup")
 
     # Task 5 (Arch-B1): a SEPARATE startup-only VACUUM sweep, additive to the
     # throttled opportunistic sweep above — NOT a replacement (replacing it
