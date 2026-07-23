@@ -51,7 +51,7 @@
       <li>
         {%- if item.href %}
         <a href="{{ item.href }}"
-           {%- if item.download %} hx-boost="false"
+           {%- if item.download %} hx-boost="false"{{ ' ' }}
            {#- Deliberately NO `download` attribute here (Task 7): the server
                sends `Content-Disposition: attachment` on every download
                target, so `download` is redundant on success — and harmful

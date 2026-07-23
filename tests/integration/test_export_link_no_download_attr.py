@@ -118,6 +118,14 @@ def test_action_menu_download_item_no_download_attr() -> None:
     tag = _anchor_to(html, "/reports/run/x")
     assert 'hx-boost="false"' in tag, f"boost opt-out missing: {tag!r}"
     assert not _BARE_DOWNLOAD_ATTR_RE.search(tag), f"bare download attr still emitted: {tag!r}"
+    # PR-gate NICE-TO-HAVE (all 3 reviewers): the `{#- ... -#}` whitespace-
+    # stripping comments between `hx-boost="false"` and `@click` used to
+    # collapse to nothing, gluing them into the malformed
+    # `hx-boost="false"@click=...`. Assert a real separator survives.
+    assert re.search(r'hx-boost="false"\s', tag), (
+        f'hx-boost="false" not separated from the next attribute: {tag!r}'
+    )
+    assert 'false"@click' not in tag, f"hx-boost and @click glued together: {tag!r}"
 
 
 def test_action_menu_busy_spinner_still_wired_without_download_attr() -> None:

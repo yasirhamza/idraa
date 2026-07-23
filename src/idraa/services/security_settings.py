@@ -5,6 +5,17 @@ refreshed after each COMMITTED write. The middleware reads the sync effective_*
 helpers with no per-request DB. Cache holds a PRIMITIVE SNAPSHOT (never the ORM
 instance) so a detached-instance lazy-load can't fault the middleware hot path.
 NULL / missing -> env default.
+
+Multi-machine scale-out (not yet the deployment model, but noted per #211):
+each process's cache is independently warmed/refreshed, so a write committed
+on machine A is invisible on machine B until B's own next boot or write. For
+MFA specifically this divergence is asymmetric in the SECURITY-DOWNGRADE
+direction: if an admin tightens `mfa_policy` to `required` on machine A,
+machine B keeps enforcing the env default (typically `optional`) until it
+independently reloads -- i.e. the unpatched machine fails open on the exact
+knob meant to raise the bar, not just stale-serves a value. A durable fix
+needs the heartbeat-column / shared-invalidation design sketched in #211
+Option 1; single-process deployments are unaffected.
 """
 
 from __future__ import annotations
