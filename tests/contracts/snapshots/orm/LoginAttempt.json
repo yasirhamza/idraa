@@ -1,6 +1,6 @@
 {
   "columns": {
-    "confirmed_at": {
+    "blocked_until": {
       "foreign_key": false,
       "has_default": false,
       "indexed": false,
@@ -16,31 +16,47 @@
       "primary_key": false,
       "type": "DATETIME"
     },
-    "last_used_step": {
+    "failed_count": {
       "foreign_key": false,
-      "has_default": false,
-      "indexed": false,
-      "nullable": true,
-      "primary_key": false,
-      "type": "INTEGER"
-    },
-    "secret_encrypted": {
-      "foreign_key": false,
-      "has_default": false,
+      "has_default": true,
       "indexed": false,
       "nullable": false,
       "primary_key": false,
-      "type": "VARCHAR(255)"
+      "type": "INTEGER"
     },
-    "user_id": {
-      "foreign_key": true,
-      "has_default": false,
+    "id": {
+      "foreign_key": false,
+      "has_default": true,
       "indexed": false,
       "nullable": false,
       "primary_key": true,
       "type": "CHAR(32)"
+    },
+    "source_key": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(64)"
+    },
+    "updated_at": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
+    },
+    "window_started_at": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "DATETIME"
     }
   },
   "indexes": [],
-  "table_name": "user_totp"
+  "table_name": "login_attempt"
 }

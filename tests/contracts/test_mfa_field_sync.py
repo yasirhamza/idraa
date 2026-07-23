@@ -37,7 +37,13 @@ def test_webauthn_credential_columns_are_expected() -> None:
 
 
 def test_user_totp_columns_are_expected() -> None:
-    assert _cols(UserTotp) == {"user_id", "secret_encrypted", "confirmed_at", "created_at"}
+    assert _cols(UserTotp) == {
+        "user_id",
+        "secret_encrypted",
+        "confirmed_at",
+        "last_used_step",
+        "created_at",
+    }
 
 
 def test_recovery_code_columns_are_expected() -> None:
