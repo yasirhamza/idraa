@@ -316,6 +316,27 @@ async def test_export_error_path_releases_slot(
     assert follow_up.status_code == 200
 
 
+async def test_detail_page_shows_samples_link_when_present(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_admin
+    run_id, _, _ = await _seed_run_with_samples(db_session, org_id)
+    resp = await client.get(f"/runs/{run_id}")
+    assert resp.status_code == 200
+    assert f"/runs/{run_id}/samples.csv.gz" in resp.text
+
+
+async def test_detail_page_hides_samples_link_when_purged(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    # Seed run WITHOUT a RunSamples row.
+    client, org_id = authed_admin
+    run_id, _, _ = await _seed_run_with_samples(db_session, org_id, skip_samples=True)
+    resp = await client.get(f"/runs/{run_id}")
+    assert resp.status_code == 200
+    assert f"/runs/{run_id}/samples.csv.gz" not in resp.text
+
+
 async def test_export_writes_bulk_export_audit_row(
     authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:

@@ -662,6 +662,13 @@ async def get_run_detail(
         _creator = await db.get(User, run.created_by)
         if _creator is not None:
             creator_label = _creator.full_name or _creator.email
+
+    # #109: render the raw-samples affordance only while the run_samples row
+    # exists. Presence probe selects the PK only — db.get would drag the
+    # LargeBinary blob into memory on every detail render.
+    samples_present = (
+        await db.scalar(select(RunSamples.run_id).where(RunSamples.run_id == run.id))
+    ) is not None
     return templates.TemplateResponse(
         request,
         "runs/detail.html",
@@ -676,6 +683,7 @@ async def get_run_detail(
             "has_reinterpreted_v2_snapshot": has_reinterpreted_v2_snapshot,
             "converted_cost_summary": converted_cost,
             "creator_label": creator_label,
+            "samples_present": samples_present,
         },
     )
 
