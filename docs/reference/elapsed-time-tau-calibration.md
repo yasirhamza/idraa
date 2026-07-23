@@ -145,7 +145,7 @@ per-org override layer adopting org-specific dwell-time fits).
 Per Standard §5.3, the following sub-functions are virtual — "no
 distinct controls serve this function." Reclassified to
 `UnitType.PROBABILITY` for schema consistency; the schema-level
-validator at `src/riskflow/schemas/control.py:80`
+validator at `src/idraa/schemas/control.py:104`
 (`reject_virtual_unless_derived`) continues to reject direct writes to
 these sub-functions.
 

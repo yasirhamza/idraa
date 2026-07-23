@@ -1,20 +1,34 @@
 ---
 title: FAIR-CAM Standard V1.0 Alignment Audit
-status: load-bearing reference (cited by PR ι, κ, λ specs)
+status: HISTORICAL — pre-PR-ι audit; the candidate schema it evaluates has since shipped (see banner below)
 last_reviewed: 2026-04-30
 source_documents:
   - docs/FAIR Controls Analytics Model (FAIR-CAM) Standard V1.0 (January 2025).pdf
   - docs/reference/fair-cam-controls-library.csv
   - docs/reference/data-model-specification.md
   - alembic/versions/355450b21719_phase_1_2_controls.py
-  - src/riskflow/models/control.py
-  - src/riskflow/services/run_executor.py
+  - src/idraa/models/control.py
+  - src/idraa/services/run_executor.py
   - fair_cam/models/control.py
-  - fair_cam/data/comprehensive_controls_library.py
+  - fair_cam/risk_engine/native_control_aware.py
   - fair_cam/risk_engine/control_aware.py
 ---
 
 # FAIR-CAM Standard V1.0 Alignment Audit
+
+> **HISTORICAL DOCUMENT.** This audit was written pre-PR-ι, against the
+> Phase 1.2 flat-triple schema it critiques (`control_strength` /
+> `control_reliability` / `control_coverage` on `Control`, the classical-action
+> `ControlFunction` enum, and the flat `_snapshot_control` audit shape). PR ι
+> subsequently shipped the Standard-conformant schema this document argues for:
+> effectiveness now lives on `ControlFunctionAssignment` (capability_value /
+> coverage / reliability, per sub-function), the classical-action
+> `ControlFunction` enum was dropped, and the run snapshot moved to the
+> per-assignment (`snapshot_version: 2`) shape. **`docs/reference/data-model-specification.md`
+> is the current source of truth for the shipped schema.** The "candidate" /
+> "Decision deferred to PR ι plan-gate" language throughout this document
+> describes decisions that were made during PR ι/κ/λ and are now settled —
+> kept here for historical rationale, not as an open design question.
 
 ## 1. Purpose and scope
 
@@ -233,15 +247,15 @@ First, the Standard defines Capability, Coverage, and Reliability as attributes 
 
 Second, the Standard explicitly treats multi-function controls as the norm (§3.2, page 14; §5.1.3.1.3, page 41). Storing one triple per Control entity cannot represent a control that simultaneously fulfills Resistance with 0.9 capability, Visibility with 0.7 capability, and Monitoring with 0.5 capability — each requiring separate coverage and reliability assessments.
 
-The practical effect of Deviation α is that the v3 adapter in `src/riskflow/services/run_executor.py:70-82` passes a single scalar through to fair_cam's composition formula, which then applies it uniformly regardless of which sub-function is being evaluated. This understates effectiveness for high-performing sub-functions and overstates it for weaker ones.
+The practical effect of Deviation α is that the v3 adapter in `src/idraa/services/run_executor.py:70-82` passes a single scalar through to fair_cam's composition formula, which then applies it uniformly regardless of which sub-function is being evaluated. This understates effectiveness for high-performing sub-functions and overstates it for weaker ones.
 
 #### 4.3.2 Deviation β — Function taxonomy
 
-The `ControlFunction` enum (defined in `src/riskflow/models/enums.py:28-33`) contains four values: PREVENTIVE, DETECTIVE, CORRECTIVE, COMPENSATING. These are classical IT security control action classifications drawn from ISO 27001 and NIST frameworks — they describe a control's temporal relationship to a security event (prevents before, detects during, corrects after, compensates for a gap).
+The `ControlFunction` enum (defined in `src/idraa/models/enums.py:28-33`) contains four values: PREVENTIVE, DETECTIVE, CORRECTIVE, COMPENSATING. These are classical IT security control action classifications drawn from ISO 27001 and NIST frameworks — they describe a control's temporal relationship to a security event (prevents before, detects during, corrects after, compensates for a gap).
 
 The Standard's taxonomy is entirely different. It defines 26 sub-functions organized by functional domain, Boolean composition, and unit of measurement (§3-§5). "Detective" maps loosely to LEC Detection (§3.2), but "Preventive" conflates LEC Prevention (§3.1) with VMC Variance Prevention (§4.1) and has no mapping to the nine DSC sub-functions. "Corrective" loosely maps to LEC Response (§3.3) and VMC Variance Correction (§4.3) but not distinctly. "Compensating" has no Standard mapping at all.
 
-The current adapter (`src/riskflow/services/run_executor.py:70-82`) silently drops v3's `function` value — it is not carried through to fair_cam because fair_cam's own `ControlFunction` enum (an Overview-era 9-value set) also does not map to v3's 4-value classical taxonomy. The result is that function classification, despite being a non-nullable column, contributes nothing to risk calculations.
+The current adapter (`src/idraa/services/run_executor.py:70-82`) silently drops v3's `function` value — it is not carried through to fair_cam because fair_cam's own `ControlFunction` enum (an Overview-era 9-value set) also does not map to v3's 4-value classical taxonomy. The result is that function classification, despite being a non-nullable column, contributes nothing to risk calculations.
 
 ---
 
@@ -318,7 +332,7 @@ fair_cam shares Deviation α (flat effectiveness triple) and Deviation β (non-S
 
 **Deviation γ — Domain string values**: fair_cam stores `ControlDomain.VARIANCE_MANAGEMENT` as the string `"variance"` and `ControlDomain.DECISION_SUPPORT` as the string `"decision"` (`fair_cam/models/control.py:16-25`). v3 stores its corresponding StrEnum values as `"variance_management"` and `"decision_support"`. Same conceptual domain, different string serialization. The adapter handles this with the explicit `_DOMAIN_MAP` lookup. PR κ should normalize fair_cam's strings to match v3.
 
-**Deviation δ — Conflated ControlType enum**: fair_cam's `ControlType` enum (`fair_cam/models/control.py:60-67`) conflates classical security action types (PREVENTIVE, DETECTIVE, CORRECTIVE) with implementation types (ADMINISTRATIVE, TECHNICAL, PHYSICAL) into one six-value enum. These are orthogonal taxonomies. Post-PR ι, v3 retains only the implementation-type axis (`ControlType` at `src/riskflow/models/enums.py:28-31` with TECHNICAL/ADMINISTRATIVE/PHYSICAL); the classical-action `ControlFunction` enum was dropped on the rationale that no v3 surface consumed it. PR κ should likewise reduce fair_cam's six-value `ControlType` to the three implementation values, dropping the classical-action values entirely to align with v3.
+**Deviation δ — Conflated ControlType enum**: fair_cam's `ControlType` enum (`fair_cam/models/control.py:60-67`) conflates classical security action types (PREVENTIVE, DETECTIVE, CORRECTIVE) with implementation types (ADMINISTRATIVE, TECHNICAL, PHYSICAL) into one six-value enum. These are orthogonal taxonomies. Post-PR ι, v3 retains only the implementation-type axis (`ControlType` at `src/idraa/models/enums.py:28-31` with TECHNICAL/ADMINISTRATIVE/PHYSICAL); the classical-action `ControlFunction` enum was dropped on the rationale that no v3 surface consumed it. PR κ should likewise reduce fair_cam's six-value `ControlType` to the three implementation values, dropping the classical-action values entirely to align with v3.
 
 ### 5.4 Found design decision: TWO live composition formulas
 
@@ -369,7 +383,7 @@ The two formulas differ by approximately **3×** at this sample input. The diver
 
 ## 6. v3↔fair_cam adapter — current behavior
 
-Source: `src/riskflow/services/run_executor.py:58-82`.
+Source: `src/idraa/services/run_executor.py:58-82`.
 
 The function `_v3_to_fair_cam_control` performs the following translations:
 
@@ -389,7 +403,7 @@ The function `_v3_to_fair_cam_control` performs the following translations:
 
 **Silent drop**: `v3_ctrl.function` (the PREVENTIVE/DETECTIVE/CORRECTIVE/COMPENSATING value) is NOT carried to fair_cam. This is the correct behavior given Deviation β — fair_cam's `ControlFunction` enum contains Overview-era values (THREAT_PREVENTION etc.) that do not map to v3's classical taxonomy. The adapter omits the field and lets fair_cam use its default (`ControlFunction.THREAT_PREVENTION`). The practical effect is that `control_function` on the fair_cam side always defaults regardless of the v3 value set.
 
-**Run-time snapshot**: `_snapshot_control` at `src/riskflow/services/run_executor.py:181-192` captures `control_strength`, `control_reliability`, `control_coverage`, `domain`, `function`, and `type` into the run's JSON audit record. Historical snapshots in `risk_analysis_runs` are written with this shape. After PRs ι/κ, the snapshot writer needs updating to capture per-assignment effectiveness values; historical snapshots are preserved unchanged (they are immutable audit records). See §9.5 for affected surfaces.
+**Run-time snapshot**: `_snapshot_control` at `src/idraa/services/run_executor.py:181-192` captures `control_strength`, `control_reliability`, `control_coverage`, `domain`, `function`, and `type` into the run's JSON audit record. Historical snapshots in `risk_analysis_runs` are written with this shape. After PRs ι/κ, the snapshot writer needs updating to capture per-assignment effectiveness values; historical snapshots are preserved unchanged (they are immutable audit records). See §9.5 for affected surfaces.
 
 ---
 
@@ -479,14 +493,14 @@ The migration is a data migration, not just a DDL migration, and must be written
 
 Production files requiring changes:
 - `alembic/versions/` — new migration file (1 new file)
-- `src/riskflow/models/control.py` — drop three fields, add relationship to `ControlFunctionAssignment`
-- `src/riskflow/models/` — new `control_function_assignment.py` model file
-- `src/riskflow/models/enums.py` — add `FairCamSubFunction` enum (26 values); rename `ControlFunction` → `ClassicalControlAction` or drop
-- `src/riskflow/schemas/control.py` — update `ControlForm` Pydantic schema; add `ControlFunctionAssignmentForm`
-- `src/riskflow/services/controls.py` — update CRUD operations for new shape
-- `src/riskflow/services/controls_importer.py` — update defaults at lines 93-95; importer now creates assignment rows
-- `src/riskflow/services/run_executor.py` — update `_v3_to_fair_cam_control` and `_snapshot_control`
-- `src/riskflow/services/scenario_calibration.py` — called from `run_executor.py:32`; may require updates if it reads control effectiveness directly
+- `src/idraa/models/control.py` — drop three fields, add relationship to `ControlFunctionAssignment`
+- `src/idraa/models/` — new `control_function_assignment.py` model file
+- `src/idraa/models/enums.py` — add `FairCamSubFunction` enum (26 values); rename `ControlFunction` → `ClassicalControlAction` or drop
+- `src/idraa/schemas/control.py` — update `ControlForm` Pydantic schema; add `ControlFunctionAssignmentForm`
+- `src/idraa/services/controls.py` — update CRUD operations for new shape
+- `src/idraa/services/controls_importer.py` — update defaults at lines 93-95; importer now creates assignment rows
+- `src/idraa/services/run_executor.py` — update `_v3_to_fair_cam_control` and `_snapshot_control`
+- `src/idraa/services/scenario_calibration.py` — called from `run_executor.py:32`; may require updates if it reads control effectiveness directly
 
 Test files requiring changes:
 - `tests/conftest.py` — update control fixtures
@@ -532,7 +546,7 @@ All 137 fair_cam tests are expected to require rewriting against the new per-ass
 
 ### 7.3 PR λ (Phase 1.5c) — control library and wizard
 
-Full spec is deferred to PR λ's own design document, following the template established by PR θ (Phase 1.5a scenario library, `docs/superpowers/specs/2026-04-28-phase-1.5a-scenario-library-design.md`).
+Full spec is deferred to PR λ's own design document, following the template established by PR θ (Phase 1.5a scenario library, internal design doc 2026-04-28-phase-1.5a-scenario-library-design).
 
 High-level scope:
 - `control_library_entries` table (composite PK id+version) with Standard-aligned schema (per-assignment effectiveness).
@@ -547,7 +561,7 @@ Inline carryovers from PR θ (must land in PR λ):
 
 ### 7.4 Data contracts at the boundary
 
-The current codebase has Pydantic schemas at `src/riskflow/schemas/` for HTTP-form-input boundaries and SQLAlchemy ORM models at `src/riskflow/models/` for the persistence schema, but cross-system data contracts are mostly implicit in code. The v3↔fair_cam adapter (§6) constructs a `FairCamControl` field-by-field with no formal input DTO; the `Scenario.library_pin` JSON shape from PR θ §6.9.4 is documented narratively but not Pydantic-validated; the `risk_analysis_runs.snapshot` JSON shape is implicit in `_snapshot_control` writers and consumers (§9.5).
+The current codebase has Pydantic schemas at `src/idraa/schemas/` for HTTP-form-input boundaries and SQLAlchemy ORM models at `src/idraa/models/` for the persistence schema, but cross-system data contracts are mostly implicit in code. The v3↔fair_cam adapter (§6) constructs a `FairCamControl` field-by-field with no formal input DTO; the `Scenario.library_pin` JSON shape from PR θ §6.9.4 is documented narratively but not Pydantic-validated; the `risk_analysis_runs.snapshot` JSON shape is implicit in `_snapshot_control` writers and consumers (§9.5).
 
 PRs ι/κ/λ traverse three reshape boundaries (v3 schema, fair_cam schema, library→instance projection). Without formal contracts, each consumer rediscovers the implicit shape, and silent drift across consumers becomes a real risk during the migration window. This section enumerates the contracts each PR must codify as Pydantic models alongside its ORM/migration work.
 
@@ -790,7 +804,7 @@ All control mutations continue routing through `AuditWriter`. PR ι must add new
 
 ### 9.5 Hash-stability of historical Monte Carlo runs
 
-Historical run snapshots stored in `risk_analysis_runs` capture control state via `_snapshot_control` at `src/riskflow/services/run_executor.py:181-192`. The current snapshot captures the flat triple. After PR ι, `_snapshot_control` must be updated to capture per-assignment effectiveness values for new runs. The snapshot schema version should be bumped (add a `"snapshot_version": 2` key) so downstream code can distinguish old flat-triple snapshots from new per-assignment snapshots.
+Historical run snapshots stored in `risk_analysis_runs` capture control state via `_snapshot_control` at `src/idraa/services/run_executor.py:181-192`. The current snapshot captures the flat triple. After PR ι, `_snapshot_control` must be updated to capture per-assignment effectiveness values for new runs. The snapshot schema version should be bumped (add a `"snapshot_version": 2` key) so downstream code can distinguish old flat-triple snapshots from new per-assignment snapshots.
 
 Historical snapshots are immutable audit records and must not be modified.
 
@@ -798,7 +812,7 @@ Surfaces that read snapshot data and must be version-aware:
 
 | Surface | File | PR ι action | Deferred to |
 |---------|------|-------------|-------------|
-| Snapshot writer | `src/riskflow/services/run_executor.py:181-192` | Update to write per-assignment shape + version key | PR ι |
+| Snapshot writer | `src/idraa/services/run_executor.py:181-192` | Update to write per-assignment shape + version key | PR ι |
 | Run-detail template | `templates/runs/detail.html` (or equivalent — verify path) | Must render both snapshot versions | PR λ |
 | Run-comparison views | (if any exist — verify) | Must handle version mismatch in comparison | PR λ |
 | Export/report paths | Any that read historical snapshot JSON | Must detect `snapshot_version` key | PR λ |
@@ -886,7 +900,7 @@ v3 importer.
 - **v3 design doc**: `docs/plans/2026-04-23-riskflow-v3-design.md` — the data-model section predates this Standard review. Control-related claims in that document are superseded by this audit where they conflict.
 - **Data-model spec**: `docs/reference/data-model-specification.md` — also pre-Standard-review. Section on Control entity is superseded by §4 of this document.
 - **Methodology memory**: contains Overview-era formulas (`OpEff = IntEff × (1 - VF/365)^VD`). The Standard supersedes the Overview for all v3 design decisions. Section §2.3 of this document documents the supersession.
-- **PR θ spec (Scenario Library)**: `docs/superpowers/specs/2026-04-28-phase-1.5a-scenario-library-design.md` — the vertical-slice template that PR λ mirrors for the control library and wizard.
+- **PR θ spec (Scenario Library)**: internal design doc 2026-04-28-phase-1.5a-scenario-library-design — the vertical-slice template that PR λ mirrors for the control library and wizard.
 - **Standards-aligned seed source**: `docs/reference/fair-cam-controls-library.csv` — 61 control entries with Standard sub-function tags; native ingestion format for PR λ seed migration.
 - **Standard source PDF**: `docs/FAIR Controls Analytics Model (FAIR-CAM) Standard V1.0 (January 2025).pdf` — 49 pages, dated 2025-01-15. All §-number and page citations in this document refer to this source.
 

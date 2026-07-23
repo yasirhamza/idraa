@@ -31,11 +31,11 @@ def test_loss_forms_doc_defines_model() -> None:
         # the six-forms taxonomy must be primary-cited to its FAIR source
         "Freund",
         # rules
-        "lognormal-only",
+        "composed-envelope-only",
         "No cross-sector",
         "materiality",
         # engine boundary
         "authoring-time",
-        "fair_core.py:445",
+        "fair_core.py:511",
     ):
         assert token in doc, f"loss-form model doc missing {token!r}"

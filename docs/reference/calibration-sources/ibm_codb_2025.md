@@ -108,4 +108,4 @@ Note: of the three spotlighted mitigators, the **largest** high-vs-low spread be
 - **Baseline anomaly** (above): use deltas as relative magnitudes only.
 - **Population skew:** judgmental sample biased toward mature programs (page-58); mid-size breach band only (2,960–113,620 records; mega-breaches excluded, page-56).
 
-**Consumption pointers:** charter §10 in `docs/reviews/2026-06-30-faircam-meta-control-attribution.md`; Slice-2 open question in `docs/superpowers/specs/2026-07-01-indirect-control-attribution-design.md`. The classification column and ratio band above must be re-reviewed by the methodology persona at the Slice-2 plan-gate before κ is pinned.
+**Consumption pointers:** charter §10 in the internal design doc 2026-06-30-faircam-meta-control-attribution; Slice-2 open question in the internal design doc 2026-07-01-indirect-control-attribution-design. The classification column and ratio band above must be re-reviewed by the methodology persona at the Slice-2 plan-gate before κ is pinned.

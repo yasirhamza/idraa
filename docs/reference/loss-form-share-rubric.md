@@ -2,8 +2,10 @@
 
 How to assign each archetype's **form-shares** for the envelope×share loss model
 (design Amendment A1). This rubric is the reproducible framework the D-iii-a
-recalibration applies to all 85 entries (and D-iii-b to new ones), so that share
-assignment is consistent and auditable rather than ad-hoc per entry.
+recalibration applied to all 85 entries at the time (and D-iii-b to new ones);
+the library has since grown to 102 entries, all still governed by the same
+framework, so that share assignment is consistent and auditable rather than
+ad-hoc per entry.
 
 ## 1. Principles (from Amendment A1)
 

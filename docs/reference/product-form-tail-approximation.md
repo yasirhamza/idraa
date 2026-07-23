@@ -132,7 +132,7 @@ All of the following are descriptive statistics read off the **same**
 product-form array. In production that array is
 `enhanced.residual_risk` (a fair_cam `FairResult` whose `simulation_results` IS
 the `lef * loss_magnitude` array from `fair_core.py:448`). The v3 view-model
-builders live in `src/riskflow/services/run_executor.py`:
+builders live in `src/idraa/services/run_executor.py`:
 
 | Stored statistic | Builder (`run_executor.py`) | Reads |
 |---|---|---|
@@ -156,23 +156,27 @@ is the only stored statistic exempt (it is exact, per the section above).
 
 ## Real exposure in the seeded library
 
-How much does this matter for the shipped seed library? Verified against
-`data/seed_library_entries.json` + `data/seed_library_entries_extension.json`
-(85 entries total) on 2026-06-23:
+How much does this matter for the shipped seed library? Originally verified
+against `data/seed_library_entries.json` + `data/seed_library_entries_extension.json`
+(85 entries total) on 2026-06-23; **counts below are re-derived as-of the
+current seed data** (library growth since 2026-06-23 changed the totals, not
+the method):
 
-| Quantity | Value |
+| Quantity | Value (as of current seed) |
 |---|---|
-| Total seed scenarios | 85 |
-| Scenarios with **TEF mode > 1** | 36 (**42.4%**) |
+| Total seed scenarios | 102 |
+| Scenarios with **TEF mode > 1** | 40 (**39.2%**) |
 | **Maximum** TEF mode anywhere | **20** — "Telecom SIM-Swap Fraud — Carrier-Liability Account Takeover" |
 | "Credential Stuffing — Consumer-Facing Portal Account Takeover" TEF mode | 5 |
 
 > These numbers **correct** the originating review, which overstated the
-> exposure as "52% of 44 scenarios" with a "max TEF mode of 50." The verified
-> figures are **42.4% of 85** and a **max mode of 20**. (TEF mode is the LEF's
-> upper component — `LEF = TEF × Vuln` — so realized LEF is typically *below*
-> TEF mode once Vulnerability < 1; TEF mode > 1 is an upper-bound proxy for "in
-> the high-frequency regime," not a literal LEF.)
+> exposure as "52% of 44 scenarios" with a "max TEF mode of 50." The
+> 2026-06-23 verified figures were **42.4% of 85** and a **max mode of 20**;
+> re-derived as-of the current 102-entry library the figure is **39.2% of
+> 102**, still a max mode of 20. (TEF mode is the LEF's upper component —
+> `LEF = TEF × Vuln` — so realized LEF is typically *below* TEF mode once
+> Vulnerability < 1; TEF mode > 1 is an upper-bound proxy for "in the
+> high-frequency regime," not a literal LEF.)
 
 Reading: a **material minority** of seed archetypes sit in the regime where the
 tail approximation's error is non-trivial, so the disclosure matters. But the
@@ -211,7 +215,7 @@ Both are **deferred** and intentionally not built in this PR.
 - `fair_cam/risk_engine/fair_core.py` — the per-iteration LEF (line 442), LM
   (line 445), and `risk = lef * loss_magnitude` product (line 448); `ale_mean`
   (line 469).
-- `src/riskflow/services/run_executor.py` — the v3 view-model tail builders
+- `src/idraa/services/run_executor.py` — the v3 view-model tail builders
   `_build_tail_metrics`, `_build_loss_percentile_band`, and
   `_build_loss_exceedance_curve`, all reading `enhanced.residual_risk`.
 - `docs/reference/control-weight-robustness.md` — the weight-uncertainty

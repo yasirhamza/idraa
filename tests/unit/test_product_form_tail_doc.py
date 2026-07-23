@@ -21,7 +21,7 @@ def test_product_form_tail_doc_states_the_limitation() -> None:
         "_build_tail_metrics",
         "_build_loss_percentile_band",
         "_build_loss_exceedance_curve",
-        "42.4%",
+        "39.2%",
         "Future work",
         "Poisson",
     ):

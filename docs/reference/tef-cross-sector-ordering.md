@@ -1,12 +1,20 @@
 # TEF cross-sector differentiation — frequency-ordering rationale
 
-Companion to the TEF PERT→lognormal + de-templating milestone. The lognormal
-conversion drops the PERT `mode`, so the distinctness key is `(low, high)` (the
-p5/p95 the fit consumes). 20 groups (59 entries) shared a `(low, high)` pair.
-Each shared group is differentiated by a **relative threat-frequency ordering**
-(a multiplicative level-shift of the group's `(low, high)`, preserving the
-spread ratio → distinct lognormals with the same σ, ordered means). One group is
-a **genuine tie → allowlisted** (not nudged).
+Companion to the TEF de-templating milestone. This differentiation exercise
+was originally performed under the (since-reversed) TEF PERT→lognormal
+representation, where the lognormal fit drops the PERT `mode` and the
+distinctness key was `(low, high)` (the p5/p95 the fit consumes). 20 groups
+(59 entries) shared a `(low, high)` pair. Each shared group was differentiated
+by a **relative threat-frequency ordering** (a multiplicative level-shift of
+the group's `(low, high)`, preserving the spread ratio → distinct anchors with
+ordered means/medians). One group was a **genuine tie → allowlisted** (not
+nudged).
+
+**Since the distribution-model reversal (lognormal → PERT), TEF is stored as a
+PERT triple `(low, mode, high)` again** — the `(low, high)` anchors from this
+exercise are unchanged, but `mode` now also participates in the distinctness
+key. See the Verification section below for the current, PERT-triple-framed
+count.
 
 ## Epistemic status (carry-over from #518 plan-gate C)
 
@@ -78,9 +86,25 @@ directional signal exists; genuine ties are allowlisted:
   supply-chain C); noted (M-5) that K12 edtech-vendor breaches are empirically a
   rampant category — the direction is defensible but not strong.
 
-## Verification (against current seed, pre-conversion)
+## Verification (against current seed, PERT triples)
 
-- 0 residual `(low, high)` collisions (excl. allowlist); 0 residual lognormal-node collisions.
-- **89 distinct lognormal nodes** (93 entries − 4 allowlisted pairs).
-- **36 entries differentiated; 57 keep their current `(low, high)`.**
-- Unchanged-entry `lognormal_mean / PERT_mean` band: `[0.898, 1.106]` (within [0.85, 1.20]). Re-spaced entries are exempt (their level deliberately shifts) and instead assert the directional median ordering vs their group.
+Re-derived directly from the current seed data
+(`data/seed_library_entries.json` + `data/seed_library_entries_extension.json`,
+102 entries total) reading each entry's `threat_event_frequency` PERT
+`(low, mode, high)` triple:
+
+- **98 distinct `(low, mode, high)` triples across 102 entries.**
+- **7 groups share a `(low, high)` pair** (14 entries); of those:
+  - **3 are legitimate (low, high) collisions distinguished by `mode`** —
+    `pipeline-nomination-scada-curtailment-shipper-penalty` (mode 0.13) vs.
+    `email-client-zeroclick-espionage` (mode 0.15); `hospitality-pos-card-skimming`
+    (mode 1.0) vs. `edge-ransomware-perimeter-gateway` (mode 0.9);
+    `professional-payroll-bec` (mode 1.2) vs. `browser-zeroday-driveby`
+    (mode 1.0). These are genuinely distinct PERT triples even though the
+    `(low, high)` anchors match.
+  - **4 are the genuine ties already allowlisted above** (`field-instrument-spoofing`
+    ≡ `pipeline-scada-integrity`; `casino-ransomware-operational-disruption` ≡
+    `law-firm-privileged-data-ransomware-extortion`; `manufacturing-billing-fraud`
+    ≡ `hospitality-guest-data-insider`; `agri-equipment-physical-tamper` ≡
+    `education-campus-facility-tamper`) — same `low`, `mode`, AND `high`, kept
+    identical by design, not nudged.

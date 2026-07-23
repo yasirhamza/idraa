@@ -1,9 +1,9 @@
 # Control-Weight Robustness (Rank-Stability)
 
 **Issue:** #419
-**Spec:** `docs/superpowers/specs/2026-06-25-control-weight-robustness-design.md`
-**Identifiability rationale:** `docs/reviews/2026-06-25-faircam-control-roi-identifiability.md`
-**Code:** `src/riskflow/services/weight_robustness.py`
+**Spec:** internal design doc 2026-06-25-control-weight-robustness-design
+**Identifiability rationale:** internal design doc 2026-06-25-faircam-control-roi-identifiability
+**Code:** `src/idraa/services/weight_robustness.py`
 
 ---
 
@@ -196,7 +196,7 @@ Concretely, `fair_cam/risk_engine/control_attribution.py:representative_value`
 defines the per-distribution scalar (PERT mode for PERT/Triangular inputs, lognormal
 median for lognormal inputs, mean for Normal, midpoint for Uniform). The displayed
 control ranking is ordered by `displayed_control_order` in
-`src/riskflow/services/aggregate_run_view_model.py`, which uses these same
+`src/idraa/services/aggregate_run_view_model.py`, which uses these same
 representative values as the sort key.
 
 ## 5 — SINGLE-scenario: ranges only (Meth-B6)
@@ -212,8 +212,8 @@ basis would be misleading. `rank_stability_available = False` and
 
 The canonical weights are **calibrated** (grounded in SME judgment and the
 FAIR-CAM standard), but **not validated** against org-specific loss outcome data
-— because validation in that sense is infeasible at single-org scale (see
-`docs/reviews/2026-06-25-faircam-control-roi-identifiability.md`). This feature
+— because validation in that sense is infeasible at single-org scale (see the
+internal design doc 2026-06-25-faircam-control-roi-identifiability). This feature
 does not change what the weights mean; it propagates their irreducible uncertainty
 into the outputs so consumers can see whether their decisions are robust to it.
 
@@ -260,12 +260,12 @@ deterministic band endpoints from §5 of the spec are the natural stepping stone
 - `docs/reference/vulnerability-semantics.md` — semantics of the `vulnerability`
   node that the `prevention.vuln` parameter targets (`vmc.vuln` retired by
   #439 — see "Retired parameters" above).
-- `docs/superpowers/specs/2026-06-25-control-weight-robustness-design.md` — full
+- internal design doc 2026-06-25-control-weight-robustness-design — full
   design spec with §2 co-variation table, §4 data contract, §7 perf/budget, and
   the full plan-gate decision log.
-- `docs/reviews/2026-06-25-faircam-control-roi-identifiability.md` — the
+- internal design doc 2026-06-25-faircam-control-roi-identifiability — the
   identifiability audit that motivated this feature and retired absolute ROI
   point claims.
-- `src/riskflow/services/weight_robustness.py` — logit-normal sampler, co-variation
+- `src/idraa/services/weight_robustness.py` — logit-normal sampler, co-variation
   resolver, ensemble runner, and `WEIGHT_ROBUSTNESS_KEYS` (the persisted key
   contract).
