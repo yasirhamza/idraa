@@ -35,6 +35,7 @@ from idraa.routes.deps import (
     current_session,
     get_db,
     require_user,
+    resolve_throttle_source,
     safe_next,
 )
 from idraa.services import webauthn_service
@@ -48,6 +49,7 @@ from idraa.services.auth import (
     set_webauthn_stepup_challenge_cookie,
     verify_user_password,
 )
+from idraa.services.login_throttle import is_ip_blocked, register_failed_source
 from idraa.services.mfa_enrollment import user_has_strong_factor
 from idraa.services.second_factor import verify_totp_or_recovery
 
@@ -197,6 +199,28 @@ async def step_up_passkey_verify(
     user: User = Depends(require_user),
     sess: AuthSession | None = Depends(current_session),
 ) -> Response:
+    # Sec-N1: per-*source* (surface="stepup", distinct from "login") 429 gate
+    # bounds the audit-log write below to a finite rate. A hostile
+    # session-holder who has stolen a cookie but not the victim's passkey can
+    # otherwise hammer this endpoint forever — each miss is an unconditional
+    # audit_log INSERT (Sec-I1's forensic-value design). Deliberately does
+    # NOT call register_failed_login (see _audit_failure) — that throttles
+    # the ACCOUNT via /login, which would let this same hostile
+    # session-holder lock the victim out of /login too, a worse DoS than the
+    # audit flood this bounds.
+    source = resolve_throttle_source(request, surface="stepup")
+    blocked = await is_ip_blocked(db, source)
+    if blocked is not None:
+        from datetime import UTC, datetime
+
+        retry = str(max(1, int((blocked - datetime.now(UTC)).total_seconds())))
+        return Response(
+            '{"error":"too_many"}',
+            media_type="application/json",
+            status_code=429,
+            headers={"Retry-After": retry},
+        )
+
     async def _audit_failure(reason: str) -> None:
         # Sec-I1: unknown-credential (hijacker probing with a foreign
         # passkey) and counter (cloned-authenticator signal) are this
@@ -212,6 +236,7 @@ async def step_up_passkey_verify(
             user_id=user.id,
             ip_address=client_ip(request),
         )
+        await register_failed_source(db, resolve_throttle_source(request, surface="stepup"))
 
     signed = request.cookies.get("rf_webauthn_stepup")
     challenge = load_webauthn_stepup_challenge(signed) if signed else None
