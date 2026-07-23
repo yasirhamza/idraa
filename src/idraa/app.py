@@ -826,6 +826,25 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _settings = _get_settings()
 
+    # Issue #81: the per-source login throttle silently no-ops without a
+    # trusted client-IP source configured (see config.py's
+    # trusted_client_ip_header / trusted_proxy_count) — a spoofable
+    # X-Forwarded-For leftmost entry is never trusted by the resolver, so a
+    # prod deploy behind a proxy with neither setting quietly loses per-source
+    # throttling (per-account throttle still applies). Warn loudly at boot
+    # rather than fail silently.
+    if (
+        _settings.environment == "prod"
+        and _settings.auth_ip_max_failed_logins > 0
+        and not _settings.trusted_client_ip_header
+        and _settings.trusted_proxy_count == 0
+    ):
+        logging.getLogger(__name__).warning(
+            "Per-source login throttle is enabled but no trusted client-IP source "
+            "is configured (TRUSTED_CLIENT_IP_HEADER / TRUSTED_PROXY_COUNT); it will "
+            "no-op behind a proxy. Per-account throttle still applies."
+        )
+
     # Fail-fast: a self-inconsistent retention config (#297) must crash boot,
     # NOT be swallowed by the reaper's broad except below. Runs BEFORE the
     # reaper try/except so the RetentionConfigError propagates and aborts

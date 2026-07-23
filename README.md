@@ -54,6 +54,7 @@ Full reference: [`.env.example`](.env.example) (copy to `.env`; every variable t
 | `WEBAUTHN_RP_ID` | Passkey relying-party ID — your registrable domain, no scheme/port. Permanently binds enrolled passkeys; prod refuses to boot on the `localhost` default. |
 | `WEBAUTHN_ORIGINS` | Comma-separated `https://` origins that must match `WEBAUTHN_RP_ID`'s host (or a subdomain). |
 | `FORWARDED_ALLOW_IPS` | IP address(es) of your reverse proxy, so uvicorn trusts its forwarded headers. Set it to the proxy's actual address, never `*` — a proxy appends to `X-Forwarded-For` rather than replacing it, so `*` (which trusts the leftmost entry) lets any client that can reach the app port directly forge a trusted "client IP". |
+| `TRUSTED_CLIENT_IP_HEADER` / `TRUSTED_PROXY_COUNT` | The per-source login throttle needs one of these set to attribute failures per client — a dedicated overwrite-protected header (`TRUSTED_CLIENT_IP_HEADER`, e.g. Fly/Cloudflare/Azure) for edges that provide one, or an exact hop count (`TRUSTED_PROXY_COUNT`) for `X-Forwarded-For`-only edges (AWS ALB, GCP LB, nginx); unset, the per-source throttle no-ops (the per-account throttle still applies) — see `.env.example` for per-platform values. |
 
 ## Development
 
