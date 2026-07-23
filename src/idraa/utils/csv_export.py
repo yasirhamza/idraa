@@ -91,3 +91,9 @@ def csv_response(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
+
+
+# Public aliases: the samples export (services/sample_export.py) reuses the
+# exact header/preamble sanitisation and filename rules of csv_response.
+sanitize_cell = _sanitize_cell
+sanitize_filename = _sanitize_filename
