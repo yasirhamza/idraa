@@ -10,6 +10,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
 </head>
 <body>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   /* ---- Idraa graphite tokens (src/idraa/static/css/app.css) ---- */
   :root {
@@ -62,7 +63,7 @@
   .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 
   .slide {
-    min-height: 100vh; scroll-snap-align: start;
+    min-height: 100vh; min-height: 100svh; scroll-snap-align: start;
     display: flex; flex-direction: column; justify-content: center;
     padding: 3rem clamp(1.2rem, 7vw, 7rem) 2.5rem;
     max-width: 1200px; margin: 0 auto; position: relative;
@@ -165,7 +166,7 @@
 
   /* playground */
   .play { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 1.6rem; align-items: start; margin-top: 1rem; }
-  @media (max-width: 760px) { .play { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .play { grid-template-columns: minmax(0,1fr); } }
   .ctl { margin-bottom: 1rem; }
   .ctl label { display: flex; justify-content: space-between; font-size: .85rem; color: var(--ink2); margin-bottom: .25rem; }
   .ctl output { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink1); }
@@ -225,7 +226,7 @@
   .duo.wideL { grid-template-columns: minmax(0,1.18fr) minmax(0,.82fr); }
   .duo.wideR { grid-template-columns: minmax(0,.78fr) minmax(0,1.22fr); }
   .duo > .inwords, .duo > .flow, .duo > .chart-card, .duo .inwords:first-child { margin-top: 0; }
-  @media (max-width: 880px) { .duo, .duo.wideL, .duo.wideR { grid-template-columns: 1fr; } }
+  @media (max-width: 880px) { .duo, .duo.wideL, .duo.wideR { grid-template-columns: minmax(0,1fr); } }
 
   /* callout — promoted load-bearing notes (formerly buried in .foot) */
   .callout { background: var(--s1); border: 1px solid var(--bdr); border-left: 3px solid var(--brass);
@@ -252,6 +253,14 @@
   @media (prefers-reduced-motion: no-preference) {
     .slide > * { animation: rise .45s ease both; }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+  /* phone reflow (viewport meta added 2026-07-23) */
+  @media (max-width: 560px) {
+    #rail { display: none; }
+    dl.terms { grid-template-columns: 1fr; gap: .1rem .8rem; }
+    dl.terms dt { margin-top: .6rem; }
+    .formula { font-size: 1.05rem; }
+    .ref { overflow-wrap: anywhere; }
   }
   strong { color: var(--ink1); }
   a { color: var(--c-ours); }
