@@ -19,6 +19,7 @@
   {"key": "full_name",   "label": "Name",     "priority": "secondary"},
   {"key": "role_value",  "label": "Role",     "priority": "secondary"},
   {"key": "active_str",  "label": "Active",   "priority": "hidden_on_mobile"},
+  {"key": "locked_str",  "label": "Locked",   "priority": "hidden_on_mobile"},
   {"key": "_actions",    "label": "",         "kind": "action_menu"},
 ] %}
 
@@ -62,6 +63,7 @@
   "full_name":  u.full_name,
   "role_value": u.role.value,
   "active_str": "Yes" if u.is_active else "No",
+  "locked_str": "Locked" if locked.get(u.id | string) else "",
   "_actions":   _actions,
 }) -%}
 {% endfor %}
