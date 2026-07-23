@@ -13,8 +13,16 @@
                 download=True → file-download link: emits `hx-boost="false"`
                   (opt out of the global <body hx-boost="true"> so the browser
                   navigates and downloads the attachment instead of HTMX
-                  swapping the bytes into the DOM as text) plus the `download`
-                  attribute. Set this on any href pointing at an export/PDF/CSV.
+                  swapping the bytes into the DOM as text). Deliberately does
+                  NOT emit the HTML `download` attribute (Task 7 / #issue): the
+                  server already sends `Content-Disposition: attachment` on
+                  every export/PDF/CSV response, so `download` is redundant on
+                  the success path — and harmful when the target is
+                  step-up-gated, because `download` tells the browser to save
+                  whatever resource it lands on AFTER following redirects, so a
+                  303 to /auth/step-up gets saved as an HTML file instead of
+                  navigated to. Set this on any href pointing at an
+                  export/PDF/CSV.
                 hx: dict of HTMX attrs (e.g., {"get": "/url", "target": "#x"})
   meta:       optional str — small subtitle / status line
 #}
@@ -53,7 +61,7 @@
         <a href="{{ a.href }}"
            class="{{ cls }}{% if a.requires_md %} hidden md:inline-flex{% endif %}"
            style="background-color: var(--color-brand, #37464F);"
-           {%- if a.download %} hx-boost="false" download{% endif %}
+           {%- if a.download %} hx-boost="false"{% endif %}
            {%- if a.hx %}{% for k, v in a.hx.items() %} hx-{{ k }}="{{ v }}"{% endfor %}{% endif %}>
           {% if a.icon %}<span aria-hidden="true">{{ a.icon }}</span>{% endif %}
           {{ a.label }}
@@ -62,7 +70,7 @@
         {%- set cls = 'btn btn-sm ' + ({'primary':'btn-primary','outline':'btn-outline','ghost':'btn-ghost'})[style] -%}
         <a href="{{ a.href }}"
            class="{{ cls }}{% if a.requires_md %} hidden md:inline-flex{% endif %}"
-           {%- if a.download %} hx-boost="false" download{% endif %}
+           {%- if a.download %} hx-boost="false"{% endif %}
            {%- if a.hx %}{% for k, v in a.hx.items() %} hx-{{ k }}="{{ v }}"{% endfor %}{% endif %}>
           {% if a.icon %}<span aria-hidden="true">{{ a.icon }}</span>{% endif %}
           {{ a.label }}
