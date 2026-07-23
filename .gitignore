@@ -84,3 +84,10 @@ scripts/_uat_screenshot.py
 # If anyone ignores that and runs `npm install`, don't let these get committed.
 node_modules/
 package-lock.json
+
+# Deployment configuration is operator-local, never tracked in the public
+# repo (owner decision 2026-07-23): platform, sizing, and DB-path details
+# are deployment disclosures. Keep your fly.toml (or equivalent) beside the
+# checkout; the tracked-path denylist enforces this.
+fly.toml
+fly.*.toml
