@@ -16,15 +16,23 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from httpx import AsyncClient
+import pytest
+from httpx import ASGITransport, AsyncClient
 
-from idraa.middleware.security_headers import CSP_POLICY
+from idraa import config
+from idraa.app import create_app
+from idraa.middleware.security_headers import (
+    CSP_POLICY,
+    HSTS_VALUE,
+    PERMISSIONS_POLICY,
+)
 
 # Headers the middleware must set on every response, with their expected values.
 EXPECTED_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": PERMISSIONS_POLICY,
 }
 
 
@@ -166,3 +174,117 @@ async def test_csp_script_src_shape(client: AsyncClient) -> None:
         assert dropped not in script_src, (
             f"script-src should no longer grant {dropped} (asset is self-hosted)"
         )
+
+
+async def test_hsts_absent_under_dev_test_settings(client: AsyncClient) -> None:
+    """HSTS must NOT be sent when environment != 'prod' (dev/test run http://).
+
+    ``client`` builds its app via the default ``ENVIRONMENT=test`` set by
+    ``tests/conftest.py``, so ``SecurityHeadersMiddleware`` is constructed with
+    ``enable_hsts=False``.
+    """
+    r = await client.get("/healthz")
+    assert r.status_code == 200
+    assert "strict-transport-security" not in r.headers
+
+
+async def test_hsts_present_when_environment_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HSTS must be sent, with the exact pinned value, when environment == 'prod'.
+
+    Builds a SEPARATE app instance with ``ENVIRONMENT=prod`` (and a
+    conforming 32+ char ``SESSION_SECRET`` — ``Settings._check_secret_hardening``
+    refuses to boot prod with the default placeholder). Hits ``/healthz``,
+    which is setup-guard-allowlisted and DB-free, so no schema/engine setup
+    is needed for this narrowly-scoped app instance.
+    """
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("SESSION_SECRET", "a" * 32)
+    # WebAuthn RP-ID/origins + MFA_ENCRYPTION_KEY must be non-default in prod
+    # (Strong Auth epic #85's Settings validators) — unrelated to HSTS, but
+    # required to construct a prod Settings instance at all.
+    monkeypatch.setenv("WEBAUTHN_RP_ID", "example.test")
+    monkeypatch.setenv("WEBAUTHN_ORIGINS", "https://example.test")
+    monkeypatch.setenv("MFA_ENCRYPTION_KEY", "c" * 32)
+    config.reset_for_tests()
+    try:
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/healthz")
+            assert r.status_code == 200
+            assert r.headers.get("strict-transport-security") == HSTS_VALUE
+            # Every other static header must still be present alongside HSTS.
+            for name, value in EXPECTED_HEADERS.items():
+                assert r.headers.get(name) == value
+            assert r.headers.get("content-security-policy") == CSP_POLICY
+    finally:
+        config.reset_for_tests()
+
+
+async def test_security_headers_on_forced_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A raw uncaught exception (500) must still carry the full header set.
+
+    Starlette's ``ServerErrorMiddleware`` sits OUTSIDE ``BaseHTTPMiddleware``,
+    so ``SecurityHeadersMiddleware.dispatch`` alone never sees a crashed
+    request unless something ELSE (the base-``Exception`` handler registered
+    in ``idraa.app.create_app``) converts it into a normal response first.
+    This is the regression guard for that handler.
+
+    The boom route is mounted under ``/setup/`` — a setup-guard-allowlisted
+    dir-prefix (``_ALLOW_DIR_PREFIXES``) — so the request reaches the route
+    without needing a seeded DB/schema.
+    """
+    app = create_app()
+
+    @app.get("/setup/__test_boom")
+    async def _boom() -> None:
+        raise RuntimeError("boom for header regression test — must not leak to client")
+
+    # Starlette's ServerErrorMiddleware ALWAYS re-raises after invoking the
+    # registered Exception/500 handler (so a real ASGI server can log it) —
+    # httpx's ASGITransport defaults to propagating that re-raise into the
+    # test itself. raise_app_exceptions=False mirrors a real deployment,
+    # where uvicorn logs the exception but still delivers the response the
+    # handler already sent on the wire.
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        r = await c.get("/setup/__test_boom")
+        assert r.status_code == 500
+        # Generic body only — no exception class/message leaked to the client.
+        assert "RuntimeError" not in r.text
+        assert "boom for header regression test" not in r.text
+        for name, value in EXPECTED_HEADERS.items():
+            assert r.headers.get(name) == value, f"{name} missing/wrong on forced 500"
+        assert r.headers.get("content-security-policy") == CSP_POLICY
+        # Dev/test env (default ENVIRONMENT=test set by conftest) -> no HSTS.
+        assert "strict-transport-security" not in r.headers
+
+
+async def test_security_headers_on_forced_500_prod_includes_hsts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The prod-gated variant: forced 500 also carries HSTS."""
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("SESSION_SECRET", "b" * 32)
+    monkeypatch.setenv("WEBAUTHN_RP_ID", "example.test")
+    monkeypatch.setenv("WEBAUTHN_ORIGINS", "https://example.test")
+    monkeypatch.setenv("MFA_ENCRYPTION_KEY", "d" * 32)
+    config.reset_for_tests()
+    try:
+        app = create_app()
+
+        @app.get("/setup/__test_boom_prod")
+        async def _boom() -> None:
+            raise RuntimeError("boom")
+
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/setup/__test_boom_prod")
+            assert r.status_code == 500
+            assert r.headers.get("strict-transport-security") == HSTS_VALUE
+    finally:
+        config.reset_for_tests()
