@@ -106,6 +106,14 @@ def _select_value(v: bool | None) -> str:
     return "on" if v else "off"
 
 
+def _none_to_empty(v: str | None) -> str:
+    """``mfa_policy`` override -> the same ""-sentinel the form/select options
+    use, so the GET/error re-render explicitly selects "Follow env" instead
+    of relying on the browser defaulting to the first <option> when nothing
+    matches ``value``."""
+    return v if v is not None else ""
+
+
 async def _context(
     request: Request,
     me: User,
@@ -132,7 +140,7 @@ async def _context(
         "is_admin": True,
         "flash": build_flash("Security settings saved.", "success") if saved else None,
         "error": error,
-        "mfa_policy_value": row.mfa_policy if row is not None else "",
+        "mfa_policy_value": _none_to_empty(row.mfa_policy if row is not None else None),
         "step_up_window_seconds_value": row.step_up_window_seconds if row is not None else None,
         "categories": categories,
         "effective_mfa_policy": effective_mfa_policy(),
@@ -177,7 +185,9 @@ async def security_settings_post(
         return templates.TemplateResponse(request, "settings/security.html", ctx, status_code=400)
 
     if not parsed:
-        return RedirectResponse("/settings/security?saved=1", status_code=303)
+        # Nothing submitted, nothing to write or audit — redirect WITHOUT
+        # ?saved=1 so the banner never claims a save that never happened.
+        return RedirectResponse("/settings/security", status_code=303)
 
     # Step 3.2: read prior values BEFORE the upsert so the diff reflects
     # the pre-write state (a fresh org with no row -> every field is None).

@@ -19,11 +19,6 @@ from starlette.responses import RedirectResponse, Response
 _ALLOWLIST = (
     "/account/security",
     "/auth/step-up",
-    "/settings/security",  # idraa#85 Task 6 — same escape-hatch rationale as
-    # /auth/step-up: an admin who flips mfa_policy to "required" without
-    # having enrolled a strong factor THEMSELVES must still be able to
-    # reach the settings page to walk the change back, or every admin is
-    # one settings save away from locking the whole admin group out.
     "/login",
     "/logout",
     "/setup",
