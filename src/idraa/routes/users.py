@@ -34,7 +34,7 @@ from idraa.models.enums import UserRole
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
 from idraa.services.audit import AuditWriter, log_bulk_export
-from idraa.services.auth import revoke_user_sessions
+from idraa.services.auth import is_locked, reset_login_throttle, revoke_user_sessions
 from idraa.services.mfa_enrollment import reset_user_mfa
 from idraa.services.org import require_sole_org
 from idraa.services.users import (
@@ -91,6 +91,7 @@ async def users_list(
     for u in users:
         authored = await _authored_count(db, u.id, org.id)
         can_delete[str(u.id)] = authored == 0 and u.id != me.id
+    locked: dict[str, bool] = {str(u.id): is_locked(u) for u in users}
     return templates.TemplateResponse(
         request,
         "users/list.html",
@@ -100,6 +101,7 @@ async def users_list(
             "users": users,
             "roles": list(UserRole),
             "can_delete": can_delete,
+            "locked": locked,
         },
     )
 
@@ -241,6 +243,8 @@ async def edit_get(
             "user": user,
             "roles": list(UserRole),
             "mfa_reset_done": request.query_params.get("mfa_reset") == "1",
+            "locked": is_locked(user),
+            "unlocked_done": request.query_params.get("unlocked") == "1",
         },
     )
 
@@ -492,3 +496,34 @@ async def reset_mfa_post(
         ip_address=client_ip(request),
     )
     return RedirectResponse(f"/users/{user.id}/edit?mfa_reset=1", status_code=303)
+
+
+@router.post("/users/{user_id}/unlock", dependencies=[Depends(require_recent_auth)])
+async def unlock_user_post(
+    user_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(require_role(UserRole.ADMIN)),
+    confirm: str | None = Form(default=None),
+) -> Response:
+    """Audited admin unlock of a lockout-throttled account (idraa#81).
+
+    Clears the per-account throttle (locked_until + failed_login_count). Per-
+    source (IP) blocks are separate and auto-expire; not cleared here.
+    """
+    if confirm is None or confirm in ("", "0", "false", "False"):
+        raise HTTPException(status_code=400, detail="confirm: missing or falsey")
+    user = await get_user(db, user_id, me.organization_id)
+    if user is None:
+        raise HTTPException(404)
+    reset_login_throttle(user)
+    await AuditWriter(db).log(
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        action="user.login_unlocked",
+        changes={"via": "ui"},
+        user_id=me.id,
+        ip_address=client_ip(request),
+    )
+    return RedirectResponse(f"/users/{user.id}/edit?unlocked=1", status_code=303)

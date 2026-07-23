@@ -16,6 +16,10 @@
 <div class="alert alert-success">MFA reset — the user must re-enroll at their next sign-in.</div>
 {% endif %}
 
+{% if unlocked_done %}
+<div class="alert alert-success">Account unlocked.</div>
+{% endif %}
+
 {%- set errors_dict = {"_form": error} if error else {} -%}
 
 <form method="post" action="/users/{{ user.id }}/edit"
@@ -74,5 +78,13 @@
   <input type="hidden" name="confirm" value="1">
   <button class="btn btn-outline btn-sm" type="submit">Reset MFA</button>
 </form>
+
+{% if locked %}
+<form method="post" action="/users/{{ user.id }}/unlock" class="mt-3">
+  {{ csrf_field() }}
+  <input type="hidden" name="confirm" value="1">
+  <button type="submit" class="btn btn-warning btn-sm">Unlock account</button>
+</form>
+{% endif %}
 
 {% endblock %}

@@ -41,6 +41,9 @@ class UserTotp(Base):
     )
     secret_encrypted: Mapped[str] = mapped_column(String(255), nullable=False)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # N4 (idraa#81): 30s TOTP step counter of the last ACCEPTED code; verify
+    # rejects a code whose step <= this (replay-within-window).
+    last_used_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, nullable=False
     )

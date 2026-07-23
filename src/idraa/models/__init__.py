@@ -28,6 +28,7 @@ from idraa.models.framework_crosswalk import (
     FrameworkControlFairCam,
 )
 from idraa.models.fx_rate import FxRate
+from idraa.models.login_attempt import LoginAttempt
 from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.mixins import IdMixin, OrgMixin, TimestampMixin
 from idraa.models.organization import Organization
@@ -64,6 +65,7 @@ __all__ = [
     "FrameworkControlFairCam",
     "FxRate",
     "IdMixin",
+    "LoginAttempt",
     "OrgMixin",
     "Organization",
     "OverlayDefinition",

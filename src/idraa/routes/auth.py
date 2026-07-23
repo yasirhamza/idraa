@@ -56,6 +56,7 @@ from idraa.routes.deps import (
     current_session,
     current_user,
     get_db,
+    resolve_throttle_source,
 )
 from idraa.routes.deps import safe_next as _safe_next
 from idraa.services import webauthn_service
@@ -76,6 +77,11 @@ from idraa.services.auth import (
     set_webauthn_challenge_cookie,
     verify_user_password,
 )
+from idraa.services.login_throttle import (
+    is_ip_blocked,
+    register_failed_source,
+    reset_source_throttle,
+)
 from idraa.services.mfa_enrollment import user_has_strong_factor
 from idraa.services.second_factor import verify_totp_or_recovery
 
@@ -86,6 +92,10 @@ def _json_err(msg: str) -> Response:
     return Response(
         content=json.dumps({"error": msg}), status_code=400, media_type="application/json"
     )
+
+
+def _retry_after(blocked_until: datetime) -> str:
+    return str(max(1, int((blocked_until - datetime.now(UTC)).total_seconds())))
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -117,6 +127,22 @@ async def login_post(
     # is attacker-controllable, so trusting the GET-time validation alone would
     # let a crafted POST smuggle an open-redirect target.
     safe_next = _safe_next(next or request.query_params.get("next"))
+    source = resolve_throttle_source(request, surface="login")
+    blocked = await is_ip_blocked(db, source)
+    if blocked is not None:
+        return templates.TemplateResponse(
+            request,
+            "auth/login.html",
+            {
+                "current_user": None,
+                "flash": None,
+                "form": {"email": email},
+                "error": "Too many attempts. Try again later.",
+                "next": safe_next,
+            },
+            status_code=429,
+            headers={"Retry-After": _retry_after(blocked)},
+        )
     user = await load_user_by_email(db, email)
     # verify_user_password always runs one Argon2 hash even when user is
     # None — prevents "does this email exist?" timing-based enumeration.
@@ -140,6 +166,7 @@ async def login_post(
                     user_id=user.id,
                     ip_address=client_ip(request),
                 )
+        await register_failed_source(db, source)
         return templates.TemplateResponse(
             request,
             "auth/login.html",
@@ -154,6 +181,7 @@ async def login_post(
         )
 
     if is_locked(user):  # correct password but locked -> still deny
+        await register_failed_source(db, source)
         return templates.TemplateResponse(
             request,
             "auth/login.html",
@@ -185,6 +213,7 @@ async def login_post(
     # here; reset the throttle, then mint a session as before (the
     # enrollment interstitial traps the user on the next request).
     reset_login_throttle(user)
+    await reset_source_throttle(db, source)
 
     sess = await create_session(db, user.id, ip=client_ip(request))
     # datetime.now(UTC) — matches the aware-UTC invariant enforced at
@@ -218,6 +247,20 @@ async def login_mfa_post(
     signed = request.cookies.get("rf_mfa_pending")
     user_id = load_mfa_pending(signed) if signed else None
     safe_next = _safe_next(next or request.query_params.get("next"))
+    source = resolve_throttle_source(request, surface="login")
+    blocked = await is_ip_blocked(db, source)
+    if blocked is not None:
+        return templates.TemplateResponse(
+            request,
+            "auth/mfa_challenge.html",
+            {
+                "current_user": None,
+                "error": "Too many attempts. Try again later.",
+                "next": safe_next,
+            },
+            status_code=429,
+            headers={"Retry-After": _retry_after(blocked)},
+        )
     if user_id is None:
         return RedirectResponse("/login", status_code=303)
     user = await db.get(User, user_id)
@@ -242,6 +285,7 @@ async def login_mfa_post(
             ip_address=client_ip(request),
         )
         register_failed_login(user)  # counts toward lockout (B1)
+        await register_failed_source(db, source)
         if is_locked(user):  # this miss just tripped the lock -> audit
             await AuditWriter(db).log(
                 organization_id=user.organization_id,
@@ -260,6 +304,7 @@ async def login_mfa_post(
         )
 
     reset_login_throttle(user)
+    await reset_source_throttle(db, source)
     sess = await create_session(db, user.id, ip=client_ip(request))
     user.last_login_at = datetime.now(UTC)
     await AuditWriter(db).log(
@@ -289,12 +334,23 @@ async def login_passkey_options(request: Request) -> Response:
 async def login_passkey_verify(
     request: Request, payload: dict[str, Any] = Body(...), db: AsyncSession = Depends(get_db)
 ) -> Response:
+    source = resolve_throttle_source(request, surface="login")
+    blocked = await is_ip_blocked(db, source)
+    if blocked is not None:
+        return Response(
+            '{"error":"too_many"}',
+            media_type="application/json",
+            status_code=429,
+            headers={"Retry-After": _retry_after(blocked)},
+        )
     signed = request.cookies.get("rf_webauthn_challenge")
     challenge = load_webauthn_challenge(signed) if signed else None
     if challenge is None:
+        await register_failed_source(db, source)
         return _json_err("challenge expired")
     credential = payload.get("credential")
     if not isinstance(credential, dict) or not credential.get("rawId"):
+        await register_failed_source(db, source)
         return _json_err("malformed credential")
     raw_id = webauthn_service.parse_raw_id(credential)
     cred = (
@@ -307,20 +363,25 @@ async def login_passkey_verify(
         .first()
     )
     if cred is None:
+        await register_failed_source(db, source)
         return _json_err("unknown credential")
     try:
         new_count = webauthn_service.verify_authentication(
             credential, challenge, cred.public_key, cred.sign_count
         )
     except Exception as exc:  # any bad/tampered assertion -> 400, not 500
+        await register_failed_source(db, source)
         return _json_err(f"verification failed: {type(exc).__name__}")
     if not webauthn_service.sign_count_ok(cred.sign_count, new_count):
+        await register_failed_source(db, source)
         return _json_err("counter")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
     user = await db.get(User, cred.user_id)
     if user is None or not user.is_active:
+        await register_failed_source(db, source)
         return _json_err("inactive")
+    await reset_source_throttle(db, source)
     sess = await create_session(db, user.id, ip=client_ip(request))
     user.last_login_at = datetime.now(UTC)
     await AuditWriter(db).log(

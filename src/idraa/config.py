@@ -311,6 +311,25 @@ class Settings(BaseSettings):
     # auth_max_failed_logins' 0-disables convention).
     auth_step_up_max_age_seconds: int = Field(default=600, ge=0)
 
+    # Per-source login throttle client-IP resolution (idraa#81). Deployment-
+    # agnostic — pick ONE strategy in the gitignored deployment config (see
+    # .env.example for the per-platform header/count table; no vendor header
+    # names are hardcoded here — OSS no-hardcoded rule + the Task 8 src/ guard):
+    #   trusted_client_ip_header: a dedicated OVERWRITE-protected single-client-IP
+    #     header your edge/CDN sets (and discards any client-supplied copy).
+    #   trusted_proxy_count: for X-Forwarded-For-only edges — the number of
+    #     trusted proxies that append to X-Forwarded-For.
+    # Both empty/0 (default) -> the throttle no-ops (source untrusted). NEVER
+    # keyed on request.client.host (spoofable behind the edge). Header wins.
+    trusted_client_ip_header: str = ""
+    trusted_proxy_count: int = Field(default=0, ge=0)
+
+    # Per-source (per-IP) login throttle (idraa#81). 0 disables the per-source
+    # dimension; the per-account throttle (auth_max_failed_logins) is separate.
+    auth_ip_max_failed_logins: int = Field(default=20, ge=0)
+    auth_ip_window_seconds: int = Field(default=900, ge=0)
+    auth_ip_lockout_seconds: int = Field(default=900, ge=0)
+
     @property
     def webauthn_origin_list(self) -> list[str]:
         """WEBAUTHN_ORIGINS parsed: comma-split, trimmed, blanks dropped."""

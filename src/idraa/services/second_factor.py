@@ -9,8 +9,9 @@ pay the Argon2 cost of the recovery loop), same burn + audit on recovery use.
 from __future__ import annotations
 
 import re
+from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models._types import now_utc
@@ -43,8 +44,29 @@ async def verify_totp_or_recovery(
         .scalars()
         .first()
     )
-    if totp and totp_service.verify_totp(decrypt_totp_secret(totp.secret_encrypted), code):
-        return "totp"
+    if totp:
+        step = totp_service.verify_totp_step(
+            decrypt_totp_secret(totp.secret_encrypted), code, after_step=totp.last_used_step
+        )
+        if step is not None:
+            # N4 (idraa#81): claim the step atomically so two concurrent
+            # verifies (e.g. Postgres under load) can't both accept it —
+            # only the request whose guarded UPDATE actually flips the row
+            # wins and returns "totp"; the loser falls through to reject.
+            res = cast(
+                CursorResult[object],
+                await db.execute(
+                    update(UserTotp)
+                    .where(
+                        UserTotp.user_id == user.id,
+                        (UserTotp.last_used_step.is_(None)) | (UserTotp.last_used_step < step),
+                    )
+                    .values(last_used_step=step)
+                ),
+            )
+            if res.rowcount == 1:  # we won the claim
+                return "totp"
+            # lost the race (already consumed this step) -> fall through to reject
     # Only walk the recovery Argon2 loop when the input is recovery-code-shaped
     # — a wrong TOTP guess must NOT cost up to 10 Argon2 verifies (CPU-DoS
     # amplifier).

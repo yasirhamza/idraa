@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import AsyncIterator, Callable
 from urllib.parse import urlsplit
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.config import get_settings
 from idraa.db import get_session
 from idraa.errors import StepUpRequired
 from idraa.models.enums import UserRole
@@ -66,6 +68,45 @@ def client_ip(request: Request) -> str | None:
     doesn't land in future phases.
     """
     return request.client.host if request.client else None
+
+
+def _normalize_ip(ip: str) -> str:
+    """IPv6 -> /64 network address (defeats free /64 rotation); IPv4 unchanged."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if isinstance(addr, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False).network_address)
+    return ip
+
+
+def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
+    """Trusted client IP for throttling, namespaced by ``surface`` (e.g. "login").
+
+    Returns ``None`` (throttle no-ops) when no configured strategy positively
+    yields a client IP. NEVER falls back to ``request.client.host`` — behind the
+    prod edge that is the spoofable leftmost X-Forwarded-For, not the client.
+    """
+    s = get_settings()
+    ip: str | None = None
+    if s.trusted_client_ip_header:  # shape 1: dedicated header
+        val = request.headers.get(s.trusted_client_ip_header)
+        if val:
+            ip = val.split(",")[0].strip()  # single-valued; split is defensive
+    elif s.trusted_proxy_count > 0:  # shape 2: XFF + known hop count
+        parts = [
+            p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()
+        ]
+        # N trusted proxies each APPEND one entry; the client is the LEFTMOST of
+        # those N rightmost == parts[len - N] (Werkzeug ProxyFix / nginx real_ip).
+        # A client can only PREPEND forged entries to the LEFT of that boundary.
+        idx = len(parts) - s.trusted_proxy_count
+        if 0 <= idx < len(parts):
+            ip = parts[idx]
+    if ip is None:
+        return None
+    return f"{surface}:{_normalize_ip(ip)}"
 
 
 def require_user(user: User | None = Depends(current_user)) -> User:

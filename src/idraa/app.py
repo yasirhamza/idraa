@@ -818,12 +818,32 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from idraa.services.run_reaper import (
         periodic_reaper_loop,
         reap_orphaned_runs,
+        sweep_expired_login_attempts,
         sweep_expired_previews,
         sweep_expired_sessions,
         sweep_wizard_drafts,
     )
 
     _settings = _get_settings()
+
+    # Issue #81: the per-source login throttle silently no-ops without a
+    # trusted client-IP source configured (see config.py's
+    # trusted_client_ip_header / trusted_proxy_count) — a spoofable
+    # X-Forwarded-For leftmost entry is never trusted by the resolver, so a
+    # prod deploy behind a proxy with neither setting quietly loses per-source
+    # throttling (per-account throttle still applies). Warn loudly at boot
+    # rather than fail silently.
+    if (
+        _settings.environment == "prod"
+        and _settings.auth_ip_max_failed_logins > 0
+        and not _settings.trusted_client_ip_header
+        and _settings.trusted_proxy_count == 0
+    ):
+        logging.getLogger(__name__).warning(
+            "Per-source login throttle is enabled but no trusted client-IP source "
+            "is configured (TRUSTED_CLIENT_IP_HEADER / TRUSTED_PROXY_COUNT); it will "
+            "no-op behind a proxy. Per-account throttle still applies."
+        )
 
     # Fail-fast: a self-inconsistent retention config (#297) must crash boot,
     # NOT be swallowed by the reaper's broad except below. Runs BEFORE the
@@ -879,6 +899,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         logging.getLogger(__name__).exception(
             "Boot expired-session sweep failed; continuing startup"
         )
+
+    # Issue #81: boot one-shot TTL sweep of inactive login_attempt rows — same
+    # "primary sweep path on scale-to-zero deploys" rationale as the sweeps
+    # above. Sibling try/except (a sweep bug must never block startup).
+    try:
+        await sweep_expired_login_attempts(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception("Boot login_attempt sweep failed; continuing startup")
 
     # Task 5 (Arch-B1): a SEPARATE startup-only VACUUM sweep, additive to the
     # throttled opportunistic sweep above — NOT a replacement (replacing it
