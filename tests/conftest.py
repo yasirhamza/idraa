@@ -1146,3 +1146,12 @@ def _clear_active_run_registry() -> Iterator[None]:
     from idraa.services.run_reaper import _ACTIVE_RUNS
 
     _ACTIVE_RUNS.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_security_settings_cache():
+    import idraa.services.security_settings as _ss
+
+    _ss.invalidate()
+    yield
+    _ss.invalidate()
