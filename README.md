@@ -86,7 +86,7 @@ docker compose down -v
 uv run alembic upgrade head
 ```
 
-Notes on cross-platform setup, operational envelope (VM size, MC iteration caps, memory patterns), and collaboration conventions live in [`CLAUDE.md`](CLAUDE.md).
+Operational tuning (MC iteration caps, retention, memory patterns) is documented in `src/idraa/config.py` docstrings and `.env.example`.
 
 ## License
 

@@ -20,6 +20,9 @@ import subprocess
 # future first-party docs (specs/plans/runbooks) are legitimate tracked content.
 DENY_PREFIXES: tuple[str, ...] = (
     ".claude/",
+    # Internal spec/plan docs + project instructions are operator-local
+    # (owner decision 2026-07-23) — operational detail stays out of public.
+    "docs/superpowers/",
     ".superpowers/",
     ".memsearch/",
     ".design-sync/",
@@ -46,6 +49,7 @@ DENY_GLOBS: tuple[str, ...] = (
     # stays operator-local, including per-instance variants (fly.<name>.toml).
     "fly.toml",
     "fly.*.toml",
+    "CLAUDE.md",
 )
 
 # Explicit allowlist: tracked paths that legitimately match a deny glob.
