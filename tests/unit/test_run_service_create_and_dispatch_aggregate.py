@@ -292,7 +292,11 @@ async def test_aggregate_rejects_cross_org_control_via_poisoned_scenario_control
     # loaded_universe is missing the foreign id).
     assert run.status == RunStatus.FAILED, run.error_message
     assert run.error_message is not None
-    assert "stale" in run.error_message.lower() or "race" in run.error_message.lower()
+    # #82: the user-facing error_message is genericized (no internal detail
+    # leak). The stale/race forensic evidence lives in the audit row below.
+    from idraa.services.run_executor import _RUN_FAILURE_MESSAGE
+
+    assert run.error_message == _RUN_FAILURE_MESSAGE
     # Audit row pins the forensic trail for the bad-data event.
     rs = await db_session.execute(
         select(AuditLog).where(
