@@ -23,7 +23,7 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
-from idraa.services.run_executor import execute_run
+from idraa.services.run_executor import _RUN_FAILURE_MESSAGE, execute_run
 
 
 @pytest.fixture
@@ -353,7 +353,10 @@ async def test_aggregate_executor_raises_on_stale_per_scenario_ids_with_audit_ro
     await db_session.refresh(run)
     assert run.status == RunStatus.FAILED, run.error_message
     assert run.error_message is not None
-    assert "stale" in run.error_message.lower() or "race" in run.error_message.lower()
+    # #82: the user-facing error_message is genericized (no internal detail
+    # leak). The stale/race forensic evidence now lives in the audit row
+    # asserted below, not in error_message.
+    assert run.error_message == _RUN_FAILURE_MESSAGE
 
     rs = await db_session.execute(
         select(AuditLog).where(
