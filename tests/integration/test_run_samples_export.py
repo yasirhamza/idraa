@@ -33,10 +33,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models._types import now_utc
 from idraa.models.audit_log import AuditLog
+from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
+from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.services.sample_codec import encode_sample_arrays
+from tests.conftest import csrf_post
 
 pytestmark = pytest.mark.asyncio
 
@@ -69,6 +72,47 @@ def _inline_agg_summary(s_ids: list[uuid.UUID]) -> dict[str, Any]:
             for sid, name in zip(s_ids, names, strict=True)
         ]
     }
+
+
+def _seed_scenario_for_org(
+    db: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    name: str = "run-test-scenario",
+) -> Scenario:
+    """Seed a minimal valid Scenario belonging to ``org_id``.
+
+    Mirrors ``tests/integration/test_scenario_run_route.py``'s helper of the
+    same name (inlined per CLAUDE.md: tests must not import from other test
+    modules). Caller must ``await db.commit()`` after calling this.
+    """
+    s = Scenario(
+        organization_id=org_id,
+        name=name,
+        scenario_type=ScenarioType.CUSTOM,
+        threat_category=ThreatCategory.RANSOMWARE,
+        threat_event_frequency={
+            "distribution": "PERT",
+            "low": 0.1,
+            "mode": 0.5,
+            "high": 2.0,
+        },
+        vulnerability={
+            "distribution": "PERT",
+            "low": 0.2,
+            "mode": 0.4,
+            "high": 0.6,
+        },
+        primary_loss={
+            "distribution": "PERT",
+            "low": 50_000,
+            "mode": 250_000,
+            "high": 2_000_000,
+        },
+        status=EntityStatus.ACTIVE,
+    )
+    db.add(s)
+    return s
 
 
 async def _seed_run_with_samples(
@@ -363,3 +407,50 @@ async def test_export_writes_bulk_export_audit_row(
     assert count[0] is None and isinstance(count[1], int) and count[1] >= 0
     assert row.user_id is not None
     assert row.entity_id == row.organization_id
+
+
+# ---- Task 6: functional smoke through the real executor path (#109) ------
+
+
+async def test_export_smoke_real_executor_single_run(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    wire_executor_to_test_db: None,
+) -> None:
+    """Tasks 1-5 above pin the contract against seeded-ORM RunSamples rows
+    (fixtures-mirror-prod-shapes rule: those tests prove the export CONSUMES
+    the right shape). This test proves the REAL producer emits that shape:
+    drives the same POST /scenarios/{id}/run -> RunService.create_and_dispatch
+    -> execute_run path that ``tests/integration/test_scenario_run_route.py::
+    test_post_run_returns_hx_redirect`` uses (``csrf_post`` + ``wire_executor_
+    to_test_db`` + a small mc_iterations). 200 < RunService._SYNC_THRESHOLD
+    (1000), so create_and_dispatch awaits execute_run() inline before the POST
+    returns 204 — no polling, no background task. random_seed is pinned
+    explicitly for a deterministic run. conftest's seed_aggregate_run_factory
+    is NOT used here — it seeds a QUEUED row with no simulation_results and
+    never calls execute_run, so it would prove nothing about the real
+    producer's output shape.
+    """
+    client, org_id = authed_admin
+    scenario = _seed_scenario_for_org(db_session, org_id=org_id)
+    await db_session.commit()
+
+    post_resp = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/run",
+        {"mc_iterations": "200", "random_seed": "42"},
+        follow_redirects=False,
+    )
+    assert post_resp.status_code == 204, post_resp.text
+    run_id = post_resp.headers["HX-Redirect"].removeprefix("/runs/")
+
+    resp = await client.get(f"/runs/{run_id}/samples.csv.gz")
+    assert resp.status_code == 200
+    text = gzip.decompress(resp.content).decode("utf-8")
+    rows = list(csv.reader(ln for ln in text.split("\r\n") if ln and not ln.startswith("#")))
+    header, data = rows[0], rows[1:]
+    assert header[:3] == ["iteration", "base_risk", "residual_risk"]
+    assert len(data) == 200  # == mc_iterations
+    vals = np.array([float(r[2]) for r in data])
+    assert np.isfinite(vals).all() and (vals >= 0).all()
+    assert "# schema: samples-export/1" in text
