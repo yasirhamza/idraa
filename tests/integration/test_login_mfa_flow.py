@@ -15,7 +15,7 @@ from idraa.models._types import now_utc
 from idraa.models.audit_log import AuditLog
 from idraa.models.mfa import RecoveryCode, UserTotp
 from idraa.models.user import User
-from idraa.services.mfa_crypto import hash_recovery_code
+from idraa.services.mfa_crypto import decrypt_totp_secret, hash_recovery_code
 
 
 async def _seed_setup(client: AsyncClient) -> None:
@@ -212,6 +212,47 @@ async def test_failed_mfa_attempt_writes_audit_row(client: AsyncClient, db_sessi
     assert rows[0].user_id == user.id
     assert rows[0].entity_type == "user"
     assert rows[0].entity_id == user.id
+
+
+async def test_totp_code_replay_within_window_is_rejected(client: AsyncClient, db_session) -> None:
+    # N4 (idraa#81): a second /login/mfa submission of the SAME code must be
+    # rejected even though it is still inside pyotp's +/- valid_window
+    # tolerance. Success clears rf_mfa_pending, so proving replay-rejection
+    # requires re-establishing mfa_pending (re-POST /login) before resubmitting
+    # the already-consumed code.
+    from tests.conftest import csrf_post
+
+    await _seed_totp_user(client, db_session)
+    secret = decrypt_totp_secret(
+        (await db_session.execute(select(UserTotp))).scalars().first().secret_encrypted
+    )
+    code = pyotp.TOTP(secret).now()
+
+    # Step 1-2: password -> mfa_pending -> TOTP code -> session (step claimed).
+    await csrf_post(
+        client, "/login", {"email": "a@b.c", "password": "pw-12345678"}, follow_redirects=False
+    )
+    r1 = await csrf_post(
+        client, "/login/mfa", {"code": code}, bootstrap_url="/login", follow_redirects=False
+    )
+    assert r1.status_code == 303
+
+    # Step 3: password again -> fresh mfa_pending for the same 30s window.
+    client.cookies.delete("idraa_session")
+    r_login2 = await csrf_post(
+        client, "/login", {"email": "a@b.c", "password": "pw-12345678"}, follow_redirects=False
+    )
+    assert r_login2.status_code == 200
+
+    # Step 4: resubmit the SAME (already-consumed) code -> rejected.
+    r2 = await csrf_post(
+        client, "/login/mfa", {"code": code}, bootstrap_url="/login", follow_redirects=False
+    )
+    assert r2.status_code == 400
+    assert "invalid code" in r2.text.lower()
+    await db_session.commit()
+    totp_row = (await db_session.execute(select(UserTotp))).scalars().first()
+    assert totp_row.last_used_step is not None  # step 1's accepted code was claimed
 
 
 async def test_relogin_does_not_reset_mfa_throttle(client: AsyncClient, db_session) -> None:
