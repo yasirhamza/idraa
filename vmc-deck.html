@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Shield &amp; the Maintenance Crew — VMCs in Idraa's Monte Carlo</title>
+<link rel="canonical" href="https://idraa.org/vmc-deck.html">
+<meta name="description" content="How Variance Management Controls earn their keep in Idraa's Monte Carlo — FAIR-CAM taxonomy, the κ coupling, and the coin-toss vs closed-form question, with receipts.">
+<meta property="og:title" content="The Shield &amp; the Crew — FAIR-CAM Deep Dive">
+<meta property="og:description" content="A 15-slide walk from FAIR-CAM's control taxonomy, through one Greek letter, to a million simulated years.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+</head>
+<body>
+<style>
+  /* ---- Idraa graphite tokens (src/idraa/static/css/app.css) ---- */
+  :root {
+    --s0: #FAFAF9; --s1: #FFFFFF; --s2: #F4F4F5;
+    --bdr: #E4E4E7; --bdr2: #D4D4D8;
+    --ink1: #18181B; --ink2: #52525B; --ink3: #A1A1AA;
+    --brand: #37464F; --brand-c: #FFFFFF;
+    --brass: #C89141;           /* DECORATIVE ONLY (2.77:1 on white) */
+    --c-ours: #1E6BB0;          /* chart-residual — "our engine" series   */
+    --c-alt:  #C2410C;          /* chart-inherent — counterfactual series */
+    --ok: #15803D; --warn: #B45309;
+    --grid: #EFEFF1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --s0: #0A0A0B; --s1: #18181B; --s2: #27272A;
+      --bdr: #27272A; --bdr2: #3F3F46;
+      --ink1: #FAFAFA; --ink2: #A1A1AA; --ink3: #71717A;
+      --brand: #B8C6CC; --brand-c: #0A0A0B;
+      --c-ours: #3B82F6; --c-alt: #EA580C;
+      --ok: #22C55E; --warn: #F59E0B;
+      --grid: #232326;
+    }
+  }
+  :root[data-theme="light"] {
+    --s0: #FAFAF9; --s1: #FFFFFF; --s2: #F4F4F5;
+    --bdr: #E4E4E7; --bdr2: #D4D4D8;
+    --ink1: #18181B; --ink2: #52525B; --ink3: #A1A1AA;
+    --brand: #37464F; --brand-c: #FFFFFF;
+    --c-ours: #1E6BB0; --c-alt: #C2410C;
+    --ok: #15803D; --warn: #B45309; --grid: #EFEFF1;
+  }
+  :root[data-theme="dark"] {
+    --s0: #0A0A0B; --s1: #18181B; --s2: #27272A;
+    --bdr: #27272A; --bdr2: #3F3F46;
+    --ink1: #FAFAFA; --ink2: #A1A1AA; --ink3: #71717A;
+    --brand: #B8C6CC; --brand-c: #0A0A0B;
+    --c-ours: #3B82F6; --c-alt: #EA580C;
+    --ok: #22C55E; --warn: #F59E0B; --grid: #232326;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-snap-type: y proximity; }
+  body {
+    margin: 0; background: var(--s0); color: var(--ink1);
+    font-family: Charter, "Iowan Old Style", Georgia, serif;
+    font-size: 17px; line-height: 1.55;
+  }
+  .disp { font-family: Futura, "Century Gothic", "Avenir Next", "Trebuchet MS", sans-serif; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  .slide {
+    min-height: 100vh; scroll-snap-align: start;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 3rem clamp(1.2rem, 7vw, 7rem) 2.5rem;
+    max-width: 1200px; margin: 0 auto; position: relative;
+  }
+  .eyebrow {
+    font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    text-transform: uppercase; letter-spacing: .22em; font-size: .72rem;
+    color: var(--ink3); margin-bottom: .9rem; display: flex; align-items: center; gap: .55rem;
+  }
+  .eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); flex: none; }
+  h1, h2 { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; text-wrap: balance; }
+  h1 { font-size: clamp(2.2rem, 5.4vw, 3.6rem); line-height: 1.06; margin: 0 0 1rem; font-weight: 600; letter-spacing: .01em; }
+  h2 { font-size: clamp(1.5rem, 3.4vw, 2.3rem); line-height: 1.12; margin: 0 0 1.2rem; font-weight: 600; }
+  p  { max-width: 62ch; margin: .5rem 0; }
+  .lead { font-size: 1.12rem; color: var(--ink2); max-width: 58ch; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.1rem; margin-top: 1.2rem; }
+  .card {
+    background: var(--s1); border: 1px solid var(--bdr); border-radius: 8px;
+    padding: 1.1rem 1.2rem;
+  }
+  .card h3 { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .95rem;
+    text-transform: uppercase; letter-spacing: .1em; margin: 0 0 .5rem; }
+  .card p { font-size: .95rem; color: var(--ink2); margin: .3rem 0; }
+  .formula {
+    background: var(--s1); border: 1px solid var(--bdr); border-left: 3px solid var(--brand);
+    border-radius: 6px; padding: 1rem 1.3rem; margin: 1.1rem 0;
+    font-size: 1.25rem; overflow-x: auto; white-space: nowrap;
+  }
+  .formula .v { font-style: italic; }
+  .formula small { font-size: .8rem; color: var(--ink3); font-style: normal; display: block; margin-top: .45rem; white-space: normal; }
+  sub, sup { font-size: .62em; }
+  .ref { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .72rem; color: var(--ink3); }
+  .foot { margin-top: 1.4rem; font-size: .82rem; color: var(--ink3); max-width: 70ch; }
+  .accent-ours { color: var(--c-ours); font-weight: bold; }
+  .accent-alt  { color: var(--c-alt);  font-weight: bold; }
+
+  /* theme toggle */
+  #themeBtn { position: fixed; top: 14px; right: 14px; z-index: 6;
+    background: var(--s1); color: var(--ink2); border: 1px solid var(--bdr2);
+    border-radius: 999px; padding: .35rem .8rem; cursor: pointer;
+    font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .78rem;
+    letter-spacing: .06em; }
+  #themeBtn:hover { color: var(--ink1); }
+  #themeBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  /* in-words formula reading + term definitions */
+  .inwords { font-size: .92rem; color: var(--ink2); max-width: 66ch; margin: .5rem 0 0;
+    padding-left: .8rem; border-left: 2px solid var(--bdr2); }
+  .inwords b { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink3); }
+  dl.terms { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem;
+    margin: 1rem 0 0; font-size: .95rem; max-width: 74ch; }
+  dl.terms dt { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .85rem;
+    color: var(--ink1); white-space: nowrap; }
+  dl.terms dd { margin: 0; color: var(--ink2); }
+  .symkey { display: flex; flex-wrap: wrap; gap: .5rem; margin: .9rem 0 .2rem; }
+  .symkey span { display: inline-flex; align-items: baseline; gap: .45rem;
+    background: var(--s1); border: 1px solid var(--bdr); border-radius: 999px;
+    padding: .28rem .8rem; font-size: .82rem; color: var(--ink2); }
+  .symkey b { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 1rem;
+    color: var(--ink1); font-weight: 600; }
+
+  /* nav rail */
+  #rail { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 5;
+    display: flex; flex-direction: column; gap: 9px; }
+  #rail a { width: 8px; height: 8px; border-radius: 50%; background: var(--bdr2); display: block; }
+  #rail a.on { background: var(--brand); transform: scale(1.3); }
+  #rail a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  #pgnum { position: fixed; left: 18px; bottom: 14px; z-index: 5; font-size: .7rem; color: var(--ink3);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; background: var(--s1);
+    border: 1px solid var(--bdr); border-radius: 8px; overflow: hidden; }
+  th, td { padding: .5rem .8rem; text-align: right; border-bottom: 1px solid var(--bdr); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .72rem;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--ink2); background: var(--s2); }
+  td { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: .86rem; }
+  td:first-child { font-family: Charter, Georgia, serif; font-size: .92rem; }
+  .tablewrap { overflow-x: auto; margin-top: 1rem; }
+
+  /* charts */
+  .chart-card { background: var(--s1); border: 1px solid var(--bdr); border-radius: 8px;
+    padding: 1rem 1.1rem .7rem; margin-top: 1.1rem; position: relative; }
+  .chart-title { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .8rem;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--ink2); margin-bottom: .2rem; }
+  .legend { display: flex; gap: 1.2rem; font-size: .8rem; color: var(--ink2); margin: .3rem 0 .2rem; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .sw { width: 18px; height: 0; border-top: 2.5px solid; display: inline-block; }
+  .sw.dash { border-top-style: dashed; }
+  svg text { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10.5px; fill: var(--ink3); }
+  svg .axis-line { stroke: var(--bdr2); }
+  svg .gridline { stroke: var(--grid); }
+  .tip { position: absolute; pointer-events: none; background: var(--s1); border: 1px solid var(--bdr2);
+    border-radius: 6px; padding: .4rem .6rem; font-size: .74rem; font-family: ui-monospace, Menlo, monospace;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none; z-index: 3; white-space: nowrap; }
+  details { margin-top: .5rem; font-size: .8rem; color: var(--ink3); }
+  details table { font-size: .74rem; margin-top: .4rem; }
+
+  /* playground */
+  .play { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 1.6rem; align-items: start; margin-top: 1rem; }
+  @media (max-width: 760px) { .play { grid-template-columns: 1fr; } }
+  .ctl { margin-bottom: 1rem; }
+  .ctl label { display: flex; justify-content: space-between; font-size: .85rem; color: var(--ink2); margin-bottom: .25rem; }
+  .ctl output { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink1); }
+  input[type=range] { width: 100%; accent-color: var(--brand); }
+  input[type=range]:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .readout { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 1.5rem; margin-top: .4rem; }
+  .readout small { font-size: .75rem; color: var(--ink3); display: block; font-family: Charter, Georgia, serif; }
+
+  /* title slide arcs */
+  .arcs { margin-bottom: 1.6rem; }
+  .kicker { font-size: 1.05rem; color: var(--ink2); max-width: 56ch; }
+  .meta-line { margin-top: 1.5rem; font-size: .78rem; color: var(--ink3);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* flow diagram */
+  .flow { display: flex; flex-direction: column; gap: 0; margin-top: 1rem; max-width: 720px; }
+  .fstep { background: var(--s1); border: 1px solid var(--bdr); border-radius: 8px; padding: .55rem .95rem; }
+  .fstep b { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .8rem;
+    text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: .15rem; }
+  .fstep span { font-size: .88rem; color: var(--ink2); }
+  .farrow { text-align: center; color: var(--ink3); font-size: .85rem; padding: .04rem 0; }
+
+  /* boolean tree */
+  .btree { display: flex; flex-direction: column; gap: .55rem; margin-top: 1rem; max-width: 780px; }
+  .brow { display: flex; gap: .55rem; align-items: stretch; flex-wrap: wrap; }
+  .bnode { border: 1px solid var(--bdr2); border-radius: 6px; padding: .45rem .7rem; background: var(--s1);
+    font-size: .82rem; flex: 1; min-width: 130px; }
+  .bnode b { display: block; font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); }
+  .bnode.top { border-color: var(--brand); border-width: 2px; }
+  .bop { align-self: center; font-family: ui-monospace, Menlo, monospace; font-size: .82rem; color: var(--ink2);
+    padding: 0 .1rem; flex: none; }
+
+  .up-strip { margin: .9rem 0 .2rem; }
+  .strip-label { font-size: .78rem; color: var(--ink2); margin-bottom: .25rem; }
+
+  /* part markers in eyebrows */
+  .eyebrow b { color: var(--ink2); font-weight: 600; }
+
+  /* title-slide agenda */
+  .agenda { margin-top: 1.5rem; display: grid; gap: .5rem; max-width: 620px; }
+  .agenda a { display: grid; grid-template-columns: 2rem 1fr; gap: .8rem; align-items: baseline;
+    text-decoration: none; color: inherit; background: var(--s1); border: 1px solid var(--bdr);
+    border-radius: 8px; padding: .6rem .95rem; }
+  .agenda a:hover { border-color: var(--bdr2); }
+  .agenda a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .agenda .n { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    font-size: .95rem; font-weight: 600; color: var(--brand); }
+  .agenda .t { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; }
+  .agenda .d { display: block; font-family: Charter, "Iowan Old Style", Georgia, serif;
+    font-size: .84rem; color: var(--ink3); text-transform: none; letter-spacing: 0; margin-top: .2rem; }
+
+  /* two-column slide layouts (dense slides spread sideways instead of overflowing) */
+  .duo { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 1.6rem;
+    align-items: start; margin-top: 1.2rem; }
+  .duo.wideL { grid-template-columns: minmax(0,1.18fr) minmax(0,.82fr); }
+  .duo.wideR { grid-template-columns: minmax(0,.78fr) minmax(0,1.22fr); }
+  .duo > .inwords, .duo > .flow, .duo > .chart-card, .duo .inwords:first-child { margin-top: 0; }
+  @media (max-width: 880px) { .duo, .duo.wideL, .duo.wideR { grid-template-columns: 1fr; } }
+
+  /* callout — promoted load-bearing notes (formerly buried in .foot) */
+  .callout { background: var(--s1); border: 1px solid var(--bdr); border-left: 3px solid var(--brass);
+    border-radius: 6px; padding: .75rem 1rem; margin: 1rem 0 0; font-size: .93rem;
+    color: var(--ink2); max-width: 66ch; }
+  .callout b { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .7rem;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--ink3); display: block; margin-bottom: .2rem; }
+  .callout.warn { border-left-color: var(--warn); }
+
+  /* stat tiles */
+  .stats { display: grid; gap: .8rem; }
+  .stat { background: var(--s1); border: 1px solid var(--bdr); border-radius: 8px; padding: .7rem 1rem; }
+  .stat .num { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif;
+    font-size: 1.6rem; font-weight: 600; color: var(--c-alt); line-height: 1.1; }
+  .stat small { display: block; font-size: .8rem; color: var(--ink2); margin-top: .25rem; }
+
+  /* Part III mini-map */
+  .map { list-style: none; margin: .8rem 0 0; padding: 0; display: grid; gap: .4rem; max-width: 78ch; }
+  .map li { display: grid; grid-template-columns: max-content 1fr; gap: .8rem; align-items: baseline;
+    font-size: .92rem; color: var(--ink2); }
+  .map b { font-family: Futura, "Century Gothic", "Avenir Next", sans-serif; font-size: .76rem;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--ink1); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .slide > * { animation: rise .45s ease both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+  strong { color: var(--ink1); }
+  a { color: var(--c-ours); }
+</style>
+
+<nav id="rail" aria-label="Slides"></nav>
+<div id="pgnum"></div>
+<button id="themeBtn" type="button" aria-label="Switch color theme">☾ dark</button>
+
+<!-- ============ 1 · TITLE ============ -->
+<section class="slide" id="s1">
+  <svg class="arcs" width="120" height="84" viewBox="0 0 120 84" aria-hidden="true">
+    <path d="M 24 62 A 42 42 0 0 1 96 62" fill="none" stroke="var(--brand)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M 40 62 A 24 24 0 0 1 80 62" fill="none" stroke="var(--brand)" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+    <circle cx="60" cy="66" r="8" fill="var(--brass)"/>
+  </svg>
+  <div class="eyebrow">Idraa engine deep-dive · fair_cam</div>
+  <h1>The Shield &amp;<br>the Maintenance Crew</h1>
+  <p class="kicker">How Variance Management Controls earn their keep in Idraa's Monte Carlo —
+  a walk from FAIR-CAM's control taxonomy, through one Greek letter,
+  to a million simulated years. With receipts.</p>
+  <nav class="agenda" aria-label="Deck agenda">
+    <a href="#s2"><span class="n">I</span><span class="t">The cast &amp; the claim
+      <span class="d">Two kinds of controls, the vocabulary, and what a maintenance crew actually changes.</span></span></a>
+    <a href="#s4"><span class="n">II</span><span class="t">The mechanism
+      <span class="d">How crews compose into one number, couple through κ, and ride the pipeline into the FAIR graph.</span></span></a>
+    <a href="#s7b"><span class="n">III</span><span class="t">But is it right?
+      <span class="d">Why no coin is flipped for shield uptime — the proof, the receipts, and the one honest caveat.</span></span></a>
+  </nav>
+  <p class="meta-line">seed 42 · N = 1,000,000 · κ = 0.5 · FAIR-CAM §2.2, §4 · 2026-07-23</p>
+</section>
+
+<!-- ============ 2 · CAST ============ -->
+<section class="slide" id="s2">
+  <div class="eyebrow"><b>Part I</b> · The cast</div>
+  <h2>Two kinds of controls, one kind of loss</h2>
+  <p class="lead">FAIR-CAM splits the control universe by <em>how</em> a control touches risk.
+  Only one kind ever touches the FAIR graph directly.</p>
+  <div class="cols">
+    <div class="card">
+      <h3 style="color:var(--c-ours)">🛡 Loss Event Controls</h3>
+      <p><strong>The shield.</strong> EDR, MFA, firewalls, backups. Directly affect the frequency
+      or magnitude of loss events — they map onto FAIR nodes (TEF, Vulnerability, Loss Magnitude).</p>
+    </div>
+    <div class="card">
+      <h3>🔧 Variance Management Controls</h3>
+      <p><strong>The maintenance crew.</strong> Config monitoring, patching cadence, pen tests.
+      They keep the shield <em>functioning</em>. FAIR-CAM puts them in the
+      "indirectly affect risk" box — no FAIR node of their own.</p>
+    </div>
+    <div class="card">
+      <h3>🧭 Decision Support Controls</h3>
+      <p><strong>The advisors.</strong> Threat intel, asset management, threat modeling.
+      They improve the decisions that shape controls. Same box: indirect, no node.
+      Idraa routes them like VMCs — a documented proxy.</p>
+    </div>
+  </div>
+  <p class="foot">FAIR-CAM §2.2 p.5 draws the direct/indirect boundary; §4 p.21 says variance management
+  acts on <em>the operational performance of other controls</em>. That sentence is the whole design.</p>
+</section>
+
+<!-- ============ 2b · GLOSSARY ============ -->
+<section class="slide" id="s2b">
+  <div class="eyebrow"><b>Part I</b> · Speaking FAIR</div>
+  <h2>The vocabulary, before the math</h2>
+  <p class="lead">Every symbol in this deck is one of these. Thirty seconds here makes
+  every later slide read like a sentence.</p>
+  <dl class="terms">
+    <dt>TEF</dt><dd><strong>Threat Event Frequency</strong> — how many times per year a threat
+      actually arrives and tries (attacks/year, drawn from a distribution each simulated year).</dd>
+    <dt>Vuln</dt><dd><strong>Vulnerability</strong> — the probability an arriving attempt succeeds
+      (a 0–1 probability, not a CVE).</dd>
+    <dt>LEF</dt><dd><strong>Loss Event Frequency</strong> = TEF × Vuln — successful attacks per year.</dd>
+    <dt>LM</dt><dd><strong>Loss Magnitude</strong> — dollars lost per successful attack
+      (primary + secondary loss, heavy-tailed).</dd>
+    <dt>ALE</dt><dd><strong>Annualized Loss Expectancy</strong> = mean of LEF × LM across all simulated
+      years — the "expected annual loss" headline.</dd>
+    <dt>VaR&nbsp;99</dt><dd><strong>Value at Risk</strong> — the annual loss only 1% of simulated years
+      exceed. VaR 95 = the worst 1-in-20 year.</dd>
+    <dt>ES&nbsp;95</dt><dd><strong>Expected Shortfall</strong> — the <em>average</em> loss across the worst
+      5% of years ("when it's bad, how bad is bad?").</dd>
+    <dt>capability</dt><dd>how well a control performs its job <em>when it is operating</em> (0–1;
+      for time-based sub-functions it's a latency in days instead — converted via e<sup>−t/τ</sup>).</dd>
+    <dt>coverage</dt><dd>the fraction of in-scope assets the control is actually deployed on (0–1).</dd>
+    <dt>reliability</dt><dd>the fraction of time the control is actually operating (0–1) — the
+      dial VMCs turn. Everything on this deck orbits this one number.</dd>
+    <dt>opeff</dt><dd><strong>operational effectiveness</strong> = capability × coverage × reliability —
+      the probability the control does its job against a random threat event. This is the number
+      the Boolean composition consumes.</dd>
+  </dl>
+</section>
+
+<!-- ============ 3 · THE CLAIM ============ -->
+<section class="slide" id="s3">
+  <div class="eyebrow"><b>Part I</b> · The claim</div>
+  <h2>VMCs change how <em>often</em>, not how <em>hard</em></h2>
+  <p class="lead">A good maintenance crew doesn't make the shield stronger.
+  It shrinks the windows when the shield is quietly broken.</p>
+
+  <div class="up-strip">
+    <div class="strip-label">One simulated year, weak crew — fail once a month, notice in 5 days, fix in 2 <span class="mono">(A ≈ 81%)</span></div>
+    <svg width="100%" height="26" viewBox="0 0 1000 26" preserveAspectRatio="none" role="img" aria-label="Year timeline, weak variance management: twelve failures each lasting about a week">
+      <rect x="0" y="4" width="1000" height="18" rx="4" fill="var(--c-ours)" opacity=".78"/>
+      <g fill="var(--s0)">
+        <rect x="62" y="4" width="19" height="18"/><rect x="145" y="4" width="19" height="18"/>
+        <rect x="228" y="4" width="19" height="18"/><rect x="311" y="4" width="19" height="18"/>
+        <rect x="394" y="4" width="19" height="18"/><rect x="477" y="4" width="19" height="18"/>
+        <rect x="560" y="4" width="19" height="18"/><rect x="643" y="4" width="19" height="18"/>
+        <rect x="726" y="4" width="19" height="18"/><rect x="809" y="4" width="19" height="18"/>
+        <rect x="892" y="4" width="19" height="18"/><rect x="962" y="4" width="19" height="18"/>
+      </g>
+    </svg>
+  </div>
+  <div class="up-strip">
+    <div class="strip-label">Same shield, strong crew — same failures, noticed and fixed in hours <span class="mono">(A ≈ 99.7%)</span></div>
+    <svg width="100%" height="26" viewBox="0 0 1000 26" preserveAspectRatio="none" role="img" aria-label="Year timeline, strong variance management: same twelve failures, each just hours long">
+      <rect x="0" y="4" width="1000" height="18" rx="4" fill="var(--c-ours)" opacity=".78"/>
+      <g fill="var(--s0)">
+        <rect x="62" y="4" width="2.5" height="18"/><rect x="145" y="4" width="2.5" height="18"/>
+        <rect x="228" y="4" width="2.5" height="18"/><rect x="311" y="4" width="2.5" height="18"/>
+        <rect x="394" y="4" width="2.5" height="18"/><rect x="477" y="4" width="2.5" height="18"/>
+        <rect x="560" y="4" width="2.5" height="18"/><rect x="643" y="4" width="2.5" height="18"/>
+        <rect x="726" y="4" width="2.5" height="18"/><rect x="809" y="4" width="2.5" height="18"/>
+        <rect x="892" y="4" width="2.5" height="18"/><rect x="962" y="4" width="2.5" height="18"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="formula">
+    <span class="v">A</span> = MTBF / (MTBF + MTTD + MTTR)
+    &nbsp;&nbsp;=&nbsp;&nbsp; 720 / (720 + 120 + 48) &nbsp;≈&nbsp; <strong>0.811</strong>
+    <small>MTBF = <em>mean time between failures</em> (how long the shield runs before it silently breaks);
+    MTTD = <em>mean time to detect</em> (how long nobody notices); MTTR = <em>mean time to repair</em>.
+    A — <em>availability</em> — is up-time over total cycle time: fail monthly (720 h), notice by manual
+    audit (120 h), fix (48 h) → up 81.1% of the time. Timelines above are illustrative, not sampled.</small>
+  </div>
+  <p class="foot">The naive form 1 − downtime/MTBF goes <em>negative</em> once downtime exceeds the failure
+  cycle. The cycle-based form above is safe on the whole domain. Small print matters.</p>
+</section>
+
+<!-- ============ 4 · TOPOLOGY ============ -->
+<section class="slide" id="s4">
+  <div class="eyebrow"><b>Part II</b> · The Boolean assembly</div>
+  <h2>Many crews, one number: <span class="v" style="font-style:italic">E</span><sub>meta</sub></h2>
+  <p class="lead">Before any coupling, every VMC and DSC assignment composes into one
+  meta-effectiveness in [0, 1] — using FAIR-CAM's own gate logic.</p>
+
+  <div class="symkey" role="list" aria-label="Symbol key">
+    <span><b>∨</b> read "or" — at least one of them works</span>
+    <span><b>∧</b> read "and" — all of them must work</span>
+    <span><b>∏</b> "multiply every term together"</span>
+    <span><b>Σ</b> "add every term up"</span>
+    <span><b>x<sub>i</sub></b> member i's opeff (0–1)</span>
+    <span><b>w<sub>i</sub></b> member i's weight (Σw<sub>i</sub> = 1)</span>
+  </div>
+
+  <div class="duo">
+    <div>
+      <div class="btree" style="margin-top:0">
+        <div class="brow">
+          <div class="bnode top" style="flex:2"><b>E<sub>meta</sub></b> = E<sub>vmc</sub> ∨ E<sub>dsc</sub> — the crew's composed strength</div>
+        </div>
+        <div class="brow">
+          <div class="bnode"><b>E<sub>vmc</sub></b> Variance Prevention ∨ (Identification ∧ Correction)</div>
+          <div class="bop">∨</div>
+          <div class="bnode"><b>E<sub>dsc</sub></b> DSC Prevention (weak-∧ of 9) ∨ (Identification ∧ Correction)</div>
+        </div>
+        <div class="brow">
+          <div class="bnode"><b>∨ &nbsp;or_compose</b> 1 − ∏(1 − x<sub>i</sub>) — noisy-OR, independence</div>
+          <div class="bnode"><b>∧ &nbsp;and_compose</b> ∏ x<sub>i</sub> — a missing partner zeroes the pair</div>
+          <div class="bnode"><b>weak-∧</b> Σ w<sub>i</sub>x<sub>i</sub> — deficiencies diminish, don't inhibit (§3.3)</div>
+        </div>
+      </div>
+      <div class="callout warn"><b>The strict ∧ has teeth</b>A control authored with only
+      VMC-Identification and no Correction partner in the scenario composes to
+      <strong>nothing</strong> — by §4 p.21 design, not by bug. If you've ever wondered why a
+      lone pen-test program can score $0, this is where.</div>
+    </div>
+    <div>
+      <p class="inwords"><b>Wait — how do you OR probabilities?</b> By computing the probability <em>of
+      the Boolean sentence</em>. For one arriving threat event, "piece i does its job" is a true/false
+      event with success probability x<sub>i</sub>. Under independence, P(A ∧ B) = a·b and
+      P(A ∨ B) = 1 − (1−a)(1−b) — the "noisy-OR" of Bayesian networks. Example: a = 0.7, b = 0.8 →
+      ∨ = 0.94, ∧ = 0.56. Feed in only 0s and 1s and both collapse to the classical truth tables — the
+      lift <em>generalizes</em> Boolean logic, it doesn't replace it. Both are monotone: improving any
+      control never worsens the composite.</p>
+      <p class="inwords"><b>Two honest caveats</b> — (1) independence is an assumption: common-cause
+      failures (same agent, same admin) make noisy-OR optimistic. (2) <strong>Weak-∧ is NOT a
+      probability lift</strong> — Σw<sub>i</sub>x<sub>i</sub> is a weighted average, chosen because
+      §3.3 says deficiencies "diminish but don't necessarily inhibit": missing one Response sub-function
+      shouldn't zero the others. Partial credit by design, and labeled as such.</p>
+    </div>
+  </div>
+
+  <p class="foot"><span class="ref">fair_cam/composition.py:99,129,182 · risk_engine/group_composition.py:325–392</span></p>
+</section>
+
+<!-- ============ 5 · KAPPA ============ -->
+<section class="slide" id="s5">
+  <div class="eyebrow"><b>Part II</b> · The coupling</div>
+  <h2>κ: half the headroom, recovered</h2>
+  <p class="lead">The entire mechanism: every Loss Event Control carries an authored reliability
+  <span style="font-style:italic">r</span><sub>0</sub> — its uptime <em>absent</em> the crew.
+  The crew buys back part of what's missing:</p>
+
+  <div class="formula">
+    <span class="v">r</span><sub>eff</sub> = <span class="v">r</span><sub>0</sub> + (1 − <span class="v">r</span><sub>0</sub>) · κ · <span class="v">E</span><sub>meta</sub>
+    <small>κ = 0.5, pinned by test. A perfect crew (E<sub>meta</sub> = 1) recovers half the headroom;
+    no crew (E<sub>meta</sub> = 0) returns r<sub>0</sub> exactly, by construction.</small>
+  </div>
+  <div class="duo wideR">
+    <p class="inwords"><b>In words</b> — <span class="mono">r₀</span> is the authored reliability: the
+    share of time the shield runs on its own ops, <em>before</em> any crew helps. <span class="mono">1 − r₀</span>
+    is the headroom: the missing uptime, all a crew could ever add. <span class="mono">E_meta</span> is
+    the crew's composed strength from the previous slide (0 = no crew, 1 = perfect crew).
+    <span class="mono">κ</span> (kappa) is the coupling gain: what fraction of the headroom a perfect
+    crew actually recovers — pinned at one-half. So: <em>effective reliability = own ops, plus κ·E<sub>meta</sub>
+    of whatever was missing.</em></p>
+
+    <div class="chart-card" id="upliftCard">
+      <div class="chart-title">Reliability uplift vs crew strength</div>
+      <div class="legend">
+        <span><span class="sw" style="border-color:var(--c-ours)"></span>r<sub>0</sub> = 0.60 (shaky shield)</span>
+        <span><span class="sw dash" style="border-color:var(--c-ours)"></span>r<sub>0</sub> = 0.90 (steady shield)</span>
+      </div>
+      <svg id="upliftChart" width="100%" height="182" viewBox="0 0 640 240" preserveAspectRatio="none" role="img"
+        aria-label="Two curves of effective reliability against meta effectiveness, starting at 0.6 and 0.9 and rising linearly to 0.8 and 0.95"></svg>
+      <div class="tip" id="upliftTip"></div>
+      <details><summary>Data table</summary>
+        <table><thead><tr><th>E_meta</th><th>r_eff (r₀=0.60)</th><th>r_eff (r₀=0.90)</th></tr></thead>
+        <tbody id="upliftTable"></tbody></table>
+      </details>
+    </div>
+  </div>
+  <p class="foot">Linear, monotone, bounded by 1 — and the weaker the shield's own ops, the more the
+  crew is worth. κ is implementation calibration, non-identifiable at single-org scale — reported as
+  ranges, not truth (last slide).
+  <span class="ref">fair_cam/models/composition_topology.py:301,331 · risk_engine/group_composition.py:411</span></p>
+</section>
+
+<!-- ============ 6 · PLAYGROUND ============ -->
+<section class="slide" id="s6">
+  <div class="eyebrow"><b>Part II</b> · Interlude — turn the dials</div>
+  <h2>The coupling, live</h2>
+  <div class="play">
+    <div>
+      <div class="ctl">
+        <label><span>authored reliability <span style="font-style:italic">r</span><sub>0</sub></span> <output id="r0Out">0.80</output></label>
+        <input type="range" id="r0" min="0" max="1" step="0.01" value="0.8" aria-label="authored reliability r0">
+      </div>
+      <div class="ctl">
+        <label><span>crew strength E<sub>meta</sub></span> <output id="emOut">0.60</output></label>
+        <input type="range" id="em" min="0" max="1" step="0.01" value="0.6" aria-label="meta effectiveness E meta">
+      </div>
+      <div class="ctl">
+        <label><span>coupling κ</span> <output id="kOut">0.50</output></label>
+        <input type="range" id="kap" min="0" max="1" step="0.01" value="0.5" aria-label="kappa coupling">
+        <div style="font-size:.72rem;color:var(--ink3);margin-top:.15rem">canonical pin = 0.50 — drag to see why the pin matters</div>
+      </div>
+      <div class="readout"><span id="reffOut">0.860</span><small>effective reliability r_eff</small></div>
+      <div class="readout" style="font-size:1.1rem"><span id="opeffOut">—</span><small>opeff for a capability 0.85 × coverage 0.95 assignment</small></div>
+    </div>
+    <div>
+      <svg id="playBar" width="100%" height="210" viewBox="0 0 560 210" role="img"
+        aria-label="Stacked bar showing authored reliability, recovered headroom, and remaining headroom"></svg>
+      <p class="foot" style="margin-top:.6rem">Graphite = what the shield's own ops deliver.
+      <span class="accent-ours">Blue</span> = headroom the crew buys back (κ·E<sub>meta</sub> of it).
+      Hollow = reliability nobody recovered. The crew's dollar value in a run is exactly the risk
+      priced through that blue band — nothing else.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6b · KAPPA HONESTY ============ -->
+<section class="slide" id="s6b">
+  <div class="eyebrow"><b>Part II</b> · Epistemic status of κ</div>
+  <h2>How honest is that ½?</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>The rulebook has no number</h3>
+      <p>FAIR-CAM fixes the <em>direction</em> (crews improve other controls' uptime), the
+      <em>floor</em> (no crew → nothing changes) and the <em>ceiling</em> (uptime can't exceed 100%).
+      It is silent on how much of the gap a perfect crew closes. Some number must be chosen —
+      better to choose it in the open.</p>
+    </div>
+    <div class="card">
+      <h3>Why one-half</h3>
+      <p>With no evidence favoring any value, the midpoint is the least-opinionated choice:
+      <strong>a perfect crew halves the reliability gap.</strong> It's locked by a test —
+      changing it is a visible, reviewed decision, not a tuning knob.</p>
+    </div>
+    <div class="card">
+      <h3>Why not measure it</h3>
+      <p>Successful attacks are rare, and κ's fingerprint on your numbers looks exactly like
+      slightly different authored reliabilities. One organization's history cannot tell
+      κ = 0.3 from κ = 0.7. A fitted value would be fake precision.</p>
+    </div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">What Idraa does instead — wiggle it, 256 times per run</div>
+    <svg width="100%" height="96" viewBox="0 0 640 110" role="img"
+      aria-label="48 illustrative kappa draws clustered around 0.5 on a 0 to 1 axis">
+      <line x1="40" x2="600" y1="78" y2="78" class="axis-line"/>
+      <line x1="320" x2="320" y1="24" y2="86" stroke="var(--brand)" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="320" y="16" text-anchor="middle">pin = 0.5</text>
+      <text x="40" y="98" text-anchor="middle">0</text>
+      <text x="600" y="98" text-anchor="middle">1</text>
+      <g fill="var(--c-ours)" opacity=".65">
+        <circle cx="204.1" cy="70" r="4"/><circle cx="230.4" cy="70" r="4"/><circle cx="232.6" cy="62" r="4"/>
+        <circle cx="246.1" cy="70" r="4"/><circle cx="246.6" cy="62" r="4"/><circle cx="255.6" cy="70" r="4"/>
+        <circle cx="257.8" cy="62" r="4"/><circle cx="258.9" cy="54" r="4"/><circle cx="260.6" cy="70" r="4"/>
+        <circle cx="271.8" cy="62" r="4"/><circle cx="272.4" cy="70" r="4"/><circle cx="274.6" cy="54" r="4"/>
+        <circle cx="276.9" cy="62" r="4"/><circle cx="280.8" cy="70" r="4"/><circle cx="280.8" cy="54" r="4"/>
+        <circle cx="289.8" cy="62" r="4"/><circle cx="291.4" cy="70" r="4"/><circle cx="293.7" cy="54" r="4"/>
+        <circle cx="295.9" cy="62" r="4"/><circle cx="296.5" cy="70" r="4"/><circle cx="297.6" cy="46" r="4"/>
+        <circle cx="297.6" cy="54" r="4"/><circle cx="306.6" cy="62" r="4"/><circle cx="308.2" cy="70" r="4"/>
+        <circle cx="311.0" cy="54" r="4"/><circle cx="314.4" cy="62" r="4"/><circle cx="317.8" cy="70" r="4"/>
+        <circle cx="318.3" cy="46" r="4"/><circle cx="318.3" cy="54" r="4"/><circle cx="320.0" cy="62" r="4"/>
+        <circle cx="322.8" cy="70" r="4"/><circle cx="323.4" cy="46" r="4"/><circle cx="323.9" cy="54" r="4"/>
+        <circle cx="325.0" cy="62" r="4"/><circle cx="325.6" cy="70" r="4"/><circle cx="325.6" cy="38" r="4"/>
+        <circle cx="325.6" cy="54" r="4"/><circle cx="327.8" cy="62" r="4"/><circle cx="333.4" cy="70" r="4"/>
+        <circle cx="334.6" cy="54" r="4"/><circle cx="337.4" cy="62" r="4"/><circle cx="344.1" cy="70" r="4"/>
+        <circle cx="354.2" cy="62" r="4"/><circle cx="362.0" cy="70" r="4"/><circle cx="363.1" cy="62" r="4"/>
+        <circle cx="371.5" cy="70" r="4"/><circle cx="384.4" cy="70" r="4"/><circle cx="385.5" cy="62" r="4"/>
+      </g>
+    </svg>
+    <p class="inwords" style="border:none;padding-left:0;margin-top:.2rem">Every run re-computes every
+    control's value 256 times with κ (and the routing weights) wiggled around their pinned values —
+    more wiggle near the middle, never past the 0-and-1 walls. That's why every dollar figure ships
+    as a <strong>range</strong> (the p5 / p50 / p95 rows in the verification workbook), not a single
+    number. The uncertainty about κ is <em>inside</em> the range, not hidden behind it. Dots above:
+    48 of those draws, illustrative spread.</p>
+  </div>
+  <p class="foot">Mechanics, for the record: logit-normal perturbation (param "meta.kappa"), same
+  spread setting as the node-routing weights — the weight-robustness ensemble (#419).</p>
+</section>
+
+<!-- ============ 7 · PIPELINE ============ -->
+<section class="slide" id="s7">
+  <div class="eyebrow"><b>Part II</b> · The plumbing</div>
+  <h2>From uptime to the FAIR graph</h2>
+  <p class="lead">r<sub>eff</sub> never touches a FAIR node by itself. It rides through
+  the same five-stage pipeline as every other control effect:</p>
+  <div class="duo wideL">
+  <div class="flow">
+    <div class="fstep"><b>1 · Assignment opeff</b>
+      <span>opeff = capability × coverage × <strong>r<sub>eff</sub></strong> — per sub-function, unit-dispatched
+      (probability · percent-reduction · elapsed-time e<sup>−t/τ</sup>)</span>
+      <span class="ref"> fair_cam/composition.py:67–96</span></div>
+    <div class="farrow">▼</div>
+    <div class="fstep"><b>2 · Group composition</b>
+      <span>or_compose within sub-function, then the group gates: Prevention ∨-trio,
+      Detection ∧ Response pair, Response weak-∧</span>
+      <span class="ref"> risk_engine/group_composition.py</span></div>
+    <div class="farrow">▼</div>
+    <div class="fstep"><b>3 · Node multipliers</b>
+      <span>each group's E hits its FAIR nodes as (1 − E·w), composed multiplicatively —
+      Prevention → TEF (w=0.8) and Vulnerability (w=0.9); Det∧Resp → Loss Magnitude</span>
+      <span class="ref"> risk_engine/control_aware.py:44–133</span></div>
+    <div class="farrow">▼</div>
+    <div class="fstep"><b>4 · Sample-level application</b>
+      <span>vuln<sub>i</sub> ← clip(vuln<sub>i</sub> × m<sub>vuln</sub>, 0, 1) on every one of N iterations —
+      sample-level, so it is exact for any vulnerability shape</span>
+      <span class="ref"> risk_engine/fair_core.py:598–602</span></div>
+    <div class="farrow">▼</div>
+    <div class="fstep"><b>5 · The year</b>
+      <span>LEF<sub>i</sub> = TEF<sub>i</sub> × vuln<sub>i</sub>, &nbsp;loss<sub>i</sub> = LEF<sub>i</sub> × LM<sub>i</sub> —
+      one iteration, one simulated year</span></div>
+  </div>
+  <div>
+    <p class="inwords"><b>In words</b> — stage 3's (1 − E·w): E is the group's composed effectiveness
+    (0–1), w is how strongly that group is allowed to move that FAIR node. A group with E = 0.6 and
+    w = 0.9 multiplies vulnerability by 1 − 0.54 = 0.46 — it removes 54% of it. Multipliers from
+    different groups stack by multiplication, and stage 4 applies the product to every one of the
+    million sampled years.</p>
+    <div class="callout"><b>Note what is absent</b>VMC and DSC groups have no entry at stage 3.
+    Their node targets were retired — all crew value flows through the κ term inside stage 1.
+    <strong>One path, counted once.</strong></div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 7b · PART III INTRO — THE FORK ============ -->
+<section class="slide" id="s7b">
+  <div class="eyebrow"><b>Part III</b> · The question</div>
+  <h2>Two ways to simulate a sometimes-broken shield</h2>
+  <p class="lead">Part II left us holding one number: the shield is up
+  <span class="mono">A</span>&nbsp;=&nbsp;81% of the time. What should the simulation
+  <em>do</em> with it? Here is the fork, from scratch.</p>
+
+  <p class="inwords" style="max-width:74ch"><b>What one trial does</b> — each Monte Carlo iteration
+  builds one hypothetical year: how many attacks arrive (TEF), whether each succeeds (Vulnerability),
+  what each costs (Loss Magnitude) — then totals the bill. A million iterations = a million plausible
+  years; every number Idraa reports is read off that pile. The fork: <em>where does the shield's
+  downtime enter the recipe?</em></p>
+
+  <div class="cols">
+    <div class="card">
+      <h3>🎲 Roll for it — "the coin toss"</h3>
+      <p>When an attack arrives, flip a weighted coin: with probability A the shield is up and the
+      attack faces the protected success rate v<sub>up</sub>; otherwise it catches the shield down
+      and faces the bare v<sub>base</sub>. More dice — it <em>feels</em> like what a simulator is for.</p>
+    </div>
+    <div class="card">
+      <h3>🧮 Average it out — "the closed form"</h3>
+      <p>Skip the coin. Give every attack the blended success chance
+      A·v<sub>up</sub> + (1−A)·v<sub>base</sub> — the probability-weighted average of the two worlds,
+      computed with algebra instead of dice. This is what Idraa ships (the docs call it the
+      <em>deterministic multiplier</em>).</p>
+    </div>
+  </div>
+
+  <p style="max-width:74ch; margin-top:1rem">Anyone who has built a simulator should squint at the
+  right-hand card: averaging <em>before</em> you simulate sounds like a shortcut that erases the very
+  variance you came for. The next four slides take that suspicion seriously:</p>
+
+  <ul class="map">
+    <li><b>One trial is one year</b><span>what a trial represents — and why one flip per trial
+      models abandonment, not maintenance</span></li>
+    <li><b>The coin flip that wasn't</b><span>the proof that the closed form <em>is</em> the coin
+      toss, already averaged — exactly</span></li>
+    <li><b>1,000,000 years, three ways</b><span>the receipts: run it all three ways; the means agree
+      to three decimals</span></li>
+    <li><b>Where doubt lives</b><span>where the choice genuinely matters: year-long outages fatten
+      the tail — disclosed, tracked</span></li>
+  </ul>
+</section>
+
+<!-- ============ 8 · ITERATION SEMANTICS ============ -->
+<section class="slide" id="s8">
+  <div class="eyebrow"><b>Part III</b> · Semantics check</div>
+  <h2>One trial is one <em>year</em>, not one arrow</h2>
+  <p class="lead">The coin-toss picture usually smuggles in a second assumption: that each trial
+  is a single attack moment, so you flip the coin once <em>per trial</em>. Idraa's trials don't
+  work that way, and the difference is not pedantry.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>What a trial holds</h3>
+      <p>TEF is drawn in <strong>events per year</strong>. One iteration = one candidate year,
+      with (say) 6.7 threat events, ~12 shield failures, and ~12 repairs inside it.</p>
+    </div>
+    <div class="card">
+      <h3>What each event sees</h3>
+      <p>With failure cycles of days-to-weeks, each threat event inside the year independently
+      finds the shield up with probability <span class="mono">A</span>. The year <em>averages
+      over the crew's whole schedule</em>.</p>
+    </div>
+    <div class="card">
+      <h3>What a coin flip would claim</h3>
+      <p>Sampling shield-state once <em>per trial</em> asserts the shield stays broken for
+      an entire year. That's not a maintenance model — that's abandonment.</p>
+    </div>
+  </div>
+  <p class="inwords"><b>The blend, with numbers</b> — A = 0.8, v<sub>up</sub> = 0.1,
+  v<sub>base</sub> = 0.5 → every event succeeds with 0.8·0.1 + 0.2·0.5 = 0.18. The next slide
+  proves this blend and the per-event coin are indistinguishable — law of total probability,
+  not a shortcut.</p>
+</section>
+
+<!-- ============ 9 · THINNING ============ -->
+<section class="slide" id="s9">
+  <div class="eyebrow"><b>Part III</b> · The theorem slide</div>
+  <h2>The coin flip that wasn't</h2>
+  <p class="lead">Per-event coin flips and Idraa's deterministic multiplier are not merely close.
+  For within-year failure cycles they are <em>the same distribution</em>.</p>
+  <div class="formula">
+    P(event succeeds) = <span class="v">A</span>·<span class="v">v</span><sub>up</sub> + (1 − <span class="v">A</span>)·<span class="v">v</span><sub>base</sub>
+    <small>Marginalize each event's shield-state (Bernoulli thinning): a mixture of Bernoullis is a
+    Bernoulli with the mixed rate. The per-event coin flip integrates out exactly.</small>
+  </div>
+  <div class="formula">
+    <span class="v">v</span><sub>eff</sub> = <span class="v">v</span><sub>base</sub>·(1 − <span class="v">A</span>·<span class="v">E</span><sub>full</sub>·w)
+    = <span class="v">A</span>·<span class="v">v</span><sub>up</sub> + (1 − <span class="v">A</span>)·<span class="v">v</span><sub>base</sub>
+    <small>…which is precisely the deterministic multiplier Idraa applies, with reliability folded into
+    opeff. Substitute v<sub>up</sub> = v<sub>base</sub>(1 − E<sub>full</sub>·w) and expand — the identity is two lines.</small>
+  </div>
+  <p class="inwords"><b>In words</b> — "marginalize" means: average over the coin before looking at
+  it. A coin flip (shield up, probability A) feeding a second coin flip (attack succeeds,
+  v<sub>up</sub> or v<sub>base</sub>) is still one coin flip — at the blended rate. That collapse
+  is <em>Bernoulli thinning</em>, and it's exact, not an approximation.</p>
+  <p>So the "weighted coin flip per attack" story and the r<sub>eff</sub> multiplier agree
+  <strong>exactly</strong> — in expectation always, and event-by-event in distribution whenever the
+  crew's repair clock runs faster than the calendar. The coin was already flipped, analytically.</p>
+  <p class="foot">The one assumption doing work: events see the shield <em>independently</em>.
+  Short outages, many cycles per year → true enough. Year-long outages → "Where doubt lives",
+  two slides ahead.</p>
+</section>
+
+<!-- ============ 10 · RECEIPTS ============ -->
+<section class="slide" id="s10">
+  <div class="eyebrow"><b>Part III</b> · Receipts</div>
+  <h2>1,000,000 years, three ways</h2>
+  <p class="lead">Same scenario (PERT-ish TEF, triangular vulnerability, lognormal severity,
+  A = 0.811, E<sub>full</sub> = 0.807): Idraa's deterministic multiplier vs the two coin-flip variants.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>metric</th><th>pencil &amp; paper</th><th class="accent-ours">Idraa (blended probability)</th><th>coin flip per event</th><th class="accent-alt">coin flip per year</th></tr></thead>
+    <tbody>
+      <tr><td>mean LEF</td><td>1.2271</td><td>1.2268</td><td>1.2270</td><td>1.2248</td></tr>
+      <tr><td>mean ALE</td><td>$181,614</td><td>$181,682</td><td>$181,817</td><td>$181,270</td></tr>
+      <tr><td>VaR 95</td><td>—</td><td>$561,417</td><td>$706,962</td><td>$667,848</td></tr>
+      <tr><td>VaR 99</td><td>—</td><td>$1,080,224</td><td>$1,524,294</td><td>$1,606,370</td></tr>
+      <tr><td>ES 95</td><td>—</td><td>$906,436</td><td>$1,254,711</td><td>$1,297,632</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="duo" style="margin-top:1rem">
+    <p class="inwords"><b>The pencil-&amp;-paper column</b> — four averages multiplied, no simulation:
+    average attacks/year (6.667) × average baseline vulnerability (0.5333) × the shield factor
+    (0.34512) × average loss per event ($148,003) ≈ $181.6k. <span class="mono" style="font-size:.78rem">In
+    symbols: E[TEF]·E[v]·(1−A·E<sub>full</sub>)·E[LM], where E[X] = "the average of X".</span>
+    All three simulated means land on it to a third decimal.</p>
+    <p class="inwords"><b>The tail columns</b> — VaR 99 = the annual loss only 1-in-100 simulated
+    years exceeds; ES 95 = the average loss across the worst 5% of years. The per-event column's
+    fatter tail is mostly the randomness of <em>how many</em> attacks land in a given year — a noise
+    source FAIR's LEF = TEF × Vuln convention deliberately averages out everywhere, for every
+    control effect, not just for VMCs.</p>
+  </div>
+  <p style="margin-top:1rem">The averages agree. The tails don't — and that difference is the
+  honest part of this story →</p>
+</section>
+
+<!-- ============ 11 · TAIL ============ -->
+<section class="slide" id="s11">
+  <div class="eyebrow"><b>Part III</b> · The honest caveat</div>
+  <h2>Where doubt lives: the tail</h2>
+  <div class="duo wideL" style="margin-top:0">
+    <div>
+      <p class="lead" style="margin-top:0">Now make the coin flip once per <em>year</em>: the shield is
+      either up all year or broken all year. The average loss doesn't move — but the bad years get
+      much worse.</p>
+      <p class="inwords"><b>How to read this chart</b> — each curve answers "what fraction of years
+      lose more than $x?" Where the <span class="accent-alt">orange</span> curve sits above the
+      <span class="accent-ours">blue</span> one, year-long outages make big-loss years more likely.
+      Both axes are logarithmic — each gridline is 10×.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="num">+49%</span><small>VaR 99 — the 1-in-100 bad year,
+        $1.08M → $1.61M under year-long outages</small></div>
+      <div class="stat"><span class="num">+43%</span><small>ES 95 — the average loss across
+        the worst 5% of years</small></div>
+    </div>
+  </div>
+  <div class="chart-card" id="excCard">
+    <div class="chart-title">Annual loss exceedance — P(loss &gt; x), log–log</div>
+    <div class="legend">
+      <span><span class="sw" style="border-color:var(--c-ours)"></span>deterministic r_eff (Idraa)</span>
+      <span><span class="sw" style="border-color:var(--c-alt)"></span>per-year coin flip (persistent outage)</span>
+    </div>
+    <svg id="excChart" width="100%" height="220" viewBox="0 0 640 220" role="img"
+      aria-label="Two loss exceedance curves diverging in the tail; the persistent-outage curve sits above beyond roughly one million dollars"></svg>
+    <div class="tip" id="excTip"></div>
+    <details><summary>Data table (excerpt)</summary>
+      <table><thead><tr><th>loss x</th><th>P&gt;x, deterministic</th><th>P&gt;x, per-year flip</th></tr></thead>
+      <tbody id="excTable"></tbody></table></details>
+  </div>
+  <p class="foot">When is the year-long-outage model the right one? When breakage <em>persists</em> —
+  configuration drift nobody audits, agents dead for quarters: exactly the weak-crew world. FAIR-CAM
+  prices reliability as a fraction of time (what Idraa implements); year-long persistence is a tracked
+  extension (issue #434), not a correctness bug. Averages, ALE, ROI and NPV are identical either way.</p>
+</section>
+
+<!-- ============ 12 · TAKEAWAYS ============ -->
+<section class="slide" id="s12">
+  <div class="eyebrow">Colophon</div>
+  <h2>What to remember</h2>
+  <div class="cols">
+    <div class="card"><h3>1 · One path, once</h3>
+      <p>All VMC/DSC value flows through r<sub>eff</sub> = r₀ + (1−r₀)·κ·E<sub>meta</sub> into
+      co-present shields' opeff. No direct FAIR-node targets; no double counting. A crew with no
+      shield to maintain — or a one-legged ∧-pair — prices at $0, by design.</p></div>
+    <div class="card"><h3>2 · Deterministic ≠ approximate</h3>
+      <p>The expected-value multiplier <em>is</em> the per-event coin flip, integrated exactly
+      (Bernoulli thinning). Means, ALE, ROI, NPV: identical. No fidelity was lost where the
+      money is computed.</p></div>
+    <div class="card"><h3>3 · Tails are the frontier</h3>
+      <p>Year-persistent outages would fatten VaR/ES beyond what time-fraction reliability shows
+      (+49% VaR99 in our stress case). Known, bounded, tracked — and reported honestly rather
+      than modeled implicitly.</p></div>
+  </div>
+  <p class="foot" style="margin-top:1.6rem">Epistemic status: κ = 0.5 is implementation calibration —
+  non-identifiable from single-org data, so the weight-robustness ensemble perturbs it (logit-normal,
+  param "meta.kappa") and every control value ships as a range across 256 draws, not a point.
+  The authored r₀ convention: expected reliability <em>absent</em> co-present crew uplift.<br><br>
+  <span class="ref">fair_cam @ yasirhamza/idraa · composition.py · models/composition_topology.py ·
+  risk_engine/{group_composition,control_aware,fair_core}.py · simulation: seed 42, N=10⁶, A=0.811</span></p>
+</section>
+
+<script>
+const DATA = {"grid": [5000.0, 5272.6, 5560.0, 5863.1, 6182.7, 6519.7, 6875.1, 7249.8, 7645.0, 8061.8, 8501.2, 8964.7, 9453.3, 9968.6, 10512.0, 11085.1, 11689.3, 12326.5, 12998.5, 13707.0, 14454.2, 15242.1, 16073.0, 16949.2, 17873.1, 18847.4, 19874.8, 20958.2, 22100.6, 23305.3, 24575.7, 25915.4, 27328.1, 28817.8, 30388.7, 32045.2, 33792.0, 35634.1, 37576.5, 39624.9, 41784.9, 44062.6, 46464.5, 48997.3, 51668.3, 54484.8, 57454.8, 60586.7, 63889.4, 67372.1, 71044.6, 74917.3, 79001.2, 83307.6, 87848.8, 92637.6, 97687.4, 103012.4, 108627.8, 114549.2, 120793.4, 127378.1, 134321.6, 141643.6, 149364.8, 157506.9, 166092.8, 175146.7, 184694.2, 194762.1, 205378.8, 216574.3, 228380.0, 240829.3, 253957.2, 267800.7, 282398.9, 297792.8, 314025.8, 331143.8, 349194.9, 368229.9, 388302.6, 409469.4, 431790.1, 455327.6, 480148.1, 506321.5, 533921.8, 563026.5, 593717.8, 626082.1, 660210.6, 696199.5, 734150.3, 774169.7, 816370.7, 860872.1, 907799.3, 957284.6, 1009467.4, 1064494.7, 1122521.7, 1183711.8, 1248237.4, 1316280.4, 1388032.5, 1463695.9, 1543483.8, 1627621.1, 1716344.7, 1809904.9, 1908565.1, 2012603.4, 2122312.9, 2238002.9, 2359999.2, 2488645.8, 2624305.0, 2767359.2, 2918211.4, 3077286.8, 3245033.6, 3421924.5, 3608457.9, 3805159.5, 4012583.6, 4231314.6, 4461968.9, 4705196.4, 4961682.6, 5232150.2, 5517361.3, 5818119.7, 6135272.7, 6469714.2, 6822386.5, 7194283.4, 7586452.9, 8000000.0], "exc_det": [0.99914, 0.998968, 0.998777, 0.998551, 0.998292, 0.997995, 0.997666, 0.997211, 0.996746, 0.996203, 0.995608, 0.99485, 0.994047, 0.993093, 0.99195, 0.990782, 0.989413, 0.987822, 0.986066, 0.983935, 0.981717, 0.979178, 0.976385, 0.973122, 0.969479, 0.965654, 0.961396, 0.956771, 0.951683, 0.946043, 0.939902, 0.933255, 0.926063, 0.918107, 0.909568, 0.900475, 0.890813, 0.880427, 0.869408, 0.857551, 0.845177, 0.832132, 0.818342, 0.803719, 0.788437, 0.772476, 0.755793, 0.738491, 0.720602, 0.70227, 0.683311, 0.663799, 0.643847, 0.623745, 0.602935, 0.581896, 0.560513, 0.53902, 0.517073, 0.495378, 0.473702, 0.452043, 0.430612, 0.409439, 0.388619, 0.367875, 0.347664, 0.327849, 0.308383, 0.289581, 0.27136, 0.253695, 0.236662, 0.220191, 0.204503, 0.189313, 0.174909, 0.161018, 0.147987, 0.135685, 0.124153, 0.11335, 0.103104, 0.093659, 0.084861, 0.076792, 0.069299, 0.062036, 0.055621, 0.049695, 0.044345, 0.039401, 0.034862, 0.030858, 0.027195, 0.023858, 0.020947, 0.018409, 0.016048, 0.013981, 0.012102, 0.010443, 0.008997, 0.007705, 0.006582, 0.005589, 0.004769, 0.003992, 0.003415, 0.002919, 0.00242, 0.002073, 0.001751, 0.001486, 0.001239, 0.001032, 0.000844, 0.000706, 0.000591, 0.000489, 0.000393, 0.000324, 0.000273, 0.000229, 0.000193, 0.000161, 0.000132, 0.000108, 9e-05, 7.3e-05, 5.6e-05, 4.5e-05, 3.9e-05, 2.7e-05, 1.9e-05, 1.6e-05, 1.3e-05, 1.2e-05, 8e-06, 7e-06], "exc_bern": [0.995826, 0.995181, 0.9944, 0.99349, 0.992545, 0.991427, 0.99012, 0.988685, 0.986941, 0.985124, 0.983025, 0.980763, 0.978102, 0.975168, 0.972053, 0.968574, 0.964781, 0.960677, 0.956083, 0.951063, 0.94565, 0.939717, 0.933221, 0.926274, 0.918851, 0.910905, 0.902403, 0.893362, 0.883636, 0.87348, 0.862705, 0.851357, 0.839305, 0.826789, 0.813624, 0.799938, 0.785692, 0.770912, 0.755768, 0.739986, 0.723783, 0.707068, 0.690169, 0.672753, 0.65503, 0.636969, 0.618689, 0.600064, 0.581543, 0.562978, 0.544175, 0.525546, 0.507072, 0.488749, 0.470377, 0.452199, 0.434401, 0.416628, 0.399317, 0.382188, 0.365543, 0.349338, 0.333353, 0.318012, 0.302724, 0.287966, 0.273435, 0.259586, 0.246083, 0.233262, 0.221033, 0.208896, 0.197562, 0.186702, 0.176176, 0.165998, 0.1561, 0.146932, 0.137907, 0.129366, 0.121203, 0.113491, 0.106183, 0.09918, 0.092536, 0.086182, 0.080354, 0.074696, 0.069377, 0.064299, 0.059606, 0.055096, 0.050872, 0.046877, 0.043027, 0.039473, 0.036191, 0.033147, 0.030269, 0.02763, 0.02513, 0.022775, 0.020694, 0.018695, 0.016849, 0.015176, 0.013661, 0.012189, 0.01088, 0.009707, 0.008649, 0.007681, 0.006797, 0.006033, 0.005333, 0.004628, 0.004058, 0.003553, 0.003085, 0.002673, 0.002308, 0.00199, 0.001707, 0.001444, 0.00124, 0.001047, 0.000903, 0.00074, 0.000632, 0.000549, 0.000463, 0.000383, 0.000316, 0.000272, 0.000228, 0.000193, 0.000157, 0.00013, 0.000115, 8.3e-05], "metrics": {"det": {"mean": 181682.42303748082, "median": 113211.82453658996, "var95": 561416.5280855066, "var99": 1080224.4328046401, "es95": 906436.0076711655}, "bern": {"mean": 181270.0564972473, "median": 80659.71327296222, "var95": 667848.1516016878, "var99": 1606369.875637142, "es95": 1297632.320373945}}, "availability": 0.811, "e_full": 0.8075};
+
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  /* ---------- theme: explicit control, light by default ---------- */
+  const root = document.documentElement;
+  let saved = null;
+  try { saved = localStorage.getItem("vmc-deck-theme"); } catch (e) { /* blocked: session-only */ }
+  root.dataset.theme = (saved === "dark" || saved === "light") ? saved : (root.dataset.theme || "light");
+  const themeBtn = $("themeBtn");
+  const paintBtn = () => { themeBtn.textContent = root.dataset.theme === "dark" ? "☀ light" : "☾ dark"; };
+  themeBtn.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("vmc-deck-theme", root.dataset.theme); } catch (e) { /* non-fatal */ }
+    paintBtn();
+  });
+  paintBtn();
+  const fmtMoney = (v) => v >= 1e6 ? "$" + (v/1e6).toFixed(1) + "M" : v >= 1e3 ? "$" + Math.round(v/1e3) + "k" : "$" + Math.round(v);
+  const fmtP = (p) => p >= 0.01 ? (p*100).toFixed(1) + "%" : p >= 0.0001 ? (p*100).toFixed(2) + "%" : (p*100).toExponential(1) + "%";
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  /* ---------- nav rail ---------- */
+  const slides = [...document.querySelectorAll(".slide")];
+  const rail = $("rail"), pg = $("pgnum");
+  slides.forEach((s, i) => {
+    const a = document.createElement("a");
+    a.href = "#" + s.id; a.setAttribute("aria-label", "Slide " + (i+1));
+    rail.appendChild(a);
+  });
+  const dots = [...rail.children];
+  const io = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) {
+      const i = slides.indexOf(e.target);
+      dots.forEach((d, j) => d.classList.toggle("on", j === i));
+      pg.textContent = (i+1) + " / " + slides.length;
+    }});
+  }, { threshold: 0.55 });
+  slides.forEach(s => io.observe(s));
+  addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const cur = dots.findIndex(d => d.classList.contains("on"));
+    const nxt = e.key === "ArrowRight" ? Math.min(cur+1, slides.length-1) : Math.max(cur-1, 0);
+    slides[nxt].scrollIntoView({ behavior: "smooth" });
+  });
+
+  /* ---------- shared chart scaffolding ---------- */
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => { const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+  /* ---------- uplift chart (slide 5) ---------- */
+  const KAPPA = 0.5;
+  function drawUplift() {
+    const svg = $("upliftChart"); svg.innerHTML = "";
+    const W = 640, H = 240, m = { l: 46, r: 96, t: 12, b: 30 };
+    const x = (e) => m.l + e * (W - m.l - m.r);
+    const y = (r) => H - m.b - (r - 0.5) / 0.5 * (H - m.t - m.b);
+    for (const g of [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]) {
+      svg.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: y(g), y2: y(g), class: "gridline" }));
+      const t = el("text", { x: m.l - 8, y: y(g) + 3.5, "text-anchor": "end" }); t.textContent = g.toFixed(1); svg.appendChild(t);
+    }
+    for (const g of [0, 0.25, 0.5, 0.75, 1]) {
+      const t = el("text", { x: x(g), y: H - m.b + 16, "text-anchor": "middle" }); t.textContent = g; svg.appendChild(t);
+    }
+    const xl = el("text", { x: (m.l + W - m.r) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "E_meta →"; svg.appendChild(xl);
+    svg.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: y(0.5), y2: y(0.5), class: "axis-line" }));
+    const series = [ { r0: 0.60, dash: "" }, { r0: 0.90, dash: "6 5" } ];
+    for (const s of series) {
+      const pts = [];
+      for (let i = 0; i <= 40; i++) { const e = i / 40; pts.push(x(e) + "," + y(s.r0 + (1 - s.r0) * KAPPA * e)); }
+      svg.appendChild(el("polyline", { points: pts.join(" "), fill: "none",
+        stroke: css("--c-ours"), "stroke-width": 2.5, "stroke-dasharray": s.dash }));
+      const rEnd = s.r0 + (1 - s.r0) * KAPPA;
+      const lbl = el("text", { x: x(1) + 8, y: y(rEnd) + 3.5 });
+      lbl.textContent = "r₀=" + s.r0.toFixed(2) + " → " + rEnd.toFixed(2); lbl.style.fill = css("--ink2"); svg.appendChild(lbl);
+    }
+    const tbody = $("upliftTable"); tbody.innerHTML = "";
+    for (let i = 0; i <= 4; i++) { const e = i / 4;
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + e.toFixed(2) + "</td><td>" + (0.6 + 0.4 * KAPPA * e).toFixed(3) +
+        "</td><td>" + (0.9 + 0.1 * KAPPA * e).toFixed(3) + "</td>";
+      tbody.appendChild(tr);
+    }
+    /* hover */
+    const tip = $("upliftTip"), card = $("upliftCard");
+    svg.onmousemove = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const e = Math.max(0, Math.min(1, ((ev.clientX - r.left) / r.width * W - m.l) / (W - m.l - m.r)));
+      tip.style.display = "block";
+      tip.style.left = (ev.clientX - card.getBoundingClientRect().left + 14) + "px";
+      tip.style.top = (ev.clientY - card.getBoundingClientRect().top - 10) + "px";
+      tip.innerHTML = "E_meta " + e.toFixed(2) +
+        "<br>r₀ 0.60 → <b>" + (0.6 + 0.4 * KAPPA * e).toFixed(3) + "</b>" +
+        "<br>r₀ 0.90 → <b>" + (0.9 + 0.1 * KAPPA * e).toFixed(3) + "</b>";
+    };
+    svg.onmouseleave = () => { tip.style.display = "none"; };
+  }
+
+  /* ---------- playground (slide 6) ---------- */
+  function playRender() {
+    const r0 = +$("r0").value, em = +$("em").value, k = +$("kap").value;
+    const reff = r0 + (1 - r0) * k * em;
+    $("r0Out").textContent = r0.toFixed(2);
+    $("emOut").textContent = em.toFixed(2);
+    $("kOut").textContent = k.toFixed(2);
+    $("reffOut").textContent = reff.toFixed(3);
+    $("opeffOut").textContent = (0.85 * 0.95 * reff).toFixed(3);
+    const svg = $("playBar"); svg.innerHTML = "";
+    const W = 560, BX = 30, BW = W - 60, BY = 60, BH = 56;
+    const seg = (x0, w, fill, op) => svg.appendChild(el("rect",
+      { x: BX + x0 * BW, y: BY, width: Math.max(0, w * BW), height: BH, fill, opacity: op || 1 }));
+    seg(0, r0, css("--brand"));
+    seg(r0, (1 - r0) * k * em, css("--c-ours"));
+    svg.appendChild(el("rect", { x: BX + reff * BW, y: BY, width: Math.max(0, (1 - reff) * BW), height: BH,
+      fill: "none", stroke: css("--bdr2"), "stroke-dasharray": "4 4" }));
+    svg.appendChild(el("line", { x1: BX + reff * BW, x2: BX + reff * BW, y1: BY - 14, y2: BY + BH + 8, stroke: css("--ink1"), "stroke-width": 1.5 }));
+    const t1 = el("text", { x: BX + reff * BW, y: BY - 20, "text-anchor": "middle" });
+    t1.textContent = "r_eff = " + reff.toFixed(3); t1.style.fill = css("--ink1"); svg.appendChild(t1);
+    const cap = (x0, txt, ty) => { const t = el("text", { x: BX + x0 * BW, y: ty, "text-anchor": "middle" }); t.textContent = txt; svg.appendChild(t); };
+    if (r0 > 0.12) cap(r0 / 2, "r0 = " + r0.toFixed(2), BY + BH + 18);
+    if ((1 - r0) * k * em > 0.055) cap(r0 + (1 - r0) * k * em / 2, "+ crew", BY + BH + 18);
+    if (1 - reff > 0.07) cap(reff + (1 - reff) / 2, "unrecovered", BY + BH + 36);
+    const t0 = el("text", { x: BX, y: BY + BH + 38 }); t0.textContent = "0"; svg.appendChild(t0);
+    const tOne = el("text", { x: BX + BW, y: BY + BH + 38, "text-anchor": "end" }); tOne.textContent = "1"; svg.appendChild(tOne);
+  }
+  for (const id of ["r0", "em", "kap"]) $(id).addEventListener("input", playRender);
+
+  /* ---------- exceedance chart (slide 11) ---------- */
+  function drawExc() {
+    const svg = $("excChart"); svg.innerHTML = "";
+    const W = 640, H = 220, m = { l: 52, r: 18, t: 12, b: 34 };
+    const xmin = Math.log10(5000), xmax = Math.log10(8e6);
+    const pmin = 1e-5, ymaxL = 0, yminL = Math.log10(pmin);
+    const x = (v) => m.l + (Math.log10(v) - xmin) / (xmax - xmin) * (W - m.l - m.r);
+    const y = (p) => m.t + (ymaxL - Math.log10(Math.max(p, pmin))) / (ymaxL - yminL) * (H - m.t - m.b);
+    for (const p of [1, 0.1, 0.01, 0.001, 0.0001]) {
+      svg.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: y(p), y2: y(p), class: "gridline" }));
+      const t = el("text", { x: m.l - 7, y: y(p) + 3.5, "text-anchor": "end" });
+      t.textContent = p >= 0.01 ? (p*100) + "%" : (p*100).toFixed(p >= 0.001 ? 1 : 2) + "%"; svg.appendChild(t);
+    }
+    for (const v of [1e4, 1e5, 1e6]) {
+      svg.appendChild(el("line", { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, class: "gridline" }));
+      const t = el("text", { x: x(v), y: H - m.b + 16, "text-anchor": "middle" });
+      t.textContent = v === 1e4 ? "$10k" : v === 1e5 ? "$100k" : "$1M"; svg.appendChild(t);
+    }
+    svg.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, class: "axis-line" }));
+    const mkPath = (arr, color) => {
+      const pts = [];
+      for (let i = 0; i < DATA.grid.length; i++) if (arr[i] > 0) pts.push(x(DATA.grid[i]) + "," + y(arr[i]));
+      svg.appendChild(el("polyline", { points: pts.join(" "), fill: "none", stroke: color, "stroke-width": 2.5 }));
+    };
+    mkPath(DATA.exc_bern, css("--c-alt"));
+    mkPath(DATA.exc_det, css("--c-ours"));
+    /* VaR99 markers */
+    for (const [v, c] of [[DATA.metrics.det.var99, css("--c-ours")], [DATA.metrics.bern.var99, css("--c-alt")]]) {
+      svg.appendChild(el("circle", { cx: x(v), cy: y(0.01), r: 4.5, fill: c, stroke: css("--s1"), "stroke-width": 2 }));
+    }
+    const lbl = el("text", { x: x(DATA.metrics.bern.var99) + 8, y: y(0.01) - 8 });
+    lbl.textContent = "VaR99: $1.08M → $1.61M (+49%)"; lbl.style.fill = css("--ink2"); svg.appendChild(lbl);
+    /* hover crosshair */
+    const tip = $("excTip"), card = $("excCard");
+    const cross = el("line", { y1: m.t, y2: H - m.b, stroke: css("--ink3"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+    svg.appendChild(cross);
+    svg.onmousemove = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const mx = (ev.clientX - r.left) / r.width * W;
+      let best = 0, bd = 1e18;
+      for (let i = 0; i < DATA.grid.length; i++) { const d = Math.abs(x(DATA.grid[i]) - mx); if (d < bd) { bd = d; best = i; } }
+      cross.setAttribute("x1", x(DATA.grid[best])); cross.setAttribute("x2", x(DATA.grid[best]));
+      cross.setAttribute("visibility", "visible");
+      tip.style.display = "block";
+      tip.style.left = (ev.clientX - card.getBoundingClientRect().left + 14) + "px";
+      tip.style.top = (ev.clientY - card.getBoundingClientRect().top - 10) + "px";
+      tip.innerHTML = "loss > " + fmtMoney(DATA.grid[best]) +
+        "<br><span style='color:" + css("--c-ours") + "'>●</span> deterministic: <b>" + fmtP(DATA.exc_det[best]) + "</b>" +
+        "<br><span style='color:" + css("--c-alt") + "'>●</span> per-year flip: <b>" + fmtP(DATA.exc_bern[best]) + "</b>";
+    };
+    svg.onmouseleave = () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); };
+    const tbody = $("excTable"); tbody.innerHTML = "";
+    for (let i = 0; i < DATA.grid.length; i += 20) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + fmtMoney(DATA.grid[i]) + "</td><td>" + fmtP(DATA.exc_det[i]) + "</td><td>" + fmtP(DATA.exc_bern[i]) + "</td>";
+      tbody.appendChild(tr);
+    }
+  }
+
+  const drawAll = () => { drawUplift(); playRender(); drawExc(); };
+  drawAll();
+  /* re-render on theme flip so series colors update */
+  new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+})();
+</script>
+
+</body>
+</html>
