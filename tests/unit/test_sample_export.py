@@ -128,6 +128,14 @@ def test_columns_unicode_digit_path_rejected() -> None:
         build_export_columns({}, arrays)
 
 
+def test_columns_trailing_newline_path_rejected() -> None:
+    # FBSec-N1: $ also matches before a trailing \n; \Z must not. A crafted
+    # path with a trailing newline falls to the unknown-path tripwire.
+    arrays = {"per_scenario/0/base_risk\n": np.ones(2, dtype=np.float32)}
+    with pytest.raises(ValueError, match="unrecognised sample array paths"):
+        build_export_columns({}, arrays)
+
+
 def test_legend_flattens_triggers_separators_and_newlines() -> None:
     _, legend = build_export_columns(_agg_summary(), _agg_arrays())
     evil = next(line for line in legend if S2.hex in line)

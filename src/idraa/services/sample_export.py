@@ -32,7 +32,7 @@ _TOP_LEVEL_ORDER = (
 # [0-9] not \d (Sec3-N1): \d matches Unicode decimal digits and int() accepts
 # them, so a crafted path like per_scenario/٣/… would alias ASCII index 3 —
 # silent column overwrite, the mislabeling class this exporter must never risk.
-_PS_PATH = re.compile(r"^per_scenario/([0-9]+)/(base_risk|residual_risk)$")
+_PS_PATH = re.compile(r"^per_scenario/([0-9]+)/(base_risk|residual_risk)\Z")
 _DEFLATE_LEVEL = 6
 _GZIP_WBITS = 31  # gzip framing (pd.read_csv-compatible), NOT the codec's raw zlib
 

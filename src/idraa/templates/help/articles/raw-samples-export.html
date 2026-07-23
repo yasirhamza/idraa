@@ -21,7 +21,7 @@
   and which exact inputs, a given CSV came from.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  Find the download next to <strong>Download PDF</strong> and the Excel
+  Find the download next to <strong>Download report (PDF)</strong> and the Excel
   verification workbook on the run detail page, labelled
   <strong>Download raw samples (CSV)</strong>. It only appears while that
   run&rsquo;s sample arrays are still retained (see Availability below).
@@ -84,8 +84,9 @@
 
 <h2 class="text-h3 text-ink-1 mb-3">Precision</h2>
 <p class="text-body text-ink-2 mb-6">
-  Sample values are exported as <strong>float32</strong> &mdash; the same
-  precision the arrays are stored at internally. Idraa&rsquo;s in-app
+  Sample values are exported as <strong>float32</strong> &mdash; current-format
+  runs store float32 natively; runs persisted in the older format are
+  downcast at export. Idraa&rsquo;s in-app
   metrics (the headline ALE, VaR, and expected-shortfall figures shown on the
   run page, in the PDF, and in the verification workbook) are computed from
   <strong>float64</strong> at simulation time. Recomputing the same statistic

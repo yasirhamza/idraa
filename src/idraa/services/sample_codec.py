@@ -60,7 +60,7 @@ def _parse_container(blob: bytes) -> dict[str, np.ndarray]:
     raw = d.decompress(blob[len(SAMPLE_CODEC_MAGIC) :], _MAX_DECOMPRESSED_BYTES)
     # Plan-gate Sec-N2: decompress(max_length) TRUNCATES silently rather than
     # raising — reject anything that didn't fit or didn't finish cleanly.
-    if not d.eof or d.unconsumed_tail:
+    if not d.eof or d.unconsumed_tail or d.unused_data:
         raise ValueError("codec blob exceeds decompression bound or is truncated")
     if len(raw) < 4:
         raise ValueError("codec blob truncated (no header length)")

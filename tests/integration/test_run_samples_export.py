@@ -454,3 +454,5 @@ async def test_export_smoke_real_executor_single_run(
     vals = np.array([float(r[2]) for r in data])
     assert np.isfinite(vals).all() and (vals >= 0).all()
     assert "# schema: samples-export/1" in text
+    assert f"# run_id: {run_id}" in text
+    assert "# random_seed: 42" in text

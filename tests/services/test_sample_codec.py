@@ -154,3 +154,11 @@ def test_decode_rejects_stream_exceeding_bound(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(sample_codec, "_MAX_DECOMPRESSED_BYTES", 64)
     with pytest.raises(ValueError, match=r"bound|truncated"):
         decode_sample_arrays_np(blob)
+
+
+def test_decode_rejects_trailing_garbage() -> None:
+    # FBSec-N2: bytes appended after a cleanly-terminated deflate stream land
+    # in d.unused_data; the container must be fully canonical, so reject.
+    blob = encode_sample_arrays({"base_risk": np.arange(8, dtype=np.float64)})
+    with pytest.raises(ValueError, match=r"bound|truncated"):
+        decode_sample_arrays_np(blob + b"garbage")
