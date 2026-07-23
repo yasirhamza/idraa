@@ -126,7 +126,14 @@
             },
         ) }}
         <div class="mt-2 flex justify-end">
-          <a href="/runs/{{ run.id }}/control-matrix.csv" hx-boost="false" download class="btn btn-outline btn-xs">Export matrix CSV</a>
+          {#- hx-boost="false": file download, opts out of the global
+              <body hx-boost="true"> so the click navigates instead of HTMX
+              swapping the bytes into the DOM. Deliberately no `download`
+              attribute (Task 7 follow-up): the route already sends
+              `Content-Disposition: attachment`, and `download` would make
+              the browser save whatever it lands on after redirects —
+              breaking a step-up navigation the moment this route is gated. -#}
+          <a href="/runs/{{ run.id }}/control-matrix.csv" hx-boost="false" class="btn btn-outline btn-xs">Export matrix CSV</a>
         </div>
       </div>
     </details>
