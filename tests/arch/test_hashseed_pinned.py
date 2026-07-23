@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 _ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -24,5 +26,14 @@ def test_dockerfile_runtime_pins_hashseed() -> None:
     assert "PYTHONHASHSEED=0" in runtime
 
 
-def test_fly_toml_pins_hashseed() -> None:
+@pytest.mark.skipif(
+    not (_ROOT / "fly.toml").exists(),
+    reason=(
+        "deploy config is operator-local since 2026-07-23 (untracked, "
+        "denylist-enforced); the pin is guarded here only on machines that "
+        "carry it — i.e. exactly the machines deploys run from. CI enforces "
+        "the Dockerfile half above."
+    ),
+)
+def test_deploy_config_pins_hashseed() -> None:
     assert 'PYTHONHASHSEED = "0"' in (_ROOT / "fly.toml").read_text(encoding="utf-8")

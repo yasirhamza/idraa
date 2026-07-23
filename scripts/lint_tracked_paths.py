@@ -41,6 +41,11 @@ DENY_GLOBS: tuple[str, ...] = (
     "*.pem",
     "*.p12",
     "local.properties",
+    # Deployment configuration (owner decision 2026-07-23): platform, VM
+    # sizing, and DB-path details are operational disclosures — deploy config
+    # stays operator-local, including per-instance variants (fly.<name>.toml).
+    "fly.toml",
+    "fly.*.toml",
 )
 
 # Explicit allowlist: tracked paths that legitimately match a deny glob.

@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     # 10_000 — high-N is opt-in, never the default. This raise is gated on
     # BOTH of: (1) the Task 8 benchmark confirming the memory envelope
     # (M=30 AGGREGATE scenarios at N=1M ~700MB peak RSS, comfortably inside
-    # the 2048MB shared-cpu-1x VM — see fly.toml / the Production deploy
-    # section of CLAUDE.md); (2) PR1's hardening already merged (binary
+    # the production memory envelope — see the operator-local deploy config /
+    # the Production deploy section of CLAUDE.md); (2) PR1's hardening already merged (binary
     # sample codec, streaming encode, event-loop offload, the min-free-disk
     # guard, and the startup VACUUM) — without PR1, a 1M-iteration run would
     # regress the storage/memory/runtime pathologies PR1 exists to close.
@@ -151,9 +151,10 @@ class Settings(BaseSettings):
     # #357: emit a WARNING log when audit_log row count reaches this
     # watermark (checked on export writes only — the bloat vector the cap
     # bounds). Alert-only; retention policy is the operator's call. 0
-    # disables. Sized well below the point where the 3GB Fly volume or
-    # query latency would hurt (audit rows are small; run_samples is the
-    # historical disk hog, see fly.toml RETENTION_SAMPLE_PURGE_DAYS).
+    # disables. Sized well below the point where the production data volume
+    # or query latency would hurt (audit rows are small; run_samples is the
+    # historical disk hog — see RETENTION_SAMPLE_PURGE_DAYS in the deploy
+    # config).
 
     dev_styleguide_enabled: bool = False
     """Mounts /_dev/styleguide as functional when True. Off in prod; turn on locally for design QA."""

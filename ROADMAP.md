@@ -1,8 +1,8 @@
 # Idraa — Roadmap
 
-_Refreshed at the public seed, 2026-07-17. The detailed backlog is tracked in the
-project's private development archive; this file gives the public shape of where
-the product is and where it is going._
+_Refreshed 2026-07-23. The detailed backlog lives in this repository's public
+issue tracker; this file gives the public shape of where the product is and
+where it is going._
 
 ## Where it is
 
@@ -13,21 +13,41 @@ MVP shipped and in production UAT. Delivered beyond MVP:
 - Curated 102-entry scenario library — primary-cited FAIR distributions
   (IRIS sector anchors), OT/ICS scenarios first-class, three-tier provenance,
   per-org override layer with versioning + audit
-- FAIR-CAM control modeling with NIST CSF / CIS v8 crosswalks and
-  MITRE ATT&CK mappings
-- Per-control Shapley attribution and if-removed (leave-one-out) analysis
-- Weight-robustness ensembles (logit-normal perturbation ranges)
-- Enterprise PDF reports + verification workbooks (Excel)
+- Qualitative risk-register converter — drafts FAIR scenarios from an existing
+  qualitative register as priors for analyst review (never auto-final)
+- Multi-SME elicitation with mixture-pooled estimates and guided re-estimation
+- FAIR-CAM control modeling with NIST CSF / CIS v8 crosswalks, MITRE ATT&CK
+  mappings, and an ATT&CK coverage view
+- Per-control Shapley attribution and if-removed (leave-one-out) analysis,
+  with control values reported as weight-robustness ranges (logit-normal
+  perturbation), never single points
+- Strong authentication — passkeys (WebAuthn) + TOTP MFA for every user, with
+  step-up re-authentication for sensitive operations
+- Evaluation self-hosting — Docker Compose quickstart, `.env.example` operator
+  reference, fail-loud production boot guards
+- Enterprise PDF reports + independent in-Excel verification workbooks
 - First-party server-rendered SVG charts (no charting dependency)
-- Mobile-responsive UI; multi-currency support
+- Mobile-responsive UI with an installable web-app manifest; multi-currency
+  support; product design language (graphite palette, sonar-arcs identity)
+- Supply-chain gates in CI — dependency review, secret scanning, and SAST
+  (ruff security rules over application code, zizmor over workflows) behind
+  branch protection; CycloneDX SBOM generated on every merge to main
 
 ## Where it is going
 
-- Qualitative risk-register converter — an on-ramp that drafts FAIR scenarios
-  from qualitative registers (priors for review, never auto-final)
-- Supply-chain security posture hardening (SCA gate, SBOM, digest pinning)
-- Continued library expansion and calibration refresh cycles
-- Launch: licensing decision, custom domain, public issue tracking
+- Register on-ramp, phase 2 — assisted mapping from qualitative register rows
+  to library archetypes
+- Generalized enterprise risk — extending the FAIR chassis beyond
+  information/OT risk
+- Elicitation depth — SME self-elicitation sessions, calibration training with
+  weighted opinion pooling, ordinal-label (VL–VH) input mode, live
+  distribution previews during elicitation
+- Analytics — what-if / sensitivity analysis via scenario cloning, bootstrap
+  confidence bands on loss-exceedance curves
+- Calibration refresh cycles — IC3 2025 anchors, ATT&CK-gap library
+  candidates, ISO 27001 (Annex A) crosswalk
+- SBOM publication + attestation (SLSA provenance)
+- Launch: licensing decision
 
 Security-relevant hardening items are tracked privately until released; see
 [SECURITY.md](SECURITY.md) for how to report a vulnerability.
