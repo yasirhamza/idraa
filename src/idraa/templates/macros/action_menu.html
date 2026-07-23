@@ -3,9 +3,12 @@
   items: list of {label, href?, action?, method?, danger?, download?, confirm?, hidden?}
     Either href (GET link) OR action+method (form submission with CSRF).
     download=True on an href item → file download: emits `hx-boost="false"`
-      (opt out of the global <body hx-boost="true">) + the `download` attr so
-      the browser downloads the attachment instead of HTMX swapping its bytes
-      into the DOM as text.
+      (opt out of the global <body hx-boost="true">) so the click navigates
+      instead of HTMX swapping the response bytes into the DOM as text. Does
+      NOT emit the HTML `download` attribute (Task 7): the server already
+      sends `Content-Disposition: attachment` on the response, and `download`
+      would make the browser save whatever it lands on after redirects —
+      breaking the step-up 303 → /auth/step-up navigation.
     confirm (form items): JS confirm() prompt string — submission is gated on
       the operator clicking OK. Used for destructive actions (delete).
     hidden (form items): dict of name→value extra hidden inputs (e.g.
@@ -48,7 +51,16 @@
       <li>
         {%- if item.href %}
         <a href="{{ item.href }}"
-           {%- if item.download %} hx-boost="false" download
+           {%- if item.download %} hx-boost="false"{{ ' ' }}
+           {#- Deliberately NO `download` attribute here (Task 7): the server
+               sends `Content-Disposition: attachment` on every download
+               target, so `download` is redundant on success — and harmful
+               when the target is step-up-gated, because `download` saves
+               whatever the browser lands on AFTER redirects, so a step-up
+               303 to /auth/step-up would get saved as an HTML file instead
+               of navigated to. `hx-boost="false"` alone still opts the click
+               out of the global HTMX AJAX-swap boost, which is what makes
+               this a real navigation in the first place. -#}
            {#- Tap feedback + debounce: server-side generation can take a few
                seconds; show "Generating…" instantly and block re-taps for 8s so
                repeated taps can't stack downloads (which exhausted the DB pool /

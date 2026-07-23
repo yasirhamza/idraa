@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.config import get_settings
 from idraa.db import get_session
 from idraa.errors import StepUpRequired
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.session import AuthSession
 from idraa.models.user import User
 from idraa.services.auth import is_step_up_fresh
@@ -169,22 +169,25 @@ def _step_up_next(request: Request) -> str:
     return safe_next(target)
 
 
-def require_recent_auth(
-    request: Request,
-    user: User | None = Depends(current_user),
-    sess: AuthSession | None = Depends(current_session),
-) -> None:
-    """Step-up ("sudo mode") gate for sensitive actions.
-
-    Wire as a ROUTE-DECORATOR dependency so it runs before handler params::
-
-        @router.post("/x/delete", dependencies=[Depends(require_recent_auth)])
-
-    Anonymous callers get the same 401 as require_user (-> /login redirect
-    via _auth_redirect_handler). Stale sessions raise StepUpRequired, which
-    app.py::_step_up_handler turns into the /auth/step-up challenge.
+def require_step_up(
+    category: StepUpCategory,
+) -> Callable[[Request, User | None, AuthSession | None], None]:
+    """Per-category step-up gate. Wire as a route dependency:
+    @router.get("/x/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
     """
-    if user is None or sess is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    if not is_step_up_fresh(sess):
-        raise StepUpRequired(next_url=_step_up_next(request))
+
+    def _dep(
+        request: Request,
+        user: User | None = Depends(current_user),
+        sess: AuthSession | None = Depends(current_session),
+    ) -> None:
+        if user is None or sess is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            )
+        from idraa.services.security_settings import step_up_required
+
+        if step_up_required(category) and not is_step_up_fresh(sess):
+            raise StepUpRequired(next_url=_step_up_next(request))
+
+    return _dep

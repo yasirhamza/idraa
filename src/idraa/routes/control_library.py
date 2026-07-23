@@ -22,9 +22,15 @@ from idraa.models.control_library import (
     ControlLibraryEntry,
     ControlLibraryEntryAssignment,
 )
-from idraa.models.enums import ControlSource, ControlType, FairCamSubFunction, UserRole
+from idraa.models.enums import (
+    ControlSource,
+    ControlType,
+    FairCamSubFunction,
+    StepUpCategory,
+    UserRole,
+)
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
+from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.audit import log_bulk_export
 from idraa.services.control_library import (
     ControlLibraryBrowseFilters,
@@ -138,7 +144,10 @@ async def _adopted_entry_ids(db: AsyncSession) -> set[str]:
     return {p["entry_id"] for p in rows if p and p.get("entry_id")}
 
 
-@router.get("/controls/library/export.csv", dependencies=[Depends(require_recent_auth)])
+@router.get(
+    "/controls/library/export.csv",
+    dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))],
+)
 async def control_library_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),

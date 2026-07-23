@@ -44,6 +44,7 @@ from idraa.models.scenario_library import (
     ScenarioLibraryOverride,
 )
 from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+from idraa.models.security_settings import SecuritySettings
 from idraa.models.session import AuthSession
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.system_state import SystemState
@@ -86,6 +87,7 @@ __all__ = [
     "ScenarioLibraryEntryAttackMapping",
     "ScenarioLibraryOverride",
     "ScenarioSMEEstimate",
+    "SecuritySettings",
     "SubjectMatterExpert",
     "SystemState",
     "TimestampMixin",

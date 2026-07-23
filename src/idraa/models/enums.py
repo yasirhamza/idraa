@@ -12,6 +12,13 @@ class UserRole(StrEnum):
     VIEWER = "viewer"
 
 
+class StepUpCategory(StrEnum):
+    EXPORTS = "exports"
+    DESTRUCTIVE = "destructive"
+    ADMIN = "admin"
+    CREDENTIALS = "credentials"
+
+
 class EntityStatus(StrEnum):
     DRAFT = "draft"
     ACTIVE = "active"

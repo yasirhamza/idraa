@@ -2,9 +2,13 @@
   empty_state(icon, title, body, cta?) — pretty empty state. Spec §3/§4.
   cta = {label, href, style?, download?} or list of those for multi-CTA.
   style: "primary" | "outline" (default) | "ghost"
-  download=True → file-download link: emits `hx-boost="false"` + `download`
-    so the browser downloads the attachment instead of HTMX (global
-    <body hx-boost="true">) swapping the bytes into the DOM as text.
+  download=True → file-download link: emits `hx-boost="false"` (opt out of
+    the global <body hx-boost="true"> so the click navigates instead of HTMX
+    swapping the bytes into the DOM as text). Does NOT emit the HTML
+    `download` attribute (Task 7 follow-up): the server already sends
+    `Content-Disposition: attachment` on the response, and `download` would
+    make the browser save whatever it lands on after redirects — breaking a
+    step-up 303 → /auth/step-up navigation the moment this target is gated.
 #}
 {% macro empty_state(icon, title, body, cta=none) -%}
 <div class="flex flex-col items-center text-center py-12 px-4 bg-surface-1 border border-border-subtle rounded-card">
@@ -21,7 +25,7 @@
       {%- for a in cta_list %}
         {%- set _style = a.style|default('outline') -%}
         {%- set _btn_cls = {'primary': 'btn-primary', 'outline': 'btn-outline', 'ghost': 'btn-ghost'}.get(_style, 'btn-outline') -%}
-      <a href="{{ a.href }}"{% if a.download %} hx-boost="false" download{% endif %} class="btn btn-sm {{ _btn_cls }}">{{ a.label }}</a>
+      <a href="{{ a.href }}"{% if a.download %} hx-boost="false"{% endif %} class="btn btn-sm {{ _btn_cls }}">{{ a.label }}</a>
       {%- endfor %}
     </div>
   {%- endif %}

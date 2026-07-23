@@ -1,10 +1,11 @@
 """Blocking MFA-enrollment interstitial.
 
-When AUTH_MFA_POLICY == "required" and the logged-in user has no strong factor
-(mfa_enrolled_at is None), redirect every non-allowlisted request to
-/account/security. Runs INNER to SessionMiddleware so request.state.user is
-already populated; reads it with zero DB access (Session pinned the loaded
-User, expire_on_commit=False).
+When the effective MFA policy (idraa.services.security_settings.effective_mfa_policy
+— a per-org DB override falls back to Settings.auth_mfa_policy when unset) is
+"required" and the logged-in user has no strong factor (mfa_enrolled_at is
+None), redirect every non-allowlisted request to /account/security. Runs
+INNER to SessionMiddleware so request.state.user is already populated; reads
+it with zero DB access (Session pinned the loaded User, expire_on_commit=False).
 """
 
 from __future__ import annotations
@@ -14,8 +15,6 @@ from collections.abc import Awaitable, Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
-
-from idraa.config import get_settings
 
 _ALLOWLIST = (
     "/account/security",
@@ -38,7 +37,9 @@ class EnrollmentGuardMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        if get_settings().auth_mfa_policy != "required":
+        from idraa.services.security_settings import effective_mfa_policy
+
+        if effective_mfa_policy() != "required":
             return await call_next(request)
         user = getattr(request.state, "user", None)
         if (

@@ -30,9 +30,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.app import templates
 from idraa.errors import UserDeleteError
 from idraa.formatting import utc_isoformat
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
+from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.auth import is_locked, reset_login_throttle, revoke_user_sessions
 from idraa.services.mfa_enrollment import reset_user_mfa
@@ -106,7 +106,7 @@ async def users_list(
     )
 
 
-@router.get("/users/export.csv", dependencies=[Depends(require_recent_auth)])
+@router.get("/users/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))])
 async def users_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -156,7 +156,7 @@ async def invite_get(
     )
 
 
-@router.post("/users/invite", dependencies=[Depends(require_recent_auth)])
+@router.post("/users/invite", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))])
 async def invite_post(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -249,7 +249,7 @@ async def edit_get(
     )
 
 
-@router.post("/users/{user_id}/edit", dependencies=[Depends(require_recent_auth)])
+@router.post("/users/{user_id}/edit", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))])
 async def edit_post(
     user_id: uuid.UUID,
     request: Request,
@@ -340,7 +340,9 @@ async def edit_post(
     return RedirectResponse("/users", status_code=303)
 
 
-@router.post("/users/{user_id}/set-active", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/users/{user_id}/set-active", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))]
+)
 async def set_active_post(
     user_id: uuid.UUID,
     request: Request,
@@ -412,7 +414,9 @@ async def set_active_post(
     return RedirectResponse("/users", status_code=303)
 
 
-@router.post("/users/{user_id}/delete", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/users/{user_id}/delete", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))]
+)
 async def delete_post(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -453,7 +457,9 @@ async def delete_post(
     return RedirectResponse("/users?deleted=1", status_code=303)
 
 
-@router.post("/users/{user_id}/reset-mfa", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/users/{user_id}/reset-mfa", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))]
+)
 async def reset_mfa_post(
     user_id: uuid.UUID,
     request: Request,
@@ -498,7 +504,9 @@ async def reset_mfa_post(
     return RedirectResponse(f"/users/{user.id}/edit?mfa_reset=1", status_code=303)
 
 
-@router.post("/users/{user_id}/unlock", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/users/{user_id}/unlock", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))]
+)
 async def unlock_user_post(
     user_id: uuid.UUID,
     request: Request,

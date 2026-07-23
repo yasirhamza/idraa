@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% from "macros/form_error_summary.html" import form_error_summary %}
+
+{% block title %}Security settings{% endblock %}
+{% block container_class %}max-w-3xl mx-auto{% endblock %}
+
+{% block content %}
+
+{{ page_header(title="Security settings",
+               breadcrumb=breadcrumb_for(request),
+               actions=[]) }}
+
+{%- set errors_dict = {"_form": error} if error else {} -%}
+
+<form method="post" action="/settings/security" class="space-y-6">
+  {{ csrf_field() }}
+
+  {{ form_error_summary(errors_dict) }}
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Authentication policy</legend>
+
+    <div class="max-w-md">
+      {{ form_field(
+        name="mfa_policy",
+        label="MFA policy",
+        input_type="select",
+        value=mfa_policy_value,
+        options=[("", "Follow env"), ("required", "Required"), ("optional", "Optional")],
+        help="Currently in effect: " ~ effective_mfa_policy
+      ) }}
+    </div>
+
+    <div class="max-w-md">
+      {{ form_field(
+        name="step_up_window_seconds",
+        label="Step-up window (seconds)",
+        input_type="number",
+        value=step_up_window_seconds_value,
+        step="1",
+        help="Empty = follow env. Currently in effect: " ~ effective_step_up_window_seconds ~ "s"
+      ) }}
+    </div>
+  </fieldset>
+
+  <fieldset class="space-y-4">
+    <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Step-up re-authentication, by category</legend>
+
+    {% for c in categories %}
+    <div class="max-w-md">
+      {{ form_field(
+        name=c.field,
+        label=c.label,
+        input_type="select",
+        value=c.value,
+        options=[("", "Follow env"), ("on", "On"), ("off", "Off")],
+        help="Currently in effect: " ~ ("On" if c.effective else "Off")
+      ) }}
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}
+  <div class="pb-24" aria-hidden="true"></div>
+
+  {# ── Sticky action bar ────────────────────── #}
+  <div class="sticky-action-bar sticky bottom-0 bg-surface-0-scrim-80 backdrop-blur border-t border-border-subtle py-3 px-4 -mx-4 md:-mx-6 flex justify-end gap-2">
+    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+  </div>
+</form>
+
+{% endblock %}

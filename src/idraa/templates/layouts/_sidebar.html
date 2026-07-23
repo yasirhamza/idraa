@@ -169,6 +169,14 @@
           <span x-show="collapsed" aria-hidden="true" class="text-meta">M</span>
         </a>
       </li>
+      <li>
+        <a href="/settings/security"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/settings/security' %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Security settings</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">S</span>
+        </a>
+      </li>
     </ul>
     {% endif %}
   </nav>

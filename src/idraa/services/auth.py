@@ -335,7 +335,9 @@ def is_step_up_fresh(sess: AuthSession) -> bool:
     auth_max_failed_logins). A NULL reauthenticated_at (pre-P2 row) is
     stale — fail closed, the user re-verifies once and gets stamped.
     """
-    max_age = get_settings().auth_step_up_max_age_seconds
+    from idraa.services.security_settings import effective_step_up_window
+
+    max_age = effective_step_up_window()
     if max_age == 0:
         return True
     ra = sess.reauthenticated_at
