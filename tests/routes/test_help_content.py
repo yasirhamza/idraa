@@ -13,11 +13,12 @@ _ARTICLES_DIR = (
 )
 
 
-def test_registry_has_ten_unique_slugs():
+def test_registry_has_eleven_unique_slugs():
     slugs = [a.slug for a in HELP_ARTICLES]
-    assert len(slugs) == 10
-    assert len(set(slugs)) == 10  # unique
+    assert len(slugs) == 11
+    assert len(set(slugs)) == 11  # unique
     assert "control-value-robustness" in slugs  # #419 plain-English explainer
+    assert "raw-samples-export" in slugs  # #109 raw sample export
 
 
 def test_by_slug_index_matches():
