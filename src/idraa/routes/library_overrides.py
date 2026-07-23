@@ -24,10 +24,10 @@ from idraa.errors import (
     LibraryOverrideAlreadyExistsError,
     LibraryOverrideVersionConflictError,
 )
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.scenario_library import ScenarioLibraryOverride
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
+from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.flash import build_flash
 from idraa.services.scenario_library import (
     OverrideDraft,
@@ -313,7 +313,7 @@ async def update_override(
 
 @router.post(
     "/library/overrides/{override_id}/delete",
-    dependencies=[Depends(require_recent_auth)],
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
 )
 async def delete_override(
     request: Request,

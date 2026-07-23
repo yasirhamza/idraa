@@ -56,7 +56,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.overlay import OverlayDefinition
 from idraa.models.user import User
 from idraa.repositories.overlay_repo import OverlayRepo
@@ -64,8 +64,8 @@ from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
     client_ip,
     get_db,
-    require_recent_auth,
     require_role,
+    require_step_up,
     require_user,
 )
 from idraa.schemas.overlay import OverlayDeactivateForm, OverlayForm
@@ -213,7 +213,7 @@ async def overlays_list(
 # ---- export + import (must come before /{overlay_id} to avoid path-collision) ---
 
 
-@router.get("/overlays/export.csv", dependencies=[Depends(require_recent_auth)])
+@router.get("/overlays/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
 async def overlays_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -592,7 +592,7 @@ async def overlay_edit_post(
 
 @router.post(
     "/overlays/{overlay_id}/deactivate",
-    dependencies=[Depends(require_recent_auth)],
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
 )
 async def overlay_deactivate(
     overlay_id: uuid.UUID,

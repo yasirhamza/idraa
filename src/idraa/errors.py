@@ -204,7 +204,7 @@ class FAIRCAMValidationError(ValidationError):
 class StepUpRequired(IdraaError):  # noqa: N818 (name is a P2 plan-gate-locked interface; later tasks import it verbatim)
     """Sensitive action attempted with a stale session (step-up / sudo mode).
 
-    Raised by routes/deps.py::require_recent_auth; translated by
+    Raised by routes/deps.py::require_step_up; translated by
     app.py::_step_up_handler into the /auth/step-up challenge. Carries the
     URL to return to after re-verification.
     """

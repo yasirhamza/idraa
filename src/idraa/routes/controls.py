@@ -40,6 +40,7 @@ from idraa.models.enums import (
     ControlType,
     EntityStatus,
     FairCamSubFunction,
+    StepUpCategory,
     UserRole,
 )
 from idraa.models.user import User
@@ -48,8 +49,8 @@ from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
     client_ip,
     get_db,
-    require_recent_auth,
     require_role,
+    require_step_up,
     require_user,
 )
 from idraa.schemas.control import ControlForm
@@ -764,7 +765,7 @@ async def control_assignment_row_partial(
     )
 
 
-@router.get("/controls/export.csv", dependencies=[Depends(require_recent_auth)])
+@router.get("/controls/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
 async def controls_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -1023,7 +1024,10 @@ async def control_edit_post(
     return RedirectResponse(f"/controls/{control.id}", status_code=303)
 
 
-@router.post("/controls/{control_id}/delete", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/controls/{control_id}/delete",
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
+)
 async def control_delete(
     control_id: uuid.UUID,
     request: Request,

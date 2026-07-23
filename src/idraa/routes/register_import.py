@@ -71,14 +71,14 @@ from starlette.datastructures import FormData
 
 from idraa.app import templates
 from idraa.errors import NotFoundError, ValidationError
-from idraa.models.enums import ThreatCategory, UserRole
+from idraa.models.enums import StepUpCategory, ThreatCategory, UserRole
 from idraa.models.user import User
 from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
     client_ip,
     get_db,
-    require_recent_auth,
     require_role,
+    require_step_up,
 )
 from idraa.routes.scenario_form_helpers import THREAT_CATEGORY_CHOICES
 from idraa.services.flash import build_flash
@@ -828,7 +828,7 @@ async def register_import_convert_post(
 
 @router.post(
     "/register-import/profiles/{profile_id}/delete",
-    dependencies=[Depends(require_recent_auth)],
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
 )
 async def delete_profile(
     request: Request,

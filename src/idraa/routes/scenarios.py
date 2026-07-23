@@ -67,7 +67,13 @@ from idraa.errors import (
     ScenarioInUseError,
     ValidationError,
 )
-from idraa.models.enums import AssetClass, EntityStatus, ThreatActorType, UserRole
+from idraa.models.enums import (
+    AssetClass,
+    EntityStatus,
+    StepUpCategory,
+    ThreatActorType,
+    UserRole,
+)
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
@@ -81,8 +87,8 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     client_ip,
     get_db,
-    require_recent_auth,
     require_role,
+    require_step_up,
     require_user,
 )
 from idraa.routes.scenario_form_helpers import (
@@ -574,7 +580,7 @@ async def create_scenario(
 
 @router.get(
     "/scenarios/export",  # B5: MUST be declared before /scenarios/{scenario_id}
-    dependencies=[Depends(require_recent_auth)],
+    dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))],
 )
 async def scenarios_export(
     request: Request,
@@ -1120,7 +1126,10 @@ async def update_scenario(
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 
-@router.post("/scenarios/{scenario_id}/delete", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/scenarios/{scenario_id}/delete",
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
+)
 async def delete_scenario(
     request: Request,
     scenario_id: uuid.UUID,

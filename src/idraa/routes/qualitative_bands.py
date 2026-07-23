@@ -29,9 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.errors import NotFoundError, QualitativeBandVersionConflictError, ValidationError
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_recent_auth, require_role
+from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.flash import build_flash
 from idraa.services.qualitative_bands import QualitativeBandService
 
@@ -281,7 +281,7 @@ async def update_band(
 
 @router.post(
     "/qualitative-bands/{band_id}/delete",
-    dependencies=[Depends(require_recent_auth)],
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
 )
 async def delete_band(
     request: Request,

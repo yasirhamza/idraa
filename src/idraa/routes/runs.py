@@ -50,6 +50,7 @@ from idraa.formatting import utc_isoformat
 from idraa.models.enums import (
     EntityStatus,
     FairCamSubFunction,
+    StepUpCategory,
     UserRole,
 )
 from idraa.models.organization import Organization
@@ -61,8 +62,8 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     client_ip,
     get_db,
-    require_recent_auth,
     require_role,
+    require_step_up,
     require_user,
 )
 from idraa.services.aggregate_run_view_model import build_aggregate_display_results
@@ -627,7 +628,9 @@ def _confirmed(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "on", "true", "yes"}
 
 
-@router.post("/runs/{run_id}/delete", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/runs/{run_id}/delete", dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))]
+)
 async def post_delete_run(
     run_id: uuid.UUID,
     request: Request,
@@ -672,7 +675,10 @@ async def post_delete_run(
     return RedirectResponse(url="/analyses?deleted=1", status_code=303)
 
 
-@router.post("/runs/{run_id}/purge-samples", dependencies=[Depends(require_recent_auth)])
+@router.post(
+    "/runs/{run_id}/purge-samples",
+    dependencies=[Depends(require_step_up(StepUpCategory.DESTRUCTIVE))],
+)
 async def post_purge_run_samples(
     run_id: uuid.UUID,
     request: Request,
@@ -855,7 +861,7 @@ async def list_analyses(
     )
 
 
-@router.get("/analyses/export.csv", dependencies=[Depends(require_recent_auth)])
+@router.get("/analyses/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
 async def analyses_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),

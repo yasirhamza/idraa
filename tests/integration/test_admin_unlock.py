@@ -13,7 +13,7 @@ async def test_admin_unlock_clears_and_audits(authed_admin, db_session):
     # SELF-target: the admin's own user (email user@test.local, SAME org). Cross-
     # org fails — the route is org-scoped (get_user(db, id, me.organization_id)),
     # and admin_user/seed_user live in OTHER org fixtures -> 404. A fresh login
-    # stamps reauthenticated_at (auth.py:238), so require_recent_auth passes.
+    # stamps reauthenticated_at (auth.py:238), so require_step_up passes.
     client, _org_id = authed_admin
     me = (
         await db_session.execute(select(User).where(User.email == "user@test.local"))
