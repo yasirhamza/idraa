@@ -331,7 +331,7 @@
     <dt>ALE</dt><dd><strong>Annualized Loss Expectancy</strong> = mean of LEF × LM across all simulated
       years — the "expected annual loss" headline.</dd>
     <dt>VaR&nbsp;99</dt><dd><strong>Value at Risk</strong> — the annual loss only 1% of simulated years
-      exceed. VaR 95 = the worst 1-in-20 year.</dd>
+      exceed. VaR 95 = the 1-in-20-year level (fine print next slide).</dd>
     <dt>ES&nbsp;95</dt><dd><strong>Expected Shortfall</strong> — the <em>average</em> loss across the worst
       5% of years ("when it's bad, how bad is bad?").</dd>
     <dt>capability</dt><dd>how well a control performs its job <em>when it is operating</em> (0–1;
@@ -343,6 +343,53 @@
       the probability the control does its job against a random threat event. This is the number
       the Boolean composition consumes.</dd>
   </dl>
+</section>
+
+<!-- ============ 2c · RETURN-PERIOD FINE PRINT ============ -->
+<section class="slide" id="s2c">
+  <div class="eyebrow"><b>Part I</b> · Fine print</div>
+  <h2>"1-in-20" is an average, not a schedule</h2>
+  <p class="lead">VaR 95 reads as "the 1-in-20-year loss". The 20 is a long-run frequency:
+  each year crosses the level independently, with probability 5%. Run many 20-year windows
+  and they come in three flavors:</p>
+
+  <div class="up-strip">
+    <div class="strip-label">No exceedance — <span class="mono">36%</span> of 20-year windows <span class="mono">(0.95²⁰)</span></div>
+    <svg width="100%" height="26" viewBox="0 0 1000 26" preserveAspectRatio="none" role="img"
+      aria-label="Twenty year cells, none exceeding">
+      <g>
+        <rect x="2" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="52" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="102" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="152" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="202" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="252" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="302" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="352" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="402" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="452" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="502" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="552" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="602" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="652" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="702" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="752" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="802" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="852" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="902" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="952" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/>
+      </g>
+    </svg>
+  </div>
+  <div class="up-strip">
+    <div class="strip-label">Exactly one — <span class="mono">38%</span></div>
+    <svg width="100%" height="26" viewBox="0 0 1000 26" preserveAspectRatio="none" role="img"
+      aria-label="Twenty year cells, one exceeding in year seven">
+      <g>
+        <rect x="2" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="52" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="102" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="152" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="202" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="252" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="302" y="4" width="44" height="18" rx="4" fill="var(--c-alt)"/><rect x="352" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="402" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="452" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="502" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="552" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="602" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="652" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="702" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="752" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="802" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="852" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="902" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="952" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/>
+      </g>
+    </svg>
+  </div>
+  <div class="up-strip">
+    <div class="strip-label">Two or more — <span class="mono">26%</span></div>
+    <svg width="100%" height="26" viewBox="0 0 1000 26" preserveAspectRatio="none" role="img"
+      aria-label="Twenty year cells, exceedances in years four and sixteen">
+      <g>
+        <rect x="2" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="52" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="102" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="152" y="4" width="44" height="18" rx="4" fill="var(--c-alt)"/><rect x="202" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="252" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="302" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="352" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="402" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="452" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="502" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="552" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="602" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="652" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="702" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="752" y="4" width="44" height="18" rx="4" fill="var(--c-alt)"/><rect x="802" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="852" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="902" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/><rect x="952" y="4" width="44" height="18" rx="4" fill="var(--s2)" stroke="var(--bdr2)"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="formula">
+    P(at least one exceedance in 20 years) = 1 − 0.95<sup>20</sup> ≈ <strong>64%</strong>
+    <small>Return period T ↔ exceedance probability 1/T ↔ quantile 1 − 1/T: VaR 95 = 1-in-20,
+    VaR 99 = 1-in-100. "On average once per 20 years" is a long-run frequency, not an
+    appointment — the level can be crossed twice next decade, or not at all in 40 years.</small>
+  </div>
+  <p class="foot">Independence across years holds by construction in the Monte Carlo — one trial
+  is one year (Part III). Real-world threat trends or clustering would loosen the return-period
+  reading; that is a model-scope caveat, not a math one.</p>
 </section>
 
 <!-- ============ 3 · THE CLAIM ============ -->
