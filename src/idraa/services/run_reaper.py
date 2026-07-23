@@ -1,6 +1,6 @@
 """Startup orphaned-run reaper (issue #211).
 
-A SIGKILL / OOM on the single Fly worker leaves the in-flight
+A SIGKILL / OOM on the single worker leaves the in-flight
 ``risk_analysis_runs`` row stuck at ``status='running'`` forever — there is
 no way to catch SIGKILL in-process, so the executor's exception handler never
 runs and the row is never flipped to FAILED. Polling lies (forever 'running')
@@ -13,7 +13,7 @@ Single-process orphan invariant
 --------------------------------
 v3 dispatches runs via in-process ``BackgroundTasks`` (``routes/runs.py``).
 In-process BackgroundTasks die with the process — they do NOT survive a
-restart. On a single Fly machine the only worker IS this process, so any
+restart. On a single deployment machine the only worker IS this process, so any
 RUNNING or QUEUED row that predates THIS boot is necessarily orphaned: the
 worker that owned it just (re)started and lost its in-memory task. That makes
 QUEUED-at-boot safe to reap, not just RUNNING.

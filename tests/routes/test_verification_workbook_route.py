@@ -243,8 +243,8 @@ async def test_route_threads_request_base_url_to_builder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The route must pass the serving request's base URL to the builder so the
-    in-sheet help link matches the deployment host (idraa.app / per-tester
-    instances / localhost) instead of a hardcoded domain."""
+    in-sheet help link matches the serving deployment host (any deployment
+    host) instead of a hardcoded domain."""
     import idraa.routes.reports as reports_mod
 
     seen: list[str] = []

@@ -185,7 +185,7 @@ async def test_post_run_above_settings_cap_rejected(
 
     Before the fix, this path only hit the hardcoded 1M service ceiling, so an
     authenticated analyst could dispatch a run 10x past the deployment cap
-    (default 100_000) and OOM-kill the 2GB Fly worker. mc_iterations above the
+    (default 100_000) and OOM-kill a memory-constrained worker. mc_iterations above the
     Settings cap must be rejected, not dispatched.
     """
     from idraa.config import get_settings

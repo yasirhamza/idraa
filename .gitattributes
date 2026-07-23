@@ -1,6 +1,6 @@
 # Enforce LF line endings everywhere — cross-platform repo (Windows + Linux/WSL)
 # This kills the "LF will be replaced by CRLF" warnings and ensures the repo state
-# is identical regardless of which OS Claude Code (or any other tool) writes from.
+# is identical regardless of which OS tooling (or any other tool) writes from.
 
 * text=auto eol=lf
 

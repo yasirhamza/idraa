@@ -4,7 +4,7 @@ Revision ID: 922b63358719
 Revises: 3e5d550fcade
 Create Date: 2026-04-28
 
-Spec: docs/superpowers/specs/2026-04-28-pr-eta-iris-sub-sector-overlays-design.md §8.
+Spec: internal design doc 2026-04-28-pr-eta-iris-sub-sector-overlays-design §8.
 
 Schema changes:
 1. Tighten Organization.industry_sub_sector from String(120) to

@@ -338,8 +338,8 @@ async def download_verification_workbook(
     # GIL-bound xlsxwriter LET build → thread so it doesn't block the event loop.
     # The connection is already back in the pool, so even if the build is slow it
     # cannot starve other requests of a DB connection.
-    # Help-link base from the serving request (idraa.app / fly.dev / per-tester
-    # hosts / localhost all self-describe) — never a hardcoded domain (OSS rule).
+    # Help-link base from the serving request (any deployment host — the
+    # serving URL self-describes) — never a hardcoded domain (OSS rule).
     xlsx_bytes = await asyncio.to_thread(
         build_verification_workbook,
         run,

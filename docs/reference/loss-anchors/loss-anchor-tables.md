@@ -490,7 +490,7 @@ All 13 entries authored from `target_archetypes.json` ∩ anchor rows with `anch
 - ATO campaign-TEF statement on `education-student-records-insider` (TEF reframed as campaign/incident frequency, not per-login-attempt)
 - Insider example replacement on `gov-employee-insider-leak` (fabricated-source example removed, replaced with research-recorded incident)
 
-**Numeric verification (PGSC-1 — CLAUDE.md §Verification reporting):** σ values derived as `ln(p95/p50) / Z₀.₉₅` where `Z₀.₉₅ = scipy.stats.norm.ppf(0.95) = 1.6448536269514722`. Hand-math and stored values are independently computed; the "Match" column reflects `|hand − stored| < 1e-10`.
+**Numeric verification (PGSC-1 — per project convention, §Verification reporting):** σ values derived as `ln(p95/p50) / Z₀.₉₅` where `Z₀.₉₅ = scipy.stats.norm.ppf(0.95) = 1.6448536269514722`. Hand-math and stored values are independently computed; the "Match" column reflects `|hand − stored| < 1e-10`.
 
 *Primary σ (3 representative entries):*
 

@@ -9,7 +9,7 @@ Spec §6.6 — single revision covering F0-F4 model-side changes:
 2. Create scenario_library_overrides (composite FK; deleted_at ships
    upfront so F9 tombstone path doesn't need a follow-up amend)
 3. Create wizard_drafts (composite PK user_id+tx_id; organization_id
-   forward-compat per CLAUDE.md)
+   forward-compat per project convention)
 4. Add scenarios.library_pin JSON column + shadow enum columns
    (_threat_actor_type / _threat_category / _asset_class) — combined
    into ONE batch block (SQLite recreates table once vs N times)
@@ -362,7 +362,7 @@ def upgrade() -> None:
     # -----------------------------------------------------------------------
     # Step 2b: wizard_drafts (paranoid-review Decision A — DB-backed state).
     # Composite PK (user_id, tx_id); organization_id forward-compat per
-    # CLAUDE.md; updated_at drives cleanup_expired (TTL 30min) in F17.
+    # project convention; updated_at drives cleanup_expired (TTL 30min) in F17.
     # -----------------------------------------------------------------------
     op.create_table(
         "wizard_drafts",
@@ -373,7 +373,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("tx_id", sa.Uuid(as_uuid=True), nullable=False),
-        # r2 BLOCKER 14: organization_id forward-compat for multi-tenancy per CLAUDE.md.
+        # r2 BLOCKER 14: organization_id forward-compat for multi-tenancy per project convention.
         sa.Column(
             "organization_id",
             sa.Uuid(as_uuid=True),

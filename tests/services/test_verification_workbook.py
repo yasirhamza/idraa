@@ -2769,7 +2769,7 @@ def test_aggregate_let_attributeerror_contained_to_summary_only(monkeypatch):
 # basis; (3) elapsed-time capability cells displayed bare day-counts on a
 # 0-1-looking column; (4) neither workbook stated its dollar-value scope
 # (scenario-scoped vs summed-across-scenarios); (5) the help link hardcoded
-# idraa.fly.dev while deployments serve idraa.app and per-tester hosts.
+# idraa.fly.dev while deployments serve arbitrary hosts.
 
 
 def _v3_snap_dict_pair_gated():
@@ -2854,7 +2854,7 @@ def test_controls_scope_note_single_vs_aggregate():
 
 def test_controls_help_url_uses_caller_base_url_never_hardcoded():
     """The help link derives from the caller-supplied deployment base URL;
-    no build path hardcodes idraa.fly.dev."""
+    no build path hardcodes a deployment host."""
     run = _let_run(controls_snapshot=[_v3_snap_dict()])
     with_base = " ".join(
         _all_cell_strings(

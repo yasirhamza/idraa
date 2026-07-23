@@ -110,7 +110,7 @@ scenarios summed for a portfolio view).
 | `status` | str | `PENDING` / `RUNNING` / `COMPLETED` / `FAILED` |
 | `inputs_hash` | str | reproducibility hash over the full input pin |
 | `controls_snapshot` | dict (JSON) | frozen capture of Control state at run time (versioned: `snapshot_version: 1` legacy / `2` post-PR-ι) |
-| `simulation_results` | dict (JSON) | full Monte Carlo output: sample arrays, percentiles, VaR, expected shortfall, loss-exceedance curve. Architectural rule (CLAUDE.md): full output is persisted, not just summaries |
+| `simulation_results` | dict (JSON) | full Monte Carlo output: sample arrays, percentiles, VaR, expected shortfall, loss-exceedance curve. Architectural rule (per project convention): full output is persisted, not just summaries |
 | `started_at`, `completed_at` | datetime | |
 
 The simulation_results dict is opaque to SQL — query/filter on financial
@@ -236,4 +236,4 @@ description second. **Don't put it in this doc until the code exists.**
 
 v3 Phase 1 explicitly does NOT include: SSO/SAML, multi-tenancy, billing,
 signup flows, mobile, real-time telemetry, AI-assisted features, self-service,
-marketing pages, SOC 2 / compliance artifacts. (CLAUDE.md.)
+marketing pages, SOC 2 / compliance artifacts. (Per project convention.)

@@ -885,7 +885,7 @@ v3 importer.
 
 - **v3 design doc**: `docs/plans/2026-04-23-riskflow-v3-design.md` — the data-model section predates this Standard review. Control-related claims in that document are superseded by this audit where they conflict.
 - **Data-model spec**: `docs/reference/data-model-specification.md` — also pre-Standard-review. Section on Control entity is superseded by §4 of this document.
-- **Methodology memory**: `~/.claude/.../memory/reference_fair_cam_methodology.md` — contains Overview-era formulas (`OpEff = IntEff × (1 - VF/365)^VD`). The Standard supersedes the Overview for all v3 design decisions. Section §2.3 of this document documents the supersession.
+- **Methodology memory**: contains Overview-era formulas (`OpEff = IntEff × (1 - VF/365)^VD`). The Standard supersedes the Overview for all v3 design decisions. Section §2.3 of this document documents the supersession.
 - **PR θ spec (Scenario Library)**: `docs/superpowers/specs/2026-04-28-phase-1.5a-scenario-library-design.md` — the vertical-slice template that PR λ mirrors for the control library and wizard.
 - **Standards-aligned seed source**: `docs/reference/fair-cam-controls-library.csv` — 61 control entries with Standard sub-function tags; native ingestion format for PR λ seed migration.
 - **Standard source PDF**: `docs/FAIR Controls Analytics Model (FAIR-CAM) Standard V1.0 (January 2025).pdf` — 49 pages, dated 2025-01-15. All §-number and page citations in this document refer to this source.

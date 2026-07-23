@@ -45,7 +45,7 @@ each of the 9 rows' ``loss_shape`` from the seed JSON (``loss_shape`` ONLY,
 never the loss nodes -- see the "Idempotency" section below). Without this,
 ``destructive-wiper-nationstate`` would silently land ``loss_shape='capped'``
 on every fresh-volume deployment (``docker-entrypoint.sh`` runs migrations on
-each boot: per-tester Fly instances, e2e harnesses, DR rebuilds), capping its
+each boot: ephemeral instances, e2e harnesses, DR rebuilds), capping its
 catastrophic tail at instantiation
 (``services/wizard_finalize.py:390``). The prod-upgrade path is unaffected --
 there the 9 slugs are absent, so the INSERT branch runs and already sets

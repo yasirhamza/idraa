@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
-"""Pre-commit guard: block commits to the PRIVATE riskflow archive.
+"""Pre-commit guard: block commits whose origin is not the canonical public repo.
 
-All work is committed and tracked on the PUBLIC repo ``yasirhamza/idraa``
-(``~/projects/Idraa``). The private ``yasirhamza/riskflow`` archive receives
-ONLY the sanctioned sensitive security issues, and only with an explicit
-override.
+All work is committed and tracked on the PUBLIC repo
+``github.com/yasirhamza/idraa``. A private archive remote receives ONLY the
+sanctioned sensitive security issues, and only with an explicit override.
 
-Rationale: on 2026-07-22 an entire feature (strong-auth MFA + passkeys, 13
-commits) was mistakenly built in a checkout whose ``origin`` was the private
-riskflow remote — its directory was named ``RiskFlow`` and its CLAUDE.md said
-Idraa, so the only distinguishing signal was the remote, which went unchecked.
-Nothing was pushed, so it was recoverable, but it wasted significant work.
-This guard makes that mistake un-committable by default.
-
-See CLAUDE.md "Canonical repository". Escape hatch for a sanctioned commit to
-one of the private sensitive security issues: ``IDRAA_ALLOW_PRIVATE_COMMIT=1``.
+Escape hatch for a sanctioned commit to one of the private sensitive security
+issues: ``IDRAA_ALLOW_PRIVATE_COMMIT=1``.
 """
 
 from __future__ import annotations
@@ -41,13 +33,12 @@ def main() -> int:
         if os.environ.get("IDRAA_ALLOW_PRIVATE_COMMIT") == "1":
             return 0
         sys.stderr.write(
-            "\nBLOCKED: this checkout's origin is the PRIVATE riskflow archive:\n"
+            "\nBLOCKED: this checkout's origin is not the canonical public repo\n"
+            "  (github.com/yasirhamza/idraa):\n"
             f"  {url}\n\n"
-            "All work is committed + tracked on the PUBLIC repo\n"
-            "  https://github.com/yasirhamza/idraa   (~/projects/Idraa)\n\n"
-            "Only the sanctioned sensitive security issues may land in riskflow.\n"
+            "Only the sanctioned sensitive security issues may land elsewhere.\n"
             "If this is genuinely one of them, set IDRAA_ALLOW_PRIVATE_COMMIT=1.\n"
-            "Otherwise: cd ~/projects/Idraa and commit there.\n\n"
+            "Otherwise: switch to a checkout whose origin is the canonical repo.\n\n"
         )
         return 1
     return 0

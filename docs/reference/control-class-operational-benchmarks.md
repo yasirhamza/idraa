@@ -60,7 +60,7 @@ If a cell cannot be primary-cited, the cell renders "—" with the note `"no cla
 
 ### IND (industrial sector) — included for completeness
 
-`IND` is technically a sector classification, not a control-class prefix in the v3 library taxonomy. It is included as a per-class section below for completeness because it is the only Phase-0-citable row that supplies primary-cited values for two of the three KEPT sub-functions. It informs sector overlays (per CLAUDE.md "Layered override beats canonical CRUD") rather than per-class library entries.
+`IND` is technically a sector classification, not a control-class prefix in the v3 library taxonomy. It is included as a per-class section below for completeness because it is the only Phase-0-citable row that supplies primary-cited values for two of the three KEPT sub-functions. It informs sector overlays (per project convention) rather than per-class library entries.
 
 ## NS (Network Security — Next-Generation Firewall class)
 
@@ -110,7 +110,7 @@ Rationale: IBM CODB 2024 p14 Fig 8 publishes phishing-vector lifecycle (261d tot
 | LEC_RESP_EVENT_TERMINATION | — | n/a | Same Fig 39 proxy caveat; canonical τ=64d default applies |
 | VMC_CORR_IMPLEMENTATION | — | n/a | No CL-class patch-cycle median in Phase 0 sources; canonical τ=79.3d default applies |
 
-Rationale: The IBM CODB 2024 Fig 39 storage-location breakouts are *total breach lifecycle*, not sub-function-segmented MTTI/MTTC, and the storage-location ≠ control-class. Best routed to a future `multi_environment_overlay` (per CLAUDE.md "Layered override beats canonical CRUD") rather than a CL-class primary-cited cell. SANS 2024 D&R Survey notes "limited cloud-security expertise" (56%) and "multi-cloud management complexity" (51%) — qualitative anchors, not τ inputs.
+Rationale: The IBM CODB 2024 Fig 39 storage-location breakouts are *total breach lifecycle*, not sub-function-segmented MTTI/MTTC, and the storage-location ≠ control-class. Best routed to a future `multi_environment_overlay` (per project convention) rather than a CL-class primary-cited cell. SANS 2024 D&R Survey notes "limited cloud-security expertise" (56%) and "multi-cloud management complexity" (51%) — qualitative anchors, not τ inputs.
 
 ## DL (Data Loss Prevention — DLP class)
 
@@ -150,7 +150,7 @@ Rationale: BR-class controls primarily drive `LEC_RESP_RESILIENCE` (recovery), w
 | LEC_RESP_EVENT_TERMINATION | — | n/a | No VM-class MTTC breakout in Phase 0 sources; canonical τ=64d default applies |
 | VMC_CORR_IMPLEMENTATION | — | n/a | DBIR 2024 p21 Fig 19 CISA KEV remediation median (55d) is environment-wide, not VM-class; canonical τ=79.3d default applies. DBIR 2024 p21 narrative cites a 15d *target* for critical vulns → overlay candidate (`critical_patch_sla_overlay`), not a primary-cited cell value |
 
-Rationale: DBIR 2024 is the canonical source for `VMC_CORR_IMPLEMENTATION` τ — but the published survival curve aggregates all surveyed orgs and does not separate behavior by VM-platform class. The 15-day critical-vuln target is normative, not observed, so it is not a primary-cited cell value; it slots into a future overlay layer per CLAUDE.md.
+Rationale: DBIR 2024 is the canonical source for `VMC_CORR_IMPLEMENTATION` τ — but the published survival curve aggregates all surveyed orgs and does not separate behavior by VM-platform class. The 15-day critical-vuln target is normative, not observed, so it is not a primary-cited cell value; it slots into a future overlay layer per project convention.
 
 ## TR (Training — Security Awareness class)
 

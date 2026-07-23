@@ -98,14 +98,14 @@ def _install_sqlite_pragmas(engine: AsyncEngine) -> None:
         cur.execute("PRAGMA journal_mode=WAL")
         # Durability decision (whole-project eval, supersedes #294's NORMAL):
         # FULL fsyncs the WAL on every commit, so committed transactions
-        # survive an unplanned shutdown (Fly host crash / kernel panic) —
+        # survive an unplanned shutdown (host crash / kernel panic) —
         # NORMAL could silently lose the most recent commits (DB stays
         # uncorrupted either way under WAL). Cost: one fsync per commit;
         # immaterial at this app's write throughput (form saves + run
         # completions, single team). The #294 perf work was read-path, not
-        # commit throughput. Disaster recovery for VOLUME loss is Fly's
-        # daily volume snapshots (RPO ≤ 24h); if a tighter RPO is ever
-        # needed, litestream WAL-shipping is the upgrade path.
+        # commit throughput. Disaster recovery for volume loss relies on the
+        # platform's scheduled volume snapshots; litestream WAL-shipping is
+        # the upgrade path for a tighter RPO.
         cur.execute("PRAGMA synchronous=FULL")
         cur.execute("PRAGMA busy_timeout=5000")
         cur.close()

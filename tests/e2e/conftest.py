@@ -94,7 +94,7 @@ def e2e_base_url(live_server_url: str) -> str:
 # Dedicated passkey e2e server — Task 10 (strong-auth P1).
 #
 # WebAuthn enforces origin == WEBAUTHN_RP_ID (or a subdomain of it), so
-# ``live_server_url`` (RP-ID defaults to idraa.fly.dev) can't be reused for
+# ``live_server_url`` (RP-ID defaults to localhost) can't be reused for
 # passkey ceremonies. This fixture launches a SEPARATE uvicorn bound to
 # localhost, against a fresh per-run SQLite file (migrated via `alembic
 # upgrade head` — the app does not auto-create tables), with

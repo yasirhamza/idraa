@@ -7,7 +7,7 @@ Create Date: 2026-07-10
 Two new canonical control-library entries closing the IBM CODB 2025 Fig 39
 product-category gaps (#459): Managed Detection and Response (MDR/MSSP; threat
 hunting folded in per plan D3) and External Attack Surface Management (EASM).
-Plan: docs/superpowers/plans/2026-07-10-codb-gap-entries-459.md (4-reviewer
+Plan: internal design doc 2026-07-10-codb-gap-entries-459 (4-reviewer
 plan-gate converged 0/0).
 
 Convergence: payloads are read from ``data/seed_control_library_entries.json``

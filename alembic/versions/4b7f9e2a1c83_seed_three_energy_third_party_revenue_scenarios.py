@@ -32,7 +32,7 @@ of these slugs is a no-op for those slugs.
 Downgrade: DELETE the 3 rows by slug (version = 1 guard).
 
 UUID foot-gun: uses ``uuid.uuid4().hex`` (no-hyphen 32-char hex) consistent
-with the raw-text seed UUID convention documented in project CLAUDE.md and
+with the raw-text seed UUID convention documented per project convention and
 enforced by the per-table no-hyphen guard test.
 """
 
@@ -120,8 +120,8 @@ def upgrade() -> None:
         """
             ),
             {
-                # No-hyphen hex UUID (raw-text seed UUID convention; see project
-                # CLAUDE.md and the per-table no-hyphen guard test).
+                # No-hyphen hex UUID (raw-text seed UUID convention; see
+                # project convention and the per-table no-hyphen guard test).
                 "id": uuid.uuid4().hex,
                 **{
                     k: json.dumps(v) if isinstance(v, (list, dict)) else v

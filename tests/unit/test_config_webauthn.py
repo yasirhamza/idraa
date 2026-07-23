@@ -46,7 +46,7 @@ def test_prod_rejects_origin_not_covering_rp_id() -> None:
         _settings(
             environment="prod",
             session_secret="y" * 40,
-            webauthn_rp_id="idraa.fly.dev",
+            webauthn_rp_id="idraa.example.com",
             webauthn_origins="https://evil.example",
         )
 

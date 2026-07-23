@@ -42,9 +42,9 @@ COPY data ./data
 COPY docs/reference/fair-cam-controls-library.csv ./docs/reference/fair-cam-controls-library.csv
 
 # #491: rebuild the purged Tailwind sheet from THIS image's templates, so a
-# merge-order race between branches (each passing its own per-branch pre-push
-# gate, nobody gating the merged tree — GHA is billing-disabled) can never
-# ship a stale committed tailwind.css to prod. The committed file + the
+# merge-order race between branches (each branch passes its own pre-push gate;
+# nothing re-gates the merged tree) can never ship a stale committed
+# tailwind.css to prod. The committed file + the
 # pre-push staleness gate remain the dev workflow; this overwrite is the
 # deploy-boundary backstop. idraa.tasks.build_css downloads the standalone
 # binary sha256-pinned (fails the image build on mismatch or on a Tailwind

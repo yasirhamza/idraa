@@ -56,7 +56,7 @@ except ImportError:  # pragma: no cover - POSIX-only; Windows-native sessions / 
     resource = None
 
 # Default subprocess wall-clock budget (seconds). Generous — a memory-constrained
-# confirmatory run (Fly/Docker) that OOM-kills the child must surface a
+# confirmatory run (a deploy/Docker) that OOM-kills the child must surface a
 # diagnostic RuntimeError, not hang the parent forever (T8 review Finding 2).
 _DEFAULT_SUBPROCESS_TIMEOUT_S = 600.0
 

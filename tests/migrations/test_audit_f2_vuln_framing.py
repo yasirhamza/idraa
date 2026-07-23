@@ -1,8 +1,8 @@
 """Audit-F2 migration tests: scenarios.vuln_framing column + backfill
 (b7d2e8a1c5f3).
 
-Backfill cutoff: created_at < 2026-06-10 09:30:00 (the #339 cutover — Fly
-release v101, startup complete 09:28:15Z) -> 'legacy_residual'; later rows
+Backfill cutoff: created_at < 2026-06-10 09:30:00 (the #339 cutover — deploy
+startup complete 09:28:15Z) -> 'legacy_residual'; later rows
 keep the 'inherent' server default. Downgrade drops the column.
 """
 

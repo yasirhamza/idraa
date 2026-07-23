@@ -119,7 +119,7 @@ log-space μ, not the arithmetic mean):
 FW is **mean-preserving** — `exp(μ_S + σ_S²/2) = M = Σ mᵢ` exactly — and reduces
 to the identity for a single form.
 
-### Worked anchor (numeric verification per CLAUDE.md)
+### Worked anchor (numeric verification per project convention)
 
 Two identical forms `(μ, σ) = (0, 1)`:
 

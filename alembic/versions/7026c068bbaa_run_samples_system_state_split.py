@@ -90,7 +90,7 @@ def _merge(summary: dict[str, Any], arrays: dict[str, Any] | None) -> dict[str, 
 
 # Keyset batch size. Peak backfill memory ceiling is ``_BATCH × max_payload``
 # (live DB max payload ~38 MB, #294): 10 × 38 MB ≈ 380 MB worst case, well
-# under the 2 GB VM (fly.toml). Bump down if larger payloads appear.
+# under the deployment VM's memory. Bump down if larger payloads appear.
 _BATCH = 10
 
 

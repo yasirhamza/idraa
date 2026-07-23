@@ -50,6 +50,13 @@ DENY_GLOBS: tuple[str, ...] = (
     "fly.toml",
     "fly.*.toml",
     "CLAUDE.md",
+    # Deploy tooling wrapper (owner decision 2026-07-23): operator-local,
+    # same rationale as the deploy config above.
+    "fly",
+    # Spec-scope-discipline lint script (owner decision 2026-07-23): its
+    # target tree (docs/superpowers/specs/) is operator-local, so this is
+    # dead config revealing internal paths if committed.
+    "lint_specs.py",
 )
 
 # Explicit allowlist: tracked paths that legitimately match a deny glob.

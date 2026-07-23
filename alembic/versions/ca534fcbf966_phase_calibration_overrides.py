@@ -42,8 +42,8 @@ def upgrade() -> None:
         sa.UniqueConstraint("organization_id", "industry", "revenue_tier",
                             name="uq_override_per_org_industry_tier"),
         # Tightened to >= 20 to match D1 model + CalibrationOverrideForm Pydantic
-        # validator — see plan preamble fold-in B5 at
-        # docs/superpowers/plans/2026-04-25-calibration-data-framework.md.
+        # validator — see plan preamble fold-in B5, internal design doc
+        # 2026-04-25-calibration-data-framework.
         # length() is cross-DB (SQLite + Postgres); char_length is Postgres-only.
         sa.CheckConstraint("length(trim(methodology)) >= 20",
                            name="ck_override_methodology_required"),

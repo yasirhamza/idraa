@@ -22,7 +22,7 @@ import numpy as np
 SAMPLE_CODEC_MAGIC = b"RFSC1"
 _DEFLATE_LEVEL = 6
 # Sec-N1: bound the decompression (defends a corrupt/crafted row). 2 GiB, not 8 —
-# the Fly VM is a 4 GB machine, so an 8 GiB bound could OOM the process before the
+# the deployment VM's memory envelope means an 8 GiB bound could OOM the process before the
 # guard even engages. 2 GiB sits comfortably above the ~248 MB real max observed at
 # M=30 scenarios / 1M iterations while still meaningfully protecting the VM.
 _MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024

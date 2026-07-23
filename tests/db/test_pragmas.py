@@ -16,7 +16,7 @@ async def test_foreign_keys_on_and_wal(db_session):
 async def test_synchronous_full_durability(db_session):
     """Durability decision (whole-project eval): WAL + synchronous=FULL.
 
-    NORMAL skips the per-commit WAL fsync — an unplanned shutdown (Fly host
+    NORMAL skips the per-commit WAL fsync — an unplanned shutdown (host
     crash, kernel panic) can silently lose the most recent committed
     transactions. FULL fsyncs the WAL on every commit; at this app's write
     throughput (form saves + run completions, single team) the per-commit

@@ -2,9 +2,8 @@
 
 This document describes the supply-chain controls on `yasirhamza/idraa`: what
 runs, where, what it catches, and how to check whether an advisory affects a
-checkout of this repo. It is a narrative companion to
-`docs/superpowers/specs/2026-07-17-supply-chain-security-design.md` (the
-design) — this doc is the posture as shipped, not the rationale trail.
+checkout of this repo. It is the posture as shipped; design rationale is
+maintained operator-locally.
 
 ## 1. Six layers
 
