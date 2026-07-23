@@ -14,14 +14,14 @@
 
 <h2 class="text-h3 text-ink-1 mb-3">Roles</h2>
 <p class="text-body text-ink-2 mb-3">
-  Idraa has three roles. Access is controlled by an admin when user accounts
+  Idraa has four roles. Access is controlled by an admin when user accounts
   are created.
 </p>
 <ul class="list-disc pl-5 space-y-2 text-body text-ink-2 mb-6">
   <li>
-    <strong>Analyst</strong> &mdash; builds scenarios, runs analyses, and
-    downloads reports. The primary day-to-day role for anyone doing risk
-    quantification work.
+    <strong>Viewer</strong> &mdash; read-only access to scenarios, analyses,
+    and results, the same visibility as Reviewer today. Suitable for
+    stakeholders who only need to see outputs.
   </li>
   <li>
     <strong>Reviewer</strong> &mdash; read-only access to scenarios, analyses,
@@ -29,11 +29,29 @@
     authoring changes.
   </li>
   <li>
+    <strong>Analyst</strong> &mdash; builds scenarios, runs analyses, and
+    downloads reports. The primary day-to-day role for anyone doing risk
+    quantification work.
+  </li>
+  <li>
     <strong>Admin</strong> &mdash; manages user accounts, imports scenario and
     control library data, and configures organisation-level settings. Admins
-    can also perform all analyst and reviewer actions.
+    can also perform all analyst, reviewer, and viewer actions.
   </li>
 </ul>
+
+<h2 class="text-h3 text-ink-1 mb-3">Signing in and account security</h2>
+<p class="text-body text-ink-2 mb-6">
+  Idraa requires multi-factor authentication for every account. On your first
+  login you will be guided to enroll a passkey, an authenticator app (TOTP), or
+  both, plus a set of one-time recovery codes, before you can use the rest of
+  the app. Manage your enrolled factors any time at
+  <a class="text-brand hover:underline" href="/account/security">Account &amp;
+  security</a>. Sensitive actions, such as downloading reports or importing
+  data, may occasionally prompt you to re-authenticate if your session
+  isn&rsquo;t recent &mdash; that step-up prompt is a security measure, not an
+  error.
+</p>
 
 <h2 class="text-h3 text-ink-1 mb-3">The scenario &rarr; analysis &rarr; report flow</h2>
 <p class="text-body text-ink-2 mb-3">

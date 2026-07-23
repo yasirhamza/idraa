@@ -17,7 +17,7 @@ Quantitative cyber-risk analysis platform — FAIR methodology, control-aware mo
 - **Controls** — FAIR-CAM control modeling with sub-function assignments, framework crosswalks (NIST CSF, CIS v8, MITRE ATT&CK), an ATT&CK coverage view, and a curated control library.
 - **Analysis** — native Monte Carlo engine (single-scenario and portfolio AGGREGATE runs), full sample persistence, VaR/ES tail ladder, loss-exceedance curves, and per-control Shapley + if-removed attribution with control values reported as weight-robustness ranges.
 - **Reporting** — executive web dashboards and tiered PDF reports with snapshot provenance; audited CSV/JSON exports.
-- **Platform** — session auth with passkey/TOTP MFA and step-up re-authentication for sensitive operations, RBAC (analyst / reviewer / admin), a first-class audit log, multi-currency support, and a mobile-responsive, installable UI.
+- **Platform** — session auth with passkey/TOTP MFA and step-up re-authentication for sensitive operations, RBAC (analyst / reviewer / viewer / admin), a first-class audit log, multi-currency support, and a mobile-responsive, installable UI.
 
 This is the v3 ground-up rebuild, succeeding a Streamlit prototype (v1 RiskFlux) that validated the FAIR math but whose UI didn't survive, and an unfinished Node/Remix/MongoDB attempt (v2 RiskFlow). The validated `fair_cam` engine from v1 carries forward as v3's calculation core.
 
@@ -38,7 +38,7 @@ That's a Postgres + app stack: the `app` container runs `alembic upgrade head` b
 
 **Engine:** a native Monte Carlo simulator drives FAIR-CAM Boolean control composition (with κ meta-reliability coupling for meta-controls), per-control Shapley and if-removed attribution, and weight-robustness ensembles that express FAIR-CAM's composition-weight uncertainty as ranges rather than a single point estimate. `fair_cam` is first-party and is the only place FAIR math is computed — the app layer never re-derives it.
 
-**Verification discipline:** every scenario ships an independent in-Excel verification workbook (LET/RANDARRAY dynamic-array Monte Carlo) that reproduces sampling and ALE from the same inputs, hand-derived math anchors pin the engine's statistical assumptions in tests, and a pre-push local gate (ruff + mypy + pytest) mirrors what CI would run.
+**Verification discipline:** every run ships an independent in-Excel verification workbook (LET/RANDARRAY dynamic-array Monte Carlo) that reproduces sampling and ALE from the same inputs, hand-derived math anchors pin the engine's statistical assumptions in tests, and a pre-push local gate (ruff + mypy + pytest) mirrors what CI would run.
 
 ## Configuration
 

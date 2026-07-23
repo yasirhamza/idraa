@@ -70,7 +70,7 @@ distribution's cited anchor.
 
 ## σ-Derivation Sub-Policies (TIER-1 and TIER-2)
 
-All three paths produce the same `{mean_log, sigma}` input to pyfair/fair_cam
+All three paths produce the same `{mean_log, sigma}` input to fair_cam
 and require that **both σ legs** (i.e. the two statistics from which σ is
 derived) trace to the entry's own cited source in `source_citations`.
 
@@ -275,8 +275,15 @@ The server default for existing entries is `anecdotal`.
 The seed-validity guard (`tests/integration/test_seed_library_lognormal.py`)
 enforces at every CI run:
 
-- Every lognormal entry has `loss_tier ∈ {paginated, vendor}`
-- Every PERT entry has `loss_tier ∈ {anecdotal, none}`
+- Every lognormal entry has `loss_tier ∈ {paginated, vendor}` — and, as of the
+  loss-PERT-overhaul (`loss-representation.md`), so does every PERT entry
+  produced by collapsing a cited envelope: all 91 current `capped`-shape PERT
+  entries carry `loss_tier ∈ {paginated, vendor}` (86 paginated + 5 vendor).
+  The guard only enforces the **contrapositive** direction — `loss_tier ∈
+  {anecdotal, none}` (or absent) ⇒ no lognormal node, must be PERT — it does
+  NOT require every PERT entry to be anecdotal/none-tiered; a PERT entry may
+  legitimately carry a paginated/vendor tier once its envelope has been
+  collapsed.
 - Both σ legs of every lognormal entry trace to its stated tier's citation(s)
 - For `paginated`: both legs trace to "IRIS 2025" + "Figure A3" tokens + a named
   p50 primary (NetDiligence / FFIEC / Verizon DBIR / IRIS 2025). Epic C-iii-a

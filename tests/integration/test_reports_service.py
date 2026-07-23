@@ -94,7 +94,7 @@ async def test_legacy_aggregate_pdf_suppresses_band_not_relabel(
     gate) and the rendered PDF must show the "not available" copy instead of
     the overclaim. This is the exact #202 repro: AGGREGATE run -> /reports ->
     download PDF -> page-2 conf-interval line. Pre-#202 rows exist in the live
-    fly.dev DB and are re-exportable after merge.
+    production DB and are re-exportable after merge.
     """
     run = await _make_completed_aggregate_run(db_session, organization, legacy_band=True)
 

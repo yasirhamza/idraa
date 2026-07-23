@@ -3,7 +3,7 @@
 > **Scope:** Epic C-ii-b (#335) — per-sector research sweep producing
 > `data/loss_anchor_tables.json`. This document is the COMMITTED procedure
 > reference that every sector task (Tasks 2–14) runs uniformly. Tasks 2–14
-> dispatch subagents; they do NOT modify this document.
+> are executed per-source; they do NOT modify this document.
 
 ---
 

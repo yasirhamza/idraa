@@ -92,6 +92,17 @@ package-lock.json
 fly.toml
 fly.*.toml
 
+# Deploy tooling is operator-local (owner decision 2026-07-23): the wrapper
+# script embeds deployment-specific detail and stays beside the checkout,
+# not in the public repo. The tracked-path denylist enforces this.
+scripts/fly
+
+# Spec-scope-discipline lint's target tree (docs/superpowers/specs/) is
+# operator-local (owner decision 2026-07-23); the lint script itself is dead
+# config without it and stays local too. The tracked-path denylist enforces
+# this.
+scripts/lint_specs.py
+
 # Working-convention docs are operator/agent-local, never tracked in the
 # public repo (owner decision 2026-07-23): project instructions and internal
 # spec/plan documents carry operational detail that doesn't belong in public.

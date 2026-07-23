@@ -183,8 +183,8 @@ numbers.
 
 ## Codebase alignment
 
-- `src/riskflow/models/enums.py::ControlDomain` (`LOSS_EVENT`, `VARIANCE_MANAGEMENT`, `DECISION_SUPPORT`) = the three FAIR-CAM functional domains. Naming aligns with Overview-era LE/VM/DS (not Standard's LEC/VMC/DSC); the values omit the trailing "_CONTROL" suffix. Acceptable abbreviation; the renaming should NOT propagate into v3 enum migrations unless the spec demands it.
-- `fair_cam/controls/comprehensive_controls_library.py` + `fair_cam/risk_engine/control_aware.py` (separate `RiskParameters` dataclass distinct from `FAIRParameters`) are the FAIR-CAM-aware reduction machinery — apply Operational Effectiveness per (LEC sub-function, control) to reduce base FAIR risk.
+- `src/idraa/models/enums.py::ControlDomain` (`LOSS_EVENT`, `VARIANCE_MANAGEMENT`, `DECISION_SUPPORT`) = the three FAIR-CAM functional domains. Naming aligns with Overview-era LE/VM/DS (not Standard's LEC/VMC/DSC); the values omit the trailing "_CONTROL" suffix. Acceptable abbreviation; the renaming should NOT propagate into v3 enum migrations unless the spec demands it.
+- `fair_cam/risk_engine/native_control_aware.py` (separate `RiskParameters` dataclass distinct from `FAIRParameters`) is the FAIR-CAM-aware reduction machinery — apply Operational Effectiveness per (LEC sub-function, control) to reduce base FAIR risk.
 
 ## Layer separation in v3 (post PR π)
 
@@ -211,7 +211,7 @@ The calibration runtime that PR-α through PR-η accreted is gone:
 - `fair_cam/parameters/overlays.py` — DELETED. Cross-cutting overlay math (CRITICAL_INFRASTRUCTURE etc.) no longer multiplies into MC inputs. OverlayDefinition rows survive as a wizard-time HTMX "Apply overlay" button that pre-fills form fields; runtime applies nothing.
 - `fair_cam/parameters/sub_sector_overlays.py` — DELETED. Sub-sector multipliers retired.
 - `fair_cam/parameters/overrides.py` — DELETED. Per-org calibration override layer retired.
-- `src/riskflow/services/scenario_calibration.py` — DELETED. The runtime composition pipeline (IRIS → override → overlay → sub-sector) is gone.
+- `src/idraa/services/scenario_calibration.py` — DELETED. The runtime composition pipeline (IRIS → override → overlay → sub-sector) is gone.
 - `/calibration-overrides` route group — DELETED. Admin CRUD UI for the old override/overlay tables retired.
 
 Monte Carlo now reads scenario distributions directly via

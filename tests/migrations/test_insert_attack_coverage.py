@@ -436,7 +436,7 @@ def test_fresh_boot_destructive_wiper_lands_catastrophic(
     instead of ``'catastrophic'`` -- silently capping its catastrophic tail
     at instantiation (``services/wizard_finalize.py:390``). This is the
     failure mode every fresh-volume deployment hits (``docker-entrypoint.sh``
-    runs migrations on every boot: per-tester Fly instances, e2e harnesses,
+    runs migrations on every boot: ephemeral instances, e2e harnesses,
     DR rebuilds) -- the existing test above only covers the (unaffected)
     prod-upgrade path.
 

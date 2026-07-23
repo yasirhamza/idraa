@@ -13,7 +13,8 @@ made the wizard author TEF as native lognormal.
 
 ## De-templating preserved
 
-The revert keeps #520's win: **89 distinct TEF nodes**, no two archetypes sharing
+The revert keeps #520's win: **98 distinct TEF nodes** (as of the current
+102-entry library), no two archetypes sharing
 a frequency, except **4 allowlisted genuine-tie pairs** (kept as identical PERT
 triples): `{field-instrument-spoofing, pipeline-scada-integrity}`,
 `{casino-ransomware-operational-disruption,
@@ -38,7 +39,7 @@ education-campus-facility-tamper}`. CI guard:
 The wizard authors right-skewed PERT via the **restored pre-Epic-B lognormal→PERT
 collapse**: `_fit_lognorm_native` (closed-form, avoids the truncated-scipy
 divergence) → `combine_lognorm_trunc` → `lognormal_to_pert_approx`, on `[0, +∞)`
-support (`_TEF_PERT_PIPELINE`). The collapsed PERT is stored as
+support (`_LOGNORMAL_TO_PERT_PIPELINE`). The collapsed PERT is stored as
 `{distribution: "PERT", low, mode, high}` with lognormal-fit provenance in the
 sidecar (`build_scenario_payload`'s TEF branch). A symmetric normal-fit PERT would
 be wrong (midpoint mode) and ill-conditioned on `[0, ∞)` — the plan-gate

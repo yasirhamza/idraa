@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     mc_iterations_default: int = Field(default=10_000, ge=100, le=10_000_000)
     # UAT 2026-05-21 (issue #212): default Monte Carlo iteration count for the
     # /analyses form. Dropped from 100k to 10k after a 100k AGGREGATE OOM-killed
-    # the 512MB Fly VM. Operators can still raise it manually up to
+    # the original small deployment VM. Operators can still raise it manually up to
     # `mc_iterations_max`. Production deployments with larger VMs should raise
     # this via the MC_ITERATIONS_DEFAULT env var.
     mc_iterations_max: int = Field(default=1_000_000, ge=100, le=10_000_000)
@@ -100,11 +100,11 @@ class Settings(BaseSettings):
     # Operational watchdog timeout (issue #211), NOT a FAIR calibration
     # constant — it carries no distributional / half-life semantics. On app
     # startup the orphaned-run reaper flips RUNNING / stale QUEUED rows older
-    # than this many seconds to FAILED, because a process boot (Fly
+    # than this many seconds to FAILED, because a process boot (platform
     # auto-restart) means any pre-boot worker is dead. The threshold only
     # guards clock skew + runs that flipped RUNNING seconds before boot.
     # Default 300s sits comfortably above observed run wall-clock; note a 100k
-    # AGGREGATE on shared-cpu-1x can run for minutes, so an operator tuning
+    # AGGREGATE on a single-vCPU host can run for minutes, so an operator tuning
     # this DOWN must keep it above the legitimate max-run duration implied by
     # mc_iterations_max. Tune via RUN_ORPHAN_THRESHOLD_SECONDS.
     # (#211 Phase 2: the PERIODIC sweep additionally exempts rows owned by a
@@ -292,7 +292,7 @@ class Settings(BaseSettings):
     # out of the box; prod boot REFUSES the localhost default (see
     # _check_webauthn_hardening). Passkeys are permanently bound to the RP-ID
     # they were enrolled under — production values live in deployment config
-    # (Fly secrets for the reference deployment).
+    # (platform secrets for the reference deployment).
     webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "Idraa"
     # Comma-separated allowed origins; must be https:// and host-match the

@@ -75,9 +75,11 @@
 <h2 class="text-h3 text-ink-1 mb-3">SME estimates and pooling</h2>
 <p class="text-body text-ink-2 mb-3">
   For each input, the wizard lets you record estimates from several subject-matter
-  experts. When you have multiple expert judgements, Idraa pools them into one
-  distribution using percentile pooling &mdash; pooled ranges preserve more of
-  the between-expert uncertainty than a simple collapse would.
+  experts. When you have multiple expert judgements, Idraa combines them using
+  <strong>mixture pooling</strong>: each expert&rsquo;s fitted distribution is
+  kept as its own component inside a pooled mixture, rather than blended into a
+  single range before fitting &mdash; this preserves more of the between-expert
+  uncertainty than a simple collapse would.
 </p>
 <p class="text-body text-ink-2 mb-6">
   The industry calibration baselines shown in the wizard are IRIS-2025 industry
@@ -166,11 +168,13 @@
   for a ready-made entry close to your threat, adopt it into your workspace, and
   adjust the low&ndash;high ranges for your context. Library entries carry
   IRIS-2025 industry median calibration baselines; your SME adjustments layer on
-  top via the wizard. When you adopt a scenario from a different industry, the
-  Primary Loss and Secondary Loss pre-fills are re-scaled to your organisation&rsquo;s
-  <strong>revenue tier</strong> (the entry&rsquo;s industry tag is advisory and is
-  not used in the rescale); the Impact-page calibration banner shows the multiplier
-  applied &mdash; review and tweak every value before saving. Admins can also
-  bulk-import scenarios from CSV or JSON at
+  top via the wizard. Primary Loss and Secondary Loss pre-fills are
+  <strong>entry-absolute</strong> &mdash; the same curated figures regardless of
+  which industry you adopted the entry from, not rescaled to your
+  organisation&rsquo;s revenue tier or size (the entry&rsquo;s industry tag is
+  advisory only). The Impact-page calibration banner confirms whether Primary
+  Loss / Secondary Loss reflect the entry&rsquo;s curated figures or your
+  organisation&rsquo;s saved override &mdash; review and tweak every value
+  before saving. Admins can also bulk-import scenarios from CSV or JSON at
   <a class="text-brand hover:underline" href="/scenarios">Scenarios &rarr; Import</a>.
 </p>

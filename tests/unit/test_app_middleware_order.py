@@ -34,7 +34,7 @@ def test_middleware_wire_order() -> None:
       second ``app.middleware("http")`` call, which makes it the outermost
       layer in LIFO ordering.
     - No-ops when ``UAT_BASIC_AUTH_PASSWORD`` is unset (dev, test, local docker).
-    - ``/healthz`` is unconditionally exempt so Fly's health probe always passes.
+    - ``/healthz`` is unconditionally exempt so the platform health probe always passes.
 
     Why setup_guard is second (index 1):
 

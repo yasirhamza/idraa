@@ -1,18 +1,19 @@
 # Loss representation: capped PERT default + curated catastrophic lognormal
 
 Library `primary_loss` / `secondary_loss` are stored per the entry's
-**`loss_shape`** class (Milestone B, spec
-`docs/superpowers/specs/2026-07-09-loss-pert-overhaul-design.md`):
+**`loss_shape`** class (Milestone B; internal design doc
+2026-07-09-loss-pert-overhaul-design):
 
-- **`capped` (83 entries, the default):** bounded **PERT**
-  `{distribution: "PERT", low, mode, high}` — the `high` IS the economic
-  ceiling. Bounding happens through the distribution choice, never a runtime
-  clip (a clipped lognormal dumps tail mass into an artifact spike at the cap).
-- **`catastrophic` (10 entries, owner-curated shortlist):** uncapped native
-  lognormal `{distribution: "lognormal", mean, sigma}` — intentionally
+- **`capped` (91 of 102 entries as of the current seed data, the default):**
+  bounded **PERT** `{distribution: "PERT", low, mode, high}` — the `high` IS
+  the economic ceiling. Bounding happens through the distribution choice,
+  never a runtime clip (a clipped lognormal dumps tail mass into an artifact
+  spike at the cap).
+- **`catastrophic` (11 of 102 entries, owner-curated shortlist):** uncapped
+  native lognormal `{distribution: "lognormal", mean, sigma}` — intentionally
   unbounded (criteria: plausible physical-safety/loss-of-life outcome, or
   nation-state systemic compromise no sector p95 credibly bounds; magnitude
-  alone never qualifies). Shortlist + criteria live in spec §3.
+  alone never qualifies). Shortlist + criteria live in the design doc §3.
 
 `loss_shape` is INDEPENDENT of `loss_tier` (citation quality) — see the
 superseding note in `loss-magnitude-tiering.md`.
@@ -29,7 +30,7 @@ high = exp(μ + Z·σ)                               # p95 — the cap
 mode = exp(μ − σ²) clamped up to low               # analytic lognormal mode
 ```
 
-**`mode == low` for ALL 83 capped entries** — the clamp fires whenever
+**`mode == low` for ALL 91 capped entries** — the clamp fires whenever
 σ > 1.645, and the library's σ range is 1.838–3.472. The engine
 (`fair_core`, pyfair-matched Vose moment form, γ=4) realizes this as
 **Beta(2/3, 10/3)**: α < 1, so the density *rises toward the low bound*;

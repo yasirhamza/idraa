@@ -5,7 +5,7 @@ Verifies the middleware:
 - rejects missing / malformed / wrong / non-Basic / non-base64 / no-colon
   credentials with 401 + WWW-Authenticate
 - accepts correct credentials and is case-insensitive on the scheme
-- exempts /healthz unconditionally so Fly's probe always passes
+- exempts /healthz unconditionally so the platform health probe always passes
 - uses constant-time compare WITHOUT short-circuiting between user+password
 - rejects empty-string user (configuration error guardrail)
 """
@@ -106,7 +106,7 @@ def test_middleware_rejects_payload_without_colon() -> None:
 
 
 def test_middleware_exempts_healthz_unconditionally() -> None:
-    """Fly health probe runs without credentials. /healthz must always 200."""
+    """Platform health probe runs without credentials. /healthz must always 200."""
     client = TestClient(_build_app(user="admin", password="hunter2"))
     assert client.get("/healthz").status_code == 200
 

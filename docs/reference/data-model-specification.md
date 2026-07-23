@@ -1,4 +1,4 @@
-# RiskFlow Data Model Specification
+# Idraa Data Model Specification
 
 > **Status: 2026-05-09 rewrite.** The previous version of this file was a
 > 1658-line aspirational spec that drifted ~60% from the actual code (PRs ι/π
@@ -9,16 +9,23 @@
 > this doc disagrees with the code, the code wins.** Anything the previous
 > spec claimed but the code never had is enumerated under
 > [§ Not implemented (was aspirational)](#not-implemented-was-aspirational).
+>
+> **Scope banner:** this doc covers the core entities only (Control,
+> ControlFunctionAssignment, Scenario, RiskAnalysisRun, ScenarioLibraryEntry,
+> Organization, User). Auth/MFA (passkeys, TOTP, recovery codes), `fx_rate`,
+> `wizard_draft`, `run_samples`, and other tables added since are documented
+> in code, not cataloged here — see the relevant `models/*.py` module for
+> those.
 
 ## Source-of-truth modules
 
 | Layer | Module |
 |---|---|
-| v3 ORM (SQLAlchemy) | `src/riskflow/models/` |
-| v3 form schemas (Pydantic) | `src/riskflow/schemas/` |
+| v3 ORM (SQLAlchemy) | `src/idraa/models/` |
+| v3 form schemas (Pydantic) | `src/idraa/schemas/` |
 | Risk-engine dataclasses | `fair_cam/models/` |
-| v3 ↔ fair_cam adapter | `src/riskflow/services/run_executor.py` |
-| Enum definitions | `src/riskflow/models/enums.py` + `fair_cam/models/sub_function.py` |
+| v3 ↔ fair_cam adapter | `src/idraa/services/run_executor.py` |
+| Enum definitions | `src/idraa/models/enums.py` + `fair_cam/models/sub_function.py` |
 | Migrations | `alembic/versions/` |
 
 ## Core entities
@@ -107,10 +114,10 @@ scenarios summed for a portfolio view).
 | `run_type` | `RunType` enum | `SINGLE` / `AGGREGATE` |
 | `name` | str | analyst-supplied or auto-generated `Run YYYY-MM-DD HH:MM` |
 | `mc_iterations` | int | Monte Carlo iteration count |
-| `status` | str | `PENDING` / `RUNNING` / `COMPLETED` / `FAILED` |
+| `status` | `RunStatus` enum | `QUEUED` / `RUNNING` / `COMPLETED` / `FAILED` / `CANCELLED` |
 | `inputs_hash` | str | reproducibility hash over the full input pin |
 | `controls_snapshot` | dict (JSON) | frozen capture of Control state at run time (versioned: `snapshot_version: 1` legacy / `2` post-PR-ι) |
-| `simulation_results` | dict (JSON) | full Monte Carlo output: sample arrays, percentiles, VaR, expected shortfall, loss-exceedance curve. Architectural rule (CLAUDE.md): full output is persisted, not just summaries |
+| `simulation_results` | dict (JSON) | slim summary: percentiles, VaR, expected shortfall, loss-exceedance curve. Populated on COMPLETED only. The heavy per-iteration sample arrays are NOT here — they were split off to the separate `run_samples` table (`models/run_samples.py`, 1:1 by `run_id`) for warm-page perf (#294 / PR #299). Architectural rule (per project convention) still holds: full Monte Carlo output is persisted across the two tables, not just summaries |
 | `started_at`, `completed_at` | datetime | |
 
 The simulation_results dict is opaque to SQL — query/filter on financial
@@ -202,7 +209,7 @@ The field is the CURRENCY-branch accumulator for the FAIR-CAM
 
 **No snapshot version bump**: the field surfaces via the per-run
 output channel `_control_adjustment_to_dict` in
-`src/riskflow/services/run_executor.py`, NOT via the snapshot.
+`src/idraa/services/run_executor.py`, NOT via the snapshot.
 `_snapshot_control_v2` is unchanged. (Plan-gate Arch-B1 fix:
 `_snapshot_control_v2` runs BEFORE the calculator, so the per-run
 output channel is the correct surface for calculator-derived fields.)
@@ -225,7 +232,7 @@ readers don't assume they do.
 | Per-column financial outputs on RiskAnalysisRun (`baseline_risk`, `controlled_risk`, `risk_reduction_percentage`, `var_95`, `var_99`, `expected_shortfall_*`) | Never persisted as columns. All buried inside `simulation_results` JSON. Querying requires reading the JSON in the application layer. |
 | `payback_period_months`, `roi_percentage`, `net_benefit`, `net_present_value`, `internal_rate_return`, the `ControlROI` dataclass that grouped them | Declared but never written by any code path. **Removed in this PR.** |
 | Sensitivity analysis output | Spec described `sensitivity_analysis` field on RiskAnalysisRun; no module computes it. |
-| `ControlValidator` / `RiskAnalysisValidator` / `DistributionValidator` / `ThreatScenarioValidator` classes | Never built. Validation lives on Pydantic schemas in `src/riskflow/schemas/`. |
+| `ControlValidator` / `RiskAnalysisValidator` / `DistributionValidator` / `ThreatScenarioValidator` classes | Never built. Validation lives on Pydantic schemas in `src/idraa/schemas/`. |
 | Control attributes: `vendor`, `implementation_time_weeks`, `effectiveness`, `threat_prevention`, `detection_capability`, `response_speed`, `threat_coverage`, `failure_frequency_per_year`, `mean_time_to_recovery_hours`, `variance_impact`, `operational_efficacy`, `dependencies`, `synergies`, `performance_metrics` | Some moved to per-assignment shape via PR ι; others never built. |
 | Scenario attributes: `contact_frequency`, `confidence_level`, `likelihood_assessment`, `review_frequency_months`, `last_reviewed`, `applicable_controls` (use `mitigating_controls` instead), `business_impact_description`, `regulatory_implications`, `industry_relevance` | Not in `Scenario` ORM. |
 
@@ -236,4 +243,4 @@ description second. **Don't put it in this doc until the code exists.**
 
 v3 Phase 1 explicitly does NOT include: SSO/SAML, multi-tenancy, billing,
 signup flows, mobile, real-time telemetry, AI-assisted features, self-service,
-marketing pages, SOC 2 / compliance artifacts. (CLAUDE.md.)
+marketing pages, SOC 2 / compliance artifacts. (Per project convention.)

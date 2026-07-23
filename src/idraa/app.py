@@ -57,7 +57,7 @@ STATIC_DIR = PACKAGE_ROOT / "static"
 
 # Cache-busting version stamp for static assets. Computed once at module
 # import (stable for the lifetime of a single deployed instance, changes
-# on every fresh container start ≡ every `fly deploy`). Templates append
+# on every fresh container start ≡ every deploy). Templates append
 # `?v={{ static_version }}` to /static/* URLs so aggressive mobile-browser
 # caches don't serve stale JS/CSS across deploys (live UAT 2026-05-20:
 # stale combobox JS caused pre-filled assignment selects to render
@@ -198,7 +198,7 @@ templates.env.globals["chart_svg"] = SimpleNamespace(
 templates.env.globals["chart_uid"] = lambda: uuid.uuid4().hex[:8]
 
 # Per-deploy static-asset cache-bust version. Templates append
-# `?v={{ static_version }}` to /static/* URLs so a fresh `fly deploy`
+# `?v={{ static_version }}` to /static/* URLs so a fresh deploy
 # automatically invalidates aggressive mobile-browser JS/CSS caches.
 templates.env.globals["static_version"] = STATIC_VERSION
 
@@ -799,7 +799,7 @@ async def _server_error_handler(request: StarletteRequest, exc: Exception) -> Re
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup hook: reap orphaned runs (issue #211).
 
-    A SIGKILL / OOM on the single Fly worker can't be caught in-process, so an
+    A SIGKILL / OOM on the single worker can't be caught in-process, so an
     in-flight run row stays ``status='running'`` forever. On every boot we
     sweep RUNNING / stale QUEUED rows older than the threshold to FAILED — a
     process boot means any pre-boot worker is dead (in-process BackgroundTasks
@@ -985,7 +985,7 @@ def create_app() -> FastAPI:
     # UAT basic-auth pre-gate (Phase 1.5.5). Sits OUTSIDE setup_guard so
     # an unauthenticated UAT visitor sees the basic-auth prompt before
     # any DB roundtrip. No-ops when UAT_BASIC_AUTH_PASSWORD is unset
-    # (dev, test, local docker). /healthz is exempt so Fly's health
+    # (dev, test, local docker). /healthz is exempt so the platform health
     # probe passes regardless of credential state.
     app.middleware("http")(uat_basic_auth_factory())
 

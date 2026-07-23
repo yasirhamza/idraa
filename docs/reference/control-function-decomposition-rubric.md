@@ -9,7 +9,7 @@ status: methodology-gated
 # Control Function-Decomposition Rubric
 
 **Issue:** #437
-**Spec:** `docs/superpowers/specs/2026-06-30-library-function-completeness-design.md`
+**Spec:** internal design doc 2026-06-30-library-function-completeness-design
 **Methodology gate:** required before any library entry is curated (§5 pipeline, step 1).
 
 This document governs the systematic audit of all 61 control-library entries. It
@@ -31,9 +31,9 @@ product — a single product (e.g., CSPM) commonly spans multiple rows.
 | Detects events — surfaces evidence of anomalous or illicit activity | LEC Detection (Visibility / Monitoring / Recognition) | LEC channel — **does NOT score standalone** | Scores only via det+resp AND-pair: **all 3 detection members** (strict AND) **+ ≥1 of {lec_resp_resilience, lec_resp_event_termination}** |
 | Contains / limits events — terminates activity or restores operations | LEC Response (EventTermination / Resilience) | LEC channel — **does NOT score standalone** | Scores only via det+resp AND-pair (all 3 det strict AND + ≥1 resp opeff member); **≥3 resp is structurally unsatisfiable** — only 2 non-currency opeff members exist |
 | Directly reduces realized losses (currency) | LEC Response (LossReduction) | LEC channel — **`lec_resp_loss_reduction` only** | **Scores standalone** (the single CURRENCY exception; see §5) |
-| Monitors / corrects **another control's** operational health or drift | VMC Identification / Correction | **meta** (needs coupling math #439) | Scores only via fully-staffed Identification+Correction AND-pair (≥2 id + ≥2 corr members; partial 1+1 = $0) |
+| Monitors / corrects **another control's** operational health or drift | VMC Identification / Correction | **meta** — couples via reliability uplift (κ coupling, Slice 2 #439, SHIPPED: `KAPPA_META_RELIABILITY` in `fair_cam/models/composition_topology.py:301`) | Fully-staffed Identification+Correction AND-pair (≥2 id + ≥2 corr members; partial 1+1 = $0) contributes to `E_meta`, which uplifts co-present LEC controls' reliability via `r_eff = r0 + (1-r0)·κ·E_meta` — NOT a direct vulnerability/magnitude multiplier of its own (that direct target was retired by Slice 2). An isolated meta-only entry with no co-present LEC control (or no r0<1 headroom) still shows $0 — correctly, not as pending future work. |
 | Reduces frequency or probability of changes that introduce control variance | VMC Variance Prevention | direct → routes to Vulnerability (Vuln×0.3 proxy) | **Scores standalone** (OR group; PERCENT_REDUCTION unit) |
-| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** | DSC_PREVENTION **scores (~$1k) when ALL 9 members are staffed** (strict AND; partial = $0). Curation policy: label-only (full-9 staffing is rare; magnitude is small — do not author DSC chasing value). DSC id+corr pair is **unreachable**: `dsc_corr_misaligned` is virtual (no control may claim it). |
+| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** — couples via the SAME κ reliability coupling as VMC (Slice 2 #439, SHIPPED); DSC's direct Loss-Magnitude target was retired on the same §2.2 p.5 "Indirectly Affect Risk" grounds | DSC_PREVENTION fully-staffed (ALL 9 members, strict AND; partial = $0) contributes to `E_meta`, uplifting co-present LEC controls' reliability — it no longer produces a direct ~$1k Loss-Magnitude multiplier of its own. Curation policy: label-only (full-9 staffing is rare). DSC id+corr pair is **unreachable**: `dsc_corr_misaligned` is virtual (no control may claim it). |
 
 **Key principle — scoring ≠ channel (B1).** Channel is where the effect routes
 (direct/meta). Whether an entry produces `v(S) > 0` is a separate, topology-derived
@@ -92,8 +92,12 @@ Group: `lec_detection` | Type: **AND** (internal composition AND: all 3 members 
 
 Detection contributes to loss magnitude only through the fully-staffed
 `lec_detection_response_pair` (AND-pair targeting `primary_loss`,
-`secondary_loss`). A detection-only entry routes to the non-scoring residual
-(→ #439).
+`secondary_loss`). A detection-only entry routes to the non-scoring residual —
+**permanently**, not pending future work: Slice 2 (#439) shipped the κ
+reliability coupling (`E_meta = OR(E_vmc, E_dsc)` — see
+`fair_cam/risk_engine/group_composition.py`), and LEC Detection is not part of
+`E_meta`. A detection-only entry has no VMC/DSC assignment to couple through,
+so it stays genuinely non-scoring by design.
 
 ### 2.3 LEC Response — gates on Detection
 
@@ -388,7 +392,7 @@ unanchored regardless of coverage/reliability bounds.
 ### 5.4 Non-identifiability disclaimer (I3)
 
 Both cited and expert-estimate defaults inherit the single-org non-identifiability
-posture (`docs/reviews/2026-06-25-faircam-control-roi-identifiability.md`).
+posture (internal design doc 2026-06-25-faircam-control-roi-identifiability).
 
 > A `cited` effectiveness value is cited to an *external/population* efficacy
 > study (MITRE coverage, a CIS deployment study), not to this organization's
@@ -397,7 +401,9 @@ posture (`docs/reviews/2026-06-25-faircam-control-roi-identifiability.md`).
 
 The weight-robustness ensemble (#419) perturbs the FAIR-CAM `node_mapping`
 weights, not these effectiveness inputs. Widening to effectiveness-input ranges
-is out of scope here (noted for #439).
+remains out of scope here — Slice 2 (#439) shipped the meta→reliability κ
+coupling but did not take on this separate effectiveness-input-range question,
+so it is unticketed, not "future #439 work."
 
 ---
 
@@ -444,18 +450,31 @@ If, after completing the blind-to-score decomposition, an entry has:
 - No `lec_resp_loss_reduction` assignment.
 - No fully-staffed detection+response pair (all 3 det members + ≥1 resp opeff member).
 - No fully-staffed identification+correction pair (≥2 id + ≥2 corr members).
-- No all-9-staffed DSC_PREVENTION group (rare; v(S) ≈ $1k when fully staffed).
+- No all-9-staffed DSC_PREVENTION group (rare).
 
-...then the entry is **genuinely meta** and routes to the non-scoring residual
-bucket. The authoritative residual predicate is the engine-based `entry_scores`
-(Task 4); this prose list is illustrative. The correct outcome is:
+...then the entry is **genuinely meta**. Slice 2 (#439) SHIPPED the κ
+reliability coupling (`KAPPA_META_RELIABILITY`,
+`fair_cam/models/composition_topology.py:301`): a fully-staffed
+identification+correction or DSC_PREVENTION group now contributes to
+`E_meta`, which uplifts the reliability of co-present LEC controls via
+`r_eff = r0 + (1-r0)·κ·E_meta` — it no longer produces a standalone dollar
+value the way the pre-Slice-2 direct vulnerability/magnitude multiplier did
+(the old "v(S) ≈ $1k" DSC_PREVENTION figure no longer applies). This means the
+entry is NOT necessarily a permanent $0: in a scenario alongside other LEC
+controls with r0 < 1 headroom, its attributed value (Shapley/LOO) is > $0. In
+isolation, or alongside only r0 = 1 (already-perfect) LEC controls, it
+correctly shows $0 — that is the engine's real behavior, not a gap awaiting
+future coupling math. The authoritative residual predicate is the
+engine-based `entry_scores` (Task 4); this prose list is illustrative. The
+correct outcome to record for a standalone/isolated genuinely-meta entry is:
 
-> "This product's value is genuinely meta after enrichment. It scores $0 under
-> the current engine. Route to #439 (coupling math) for future scoring."
+> "This product's value is genuinely meta. Its FAIR-CAM node targets were
+> retired by Slice 2 (#439); it credits only through the κ reliability
+> coupling onto co-present LEC controls, so it shows $0 in isolation by
+> design — not a scoring gap."
 
 This is a first-class outcome — not a failure state. **Never graft a scoring
-sub-function onto a genuinely-meta control to rescue it from $0.** The residual
-list is the input scope for the #439 coupling-math epic.
+sub-function onto a genuinely-meta control to rescue it from $0.**
 
 ### 6.4 I5 invariant — no vmc_prev_* or vmc_id+corr score-rescue
 

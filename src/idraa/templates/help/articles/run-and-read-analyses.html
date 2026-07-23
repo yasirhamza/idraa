@@ -11,8 +11,11 @@
   loss figure, to produce a realistic spread of outcomes &mdash; the typical year,
   a bad year, and the rare but costly disaster. The default is
   <strong>10,000 iterations</strong>; the server enforces a maximum of
-  <strong>100,000 iterations</strong>. More iterations improve tail precision but
-  take longer.
+  <strong>1,000,000 iterations</strong>. Runs of <strong>250,000 or more</strong>
+  are treated as <strong>high-fidelity</strong> and are capped at 2 concurrent
+  in-flight runs across the deployment, since each one holds a much larger
+  sample array in memory. More iterations improve tail precision but take
+  longer.
 </p>
 <p class="text-body text-ink-2 mb-6">
   For the statistical foundations behind the simulation, see the
@@ -119,7 +122,8 @@
   approximately 10 samples. This makes those figures the least reliable readings
   on the page. Treat them as indicative. If tail precision matters (for example,
   when sizing insurance limits at the 99.9% level), increase the iteration count
-  toward the 100,000 server maximum and re-run. Mid-range confidence levels (VaR
+  &mdash; runs of 250,000 or more are treated as high-fidelity &mdash; up toward
+  the 1,000,000 server maximum and re-run. Mid-range confidence levels (VaR
   95% and ES 99%) are substantially more reliable at the default count.
 </p>
 
@@ -137,15 +141,17 @@
   &mdash; especially in the deep tail (e.g. p99.9, which rests on &asymp;&thinsp;10
   samples at 10,000 iterations) &mdash; <strong>vary the seed</strong> across
   several runs and compare results, or raise the iteration count toward the
-  100,000 server maximum. The seed is a simulation parameter only; it is
+  1,000,000 server maximum (250,000+ counts as high-fidelity and is capped at
+  2 concurrent runs). The seed is a simulation parameter only; it is
   <em>not</em> a security or cryptographic value.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3">Downloading the data</h2>
 <p class="text-body text-ink-2 mb-6">
-  Every chart on the results page has a <strong>Download data (CSV)</strong>
-  button in its toolbar. Use it to pull the underlying simulation numbers into a
-  spreadsheet or your own reporting pipeline. For a formatted executive summary,
-  see the
+  The <strong>Loss Exceedance Curve</strong> and
+  <strong>Exceedance Probability Curve</strong> charts each have a
+  <strong>Download data (CSV)</strong> button in their toolbar. Use it to pull
+  the underlying simulation numbers into a spreadsheet or your own reporting
+  pipeline. For a formatted executive summary, see the
   <a class="text-brand hover:underline" href="/help/reports">Reports guide</a>.
 </p>

@@ -7,7 +7,7 @@ merge-order race between two branches can still slip a stale sheet through).
 The committed tailwind.css + the pre-push staleness gate remain the DEV
 workflow; the Dockerfile RUN is the deploy-boundary backstop. These are
 text-level assertions (no docker daemon in the local gate) — the real build is
-exercised by every Fly remote deploy, which fails loudly if the RUN breaks.
+exercised by every remote deploy, which fails loudly if the RUN breaks.
 """
 
 from __future__ import annotations

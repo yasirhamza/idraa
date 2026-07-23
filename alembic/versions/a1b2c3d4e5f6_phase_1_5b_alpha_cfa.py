@@ -9,7 +9,7 @@ Revises: c1d2e3f4a5b6
 Create Date: 2026-04-30
 
 Pre-merge runbook (operator executes before merging to production):
-1. Backup: cp riskflow.db riskflow.db.backup-$(date +%Y%m%d%H%M%S)
+1. Backup: cp <your-db-file> <your-db-file>.backup-$(date +%Y%m%d%H%M%S)
 2. Run migration: uv run alembic upgrade head
 3. Verify CFA rows: SELECT COUNT(*) FROM control_function_assignments
    Expected: equal to SELECT COUNT(*) FROM controls

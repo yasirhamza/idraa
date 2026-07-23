@@ -8,7 +8,7 @@ entered ``(388920, 20158367)``; ~5 scenarios, 2026-06-10 audit). #336 fixed
 the live path (closed-form ``lognormal_from_quantiles``); this migration
 repairs the rows the divergent fitter already wrote.
 
-Per spec ``docs/superpowers/specs/2026-06-10-audit-remediation-f1-f2-design.md``
+Per spec (internal design doc 2026-06-10-audit-remediation-f1-f2-design)
 (plan-gate-applied):
 
 - Candidates: any tef/pl/sl node whose sidecar says

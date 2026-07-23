@@ -8,7 +8,7 @@
   {% if run.run_type.value == "aggregate" and run.aggregate_control_ids_per_scenario is none %}
     <div class="alert alert-warning text-sm mb-4">
       <span>This AGGREGATE run was created before strict scenario-coupling
-      (<a class="link" href="https://github.com/yasirhamza/idraa/issues/89">issue #89</a>).
+      (issue #89).
       It applied the UNION of all selected scenarios' controls to every
       scenario. New AGGREGATE runs apply each scenario's own controls.</span>
     </div>

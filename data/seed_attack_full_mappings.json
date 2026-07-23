@@ -1,5 +1,5 @@
 {
- "_note": "P2 full-library curation (#475). Complements seed_attack_exemplar_mappings.json. Rules: docs/superpowers/specs/2026-07-05-attack-curation-p2-design.md \u00a7Curation methodology. Deliberate gap: entry 'generative-ai-prompt-injection' stays unmapped pending the MITRE ATLAS domain (#482) \u2014 no Enterprise nearest-fit.",
+ "_note": "P2 full-library curation (#475). Complements seed_attack_exemplar_mappings.json. Rules: internal curation doc 2026-07-05-attack-curation-p2-design \u00a7Curation methodology. Deliberate gap: entry 'generative-ai-prompt-injection' stays unmapped pending the MITRE ATLAS domain (#482) \u2014 no Enterprise nearest-fit.",
  "mappings": [
   {
    "entry_slug": "accidental-insider-exposure",

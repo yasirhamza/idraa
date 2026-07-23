@@ -1,11 +1,11 @@
 """UAT basic-auth pre-gate middleware (Phase 1.5.5).
 
 The OUTERMOST request-path layer for the hosted UAT runtime. When
-``UAT_BASIC_AUTH_PASSWORD`` is set in the env (Fly secrets in production
+``UAT_BASIC_AUTH_PASSWORD`` is set in the env (platform secrets in production
 UAT), every request without a valid ``Authorization: Basic`` header is
 rejected with 401 — except the exact paths in ``EXEMPT_PATHS``:
-``/healthz`` (Fly's probe runs credential-less; a 401 would loop the
-deploy) and the enumerated PWA install assets (browser install pipelines
+``/healthz`` (the platform health probe runs credential-less; a 401 would
+loop the deploy) and the enumerated PWA install assets (browser install pipelines
 fetch manifest/icons/worker in credentials modes that may omit HTTP-auth
 entries — see the EXEMPT_PATHS comment).
 
@@ -57,15 +57,15 @@ def uat_basic_auth_factory(*, user: str | None = None, password: str | None = No
 
     If ``user`` or ``password`` is None, the corresponding env var
     (``UAT_BASIC_AUTH_USER``, ``UAT_BASIC_AUTH_PASSWORD``) is consulted.
-    Tests pass explicit values; production reads env via Fly secrets.
+    Tests pass explicit values; production reads env via platform secrets.
     """
     eff_user = user if user is not None else os.environ.get("UAT_BASIC_AUTH_USER")
     eff_password = password if password is not None else os.environ.get("UAT_BASIC_AUTH_PASSWORD")
 
     async def uat_basic_auth(request: Request, call_next: DispatchFn) -> Response:
-        # Health-probe exemption is unconditional: Fly's probe runs without
-        # credentials, and a 401 there would loop the deploy. Read-only verbs
-        # ONLY (S-2): every exempt path serves a GET-only asset today; the
+        # Health-probe exemption is unconditional: the platform health probe
+        # runs without credentials, and a 401 there would loop the deploy.
+        # Read-only verbs ONLY (S-2): every exempt path serves a GET-only asset today; the
         # method guard keeps a future POST handler on one of these paths from
         # silently inheriting an unauthenticated write.
         if request.url.path in EXEMPT_PATHS and request.method in {"GET", "HEAD"}:

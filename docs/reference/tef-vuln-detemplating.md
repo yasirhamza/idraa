@@ -2,7 +2,9 @@
 
 The threat-intel half of D-ii-b. D-i found TEF drawn from ~41 buckets (top bucket
 10 entries) and vulnerability from ~25 buckets (top bucket 10) across the 85 seed
-entries — shared "templates" applied across dissimilar archetypes. Epic D §3
+entries at the time of that analysis (the library has since grown to 102
+entries; the bucket counts are historical, not re-derived here) — shared
+"templates" applied across dissimilar archetypes. Epic D §3
 de-templates both: **differentiate per archetype.** Neither TEF nor vulnerability
 is a loss *magnitude*, so neither goes through the envelope×share machinery
 (design Amendment A1) — they are their own PERT / inherent-baseline layers. This

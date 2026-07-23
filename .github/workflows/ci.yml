@@ -145,7 +145,7 @@ jobs:
   # The Windows matrix job was ALSO removed 2026-07-19 (owner call): it was
   # the CI critical path (43 min vs 12 min for everything else) and guarded a
   # platform with no remaining dev environment, user, or deploy target (dev
-  # is macOS/Linux, prod is Docker/Linux on Fly). Its two known Windows-only
+  # is macOS/Linux, prod is Docker/Linux). Its two known Windows-only
   # failure classes (cp1252 default-encoding reads, Babel locale None
   # without LANG) are moot without a Windows consumer.
   ci-success:

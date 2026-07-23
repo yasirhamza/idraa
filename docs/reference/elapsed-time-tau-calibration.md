@@ -46,8 +46,7 @@ The decay model is `opeff(t) = exp(-t/τ)`. For each canonical-τ
 sub-function, **the τ value must be derivable from a primary-source
 statistic that matches the philosophy plugged into the derivation
 formula**. Two philosophies are admissible; mixing them silently is the
-foot-gun the methodology-reviewer persona (CLAUDE.md "Statistical-method
-correctness") now catches:
+foot-gun the methodology-reviewer persona (per project convention) now catches:
 
 1. **Median half-life — `τ = median / ln(2)`.** Anchored on a published
    *median* of the operational time. Guarantees
@@ -77,7 +76,7 @@ correctness") now catches:
 ### Methodology-reviewer mean-vs-median trap
 
 The methodology-reviewer "Statistical-method correctness" gate
-(CLAUDE.md) prevents mixing the two philosophies. Specifically: plugging
+(per project convention) prevents mixing the two philosophies. Specifically: plugging
 a *mean* into `τ = X / ln(2)` is INCORRECT for any skewed distribution.
 That formula only yields `opeff(X) = 0.5` when X is a median.
 
@@ -92,8 +91,8 @@ survival-curve median; see design doc §3.) The mean-as-median error
 propagated through six plan-gate rounds with four SWE-grounded
 reviewers each (architect / code-reviewer / security-auditor /
 spec-compliance) undetected before a methodology-reviewer self-check
-at T0f.5 flagged it. The precedent is now anchored in CLAUDE.md
-"Methodology reviewer persona"; full side-by-side hand-math for each
+at T0f.5 flagged it. The precedent is now anchored in project convention
+("Methodology reviewer persona"); full side-by-side hand-math for each
 τ correction lives in the design doc at
 `docs/plans/2026-05-15-issue-131-tau-calibration-design.md` §3.
 
@@ -146,7 +145,7 @@ per-org override layer adopting org-specific dwell-time fits).
 Per Standard §5.3, the following sub-functions are virtual — "no
 distinct controls serve this function." Reclassified to
 `UnitType.PROBABILITY` for schema consistency; the schema-level
-validator at `src/riskflow/schemas/control.py:80`
+validator at `src/idraa/schemas/control.py:104`
 (`reject_virtual_unless_derived`) continues to reject direct writes to
 these sub-functions.
 
@@ -250,14 +249,14 @@ Modifying any value in `TAU_BY_SUB_FUNCTION` requires:
 2. Update this methodology doc (per-sub-function table) with the new
    value, anchor statistic, and primary citation.
 3. Re-pin any backtest fixtures that depended on the old values, with
-   side-by-side hand-math + actual code output per CLAUDE.md
-   "Verification reporting."
+   side-by-side hand-math + actual code output per project convention
+   ("Verification reporting").
 4. PR description must call out the calibration change explicitly.
 
 ## Future work
 
-- **Per-org τ override layer** (canonical+override pattern per CLAUDE.md
-  "Layered override beats canonical CRUD"). PR μ.1's
+- **Per-org τ override layer** (canonical+override pattern per project
+  convention). PR μ.1's
   `get_canonical_tau()` accessor
   (`fair_cam/calibration/elapsed_time_taus.py`) is the slot-in point for
   a future wrapping accessor `get_tau(sub_function, org_id=None)`.

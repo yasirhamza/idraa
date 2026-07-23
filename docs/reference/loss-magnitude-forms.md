@@ -110,7 +110,11 @@ discarded up to 10% of the composed mean at the threshold boundary, biasing
 Given active forms each a lognormal with **log-space** parameters `(μᵢ, σᵢ)`
 (i.e. `μᵢ` is the mean of `ln X`, matching the stored
 `{"distribution":"lognormal","mean":μ,"sigma":σ}` convention — `mean` is the
-log-space μ, not the arithmetic mean):
+log-space μ, not the arithmetic mean). This composed lognormal is the
+**pre-conversion envelope**: for `capped`-shape entries it is subsequently
+collapsed into a bounded PERT on its (p5, p95) anchors — see
+`docs/reference/loss-representation.md` for that conversion and which
+entries keep the uncapped lognormal:
 
 1. arithmetic moments: `mᵢ = exp(μᵢ + σᵢ²/2)`, `vᵢ = (exp(σᵢ²) − 1)·exp(2μᵢ + σᵢ²)`
 2. sum: `M = Σ mᵢ`, `V = Σ vᵢ`
@@ -119,7 +123,7 @@ log-space μ, not the arithmetic mean):
 FW is **mean-preserving** — `exp(μ_S + σ_S²/2) = M = Σ mᵢ` exactly — and reduces
 to the identity for a single form.
 
-### Worked anchor (numeric verification per CLAUDE.md)
+### Worked anchor (numeric verification per project convention)
 
 Two identical forms `(μ, σ) = (0, 1)`:
 
@@ -170,8 +174,14 @@ anchor above (it would force `σ_S = 1.0` where 0.787473 is correct).
 
 ## 6. Gating rules
 
-- **lognormal-only.** After recalibration every entry's `primary_loss` and
-  `secondary_loss` are lognormal; no PERT loss survives. An entry ships only if
+- **composed-envelope-only, then shape-dispatched.** After recalibration every
+  entry's `primary_loss` and `secondary_loss` are derived from the
+  Fenton–Wilkinson composed lognormal envelope described above — there is no
+  path back to an uncomposed, per-form PERT. What's stored downstream of that
+  envelope depends on the entry's `loss_shape` (`docs/reference/loss-representation.md`):
+  91 of the current 102 entries are `capped`, so the composed lognormal is
+  collapsed to a bounded PERT on its (p5, p95) anchors; the remaining 11 are
+  `catastrophic` and keep the untruncated lognormal. An entry ships only if
   **every active form** in its profile has a primary-cited, adversarially-verified
   `magnitude_basis` (D-ii protocol). A form with no citeable basis is either
   dropped (subject to the materiality bar) or the whole archetype is deferred —
@@ -191,9 +201,11 @@ anchor above (it would force `σ_S = 1.0` where 0.787473 is correct).
 ## 7. Engine boundary
 
 Loss forms are an **authoring-time** derivation. The engine is **unchanged**: it
-consumes exactly two stored lognormals per entry (`primary_loss`,
-`secondary_loss`), samples them independently, and sums them at sample time
-(`fair_cam/risk_engine/fair_core.py:445`, `loss_magnitude = samples["primary_loss"]
+consumes exactly two stored distributions per entry (`primary_loss`,
+`secondary_loss` — PERT for `capped`-shape entries, lognormal for
+`catastrophic`-shape entries; see `loss-representation.md`), samples them
+independently, and sums them at sample time
+(`fair_cam/risk_engine/fair_core.py:511`, `loss_magnitude = samples["primary_loss"]
 + samples["secondary_loss"]`). There is **no runtime six-form decomposition** —
 the profile is provenance, read by nothing in `risk_engine/` or the
 ORM→fair_cam bridge (`services/run_executor.py`). This keeps Epic D entirely
