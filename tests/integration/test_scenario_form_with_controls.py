@@ -188,6 +188,128 @@ async def test_edit_scenario_diff_applies_controls(
     assert response.status_code == 303
 
 
+@pytest.mark.asyncio
+async def test_edit_scenario_controls_only_change_audits_and_bumps_row_version(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """Issue #79 L6: editing ONLY the mitigating-control set (every
+    descriptive field round-trips unchanged) must still (a) emit a
+    ``scenario.controls_changed`` audit row and (b) bump ``row_version`` —
+    closing the lost-update window left by ``ScenarioService.update``'s
+    no-op-fields early return, which never sees the ScenarioControl join.
+    """
+    from idraa.models.audit_log import AuditLog
+    from idraa.routes.scenario_form_helpers import form_from_scenario
+
+    client, org_id = authed_analyst
+
+    from datetime import UTC, datetime
+
+    from idraa.models.control_function_assignment import ControlFunctionAssignment
+
+    c_keep = _make_control(org_id, name="Keep-Only-Controls-Change")
+    c_remove = _make_control(org_id, name="Remove-Only-Controls-Change")
+    db_session.add(c_keep)
+    db_session.add(c_remove)
+
+    scenario = _make_scenario(org_id, name="only-controls-change")
+    db_session.add(scenario)
+    await db_session.flush()
+
+    _now = datetime.now(UTC)
+    for ctrl in (c_keep, c_remove):
+        db_session.add(
+            ControlFunctionAssignment(
+                control_id=ctrl.id,
+                organization_id=org_id,
+                sub_function=FairCamSubFunction.VMC_PREV_REDUCE_VARIANCE_PROB,
+                capability_value=0.7,
+                coverage=0.8,
+                reliability=0.85,
+                confirmed_by_user_at=_now,
+            )
+        )
+    db_session.add(ScenarioControl(scenario_id=scenario.id, control_id=c_keep.id))
+    db_session.add(ScenarioControl(scenario_id=scenario.id, control_id=c_remove.id))
+    await db_session.commit()
+    await db_session.refresh(scenario, attribute_names=["mitigating_controls"])
+
+    scenario_id = scenario.id
+    original_row_version = scenario.row_version
+    c_keep_id = c_keep.id
+    c_remove_id = c_remove.id
+
+    # Round-trip every descriptive field EXACTLY as stored (form_from_scenario
+    # mirrors the GET-edit-form render) plus the hidden status/version/
+    # scenario_type mirrors the template adds separately — only
+    # mitigating_control_ids changes (drop c_remove).
+    update_data: dict[str, Any] = {
+        **form_from_scenario(scenario),
+        "scenario_type": scenario.scenario_type.value,
+        "status": scenario.status.value,
+        "version": scenario.version,
+        "expected_row_version": str(original_row_version),
+        "mitigating_control_ids": [str(c_keep_id)],
+    }
+    response = await csrf_post(
+        client,
+        f"/scenarios/{scenario_id}",
+        data=update_data,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303, response.text
+
+    db_session.expire_all()
+    linked = await _linked_control_ids(db_session, scenario_id)
+    assert linked == {c_keep_id}
+
+    refreshed = (
+        await db_session.execute(select(Scenario).where(Scenario.id == scenario_id))
+    ).scalar_one()
+    assert refreshed.row_version == original_row_version + 1, (
+        "row_version must bump even though ScenarioService.update saw no "
+        "field diff — otherwise a concurrent field edit can silently "
+        "clobber this control change (lost-update window)"
+    )
+
+    # No descriptive field changed → ScenarioService.update must NOT have
+    # emitted its own scenario.update audit row.
+    update_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "scenario",
+                    AuditLog.entity_id == scenario_id,
+                    AuditLog.action == "scenario.update",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert update_rows == []
+
+    controls_changed_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "scenario",
+                    AuditLog.entity_id == scenario_id,
+                    AuditLog.action == "scenario.controls_changed",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(controls_changed_rows) == 1
+    row = controls_changed_rows[0]
+    before, after = row.changes["mitigating_controls"]
+    assert before == sorted([str(c_keep_id), str(c_remove_id)])
+    assert after == [str(c_keep_id)]
+
+
 async def _linked_control_ids(db_session: AsyncSession, scenario_id: uuid.UUID) -> set[uuid.UUID]:
     """Read the live scenario_control join rows for a scenario."""
     rows = (

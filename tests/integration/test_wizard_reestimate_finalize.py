@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.attack import AttackTechnique, ScenarioAttackMapping
+from idraa.models.audit_log import AuditLog
 from idraa.models.enums import (
     AssetClass,
     EntityStatus,
@@ -137,14 +138,17 @@ async def _walk_reestimate_to_finalize(
     pl: list[tuple[str, float, float]],
     sl: list[tuple[str, float, float]] | None = None,
     control_id: uuid.UUID | None = None,
+    control_ids: list[uuid.UUID] | None = None,
 ) -> Any:
     """Walk a targeted draft from step 2 through finalize.
 
     Step 2 re-submits the SAME descriptive fields the entry route pre-filled
     (mirrors an analyst who lands on a pre-populated page and clicks
     through). Steps 3+4 always enter FRESH tef/vuln/pl rows via the shared
-    helper. Step 5 is only visited when ``control_id`` is given (most tests
-    don't touch mitigating controls).
+    helper. Step 5 is only visited when ``control_id``/``control_ids`` is
+    given (most tests don't touch mitigating controls). ``control_ids``
+    (plural) posts multiple ``control_ids`` form values and takes precedence
+    over the single-id ``control_id`` when both are given.
     """
     step2_data = {
         "name": scenario.name,
@@ -163,7 +167,15 @@ async def _walk_reestimate_to_finalize(
 
     await _persist_fair_rows_via_steps_3_and_4(client, db, tx, tef=tef, vuln=vuln, pl=pl, sl=sl)
 
-    if control_id is not None:
+    if control_ids is not None:
+        r5 = await csrf_post(
+            client,
+            f"/scenarios/new/wizard/step/5?tx={tx}",
+            data={"control_ids": [str(c) for c in control_ids]},
+            follow_redirects=False,
+        )
+        assert r5.status_code in (302, 303), r5.text
+    elif control_id is not None:
         r5 = await csrf_post(
             client,
             f"/scenarios/new/wizard/step/5?tx={tx}",
@@ -305,6 +317,33 @@ async def test_finalize_updates_target_in_place(
         .all()
     )
     assert len(mappings) == 1
+
+    # Issue #79 L11: the replace-all delete of the 3 seeded prior SME
+    # estimates (TEF/VULN/PL) must leave an audit trail, load-then-log
+    # BEFORE the delete.
+    replaced_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "scenario_sme_estimate",
+                    AuditLog.entity_id == s.id,
+                    AuditLog.action == "sme_estimate.replaced",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(replaced_rows) == 1
+    changes = replaced_rows[0].changes
+    assert changes["added"] is None
+    removed = changes["removed"]
+    assert len(removed) == 3, "all 3 pre-existing SME rows (TEF/VULN/PL) must be logged as removed"
+    assert {(r["low"], r["high"]) for r in removed} == {
+        (0.1, 2.0),
+        (0.1, 0.5),
+        (50_000.0, 500_000.0),
+    }
 
 
 # ---- 2: SME rows replaced, not merged --------------------------------------
@@ -603,6 +642,76 @@ async def test_deprecated_control_link_survives_reestimate(
         "the DEPRECATED control's link must survive even though its "
         "checkbox never appeared on the step-5 picker"
     )
+
+
+# ---- 6.5: controls_changed audit on genuine reestimate removal ------------
+
+
+async def test_reestimate_control_removal_audits_controls_changed(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    seed_control_factory: Any,
+) -> None:
+    """Issue #79 L6: dropping an ACTIVE control's checkbox on the step-5
+    picker during re-estimation is a genuine removal and must emit a
+    ``scenario.controls_changed`` audit row with the before/after id sets —
+    the deprecated-preservation case above (test 6) never changes the join,
+    so this is the ``changed=True`` counterpart.
+    """
+    client, org_id = authed_analyst
+    user_id = await _resolve_user_id(db_session, "analyst@test.local")
+    s = _seed_scenario(db_session, org_id=org_id, name="Controls-changed reestimate target")
+    await db_session.commit()
+
+    ctrl_keep = await seed_control_factory(
+        name="Keep control", organization_id=org_id, created_by=user_id
+    )
+    ctrl_remove = await seed_control_factory(
+        name="Remove control", organization_id=org_id, created_by=user_id
+    )
+
+    await ScenarioRepo(db_session).set_mitigating_controls(
+        scenario_id=s.id,
+        organization_id=org_id,
+        control_ids=[ctrl_keep.id, ctrl_remove.id],
+    )
+    await db_session.commit()
+
+    tx = await _post_re_estimate(client, s.id)
+    r = await _walk_reestimate_to_finalize(
+        client,
+        db_session,
+        tx=tx,
+        scenario=s,
+        tef=[("A", 1.0, 6.0)],
+        vuln=[("A", 0.05, 0.4)],
+        pl=[("A", 100_000.0, 1_000_000.0)],
+        control_ids=[ctrl_keep.id],
+    )
+    assert r.status_code == 303, r.text
+
+    await db_session.close()
+    updated = (await db_session.execute(select(Scenario).where(Scenario.id == s.id))).scalar_one()
+    linked_ids = {c.id for c in updated.mitigating_controls}
+    assert linked_ids == {ctrl_keep.id}
+
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "scenario",
+                    AuditLog.entity_id == s.id,
+                    AuditLog.action == "scenario.controls_changed",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    before, after = rows[0].changes["mitigating_controls"]
+    assert before == sorted([str(ctrl_keep.id), str(ctrl_remove.id)])
+    assert after == [str(ctrl_keep.id)]
 
 
 # ---- 7: cancel is a no-op --------------------------------------------------
