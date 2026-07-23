@@ -10,6 +10,10 @@ Container layout (post-magic, post-DEFLATE-decompress):
     [4 bytes big-endian: header length H]
     [H bytes: UTF-8 JSON manifest = list of {"path": str, "len": int}]
     [concatenated float32 LE bytes, in manifest order]
+
+Two decode variants share one validated parse: ``decode_sample_arrays`` returns
+the legacy ``dict[str, list[float]]`` contract (float64 lists); ``decode_sample_arrays_np``
+returns zero-copy float32 ``np.ndarray`` views for memory-bounded consumers (CSV export).
 """
 
 from __future__ import annotations
@@ -40,28 +44,53 @@ def encode_sample_arrays(arrays: dict[str, np.ndarray]) -> bytes:
     return SAMPLE_CODEC_MAGIC + zlib.compress(raw, _DEFLATE_LEVEL)
 
 
-def decode_sample_arrays(blob: bytes) -> dict[str, list[float]]:
+def _parse_container(blob: bytes) -> dict[str, np.ndarray]:
+    """Validate + parse the codec container to float32 LE views.
+
+    Zero-copy discipline (plan-gate Sec-I3/SWE-I2): every view is built with
+    offset-based np.frombuffer over the ONE decompressed buffer — bytes
+    slicing would COPY (peak ~3x decompressed size, ~750 MB at the observed
+    248 MB max, on the VM PR #216 already OOM-bumped once). Views are
+    read-only (frombuffer over immutable bytes).
+    """
     if not blob.startswith(SAMPLE_CODEC_MAGIC):
         raise ValueError("not an Idraa sample-codec blob")
     # Sec-N1: bound the decompression (defends a corrupt/crafted row).
-    raw = zlib.decompressobj().decompress(blob[len(SAMPLE_CODEC_MAGIC) :], _MAX_DECOMPRESSED_BYTES)
+    d = zlib.decompressobj()
+    raw = d.decompress(blob[len(SAMPLE_CODEC_MAGIC) :], _MAX_DECOMPRESSED_BYTES)
+    # Plan-gate Sec-N2: decompress(max_length) TRUNCATES silently rather than
+    # raising — reject anything that didn't fit or didn't finish cleanly.
+    if not d.eof or d.unconsumed_tail or d.unused_data:
+        raise ValueError("codec blob exceeds decompression bound or is truncated")
     if len(raw) < 4:
         raise ValueError("codec blob truncated (no header length)")
     hlen = int.from_bytes(raw[:4], "big")
     if not (0 <= hlen <= len(raw) - 4):
         raise ValueError("codec header length out of range")
     manifest = json.loads(raw[4 : 4 + hlen].decode("utf-8"))
-    buf = raw[4 + hlen :]
-    if sum(int(e["len"]) for e in manifest) * 4 != len(buf):
+    payload_len = len(raw) - 4 - hlen
+    if sum(int(e["len"]) for e in manifest) * 4 != payload_len:
         raise ValueError("codec manifest lengths do not match payload buffer")
-    out: dict[str, list[float]] = {}
-    off = 0
+    out: dict[str, np.ndarray] = {}
+    off = 4 + hlen
     for entry in manifest:
-        nbytes = int(entry["len"]) * 4
-        arr = np.frombuffer(buf[off : off + nbytes], dtype="<f4")
-        out[str(entry["path"])] = arr.astype(np.float64).tolist()
-        off += nbytes
+        count = int(entry["len"])
+        if count < 0:  # negative lens can satisfy the sum check yet walk offsets backwards
+            raise ValueError("codec manifest entry has negative length")
+        out[str(entry["path"])] = np.frombuffer(raw, dtype="<f4", count=count, offset=off)
+        off += count * 4
     return out
+
+
+def decode_sample_arrays(blob: bytes) -> dict[str, list[float]]:
+    return {p: a.astype(np.float64).tolist() for p, a in _parse_container(blob).items()}
+
+
+def decode_sample_arrays_np(blob: bytes) -> dict[str, np.ndarray]:
+    """float32 views for memory-bounded consumers (CSV export). Read-only
+    (frombuffer over immutable bytes); list contract of decode_sample_arrays
+    is untouched."""
+    return _parse_container(blob)
 
 
 def encode_sample_arrays_streaming(arrays: dict[str, np.ndarray]) -> bytes:

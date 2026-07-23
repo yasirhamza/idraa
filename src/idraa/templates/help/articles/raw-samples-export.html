@@ -1,0 +1,173 @@
+<h2 class="text-h3 text-ink-1 mb-3">What the file is</h2>
+<p class="text-body text-ink-2 mb-3">
+  Every completed analysis run also has a downloadable <strong>raw sample
+  export</strong>: a gzipped, wide <strong>CSV</strong> holding the actual
+  per-iteration Monte Carlo values that produced that run&rsquo;s Annualized
+  Loss Expectancy (ALE), Value at Risk (VaR), and expected shortfall figures.
+  Where the PDF and the verification workbook give you Idraa&rsquo;s
+  computed summaries, this export gives you the underlying numbers themselves
+  so you can independently recompute VaR, expected shortfall, or the loss
+  exceedance curve with your own tools.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  The file has <strong>one row per simulated iteration</strong> and
+  <strong>one column per stored array</strong> &mdash; for a 100,000-iteration
+  run that is 100,000 rows. Above the header row, every line begins with
+  <span class="font-mono">#</span> and carries provenance for the file: the
+  run id, the run type, the iteration count, the random seed (and any
+  per-scenario derived seeds), the inputs hash, the app version that
+  generated it, and a generation timestamp. Treat that preamble as the
+  file&rsquo;s chain of custody &mdash; it is what lets you prove which run,
+  and which exact inputs, a given CSV came from.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Find the download next to <strong>Download report (PDF)</strong> and the Excel
+  verification workbook on the run detail page, labelled
+  <strong>Download raw samples (CSV)</strong>. It only appears while that
+  run&rsquo;s sample arrays are still retained (see Availability below).
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Column naming</h2>
+<p class="text-body text-ink-2 mb-3">
+  The first column is always <span class="font-mono">iteration</span>, and it
+  is <strong>0-based</strong> &mdash; the first simulated draw is row
+  <span class="font-mono">iteration&nbsp;=&nbsp;0</span>, not&nbsp;1. The
+  remaining columns depend on whether the run is a single-scenario run or an
+  aggregate (portfolio) run:
+</p>
+<div class="overflow-x-auto mb-3">
+  <table class="table table-sm w-full">
+    <thead>
+      <tr class="text-meta text-ink-3 text-left">
+        <th>Run type</th><th>Columns</th>
+      </tr>
+    </thead>
+    <tbody class="text-body text-ink-2">
+      <tr>
+        <td><strong>Single-scenario</strong></td>
+        <td>
+          <span class="font-mono">base_risk</span> (inherent, before controls)
+          and <span class="font-mono">residual_risk</span> (after controls).
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Aggregate (portfolio)</strong></td>
+        <td>
+          <span class="font-mono">aggregate_without_controls</span> and
+          <span class="font-mono">aggregate_with_controls</span> for the
+          portfolio total, plus one
+          <span class="font-mono">scenario_&lt;hex&gt;_base_risk</span> /
+          <span class="font-mono">scenario_&lt;hex&gt;_residual_risk</span>
+          pair for every scenario in the run.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p class="text-body text-ink-2 mb-3">
+  The <span class="font-mono">&lt;hex&gt;</span> in a per-scenario column
+  name is that scenario&rsquo;s UUID with the hyphens removed (32 lowercase
+  hex characters) &mdash; never a scenario name, and never a hyphenated UUID.
+  Column names have to survive being pasted into pandas, R, or a spreadsheet
+  formula unescaped, and hyphens and punctuation in a name would break that;
+  the hex id is the stable, copy-paste-safe machine key.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Because the hex id alone isn&rsquo;t human-readable, the <span
+  class="font-mono">#</span>-comment preamble includes a
+  <strong>legend</strong> line for every scenario, mapping its hex id back to
+  its scenario name and full (hyphenated) UUID &mdash; for example
+  <span class="font-mono">column scenario_&lt;hex&gt;_*: scenario_id=&lt;uuid&gt; name=Ransomware</span>.
+  Read the legend once and you can label every
+  <span class="font-mono">scenario_&lt;hex&gt;_*</span> column pair by name.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Precision</h2>
+<p class="text-body text-ink-2 mb-6">
+  Sample values are exported as <strong>float32</strong> &mdash; current-format
+  runs store float32 natively; runs persisted in the older format are
+  downcast at export. Idraa&rsquo;s in-app
+  metrics (the headline ALE, VaR, and expected-shortfall figures shown on the
+  run page, in the PDF, and in the verification workbook) are computed from
+  <strong>float64</strong> at simulation time. Recomputing the same statistic
+  from this export should agree with the in-app figure to roughly
+  <span class="font-mono">1e-6</span> relative precision &mdash; close
+  agreement, not bit-for-bit equality. A visible difference in, say, the
+  9th significant digit of a VaR estimate is expected float32/float64
+  rounding, not a data error.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Size envelope</h2>
+<p class="text-body text-ink-2 mb-6">
+  At Idraa&rsquo;s production caps &mdash; 100,000 iterations, roughly 30
+  scenarios in a single aggregate run &mdash; the export is on the order of
+  <strong>75&nbsp;MB expanded</strong> and
+  <strong>25&ndash;35&nbsp;MB compressed</strong> (the file you actually
+  download). Smaller runs are proportionally smaller; a 10,000-iteration
+  single-scenario run is a few hundred kilobytes. Size scales roughly
+  linearly with iteration count and with the number of scenarios in an
+  aggregate run, so a run with more scenarios or a higher iteration count
+  produces a larger file, not a slower page &mdash; the export streams in
+  chunks rather than building the whole file in memory first.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Availability</h2>
+<p class="text-body text-ink-2 mb-3">
+  Raw samples are retained under Idraa&rsquo;s sample retention policy, which
+  is shorter than how long the run&rsquo;s summary results (ALE, VaR, the
+  charts) are kept &mdash; the sample arrays are the largest part of a run
+  and are purged first. Once a run&rsquo;s samples have been purged, the
+  download link disappears from the run detail page, and requesting the
+  export URL directly returns <strong>410&nbsp;Gone</strong> rather than a
+  file.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  A 410 is not an error to report &mdash; it means exactly what it says: the
+  raw arrays for that run are gone. If you need them again,
+  <strong>re-run the analysis with the same random seed</strong> (visible in
+  the run&rsquo;s own metadata and in this export&rsquo;s preamble on any
+  earlier copy you kept) to regenerate an equivalent set of samples. Because
+  export and every other bulk-data download in Idraa is a sensitive action,
+  you may also be prompted to re-authenticate with your password or passkey
+  first if your session&rsquo;s authentication isn&rsquo;t recent &mdash; the
+  same step-up check used by the PDF, the workbook, and the scenario
+  import/export flows.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Recomputing tail metrics yourself</h2>
+<p class="text-body text-ink-2 mb-3">
+  The preamble lines all start with <span class="font-mono">#</span>, so any
+  CSV reader that supports a comment prefix will skip them automatically and
+  land on the header row. Two worked examples, using the
+  <span class="font-mono">residual_risk</span> column from a single-scenario
+  run:
+</p>
+<div class="bg-surface-2 border border-border-subtle rounded-lg p-4 mb-3 overflow-x-auto">
+  <p class="text-meta font-semibold text-ink-1 mb-2">Python (pandas)</p>
+  <pre class="text-body text-ink-2 font-mono whitespace-pre"><code>import pandas as pd
+df = pd.read_csv("run-&lt;id&gt;-samples.csv.gz", comment="#")
+var95 = df["residual_risk"].quantile(0.95)
+es95 = df.loc[df["residual_risk"] &gt;= var95, "residual_risk"].mean()</code></pre>
+</div>
+<div class="bg-surface-2 border border-border-subtle rounded-lg p-4 mb-6 overflow-x-auto">
+  <p class="text-meta font-semibold text-ink-1 mb-2">R</p>
+  <pre class="text-body text-ink-2 font-mono whitespace-pre"><code>df &lt;- read.csv(gzfile("run-&lt;id&gt;-samples.csv.gz"), comment.char = "#")
+quantile(df$residual_risk, c(0.95, 0.99))</code></pre>
+</div>
+<p class="text-body text-ink-2 mb-6">
+  Both readers transparently decompress the <span class="font-mono">.gz</span>
+  file, so there is no need to unzip it first. For an aggregate run, swap
+  <span class="font-mono">residual_risk</span> for
+  <span class="font-mono">aggregate_with_controls</span>, or for one
+  scenario&rsquo;s own column pair using the hex id from the preamble legend.
+</p>
+
+<p class="text-body text-ink-2">
+  See also:
+  <a class="text-brand hover:underline" href="/help/run-and-read-analyses">Run &amp; read analyses</a>
+  for how Idraa itself reads the loss range, VaR, and expected shortfall from
+  the same underlying simulation, and
+  <a class="text-brand hover:underline" href="/help/reports">Reports</a>
+  for the PDF and the Excel verification workbook, which cover the same run
+  from a summary rather than a per-iteration angle.
+</p>

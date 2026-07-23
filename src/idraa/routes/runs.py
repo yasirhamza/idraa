@@ -20,7 +20,10 @@ RBAC summary:
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
+import weakref
+from collections.abc import Iterator
 from typing import Any
 
 from fastapi import (
@@ -33,10 +36,12 @@ from fastapi import (
     Request,
     Response,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.background import BackgroundTask
 
 from idraa.app import templates
 from idraa.config import get_settings
@@ -55,6 +60,7 @@ from idraa.models.enums import (
 )
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
+from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.run_repo import RunRepo
@@ -76,7 +82,13 @@ from idraa.services.reporting_currency import resolve_reporting_currency
 from idraa.services.retention import maybe_sweep_opportunistic
 from idraa.services.run_view_model import build_display_results
 from idraa.services.runs import RunService
-from idraa.utils.csv_export import csv_response
+from idraa.services.sample_export import (
+    build_export_columns,
+    build_preamble,
+    iter_csv_gz,
+    samples_row_to_arrays,
+)
+from idraa.utils.csv_export import csv_response, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +371,154 @@ async def get_aggregate_matrix_csv(
     )
 
 
+# --- raw sample export (#109) -------------------------------------------
+# Exports need their own concurrency guard: the MC single-flight guard in
+# services/runs.py bounds simulation concurrency, not export concurrency,
+# and decode+format is this endpoint's memory/CPU spike. Single-process
+# invariant, same as the run reaper.
+_SAMPLES_EXPORT_GUARD = threading.BoundedSemaphore(1)
+_SAMPLES_EXPORT_RETRY_AFTER_SECONDS = 30
+
+
+@router.get(
+    "/runs/{run_id}/samples.csv.gz",
+    dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))],
+)
+async def get_run_samples_csv_gz(
+    request: Request,
+    run_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+) -> Response:
+    """Persisted per-iteration MC arrays as a gzipped wide CSV (#109).
+
+    The analyst-facing complement to the verification workbook: the workbook
+    reproduces sampling + ALE; this export lets tail metrics (VaR/ES/LEC) be
+    recomputed independently. 410 (not 404) when samples were purged, so a
+    stale link explains itself. RBAC: any authenticated org user + EXPORTS
+    step-up, same as the other bulk exports.
+    """
+    service = RunService(db)
+    try:
+        run = await service.get_for_org(user.organization_id, run_id)
+    except RunNotFoundError as exc:
+        raise HTTPException(status_code=404) from exc
+    samples_gone = HTTPException(  # N806: lowercase — per-request local
+        status_code=410,
+        detail=(
+            "Sample arrays for this run were purged under the sample "
+            "retention policy or never persisted. Re-run the analysis "
+            "with the same seed to regenerate them."
+        ),
+    )
+    # Plan-gate Sec2-I1: the 410 decision uses a PK-only presence probe.
+    # db.get would materialise the full compressed blob (arrays_codec is a
+    # plain non-deferred LargeBinary) BEFORE the concurrency guard — letting
+    # guard-contended (429) requests, which never reach the audit rate
+    # limiter, pull multi-hundred-MB transients at will. The blob is loaded
+    # only inside the guard, after audit + commit.
+    samples_exist = (
+        await db.scalar(select(RunSamples.run_id).where(RunSamples.run_id == run_id))
+    ) is not None
+    if not samples_exist:
+        raise samples_gone
+    if not _SAMPLES_EXPORT_GUARD.acquire(blocking=False):
+        return Response(
+            status_code=429,
+            content="Another samples export is in progress; retry shortly.",
+            media_type="text/plain",
+            headers={"Retry-After": str(_SAMPLES_EXPORT_RETRY_AFTER_SECONDS)},
+        )
+    # Idempotent release (plan-gate Sec-I2a): one-shot via non-blocking
+    # acquire of a never-released Lock — atomic test-and-set, so concurrent
+    # hooks cannot double-release the BoundedSemaphore (which would raise).
+    # Wired FOUR ways, any first one wins: setup-exception path, the body
+    # generator's finally (mid-stream disconnect closes the suspended
+    # generator), BackgroundTask (normal completion), and weakref.finalize
+    # (plan-gate Sec2-I2: a NEVER-STARTED generator does NOT run its finally
+    # on close/GC — the body was never entered — so if the response dies
+    # between construction and first iteration, only the finalizer fires,
+    # when the abandoned generator is collected).
+    release_once = threading.Lock()
+
+    def release_slot() -> None:
+        if release_once.acquire(blocking=False):
+            _SAMPLES_EXPORT_GUARD.release()
+
+    try:
+        # #304 fail-closed bulk-egress audit BEFORE any bytes leave; also
+        # enforces the per-user export rate limit (429 via app-level handler).
+        await log_bulk_export(
+            db,
+            organization_id=user.organization_id,
+            entity_type="run_samples",
+            fmt="csv.gz",
+            count=run.mc_iterations,
+            user_id=user.id,
+            ip_address=client_ip(request),
+            filters={"run_id": str(run_id)},
+        )
+        # Plan-gate Sec-B1: FastAPI's function-scoped teardown already
+        # commits before the body streams; this explicit commit exists to
+        # release SQLite's writer lock BEFORE the seconds-long decode below
+        # (single-writer DB) and to make audit-before-egress locally
+        # explicit. get_db's sanctioned MID-REQUEST-visibility case.
+        await db.commit()
+        # Blob load INSIDE the guard (Sec2-I1); the row can have been purged
+        # between probe and load — same 410, now via the release path.
+        row = await db.get(RunSamples, run_id)
+        if row is None:
+            raise samples_gone
+        # Plan-gate Sec-I1: decode + column build are seconds of CPU on the
+        # blob — threadpool them off the event loop (single-process app).
+        arrays = await run_in_threadpool(samples_row_to_arrays, row)
+        columns, legend = await run_in_threadpool(
+            build_export_columns, run.simulation_results or {}, arrays
+        )
+        if not columns:
+            raise HTTPException(
+                status_code=410,
+                detail="This run's stored samples hold no exportable arrays.",
+            )
+        derived_seed_keys = row.derived_seed_keys
+        del row  # drop the compressed-blob ref; views alias the decompressed buffer
+        preamble = build_preamble(
+            run=run,
+            derived_seed_keys=derived_seed_keys,
+            app_version=get_settings().version,
+            legend_lines=legend,
+        )
+        stream = iter_csv_gz(preamble, columns)
+
+        def guarded() -> Iterator[bytes]:
+            try:
+                yield from stream
+            finally:  # completion and mid-stream disconnect (generator close)
+                release_slot()
+
+        body = guarded()
+        # Sec2-I2: real backstop for the never-started case (see comment
+        # above). Sec3-N4: constructed INSIDE the try so even a
+        # MemoryError-class failure between guard-acquire and finalizer
+        # registration hits the release path (release is idempotent).
+        weakref.finalize(body, release_slot)
+        filename = sanitize_filename(f"run-{run_id}-samples.csv.gz")
+        return StreamingResponse(
+            body,
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                # Sec3-N3: step-up-gated bulk egress — match the PDF report's
+                # no-store precedent (routes/reports.py).
+                "Cache-Control": "private, no-store",
+            },
+            background=BackgroundTask(release_slot),
+        )
+    except BaseException:
+        release_slot()
+        raise
+
+
 def _build_display_context(
     run: RiskAnalysisRun,
     org: Organization | None,
@@ -502,6 +662,13 @@ async def get_run_detail(
         _creator = await db.get(User, run.created_by)
         if _creator is not None:
             creator_label = _creator.full_name or _creator.email
+
+    # #109: render the raw-samples affordance only while the run_samples row
+    # exists. Presence probe selects the PK only — db.get would drag the
+    # LargeBinary blob into memory on every detail render.
+    samples_present = (
+        await db.scalar(select(RunSamples.run_id).where(RunSamples.run_id == run.id))
+    ) is not None
     return templates.TemplateResponse(
         request,
         "runs/detail.html",
@@ -516,6 +683,7 @@ async def get_run_detail(
             "has_reinterpreted_v2_snapshot": has_reinterpreted_v2_snapshot,
             "converted_cost_summary": converted_cost,
             "creator_label": creator_label,
+            "samples_present": samples_present,
         },
     )
 

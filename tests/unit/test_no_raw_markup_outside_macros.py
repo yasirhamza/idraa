@@ -50,6 +50,7 @@ ALLOWED_DIRS = {"macros"}
 #
 #   help/articles/controls-overlays.html
 #   help/articles/methodology-primer.html
+#   help/articles/raw-samples-export.html
 #   help/articles/reports.html
 #   help/articles/run-and-read-analyses.html
 #       Static prose reference tables on the read-only Help article pages
@@ -246,6 +247,7 @@ ALLOWLIST: set[str] = {
     "controls/maintenance.html",
     "help/articles/controls-overlays.html",
     "help/articles/methodology-primer.html",
+    "help/articles/raw-samples-export.html",
     "help/articles/reports.html",
     "help/articles/run-and-read-analyses.html",
     "layouts/_sidebar.html",
@@ -341,7 +343,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 46 = 45 + auth/step_up.html (Strong Auth P2 Task 1: step-up challenge
     #      code/password fields need the same attrs form_field's text variant
     #      doesn't expose — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 46, (
+    # 47 = 46 + help/articles/raw-samples-export.html (#109: static prose
+    #      reference tables, same justification block as its four Help-article
+    #      siblings — justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 47, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

@@ -28,6 +28,9 @@
 {% if run.status.value == "completed" %}
   {%- set _ = _actions.append({"label": "Download report (PDF)", "style": "primary", "href": "/reports/run/" ~ run.id, "download": true}) -%}
   {%- set _ = _actions.append({"label": "Download verification workbook (Excel)", "style": "outline", "href": "/reports/run/" ~ run.id ~ "/verification.xlsx", "download": true}) -%}
+  {% if samples_present %}
+    {%- set _ = _actions.append({"label": "Download raw samples (CSV)", "style": "outline", "href": "/runs/" ~ run.id ~ "/samples.csv.gz", "download": true}) -%}
+  {% endif %}
 {% endif %}
 
 {{ page_header(

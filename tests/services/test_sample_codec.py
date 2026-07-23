@@ -1,8 +1,13 @@
+import json
+import zlib
+
 import numpy as np
 import pytest
 
 from idraa.services.sample_codec import (
+    SAMPLE_CODEC_MAGIC,
     decode_sample_arrays,
+    decode_sample_arrays_np,
     encode_sample_arrays,
 )
 
@@ -48,22 +53,112 @@ def test_decode_rejects_non_codec_bytes():
 def test_decode_rejects_truncated_or_inconsistent_blob():
     # Sec-N1: guard (c) — header length must fit within the decompressed buffer.
     good = encode_sample_arrays({"base_risk": np.array([1.0, 2.0, 3.0])})
-    # zlib's stream trailer (final block + Adler-32 checksum) absorbs a few
-    # trailing bytes without affecting the decompressed payload, so a small
-    # truncation must be large enough to actually reach into the float
-    # payload bytes (verified empirically: <6 bytes dropped is a no-op here).
-    # This large a truncation (16 bytes) reaches back into the 4-byte header
-    # length prefix itself, tripping guard (c) — "codec header length out of
-    # range" — not the manifest-sum guard (d).
-    with pytest.raises(ValueError):
-        decode_sample_arrays(good[:-16])  # drop trailing float bytes → length mismatch
+    # Plan-gate SWE2-B1 re-pin: this vector (16 bytes dropped) used to reach
+    # back into the 4-byte header-length prefix and trip guard (c) directly.
+    # The new eof/unconsumed_tail guard (Sec-N2) now fires FIRST on any
+    # truncated deflate stream, so this vector hits the truncation guard
+    # instead — a strictly better diagnostic for a chopped blob (it IS a
+    # truncated stream, not a header-length lie), which is why the re-pin is
+    # legitimate rather than a blind test weakening.
+    with pytest.raises(ValueError, match=r"bound|truncated"):
+        decode_sample_arrays(good[:-16])  # drop trailing float bytes → truncated stream
 
 
-def test_decode_rejects_manifest_sum_mismatch():
-    # Sec-N1: guard (d) — manifest-declared lengths must sum to match the
-    # payload buffer. Dropping 8 bytes here removes float payload bytes without
-    # reaching back into the 4-byte header-length prefix, so it trips guard (d)
-    # specifically (verified empirically over the good[:-6]..good[:-15] range).
+def test_decode_rejects_truncated_stream():
+    # Plan-gate SWE2-B1 re-pin (renamed from test_decode_rejects_manifest_sum_mismatch):
+    # the new eof/unconsumed_tail guard (Sec-N2) fires BEFORE the manifest-sum
+    # check on any truncated blob, so this vector (originally targeting the
+    # manifest-sum guard) now raises the truncation message instead — a
+    # strictly better diagnostic for a chopped blob (it IS a truncated stream,
+    # not a manifest lie), which is why the re-pin is legitimate.
     good = encode_sample_arrays({"base_risk": np.array([1.0, 2.0, 3.0])})
-    with pytest.raises(ValueError, match="manifest lengths do not match payload buffer"):
+    with pytest.raises(ValueError, match=r"bound|truncated"):
         decode_sample_arrays(good[:-8])
+
+
+def test_decode_rejects_manifest_length_lie():
+    # Valid deflate stream, lying manifest: rebuild the container with a
+    # wrong "len" so the eof guard passes and the sum check must catch it.
+    blob = encode_sample_arrays({"base_risk": np.arange(8, dtype=np.float64)})
+    raw = zlib.decompress(blob[len(SAMPLE_CODEC_MAGIC) :])
+    hlen = int.from_bytes(raw[:4], "big")
+    manifest = json.loads(raw[4 : 4 + hlen])
+    manifest[0]["len"] = 7  # lie: payload holds 8 floats
+    header = json.dumps(manifest, separators=(",", ":")).encode()
+    forged = len(header).to_bytes(4, "big") + header + raw[4 + hlen :]
+    forged_blob = SAMPLE_CODEC_MAGIC + zlib.compress(forged)
+    with pytest.raises(ValueError, match="manifest lengths do not match"):
+        decode_sample_arrays_np(forged_blob)
+
+
+def test_decode_rejects_negative_manifest_length():
+    blob = encode_sample_arrays(
+        {"a": np.arange(4, dtype=np.float64), "b": np.arange(12, dtype=np.float64)}
+    )
+    raw = zlib.decompress(blob[len(SAMPLE_CODEC_MAGIC) :])
+    hlen = int.from_bytes(raw[:4], "big")
+    manifest = json.loads(raw[4 : 4 + hlen])
+    manifest[0]["len"], manifest[1]["len"] = -4, 20  # sum still matches payload
+    header = json.dumps(manifest, separators=(",", ":")).encode()
+    forged = len(header).to_bytes(4, "big") + header + raw[4 + hlen :]
+    forged_blob = SAMPLE_CODEC_MAGIC + zlib.compress(forged)
+    with pytest.raises(ValueError, match="negative length"):
+        decode_sample_arrays_np(forged_blob)
+
+
+def test_decode_rejects_header_length_out_of_range():
+    # Plan-gate SWE3-3: the hlen-range guard lost its only vector to the eof
+    # guard above. Restore direct coverage with a forged valid-stream vector:
+    # a valid deflate stream whose 4-byte prefix claims a header longer than
+    # the remaining payload — must hit the hlen-range guard, not eof.
+    blob = encode_sample_arrays({"base_risk": np.arange(4, dtype=np.float64)})
+    raw = zlib.decompress(blob[len(SAMPLE_CODEC_MAGIC) :])
+    forged = len(raw).to_bytes(4, "big") + raw[4:]
+    forged_blob = SAMPLE_CODEC_MAGIC + zlib.compress(forged)
+    with pytest.raises(ValueError, match="header length out of range"):
+        decode_sample_arrays_np(forged_blob)
+
+
+def test_decode_np_round_trips_float32_views() -> None:
+    src = {
+        "base_risk": np.array([1.5, 2.25, 3.125], dtype=np.float64),
+        "per_scenario/0/base_risk": np.array([0.1, 0.2], dtype=np.float64),
+    }
+    blob = encode_sample_arrays(dict(src))
+    out = decode_sample_arrays_np(blob)
+    assert set(out) == set(src)
+    for k, v in out.items():
+        assert v.dtype == np.dtype("<f4")
+        np.testing.assert_array_equal(v, src[k].astype(np.float32))
+
+
+def test_decode_np_rejects_bad_magic() -> None:
+    with pytest.raises(ValueError):
+        decode_sample_arrays_np(b"NOTRFSC" + b"\x00" * 16)
+
+
+def test_decode_np_matches_list_decoder() -> None:
+    src = {"residual_risk": np.linspace(0.0, 9.75, 40)}
+    blob = encode_sample_arrays(dict(src))
+    as_np = decode_sample_arrays_np(blob)["residual_risk"]
+    as_list = decode_sample_arrays(blob)["residual_risk"]
+    assert [float(x) for x in as_np.astype(np.float64)] == as_list
+
+
+def test_decode_rejects_stream_exceeding_bound(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sec-N2: decompress(max_length) truncates silently; the decoder must
+    # reject rather than parse a truncated buffer. Shrink the bound to test.
+    from idraa.services import sample_codec
+
+    blob = encode_sample_arrays({"base_risk": np.arange(1000, dtype=np.float64)})
+    monkeypatch.setattr(sample_codec, "_MAX_DECOMPRESSED_BYTES", 64)
+    with pytest.raises(ValueError, match=r"bound|truncated"):
+        decode_sample_arrays_np(blob)
+
+
+def test_decode_rejects_trailing_garbage() -> None:
+    # FBSec-N2: bytes appended after a cleanly-terminated deflate stream land
+    # in d.unused_data; the container must be fully canonical, so reject.
+    blob = encode_sample_arrays({"base_risk": np.arange(8, dtype=np.float64)})
+    with pytest.raises(ValueError, match=r"bound|truncated"):
+        decode_sample_arrays_np(blob + b"garbage")

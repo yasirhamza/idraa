@@ -97,6 +97,13 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         ),
         related=("reports", "controls-overlays", "methodology-primer"),
     ),
+    HelpArticle(
+        slug="raw-samples-export",
+        title="Raw sample export",
+        cluster="Outputs & configuration",
+        summary="Download per-iteration Monte Carlo samples and recompute tail metrics yourself.",
+        related=("run-and-read-analyses", "reports"),
+    ),
 )
 
 HELP_BY_SLUG: dict[str, HelpArticle] = {a.slug: a for a in HELP_ARTICLES}
