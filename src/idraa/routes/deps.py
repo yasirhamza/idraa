@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.config import get_settings
 from idraa.db import get_session
 from idraa.errors import StepUpRequired
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.session import AuthSession
 from idraa.models.user import User
 from idraa.services.auth import is_step_up_fresh
@@ -188,3 +188,27 @@ def require_recent_auth(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     if not is_step_up_fresh(sess):
         raise StepUpRequired(next_url=_step_up_next(request))
+
+
+def require_step_up(
+    category: StepUpCategory,
+) -> Callable[[Request, User | None, AuthSession | None], None]:
+    """Per-category step-up gate. Wire as a route dependency:
+    @router.get("/x/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
+    """
+
+    def _dep(
+        request: Request,
+        user: User | None = Depends(current_user),
+        sess: AuthSession | None = Depends(current_session),
+    ) -> None:
+        if user is None or sess is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            )
+        from idraa.services.security_settings import step_up_required
+
+        if step_up_required(category) and not is_step_up_fresh(sess):
+            raise StepUpRequired(next_url=_step_up_next(request))
+
+    return _dep
