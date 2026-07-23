@@ -7,8 +7,16 @@
   <strong>Download PDF</strong>.
 </p>
 <p class="text-body text-ink-2 mb-3">
-  The PDF is rendered server-side from the stored simulation results — no browser
-  plugin is required and the output is byte-stable for any given run.
+  The PDF is rendered server-side from the stored simulation results &mdash; no
+  browser plugin is required, and the figures and numbers are drawn from that
+  stored snapshot rather than being recomputed on each download.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Every completed run also has a companion downloadable
+  <strong>Excel verification workbook</strong>: an independent, in-Excel
+  re-derivation of the same Monte Carlo math using native spreadsheet formulas,
+  so a stakeholder can check Idraa&rsquo;s numbers without trusting the app&rsquo;s
+  engine. Find it next to <strong>Download PDF</strong> on the run detail page.
 </p>
 
 <h3 class="text-h4 text-ink-1 mb-2">What the PDF contains</h3>
@@ -137,17 +145,37 @@
   risk reduction.
 </p>
 
+<h3 class="text-h4 text-ink-1 mb-2">Average, typical, and if-removed figures in the PDF</h3>
+<p class="text-body text-ink-2 mb-6">
+  The same control-value framing used elsewhere in Idraa carries into the
+  PDF&rsquo;s attribution tables: an <strong>average (mean)</strong> Shapley
+  figure paired with a muted <strong>typical-case</strong> figure, an
+  <strong>&ldquo;if removed&rdquo;</strong> (leave-one-out) drop-cost column
+  alongside the fair-share Shapley attribution, and &mdash; for runs computed
+  with the weight-robustness ensemble &mdash; a robustness range per control.
+  See
+  <a class="text-brand hover:underline" href="/help/control-value-robustness">Why
+  control value is shown as a range</a> for how to read all of these together.
+</p>
+
 <h2 class="text-h3 text-ink-1 mb-3">Downloading and sharing the PDF</h2>
 <p class="text-body text-ink-2 mb-3">
   The <strong>Download PDF</strong> button is available to all authenticated users
-  (Analyst, Reviewer, Admin). Every download is recorded in the audit log against
-  the user who triggered it.
+  (Analyst, Reviewer, Viewer, Admin). Every download is recorded in the audit log
+  against the user who triggered it. Because downloading a report is a sensitive
+  action, Idraa may prompt you to re-authenticate (with your password or
+  passkey) first if your session&rsquo;s authentication isn&rsquo;t recent
+  &mdash; the same step-up check applies to the data exports covered in the
+  <a class="text-brand hover:underline" href="/help/import-export">Import &amp;
+  export</a> guide.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  Because the PDF is rendered from the stored run snapshot, re-downloading the
-  same run at a later date produces an identical file &mdash; useful when you
-  need to confirm that the report shared with the board matches the current
-  system record.
+  Because the PDF is rendered from the stored run snapshot, the figures, tables,
+  and numbers are identical every time you re-download the same run &mdash;
+  useful when you need to confirm that the report shared with the board matches
+  the current system record. The cover page and footer do stamp the time you
+  generated that particular copy, so two downloads of the same run will show
+  different generation timestamps even though the underlying data is unchanged.
 </p>
 
 <p class="text-body text-ink-2">

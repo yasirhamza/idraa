@@ -72,34 +72,46 @@
   realistic spread: the typical year, a bad year, and the rare disaster.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  The 5th and 95th percentile framing is a 90% credible interval, not hard
-  min/max limits. For frequency and magnitude inputs the sampled distribution
-  has tails that extend beyond your stated range &mdash; this is intentional,
-  because rare extremes are exactly what risk analysis must not truncate away.
-  Vulnerability is always a probability (0&ndash;100%) and is always sampled
-  within the range you enter.
+  The 5th and 95th percentile framing sets the <em>shape</em> of the fitted
+  distribution &mdash; it is not a live hard min/max clip applied at sample
+  time. By default, Threat Event Frequency and Loss Magnitude (Primary and
+  Secondary Loss) inputs are fitted as a lognormal and then collapsed to a
+  <strong>bounded PERT</strong> distribution for sampling, so under default
+  settings your high estimate <em>is</em> the ceiling of the sampled values.
+  Loss Magnitude entries you flag as <strong>catastrophic</strong> are the
+  documented exception: they keep the full, untruncated lognormal tail,
+  because that curated shortlist is reserved for physical-safety or
+  nation-state-scale outcomes that a single expert&rsquo;s 95th-percentile
+  judgement should not cap. Vulnerability is always a probability
+  (0&ndash;100%) and uses the same capped-PERT approach, bounded to
+  [0,&nbsp;100%].
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3">Lognormal authoring &mdash; the distribution assumption</h2>
 <p class="text-body text-ink-2 mb-3">
-  Cyber loss quantities (frequency, magnitude) are modelled as
-  <strong>lognormal</strong> distributions: non-negative, right-skewed, with a
-  heavy upper tail. The lognormal assumption is well-supported in the
-  calibration literature. Douglas Hubbard and Richard Seiersen note (in
-  <em>How to Measure Anything in Cybersecurity Risk</em>, 2nd&nbsp;ed., 2023,
-  ch.&nbsp;6) that 90% credible intervals elicited as low&ndash;high estimates
-  map naturally onto lognormal parameters via the 5th&ndash;95th percentile
-  pair. Jack Jones and the FAIR Institute document the same distributional
-  assumption in the FAIR-CAM calibration framework.
+  Cyber loss and frequency quantities are right-skewed with a heavy upper
+  tail, so Idraa elicits them as a <strong>lognormal</strong>: your low and
+  high estimates are treated as the <strong>5th</strong> and
+  <strong>95th</strong> percentiles of a lognormal belief distribution. This
+  elicitation shape is well-supported in the calibration literature. Douglas
+  Hubbard and Richard Seiersen note (in <em>How to Measure Anything in
+  Cybersecurity Risk</em>, 2nd&nbsp;ed., 2023, ch.&nbsp;6) that 90% credible
+  intervals elicited as low&ndash;high estimates map naturally onto lognormal
+  parameters via the 5th&ndash;95th percentile pair. Jack Jones and the FAIR
+  Institute document the same elicitation assumption in the FAIR-CAM
+  calibration framework. Neither source is a claim about the shape Idraa
+  ultimately <em>samples</em> from &mdash; see below.
 </p>
 <p class="text-body text-ink-2 mb-3">
-  When you enter a low and a high estimate, Idraa derives the lognormal
-  mean and sigma that place those values at the <strong>5th</strong> and
-  <strong>95th</strong> percentiles respectively. The sampled distribution is
-  <em>untruncated</em> &mdash; the tails extend beyond your stated low and high,
-  reflecting the reality that rare events can exceed expert expectations. This
-  is why a &ldquo;high&rdquo; estimate is not a ceiling; it is where you are
-  95% confident the true value falls below.
+  Idraa fits a right-skewed lognormal to your 5th/95th anchors and then
+  <strong>collapses it to a bounded PERT</strong> for sampling &mdash; your
+  high estimate is the ceiling of the sampled distribution. This is a
+  deliberate choice over a runtime clip, which would instead dump the
+  lognormal&rsquo;s tail mass into an artificial spike sitting exactly at the
+  cap. Loss Magnitude (Primary and Secondary Loss) entries flagged
+  <strong>catastrophic</strong> are the exception: they keep the untruncated
+  lognormal tail, intentionally unbounded, reflecting that rare, severe
+  events can exceed any single expert&rsquo;s 95th-percentile judgement.
 </p>
 <p class="text-body text-ink-2 mb-6">
   For scenario authoring guidance, see
@@ -130,7 +142,6 @@
       <tr><td>EPC</td><td>Exceedance Probability Curve</td><td>A companion view of the loss exceedance curve, showing the probability of exceeding each loss amount.</td></tr>
       <tr><td>VaR</td><td>Value at Risk</td><td>A loss level at a chosen confidence, e.g. &ldquo;95% Value at Risk&rdquo;.</td></tr>
       <tr><td>ROI</td><td>Return on Investment</td><td>How much risk a control removes relative to its cost.</td></tr>
-      <tr><td>NPV</td><td>Net Present Value</td><td>Future costs and savings expressed in today&rsquo;s money.</td></tr>
     </tbody>
   </table>
 </div>

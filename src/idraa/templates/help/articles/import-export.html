@@ -14,6 +14,12 @@
   <strong>Admin</strong> users only &mdash; the upload form and both
   template downloads are 403-blocked for Analyst and Reviewer roles.
 </p>
+<p class="text-body text-ink-2 mb-6">
+  Because export and import both move data in bulk, Idraa treats them as
+  sensitive actions: if your session&rsquo;s authentication isn&rsquo;t recent,
+  you may be prompted to re-authenticate with your password or passkey before
+  the download or upload proceeds.
+</p>
 
 <h2 class="text-h3 text-ink-1 mb-3">Exporting scenarios</h2>
 <p class="text-body text-ink-2 mb-3">
@@ -110,6 +116,27 @@
   match the CSV column names. The sample file provides one worked example per
   common threat actor type. JSON is preferable when field values may contain
   commas or newlines (e.g. long descriptions).
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3">Other ways data moves in and out</h2>
+<p class="text-body text-ink-2 mb-3">
+  Beyond scenario CSV/JSON, every completed analysis run has its own
+  downloadable <strong>Excel verification workbook</strong> &mdash; an
+  independent, in-Excel re-derivation of the Monte Carlo math using native
+  spreadsheet formulas, so a stakeholder can check Idraa&rsquo;s numbers
+  without trusting the app&rsquo;s engine. Find it next to
+  <strong>Download PDF</strong> on the run detail page; see the
+  <a class="text-brand hover:underline" href="/help/reports">Reports guide</a>
+  for details.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  If you are migrating from a qualitative risk register (a spreadsheet of
+  High/Medium/Low ratings), <strong>Admins</strong> have a separate guided
+  import at <code>/register-import</code>: a multi-step flow that maps your
+  register&rsquo;s columns and values onto FAIR inputs and previews the
+  resulting draft scenarios before anything is created. This is distinct from
+  the CSV/JSON scenario import above, which expects Idraa&rsquo;s own native
+  format.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3">See also</h2>
