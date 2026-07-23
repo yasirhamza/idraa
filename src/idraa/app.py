@@ -823,6 +823,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         sweep_expired_sessions,
         sweep_wizard_drafts,
     )
+    from idraa.services.security_settings import warm_cache as _warm_security_settings_cache
 
     _settings = _get_settings()
 
@@ -867,6 +868,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         logging.getLogger(__name__).exception(
             "Startup orphaned-run reaper / retention sweep failed"
         )
+
+    # idraa#85 admin knobs (Task 5): warm the effective security-settings
+    # cache (per-org MFA-policy / step-up overrides) at boot so the
+    # enrollment guard and require_step_up see a DB ``required`` override
+    # immediately, not just after the first settings write. warm_cache
+    # already swallows its own failures and logs (Task 2) — this sibling
+    # try/except is defense-in-depth matching every other startup sweep in
+    # this function, so a future refactor can't accidentally let a warm
+    # failure block boot. On failure the cache stays empty and effective_*
+    # falls back to env, exactly like the pre-Task-5 behavior.
+    try:
+        await _warm_security_settings_cache(_settings)
+    except Exception:
+        logging.getLogger(__name__).exception("Boot security-settings cache warm failed")
 
     # Drafts-surfaced spec §4 (DA-3): a boot one-shot TTL sweep of idle
     # wizard drafts — PRIMARY sweep path on scale-to-zero deploys where the
