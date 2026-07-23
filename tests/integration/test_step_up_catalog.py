@@ -29,6 +29,7 @@ GET_TARGETS = [
     f"/reports/run/{_UUID}/verification.xlsx",
     "/overlays/export.csv",
     "/account/security/totp/enroll",
+    f"/runs/{_UUID}/samples.csv.gz",
 ]
 POST_TARGETS = [
     "/users/invite",
