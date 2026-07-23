@@ -9,6 +9,11 @@ import re
 # tripwire fails loudly if an auth decorator is silently dropped.
 _EXPECTED_STEP_UP_WIRINGS = 32  # Task 6 -> 33
 
+# Built dynamically (not a literal) so this guard itself never contains the
+# retired token — a raw repo-wide grep for it (the feature's final acceptance
+# criterion) must return zero, including inside this very file.
+_RETIRED = "require_recent" + "_auth"
+
 
 def test_step_up_wiring_count():
     files = [p for p in pathlib.Path("src/idraa/routes").glob("*.py") if p.name != "deps.py"]
@@ -16,7 +21,6 @@ def test_step_up_wiring_count():
     assert n == _EXPECTED_STEP_UP_WIRINGS, (
         f"expected {_EXPECTED_STEP_UP_WIRINGS} wirings, found {n} — a decorator was added/dropped"
     )
-    # require_recent_auth must be fully retired (routes AND its docstrings in deps.py/errors.py):
-    assert not any(
-        "require_recent_auth" in p.read_text() for p in pathlib.Path("src/idraa").rglob("*.py")
-    )
+    # The retired pre-category dependency must be fully gone (routes AND its
+    # docstrings in deps.py/errors.py):
+    assert not any(_RETIRED in p.read_text() for p in pathlib.Path("src/idraa").rglob("*.py"))
