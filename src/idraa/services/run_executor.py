@@ -84,6 +84,15 @@ from idraa.services.weight_robustness import (
 
 logger = logging.getLogger(__name__)
 
+# Generic client-facing message for FAILED runs (issue #82): the raw exception
+# repr (class name + str(exc)) must never reach the UI — it can leak internal
+# paths, SQL fragments, or other implementation detail. Full diagnostics still
+# land server-side via the ``error_class`` audit field below and
+# ``logger.exception`` — this constant only replaces what gets persisted to
+# ``RiskAnalysisRun.error_message`` (rendered verbatim in
+# ``templates/runs/_status_poll.html``).
+_RUN_FAILURE_MESSAGE = "The analysis run failed due to an internal error."
+
 
 # v3 ControlDomain (StrEnum) → fair_cam ControlDomain (Enum).
 # Values differ: v3 uses "variance_management"/"decision_support"; fair_cam
@@ -2561,7 +2570,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 )
                 .values(
                     status=RunStatus.FAILED,
-                    error_message=f"{type(exc).__name__}: {exc}",
+                    error_message=_RUN_FAILURE_MESSAGE,
                     completed_at=now_utc(),
                     scenario_inputs_snapshot=_fail_snapshot,
                     # P3 (currency): pin presentation FX snapshot in the same atomic UPDATE.

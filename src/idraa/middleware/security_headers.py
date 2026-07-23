@@ -12,9 +12,23 @@ Emits defense-in-depth HTTP headers on every response:
   self-hosted, so no external origin is granted anywhere in the policy.
   Violations fail-closed at the browser.
 
-HSTS is intentionally NOT set here. HSTS must only be sent over HTTPS
-(OWASP guidance — sending it over plain HTTP is a no-op at best, confusing
-at worst) and is the reverse-proxy layer's job (Caddy / nginx in prod).
+- ``Permissions-Policy`` — conservative deny-all for a handful of sensitive
+  browser features this app never uses (geolocation, camera, mic, payment,
+  USB).
+
+HSTS (``Strict-Transport-Security``) is app-layer and prod-gated at
+construction time (``enable_hsts=True`` when ``settings.environment ==
+"prod"``), NOT keyed on ``request.url.scheme`` — Fly terminates TLS at the
+edge, so the app never observes ``https://`` on the request itself, and
+dev/test both run plain http:// where sending HSTS would be a confusing
+no-op (OWASP guidance). ``includeSubDomains`` covers deployments that also
+serve a ``www.`` subdomain of the same apex.
+
+Error responses (uncaught-exception 500s) carry the same header set: see
+``security_header_map()`` below, applied by the base-``Exception`` handler
+registered in ``idraa.app.create_app`` (Starlette's ``ServerErrorMiddleware``
+sits outside ``BaseHTTPMiddleware``, so ``dispatch`` alone never sees a
+crashed request — the exception handler is what re-applies headers there).
 
 CSP compromises (documented so the reviewer does not have to re-derive):
 
@@ -49,6 +63,7 @@ from collections.abc import Awaitable, Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 CSP_POLICY = (
     "default-src 'self'; "
@@ -64,12 +79,33 @@ CSP_POLICY = (
     "form-action 'self'"
 )
 
+PERMISSIONS_POLICY = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+
+# HSTS max-age is 1 year (31536000s), the widely-recommended floor for
+# preload-eligible policies. includeSubDomains covers a future www.<apex>
+# subdomain of the same deployment; the RP-ID/origin itself stays
+# config-driven elsewhere (no domain is hardcoded here).
+HSTS_VALUE = "max-age=31536000; includeSubDomains; preload"
+
 _STATIC_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Content-Security-Policy": CSP_POLICY,
+    "Permissions-Policy": PERMISSIONS_POLICY,
 }
+
+
+def security_header_map(enable_hsts: bool) -> dict[str, str]:
+    """Build the header set this app emits, optionally including HSTS.
+
+    Shared by :class:`SecurityHeadersMiddleware` (normal responses) and the
+    base-``Exception`` (500) handler registered in ``idraa.app.create_app``,
+    so both paths emit byte-identical headers.
+    """
+    if enable_hsts:
+        return {**_STATIC_HEADERS, "Strict-Transport-Security": HSTS_VALUE}
+    return dict(_STATIC_HEADERS)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -80,15 +116,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     wins. This lets routes that legitimately need a different policy (future
     report-embed view) opt out without monkey-patching the middleware.
 
-    Known gap: uncaught-exception (HTTP 500) responses do NOT carry these
-    headers. Starlette's ``ServerErrorMiddleware`` wraps ``BaseHTTPMiddleware``
-    from the outside, so a crashed request short-circuits to a static
-    Starlette error page before ``dispatch`` can attach headers. The 500
-    body is a fixed Starlette string (not a user-controlled injection
-    surface), so this is informational rather than exploitable. TODO:
-    migrate to a pure-ASGI middleware if a future hardening requirement
-    (e.g. CSP on error pages for report-injection defense) demands it.
+    ``enable_hsts`` is resolved ONCE at construction (``idraa.app`` passes
+    ``settings.environment == "prod"``) and the resulting header map is
+    precomputed — dispatch never re-reads settings or the request scheme.
     """
+
+    def __init__(self, app: ASGIApp, *, enable_hsts: bool = False) -> None:
+        super().__init__(app)
+        self._headers = security_header_map(enable_hsts)
 
     async def dispatch(
         self,
@@ -104,6 +139,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         override from shipping by accident.
         """
         response = await call_next(request)
-        for name, value in _STATIC_HEADERS.items():
+        for name, value in self._headers.items():
             response.headers.setdefault(name, value)
         return response

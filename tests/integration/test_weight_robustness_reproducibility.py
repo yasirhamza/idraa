@@ -317,3 +317,44 @@ async def test_weight_robustness_null_on_failed_run(
     ).scalar_one()
     assert refreshed.status == RunStatus.FAILED
     assert refreshed.weight_robustness is None
+
+
+@pytest.mark.asyncio
+async def test_failed_run_error_message_is_generic(
+    db_session: AsyncSession,
+    seed_aggregate_run_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #82: a FAILED run's ``error_message`` must be the fixed generic
+    string, never the raw exception repr — ``_status_poll.html`` renders
+    ``error_message`` verbatim, and a raw ``f"{type(exc).__name__}: {exc}"``
+    could leak internal detail (paths, SQL fragments, class names) to the UI.
+    Full diagnostics still land server-side via the audit log's
+    ``error_class`` field and ``logger.exception`` — this test only pins what
+    reaches the stored/rendered column.
+    """
+    import idraa.services.run_executor as rex
+    from idraa.services.run_executor import _RUN_FAILURE_MESSAGE, execute_run
+
+    run = await seed_aggregate_run_factory(n_scenarios=2, n_controls=1, n_simulations=200)
+    run_id = run.id
+
+    def _boom(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("internal detail that must not reach the client")
+
+    monkeypatch.setattr(rex, "split_simulation_payload", _boom)
+
+    await execute_run(run_id)
+
+    refreshed = (
+        await db_session.execute(
+            select(RiskAnalysisRun)
+            .where(RiskAnalysisRun.id == run_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert refreshed.status == RunStatus.FAILED
+    assert refreshed.error_message == _RUN_FAILURE_MESSAGE
+    assert refreshed.error_message is not None
+    assert "RuntimeError" not in refreshed.error_message
+    assert "internal detail" not in refreshed.error_message

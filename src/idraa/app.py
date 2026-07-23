@@ -33,7 +33,7 @@ from idraa.help_content import help_url as _help_url
 from idraa.middleware.csrf import CSRFMiddleware
 from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
 from idraa.middleware.maintenance_count import MaintenanceBadgeCountMiddleware
-from idraa.middleware.security_headers import SecurityHeadersMiddleware
+from idraa.middleware.security_headers import SecurityHeadersMiddleware, security_header_map
 from idraa.middleware.session import SessionMiddleware
 from idraa.middleware.uat_basic_auth import uat_basic_auth_factory
 from idraa.models.enums import SUB_FUNCTION_UNITS
@@ -762,6 +762,39 @@ async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Re
     return RedirectResponse(dest, status_code=303)
 
 
+async def _server_error_handler(request: StarletteRequest, exc: Exception) -> Response:
+    """Catch-all for uncaught exceptions (500s): generic body, full headers.
+
+    Two things a raw 500 would otherwise get wrong:
+
+    1. No internal exception detail (class name, message, traceback) reaches
+       the client — a generic body only. The exception is still logged in
+       full server-side via ``logger.exception`` below.
+    2. Security headers (CSP, X-Frame-Options, HSTS, etc.) still apply.
+       Starlette's ``ServerErrorMiddleware`` sits OUTSIDE
+       ``SecurityHeadersMiddleware`` (a ``BaseHTTPMiddleware`` subclass), so
+       an uncaught exception short-circuits ``dispatch`` entirely and would
+       otherwise ship headerless. Registering this as an ``Exception``
+       handler runs it inside FastAPI's exception-handling layer, which DOES
+       sit before ``ServerErrorMiddleware`` returns to the client, so the
+       headers make it onto the wire.
+
+    Registered for the base ``Exception`` type; the more specific
+    ``HTTPException`` / ``ExportRateLimitedError`` handlers below take
+    precedence for their own types (Starlette dispatches exception handlers
+    by exact-then-MRO type match), so this only ever fires for truly
+    uncaught errors.
+    """
+    logging.getLogger(__name__).exception(
+        "Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc
+    )
+    settings = get_settings()
+    response = PlainTextResponse("Internal Server Error", status_code=500)
+    for name, value in security_header_map(settings.environment == "prod").items():
+        response.headers[name] = value
+    return response
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup hook: reap orphaned runs (issue #211).
@@ -888,7 +921,7 @@ def create_app() -> FastAPI:
         # test clients that would otherwise silently drop the cookie.
         secure_cookie=(settings.environment == "prod"),
     )
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware, enable_hsts=(settings.environment == "prod"))
 
     # Setup-guard: if no users exist in the DB, redirect everything that
     # isn't allowlisted to /setup. Registered as the OUTERMOST http middleware
@@ -1015,6 +1048,13 @@ def create_app() -> FastAPI:
     app.add_exception_handler(HTTPException, _auth_redirect_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ExportRateLimitedError, _export_rate_limited_handler)
     app.add_exception_handler(StepUpRequired, _step_up_handler)  # type: ignore[arg-type]
+    # Base-Exception (500) handler: applies security headers to responses that
+    # would otherwise bypass SecurityHeadersMiddleware entirely, and strips
+    # internal exception detail from the body. Registered for the base type
+    # so it only ever catches truly uncaught errors — HTTPException,
+    # ExportRateLimitedError, and StepUpRequired keep their own
+    # more-specific handlers above.
+    app.add_exception_handler(Exception, _server_error_handler)
 
     # Static assets: serve with `Cache-Control: no-cache` so the browser
     # ALWAYS revalidates with the server before reusing a cached copy.
