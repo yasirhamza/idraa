@@ -33,6 +33,16 @@ def encode_sample_arrays(arrays: dict[str, np.ndarray]) -> bytes:
     chunks: list[bytes] = []
     for path, arr in arrays.items():
         a = np.ascontiguousarray(arr, dtype="<f4")
+        # Sec-L8/#84: inputs are validated finite upstream (#306/#307), so a
+        # non-finite float32 here means the float64 source overflowed the
+        # float32 range on cast (e.g. a sampled risk = LEF*LM product) — a
+        # genuine codec overflow, not a pass-through of an already-rejected
+        # value. Fail closed rather than persist a corrupt BLOB.
+        if not np.isfinite(a).all():
+            raise ValueError(
+                f"sample codec overflow: '{path}' produced non-finite float32 "
+                "(source magnitude exceeds float32 range)"
+            )
         manifest.append({"path": path, "len": int(a.size)})
         chunks.append(a.tobytes())
     header = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
@@ -75,6 +85,13 @@ def encode_sample_arrays_streaming(arrays: dict[str, np.ndarray]) -> bytes:
     out: list[bytes] = [SAMPLE_CODEC_MAGIC, co.compress(len(header).to_bytes(4, "big") + header)]
     for path in [str(e["path"]) for e in manifest]:
         a = np.ascontiguousarray(arrays.pop(path), dtype="<f4")
+        # Sec-L8/#84: see encode_sample_arrays — fail closed on float32 overflow
+        # rather than persist a corrupt BLOB.
+        if not np.isfinite(a).all():
+            raise ValueError(
+                f"sample codec overflow: '{path}' produced non-finite float32 "
+                "(source magnitude exceeds float32 range)"
+            )
         out.append(co.compress(a.tobytes()))
         del a
     out.append(co.flush())

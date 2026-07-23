@@ -307,3 +307,45 @@ def test_mixture_sigma_at_bound_accepted():
             ]
         )
     )
+
+
+# ---- #84 (Sec-L8): magnitude cap — finite-but-enormous values overflow the
+# float32 sample-array codec on write and must be rejected, not clamped. ------
+
+
+def test_pert_high_magnitude_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="magnitude exceeds"):
+        _call(primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 1e50})
+
+
+def test_lognormal_mean_magnitude_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="magnitude exceeds"):
+        _call(primary_loss={"distribution": "lognormal", "mean": 1e50, "sigma": 1.2})
+
+
+def test_tef_magnitude_rejected():
+    # Guard applies to TEF too — a 1e50 events/yr TEF also feeds risk=LEF*LM
+    # through the codec.
+    with pytest.raises(FAIRCAMValidationError, match="magnitude exceeds"):
+        _call(
+            threat_event_frequency={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 1e50}
+        )
+
+
+def test_mixture_component_mean_magnitude_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="magnitude exceeds"):
+        _call(
+            primary_loss=_mixture(
+                [
+                    _good_component(mean=1e50, sigma=0.7, weight=0.5),
+                    _good_component(mean=15.77, sigma=1.19, weight=0.5),
+                ]
+            )
+        )
+
+
+def test_legitimate_large_loss_still_accepted():
+    # A large-but-genuinely-valid loss (e.g. a catastrophic-scenario ceiling)
+    # must NOT be rejected — the cap is a float32-representability guard, not
+    # a semantic loss ceiling.
+    _call(primary_loss={"distribution": "PERT", "low": 1e6, "mode": 1e9, "high": 1e12})

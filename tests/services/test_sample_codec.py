@@ -59,6 +59,15 @@ def test_decode_rejects_truncated_or_inconsistent_blob():
         decode_sample_arrays(good[:-16])  # drop trailing float bytes → length mismatch
 
 
+def test_encode_rejects_float32_overflow():
+    # Sec-L8/#84: a float64 value that overflows on cast to float32 (source
+    # magnitude exceeds ~3.4e38) must fail closed at write time rather than
+    # silently persist inf into the codec blob.
+    arrays = {"base_risk": np.array([1.0, 1e50, 3.0], dtype=np.float64)}
+    with pytest.raises(ValueError, match="codec overflow"):
+        encode_sample_arrays(arrays)
+
+
 def test_decode_rejects_manifest_sum_mismatch():
     # Sec-N1: guard (d) — manifest-declared lengths must sum to match the
     # payload buffer. Dropping 8 bytes here removes float payload bytes without
