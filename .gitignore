@@ -91,3 +91,10 @@ package-lock.json
 # checkout; the tracked-path denylist enforces this.
 fly.toml
 fly.*.toml
+
+# Working-convention docs are operator/agent-local, never tracked in the
+# public repo (owner decision 2026-07-23): project instructions and internal
+# spec/plan documents carry operational detail that doesn't belong in public.
+# Keep local copies; new worktrees need them copied from the main checkout.
+CLAUDE.md
+docs/superpowers/
