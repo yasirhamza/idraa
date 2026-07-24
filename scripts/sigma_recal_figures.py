@@ -51,17 +51,17 @@ def _entries() -> list[dict]:
     return out
 
 
-def _pert_ab(low: float, high: float) -> tuple[float, float]:
-    """Vose BetaPERT gamma=4 at mode==low, mirroring fair_core.py:155-164."""
+def _pert_ab(low: float, mode: float, high: float) -> tuple[float, float]:
+    """Vose BetaPERT gamma=4, mirroring fair_core.py:155-164. General mode."""
     g = 4.0
-    mean = (low + g * low + high) / (g + 2.0)
+    mean = (low + g * mode + high) / (g + 2.0)
     sd = (high - low) / (g + 2.0)
     a = ((mean - low) / (high - low)) * (((mean - low) * (high - mean) / sd**2) - 1.0)
     return a, a * (high - mean) / (mean - low)
 
 
 def _realized_median(low: float, high: float) -> float:
-    a, b = _pert_ab(low, high)
+    a, b = _pert_ab(low, low, high)
     return low + float(beta_dist.ppf(0.5, a, b)) * (high - low)
 
 
@@ -75,6 +75,7 @@ def library() -> dict[str, object]:
     med_ratios: list[float] = []
     med_ratios_149: list[float] = []
     high_cuts: list[float] = []
+    high_cuts_149: list[float] = []
     risers: list[tuple[str, float]] = []
     sigmas: list[float] = []
     n_capped = n_cat = 0
@@ -101,6 +102,7 @@ def library() -> dict[str, object]:
                     risers.append((e["slug"], 1.0 / ratio))
                 else:
                     med_ratios_149.append(ratio)
+                    high_cuts_149.append(high / nhigh)
                 n_capped += 1
             elif kind == "lognormal":
                 cat_old += math.exp(d["mean"] + d["sigma"] ** 2 / 2)
@@ -121,9 +123,10 @@ def library() -> dict[str, object]:
         "capped_only_delta": cap_new / cap_old - 1.0,
         "median_sigma": st.median(sigmas),
         "median_high_cut_154": st.median(high_cuts),
-        "median_high_cut_149": st.median(
-            [h for h, r in zip(high_cuts, med_ratios, strict=True) if r > 1]
-        ),
+        # Selected on the mean-anchored flag, NOT on ratio direction: selecting
+        # on r > 1 coincides today only because all 154 sigmas exceed 1.7, and
+        # would silently mislabel the population the day one field is narrower.
+        "median_high_cut_149": st.median(high_cuts_149),
         "med_ratio_min": min(med_ratios),
         "med_ratio_max": max(med_ratios),
         "med_ratio_median_154": st.median(med_ratios),
@@ -239,7 +242,15 @@ def prod_runs(active_only: bool) -> dict[str, object]:
     )
 
     def q(dist: dict | None, sigma_rule: str) -> float:
-        if not dist or dist.get("distribution") != "lognormal":
+        """Max-draw proxy for one loss field. PERT fields contribute their
+        bound `high` (the 1-1/n quantile of BetaPERT is ~indistinguishable from
+        it at n=700k) rather than silently contributing zero."""
+        if not dist:
+            return 0.0
+        kind = dist.get("distribution")
+        if kind == "PERT":
+            return float(dist.get("high", 0.0))
+        if kind != "lognormal":
             return 0.0
         mu, s = dist["mean"], dist["sigma"]
         if sigma_rule == "uniform" or (sigma_rule == "narrow_only" and s > SIGMA_DEFAULT):
@@ -269,6 +280,119 @@ def prod_runs(active_only: bool) -> dict[str, object]:
         "lognormal_loss_fields": n_lognormal,
         "filter": "status='active'" if active_only else "ALL statuses",
     }
+    return out
+
+
+SIM_SEEDS = tuple(range(10))  # committed seed set for B-RUN-LM-SIM; never vary silently
+
+
+def _dist_mean(d: dict | None, sigma_rule: str, is_loss: bool) -> float:
+    """Analytic mean of one node. The sweep rule applies to LOSS lognormals only
+    (TEF dispersion is out of scope by decision).
+
+    Kind resolution mirrors run_executor._dict_to_fair_distribution: the key is
+    OPTIONAL and defaults to PERT (prod vulnerability dicts carry no
+    'distribution' key at all), and matching is case-insensitive.
+    """
+    if not d:
+        return 0.0
+    kind = str(d.get("distribution", "pert")).lower()
+    if kind == "lognormal":
+        s = d["sigma"]
+        if is_loss and (
+            sigma_rule == "uniform" or (sigma_rule == "narrow_only" and s > SIGMA_DEFAULT)
+        ):
+            s = SIGMA_DEFAULT
+        return math.exp(d["mean"] + s**2 / 2)
+    if kind == "pert":
+        return (d["low"] + 4.0 * d["mode"] + d["high"]) / 6.0
+    return 0.0
+
+
+def portfolio_ale(active_only: bool) -> dict[str, object]:
+    """[B-PORT-ALE] analytic portfolio ALE = sum of E[tef]*E[vuln]*(E[pl]+E[sl]).
+
+    Standalone estimator (no subtractor, no engine stream) -- suitable for
+    before/after deltas, not for reproducing a specific run's output.
+    """
+    if not PROD_DB.exists():
+        return {"unavailable": str(PROD_DB)}
+    db = sqlite3.connect(PROD_DB)
+    sql = (
+        "SELECT threat_event_frequency, vulnerability, primary_loss, secondary_loss FROM scenarios"
+    )
+    if active_only:
+        sql += " WHERE status = 'active'"
+    rows = db.execute(sql).fetchall()
+    out: dict[str, object] = {"n": len(rows)}
+    for rule in ("today", "narrow_only"):
+        total = 0.0
+        for tef, vuln, pl, sl in rows:
+            j = [json.loads(b) if b else None for b in (tef, vuln, pl, sl)]
+            total += (
+                _dist_mean(j[0], rule, is_loss=False)
+                * _dist_mean(j[1], rule, is_loss=False)
+                * (_dist_mean(j[2], rule, is_loss=True) + _dist_mean(j[3], rule, is_loss=True))
+            )
+        out[rule] = total
+    return out
+
+
+def run_lm_sim() -> dict[str, object]:
+    """[B-RUN-LM-SIM] simulated max single-event LM over the committed seed set.
+
+    Simulates the lognormal-bearing active scenarios only; a PERT-only
+    scenario's LM is bounded by high_P + high_S, reported analytically so the
+    output shows whether it could ever compete. Standalone estimator, NOT the
+    engine (no shared stream, no vuln thinning): valid for seed-spread of the
+    max, not for reproducing a run.
+    """
+    if not PROD_DB.exists():
+        return {"unavailable": str(PROD_DB)}
+    import numpy as np
+
+    db = sqlite3.connect(PROD_DB)
+    rows = db.execute(
+        "SELECT name, primary_loss, secondary_loss FROM scenarios WHERE status = 'active'"
+    ).fetchall()
+    lognormal_scen: list[tuple[str, dict | None, dict | None]] = []
+    pert_only_bound = 0.0
+    for name, pl, sl in rows:
+        pld = json.loads(pl) if pl else None
+        sld = json.loads(sl) if sl else None
+        kinds = {(d or {}).get("distribution") for d in (pld, sld)}
+        if "lognormal" in kinds:
+            lognormal_scen.append((name, pld, sld))
+        else:
+            bound = sum(float((d or {}).get("high", 0.0)) for d in (pld, sld) if d)
+            pert_only_bound = max(pert_only_bound, bound)
+
+    def draw(d: dict | None, rule: str, rng: object) -> object:
+        if not d:
+            return 0.0
+        kind = d.get("distribution")
+        if kind == "lognormal":
+            s = d["sigma"]
+            if rule == "narrow_only" and s > SIGMA_DEFAULT:
+                s = SIGMA_DEFAULT
+            return rng.lognormal(d["mean"], s, ITERS)  # type: ignore[attr-defined]
+        if kind == "PERT":
+            a, b = _pert_ab(d["low"], d["mode"], d["high"])
+            return d["low"] + rng.beta(a, b, ITERS) * (d["high"] - d["low"])  # type: ignore[attr-defined]
+        return 0.0
+
+    out: dict[str, object] = {"pert_only_bound": pert_only_bound, "seeds": SIM_SEEDS}
+    for rule in ("today", "narrow_only"):
+        maxima = []
+        for seed in SIM_SEEDS:
+            rng = np.random.default_rng(seed)
+            worst = 0.0
+            for _name, pld, sld in lognormal_scen:
+                lm = draw(pld, rule, rng) + draw(sld, rule, rng)
+                worst = max(worst, float(np.max(lm)))
+            maxima.append(worst)
+        maxima.sort()
+        out[rule] = {"min": maxima[0], "median": st.median(maxima), "max": maxima[-1]}
     return out
 
 
@@ -349,6 +473,35 @@ def main() -> None:
                 f"PL-only ${r['pl_only']:>16,.0f} ({r['pl_only_pct']:>8.2%})  [{r['holder'][:26]}]"
             )
         print("  NOTE: 'uniform' is the WITHDRAWN rev-1 rule. The shipped rule is narrow_only.")
+
+    for active_only in (True, False):
+        ale = portfolio_ale(active_only=active_only)
+        label = "active-only" if active_only else "ALL statuses"
+        print(f"\n[B-PORT-ALE] analytic portfolio ALE — population={label}")
+        if "unavailable" in ale:
+            print(f"  SKIPPED: {ale['unavailable']} not present")
+            break
+        t, n = ale["today"], ale["narrow_only"]
+        print(f"  population {ale['n']} scenarios")
+        print(
+            f"  today ${t:,.0f} -> narrow_only ${n:,.0f}  = {n / t - 1.0:+.2%}"  # type: ignore[operator]
+        )
+
+    sim = run_lm_sim()
+    print(f"\n[B-RUN-LM-SIM] simulated max LM, seeds={SIM_SEEDS}, active lognormal-bearing")
+    if "unavailable" in sim:
+        print(f"  SKIPPED: {sim['unavailable']} not present")
+    else:
+        for rule in ("today", "narrow_only"):
+            r = sim[rule]  # type: ignore[index]
+            print(
+                f"  {rule:12} min ${r['min']:>18,.0f}  median ${r['median']:>18,.0f}  "
+                f"max ${r['max']:>18,.0f}  ({r['median'] / REVENUE:.1%} rev at median)"
+            )
+        print(
+            f"  PERT-only scenarios cannot exceed ${sim['pert_only_bound']:,.0f} "
+            f"(analytic bound high_P+high_S) — cannot compete with the above"
+        )
 
 
 if __name__ == "__main__":
