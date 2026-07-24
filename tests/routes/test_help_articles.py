@@ -207,3 +207,18 @@ async def test_run_and_read_covers_seed(authed_analyst):
     assert "seed" in body
     assert "reproducible" in body
     assert "vary" in body  # vary the seed for sampling variability
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "slug,figure_marker",
+    [
+        ("fair-in-idraa-terms", 'data-figure="factor-tree"'),
+        ("run-and-read-analyses", 'data-figure="lec-anatomy"'),
+    ],
+)
+async def test_article_renders_its_figure(authed_analyst, slug, figure_marker):
+    client, _ = authed_analyst
+    r = await client.get(f"/help/{slug}")
+    assert r.status_code == 200
+    assert figure_marker in r.text
