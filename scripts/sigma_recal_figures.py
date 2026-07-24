@@ -41,7 +41,6 @@ VENDOR_SLUGS = [
 ]
 ITERS = 700_000
 Z_RUN = float(norm.ppf(1 - 1 / ITERS))
-REVENUE = 4_000_000_000.0
 
 
 def _entries() -> list[dict]:
@@ -234,6 +233,7 @@ def prod_runs(active_only: bool) -> dict[str, object]:
     if active_only:
         sql += " WHERE status = 'active'"
     sql += " ORDER BY id"
+    revenue = _prod_revenue(db)
     rows = db.execute(sql).fetchall()
     n_lognormal = sum(
         1
@@ -271,11 +271,12 @@ def prod_runs(active_only: bool) -> dict[str, object]:
             worst_pl = max(worst_pl, pl_q)
         out[rule] = {
             "lm": worst_lm,
-            "lm_pct": worst_lm / REVENUE,
+            "lm_pct": worst_lm / revenue,
             "pl_only": worst_pl,
-            "pl_only_pct": worst_pl / REVENUE,
+            "pl_only_pct": worst_pl / revenue,
             "holder": holder,
         }
+    out["revenue"] = revenue
     out["population"] = {
         "scenarios": len(rows),
         "lognormal_loss_fields": n_lognormal,
@@ -340,13 +341,18 @@ def portfolio_ale(active_only: bool) -> dict[str, object]:
 
 
 def _prod_revenue(db: sqlite3.Connection) -> float:
-    """Read the org's annual revenue and pin it against the REVENUE constant so
-    D8's denominator can never silently diverge from its source."""
+    """Read the org's annual revenue from the DB the script is pointed at.
+
+    The DB is the SOURCE OF TRUTH -- never a hardcoded constant. Every
+    "% of revenue" readout is relative to this value, and the output header
+    prints it so the denominator is always visible. Pointing the script at a
+    different deployment's backup re-bases every percentage automatically
+    (D8 itself is symbolic: <= 100% of Organization.annual_revenue).
+    """
     row = db.execute("SELECT annual_revenue FROM organizations ORDER BY id LIMIT 1").fetchone()
-    revenue = float(row[0])
-    if revenue != REVENUE:
-        raise SystemExit(f"PIN FAILED: org annual_revenue {revenue} != REVENUE constant {REVENUE}")
-    return revenue
+    if row is None or row[0] is None:
+        raise SystemExit("PIN FAILED: no organization with annual_revenue in the prod backup")
+    return float(row[0])
 
 
 def per_scenario_ale() -> list[tuple[str, float, float, float]] | dict[str, str]:
@@ -423,7 +429,11 @@ def run_lm_sim() -> dict[str, object]:
 
     import hashlib
 
-    out: dict[str, object] = {"pert_only_bound": pert_only_bound, "seeds": SIM_SEEDS}
+    out: dict[str, object] = {
+        "pert_only_bound": pert_only_bound,
+        "seeds": SIM_SEEDS,
+        "revenue": _prod_revenue(db),
+    }
     for rule in ("today", "narrow_only"):
         maxima = []
         for seed in SIM_SEEDS:
@@ -505,6 +515,11 @@ def main() -> None:
         pop = runs.get("population")
         label = "active-only" if active_only else "ALL statuses"
         print(f"\n[B-RUN-LM] prod worst single event — analytic, n=iters, population={label}")
+        if active_only:
+            print(
+                f"  denominator: org annual_revenue ${runs['revenue']:,.0f} "
+                f"(READ FROM the backup DB — never hardcoded; a different deployment re-bases all %)"
+            )
         if "unavailable" in runs:
             print(f"  SKIPPED: {runs['unavailable']} not present")
             break
@@ -551,7 +566,7 @@ def main() -> None:
             r = sim[rule]  # type: ignore[index]
             print(
                 f"  {rule:12} min ${r['min']:>18,.0f}  median ${r['median']:>18,.0f}  "
-                f"max ${r['max']:>18,.0f}  ({r['median'] / REVENUE:.1%} rev at median)"
+                f"max ${r['max']:>18,.0f}  ({r['median'] / sim['revenue']:.1%} rev at median)"
             )
         print(
             f"  PERT-only scenarios cannot exceed ${sim['pert_only_bound']:,.0f} "
