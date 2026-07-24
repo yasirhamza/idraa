@@ -50,6 +50,28 @@ REVENUE_TIER_LABELS: dict[str, str] = {
 }
 
 
+# === Within-scenario loss dispersion ==========================================
+# A v3 CALIBRATION CONVENTION, not a point citation: IRIS never publishes the
+# single-firm x single-scenario joint, so this is a conservative round number
+# above the type-conditioned reads (IRIS 2025 Fig 15 2024, sigma = ln(p90/p50)/
+# z_0.90: system_intrusion 1.3570, ransomware 1.6813) and below every
+# size-conditioned read (Table 1 min 1.9687). The superseded values (1.84-3.47)
+# were the per-sector Fig A3 envelope -- cross-firm x cross-incident-type
+# POPULATION dispersion mis-applied as single-event uncertainty. Estimator and
+# volatility caveats, the accidental-disclosure exclusion, and what 1.7 still
+# implies (p95/p50 16.4x, p5-p95 268x, mean/median 4.24x): see
+# docs/reference/within-scenario-sigma-calibration.md.
+# PRECONDITION: must stay > z_0.95 (1.6449) -- the capped-PERT collapse relies
+# on the analytic lognormal mode clamping to `low` (mode-clamp regime).
+WITHIN_SCENARIO_SIGMA_DEFAULT: float = 1.7
+
+# Advisory ceiling for authored/pinned dispersion: above this the value exceeds
+# the within-incident-type reads this default is drawn from (NOT "every
+# conditioned read" -- Table 1's top tier is 2.916). Hard bound stays
+# _SIGMA_MAX in services/fair_cam_validation.py.
+SIGMA_WARN_THRESHOLD: float = 2.2
+
+
 def revenue_tier_from_annual_revenue(annual_revenue: Any) -> str:
     """Map org.annual_revenue (Decimal | None) to an IRIS tier slug.
 
