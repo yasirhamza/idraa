@@ -264,6 +264,7 @@ async def test_route_threads_request_base_url_to_builder(
     assert r.status_code == 200
     assert len(seen) == 1
     # Non-empty, scheme-qualified, no trailing slash — exactly what the sheet
-    # concatenates with /help/control-value-robustness.
+    # concatenates with /help/why-values-are-ranges (slug renamed from
+    # control-value-robustness in help-overhaul P1 T1).
     assert seen[0].startswith("http"), seen
     assert not seen[0].endswith("/"), seen

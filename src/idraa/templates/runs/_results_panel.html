@@ -40,7 +40,7 @@
       <p class="text-xs text-ink-3 mt-1">
         This range is on the same <strong>average</strong> basis as the bars above, so it is
         directly comparable to them.
-        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Learn how to read this</a>.
       </p>
       {%- else %}
       <p class="font-medium text-ink-2 mb-1">Typical-case value range (the bars above show the average):</p>
@@ -49,7 +49,7 @@
         This range uses a <strong>typical-case</strong> loss, which sits below the
         <strong>average</strong> figure above because a few rare, very large losses pull the
         average up.
-        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Learn how to read this</a>.
       </p>
       {%- endif %}
       {# #421-3: SINGLE runs never compute rank-stability pairs, so the full
@@ -61,7 +61,7 @@
     <p class="text-xs text-ink-3 mt-1">
       Ranking-stability check skipped &mdash; too few simulation draws
       (K={{ _wr_single.draws_used if _wr_single.draws_used is not none else "n/a" }}).
-      <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+      <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Learn how to read this</a>.
     </p>
     {%- endif %}
 
@@ -164,7 +164,7 @@
       </div>
       <p class="text-xs text-ink-3 mt-2">
         {{ control_weight_provenance_disclaimer_with_if_removed }}
-        <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+        <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Learn how to read this</a>.
         {%- if _wr_single.basis == "mean" %} {{ mean_basis_pairing_note }}{%- endif %}
       </p>
     {%- endif %}

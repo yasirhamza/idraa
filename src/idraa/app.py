@@ -29,6 +29,7 @@ from starlette.types import Scope
 from idraa.config import get_settings
 from idraa.db import get_session
 from idraa.errors import StepUpRequired
+from idraa.help_content import help_slug_for_path as _help_slug_for_path
 from idraa.help_content import help_url as _help_url
 from idraa.middleware.csrf import CSRFMiddleware
 from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
@@ -150,6 +151,7 @@ def _csrf_field(context: dict[str, object]) -> Markup:
 
 templates.env.globals["csrf_field"] = _csrf_field
 templates.env.globals["help_url"] = _help_url
+templates.env.globals["help_slug_for_path"] = _help_slug_for_path
 
 
 # Chart series palette — single Python source of truth, mirrored into

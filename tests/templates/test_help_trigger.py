@@ -24,11 +24,37 @@ def _render_labeled(slug: str, label: str) -> str:
     return tpl.render(slug=slug, label=label)
 
 
+def _render_anchored(slug: str, anchor: str) -> str:
+    tpl = _ENV.from_string(
+        '{% from "macros/help_trigger.html" import help_trigger %}'
+        "{{ help_trigger(slug, anchor=anchor) }}"
+    )
+    return tpl.render(slug=slug, anchor=anchor)
+
+
 def test_renders_drawer_button_for_valid_slug():
     html = _render("build-a-scenario")
     assert 'hx-get="/help/build-a-scenario"' in html
     assert 'hx-target="#help-drawer-body"' in html
-    assert "$store.helpDrawer.show()" in html
+    # Re-pinned (help-overhaul P1 T5): the macro gained an `anchor` param and
+    # now always passes it through to $store.helpDrawer.show(anchor) via
+    # |tojson (Sec-B1 single-quoted attribute) — anchorless calls emit the
+    # empty string, not a bare no-arg call.
+    assert '$store.helpDrawer.show("")' in html
+
+
+def test_anchored_trigger_passes_anchor_to_drawer_show():
+    from idraa.help_content import HELP_DERIVED
+
+    anchor = HELP_DERIVED["getting-started"].toc[0][0]
+    html = _render_anchored("getting-started", anchor)
+    assert 'hx-get="/help/getting-started"' in html  # fragment-free — never reaches the server
+    assert f'$store.helpDrawer.show("{anchor}")' in html
+
+
+def test_invalid_anchor_raises_at_render():
+    with pytest.raises(KeyError):  # help_url raises KeyError for a dangling anchor
+        _render_anchored("getting-started", "not-a-real-anchor")
 
 
 def test_invalid_slug_raises_at_render():
@@ -47,6 +73,8 @@ def test_text_label_is_not_forced_into_a_circle():
     # to a one-glyph square, so a phrase like "Sub-function help" wrapped and
     # overlapped the neighbouring text on the control form header. The text
     # variant must drop btn-circle and size to its content.
-    html = _render_labeled("control-sub-functions", "Sub-function help")
+    # slug renamed control-sub-functions -> how-controls-change-the-numbers
+    # (help-overhaul P1 T1): help_url would otherwise KeyError at render time.
+    html = _render_labeled("how-controls-change-the-numbers", "Sub-function help")
     assert "Sub-function help" in html
     assert "btn-circle" not in html

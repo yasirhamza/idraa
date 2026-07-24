@@ -1,0 +1,11 @@
+{# src/idraa/templates/help/_nav.html — article tree (Direction A). #}
+<nav data-help-nav class="help-nav" aria-label="Help articles">
+  {% include "help/_search_box.html" %}
+  {% for track, title in track_titles.items() %}
+  <div class="text-meta text-ink-3 uppercase mt-4 mb-1">{{ title }}</div>
+  {% for a in articles if a.track == track %}
+  <a href="/help/{{ a.slug }}"
+     class="help-nav-link {% if active_slug == a.slug %}help-nav-link-active{% endif %}">{{ a.title }}</a>
+  {% endfor %}
+  {% endfor %}
+</nav>

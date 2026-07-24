@@ -1,0 +1,9 @@
+{# src/idraa/templates/help/_toc.html — sticky on-page TOC (scrollspy via help_hub.js). #}
+{% if toc %}
+<aside data-help-toc class="help-toc" aria-label="On this page">
+  <div class="text-meta text-ink-3 uppercase mb-2">On this page</div>
+  {% for anchor, heading in toc %}
+  <a href="#{{ anchor }}" data-toc-link="{{ anchor }}" class="help-toc-link">{{ heading }}</a>
+  {% endfor %}
+</aside>
+{% endif %}

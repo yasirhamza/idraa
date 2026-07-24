@@ -61,19 +61,18 @@ async def test_article_requires_login(anonymous_client, admin_user, db_session):
 
 
 @pytest.mark.asyncio
-async def test_index_groups_by_cluster_and_links_each_article(authed_analyst):
+async def test_index_groups_by_track_and_links_each_article(authed_analyst):
+    # Renamed from test_index_groups_by_cluster_and_links_each_article
+    # (help-overhaul P1 T1): `cluster` (5 headings) retired in favor of the
+    # two-track registry (TRACK_TITLES).
+    from idraa.help_content import TRACK_TITLES
+
     client, _ = authed_analyst
     r = await client.get("/help")
     body = r.text
-    # cluster headings present (assert autoescaped form — autoescape is ON)
-    for cluster in [
-        "Getting started",
-        "Core flow",
-        "Methodology",
-        "Libraries & data",
-        "Outputs & configuration",
-    ]:
-        assert str(escape(cluster)) in body
+    # track headings present (assert autoescaped form — autoescape is ON)
+    for title in TRACK_TITLES.values():
+        assert str(escape(title)) in body
     # each article linked to its URL
     for a in HELP_ARTICLES:
         assert f'href="/help/{a.slug}"' in body
@@ -103,3 +102,115 @@ async def test_help_nav_active_on_article_page(authed_analyst):
         r'|<a[^>]*aria-current="page"[^>]*href="/help"'
     )
     assert anchor.search(r.text), "Help sidebar anchor not marked aria-current"
+
+
+@pytest.mark.asyncio
+async def test_help_search_endpoint_returns_partial(authed_analyst) -> None:
+    # PRArch-N1: direct-nav (no HX-Request) now redirects to /help instead of
+    # emitting a headless partial — this test asserts the HX-driven partial
+    # shape specifically, so it must send the header rather than rely on the
+    # old no-header default (migrated deliberately, not blindly re-pinned).
+    # PRArch2-N4: the partial branch additionally requires HX-Boosted to be
+    # absent (defensive parity with /help/{slug}) — this request sends only
+    # HX-Request, so it still hits the partial branch.
+    client, _ = authed_analyst
+    r = await client.get("/help/search", params={"q": "scenario"}, headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "/help/build-a-scenario" in r.text
+    assert "<html" not in r.text  # partial, not a full page
+    assert r.headers["vary"] == "HX-Request, HX-Boosted"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        # PRArch2-N4: a BOOSTED nav ALSO sends HX-Request: true (htmx sets
+        # both headers on a boosted request) — without checking is_boosted,
+        # this would hit the partial branch and swap a headless fragment
+        # into the full-page body, destroying page chrome (the same
+        # Arch-B1 bug pattern /help/{slug} already guards against).
+        {"HX-Request": "true", "HX-Boosted": "true"},
+    ],
+    ids=["direct-nav", "boosted-nav"],
+)
+async def test_help_search_direct_nav_redirects_to_index(authed_analyst, headers) -> None:
+    # PRArch-N1: a typed/bookmarked /help/search URL (no HX-Request) has no
+    # sensible bare-partial rendering — redirect to the index rather than
+    # serve a headless fragment with no page chrome.
+    client, _ = authed_analyst
+    r = await client.get(
+        "/help/search", params={"q": "scenario"}, headers=headers, follow_redirects=False
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/help"
+    assert r.headers["vary"] == "HX-Request, HX-Boosted"
+
+
+@pytest.mark.asyncio
+async def test_help_search_requires_auth(anonymous_client, admin_user, db_session) -> None:
+    # PRArch2-I1: the bare `client` fixture (no seeded admin) hits the
+    # app's first-run setup-gate BEFORE the auth dependency and redirects
+    # to /setup, not /login — that would make a Location=/login assertion
+    # simply wrong rather than meaningful. Use the same
+    # anonymous_client+admin_user+db_session pattern as
+    # test_article_requires_login above so this actually exercises the
+    # require_user dependency's redirect.
+    await db_session.commit()
+    r = await anonymous_client.get("/help/search", params={"q": "scenario"}, follow_redirects=False)
+    assert r.status_code in (302, 303, 307, 401, 403)
+    # The handler's own non-HX branch ALSO 303s (to /help) — without
+    # pinning Location to the login redirect, a regression that dropped
+    # the require_user dependency entirely would still 303 and pass this
+    # test vacuously.
+    assert r.headers["location"].startswith("/login")
+
+
+@pytest.mark.asyncio
+async def test_article_page_has_three_column_chrome(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/run-and-read-analyses")
+    assert r.status_code == 200
+    assert "data-help-nav" in r.text  # article tree present
+    assert "data-help-toc" in r.text  # on-page TOC present
+    assert "Using Idraa" in r.text and "Methodology" in r.text
+    assert "min read" in r.text
+
+
+@pytest.mark.asyncio
+async def test_article_page_has_prev_next(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/build-a-scenario")
+    assert "/help/getting-started" in r.text  # prev
+    assert "/help/run-and-read-analyses" in r.text  # next
+
+
+@pytest.mark.asyncio
+async def test_index_shows_track_panels_with_minutes(authed_analyst) -> None:
+    from markupsafe import escape
+
+    client, _ = authed_analyst
+    r = await client.get("/help")
+    # SC-I2: autoescape renders the ampersand as &amp; — compare escaped,
+    # same convention as this file's existing title assertions.
+    assert "Using Idraa" in r.text
+    assert str(escape("Methodology & verification")) in r.text
+    assert "min" in r.text
+
+
+@pytest.mark.asyncio
+async def test_drawer_partial_has_full_guide_link_and_toc(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/build-a-scenario", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "Open full guide" in r.text
+    assert 'href="#' in r.text  # inline TOC anchors
+
+
+@pytest.mark.asyncio
+async def test_sidebar_help_is_route_aware(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/scenarios")
+    # Mapped route: the sidebar Help entry opens the drawer on the mapped article.
+    assert 'hx-get="/help/build-a-scenario"' in r.text

@@ -1,0 +1,42 @@
+{#- src/idraa/templates/help/figures/lec_anatomy.html — static first-party
+    SVG figure (Task 6). Colors are literal graphite tokens, not CSS vars
+    (PRSC-N1): fill=/stroke= are SVG PRESENTATION ATTRIBUTES, which cannot
+    take var(--color-…) — only CSS properties set via a <style> block or
+    external sheet can reference a custom property. #37464F = graphite
+    strokes + the shaded-tail fill (matches pdf_theme/chart palette),
+    #A1A1AA = guide lines (axes, VaR 95 dashed guide), #52525B = label ink.
+    No script tags, no on*= handlers, no Jinja expressions inside this
+    figure — enforced by help_content.py's import-time figure guard
+    (Sec2-I3/Sec3-N2b). -#}
+<figure class="help-figure" data-figure="lec-anatomy">
+  <svg viewBox="0 0 640 240" role="img" aria-labelledby="fig-lec-anatomy-title" xmlns="http://www.w3.org/2000/svg">
+    <title id="fig-lec-anatomy-title">Loss exceedance anatomy as Idraa computes it</title>
+
+    <!-- axes (guides) -->
+    <line x1="60" y1="18" x2="60" y2="172" stroke="#A1A1AA" stroke-width="1" />
+    <line x1="60" y1="172" x2="610" y2="172" stroke="#A1A1AA" stroke-width="1" />
+    <text x="52" y="22" text-anchor="end" font-size="9" fill="#52525B">100%</text>
+    <text x="52" y="172" text-anchor="end" font-size="9" fill="#52525B">0%</text>
+    <text x="60" y="186" text-anchor="start" font-size="9" fill="#52525B">$0</text>
+    <text x="610" y="186" text-anchor="end" font-size="10" fill="#52525B">Loss ($) &#8594;</text>
+    <text x="20" y="95" text-anchor="middle" font-size="10" fill="#52525B" transform="rotate(-90 20 95)">P(loss &#8805; X)</text>
+
+    <!-- shaded tail: loss at/beyond VaR 95, 12% opacity per house style -->
+    <path d="M430,164 Q520,163 610,168 L610,172 L430,172 Z" fill="#37464F" fill-opacity="0.12" stroke="none" />
+
+    <!-- VaR 95 guide (dashed) -->
+    <line x1="430" y1="18" x2="430" y2="172" stroke="#A1A1AA" stroke-width="1.5" stroke-dasharray="4 3" />
+    <text x="430" y="12" text-anchor="middle" font-size="11" fill="#52525B">VaR 95</text>
+
+    <!-- loss exceedance curve -->
+    <path d="M60,18 C160,42 230,92 300,132 C380,158 480,166 610,168" fill="none" stroke="#37464F" stroke-width="2" />
+    <circle cx="430" cy="164" r="4" fill="#37464F" />
+
+    <!-- ES bracket: the tail at and beyond VaR 95 -->
+    <line x1="430" y1="205" x2="610" y2="205" stroke="#37464F" stroke-width="1.5" />
+    <line x1="430" y1="200" x2="430" y2="210" stroke="#37464F" stroke-width="1.5" />
+    <line x1="610" y1="200" x2="610" y2="210" stroke="#37464F" stroke-width="1.5" />
+    <text x="520" y="222" text-anchor="middle" font-size="11" fill="#52525B">Expected shortfall (ES)</text>
+  </svg>
+  <figcaption>Loss exceedance anatomy: VaR marks the tail's edge; expected shortfall averages the losses at and beyond it.</figcaption>
+</figure>

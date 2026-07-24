@@ -90,7 +90,12 @@ async def test_run_and_read_var_es_and_outputs(authed_analyst):
 @pytest.mark.asyncio
 async def test_methodology_primer_glossary_and_nodes(authed_analyst):
     client, _ = authed_analyst
-    body = await _body(client, "methodology-primer")
+    # Slug renamed methodology-primer -> fair-in-idraa-terms (help-overhaul P1
+    # T1): this test asserts article CONTENT, so it must fetch the live slug
+    # directly rather than the old slug (which would silently pass via the
+    # drawer-redirect branch — an audit-old-tests violation); the redirect
+    # path has its own tests in test_help_redirects.py.
+    body = await _body(client, "fair-in-idraa-terms")
     # migrated full acronym expansions
     for full_term in [
         "Factor Analysis of Information Risk",
@@ -165,7 +170,12 @@ async def test_import_export_covers_csv_json_roundtrip(authed_analyst):
 @pytest.mark.asyncio
 async def test_reports_covers_pdf_and_attribution(authed_analyst):
     client, _ = authed_analyst
-    body = (await _body(client, "reports")).lower()
+    # Slug renamed reports -> reports-and-workbook (help-overhaul P1 T1): this
+    # test asserts article CONTENT, so it must fetch the live slug directly
+    # rather than the old slug (which would silently pass via the
+    # drawer-redirect branch — an audit-old-tests violation); the redirect
+    # path has its own tests in test_help_redirects.py.
+    body = (await _body(client, "reports-and-workbook")).lower()
     assert "pdf" in body
     assert "attribution" in body or "shapley" in body
     # Meth-I1: attribution labeled as a view-model derivation, not FAIR-grounded overclaim
@@ -197,3 +207,18 @@ async def test_run_and_read_covers_seed(authed_analyst):
     assert "seed" in body
     assert "reproducible" in body
     assert "vary" in body  # vary the seed for sampling variability
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "slug,figure_marker",
+    [
+        ("fair-in-idraa-terms", 'data-figure="factor-tree"'),
+        ("run-and-read-analyses", 'data-figure="lec-anatomy"'),
+    ],
+)
+async def test_article_renders_its_figure(authed_analyst, slug, figure_marker):
+    client, _ = authed_analyst
+    r = await client.get(f"/help/{slug}")
+    assert r.status_code == 200
+    assert figure_marker in r.text

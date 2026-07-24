@@ -49,11 +49,13 @@ ALLOWED_DIRS = {"macros"}
 #       cannot be expressed via data_table.action_menu (static href/action only).
 #
 #   help/articles/controls-overlays.html
-#   help/articles/methodology-primer.html
+#   help/articles/fair-in-idraa-terms.html
 #   help/articles/raw-samples-export.html
-#   help/articles/reports.html
+#   help/articles/reports-and-workbook.html
 #   help/articles/run-and-read-analyses.html
-#       Static prose reference tables on the read-only Help article pages
+#       (fair-in-idraa-terms.html renamed from methodology-primer.html,
+#       reports-and-workbook.html renamed from reports.html — help-overhaul
+#       P1 T1.) Static prose reference tables on the read-only Help article pages
 #       (acronym glossary, outputs→action mapping, FAIR-CAM control tables,
 #       PDF contents table). Fixed content, not data-driven ORM row sets; the
 #       data_table macro (sortable/paginated/projected) is unsuitable for static
@@ -240,15 +242,21 @@ ALLOWED_DIRS = {"macros"}
 #       password variant for factor-less accounts; form_field's text variant
 #       exposes neither.
 #
+#   help/_search_box.html
+#       HTMX active-search <input type="search">; no form_field search-input
+#       variant — same gap as library/browse.html (help-overhaul P1 T4).
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
     "controls/import.html",
     "controls/maintenance.html",
     "help/articles/controls-overlays.html",
-    "help/articles/methodology-primer.html",
+    # renamed in help-overhaul P1 (methodology-primer.html -> fair-in-idraa-terms.html)
+    "help/articles/fair-in-idraa-terms.html",
     "help/articles/raw-samples-export.html",
-    "help/articles/reports.html",
+    # renamed in help-overhaul P1 (reports.html -> reports-and-workbook.html)
+    "help/articles/reports-and-workbook.html",
     "help/articles/run-and-read-analyses.html",
     "layouts/_sidebar.html",
     "library/browse.html",
@@ -295,6 +303,7 @@ ALLOWLIST: set[str] = {
     "auth/mfa_challenge.html",
     "account/security.html",
     "auth/step_up.html",
+    "help/_search_box.html",
 }
 
 
@@ -346,7 +355,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 47 = 46 + help/articles/raw-samples-export.html (#109: static prose
     #      reference tables, same justification block as its four Help-article
     #      siblings — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 47, (
+    # 48 = 47 + help/_search_box.html (help-overhaul P1 T4: HTMX active-search
+    #      <input type="search">, same form_field gap as library/browse.html —
+    #      justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 48, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

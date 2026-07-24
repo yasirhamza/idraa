@@ -137,6 +137,10 @@
   {# Help slide-over drawer store. Non-defer, like sub_function_combobox.js, so
      its alpine:init listener registers before Alpine initializes. #}
   <script src="/static/js/help_drawer.js?v={{ static_version }}"></script>
+  {# Docs-hub behaviors (help-overhaul P1 T4): TOC scrollspy + '/' search
+     shortcut. `defer` since it only wires event listeners, no alpine:init
+     race like sub_function_combobox.js/help_drawer.js above. #}
+  <script src="/static/js/help_hub.js?v={{ static_version }}" defer></script>
   {# Passkey (WebAuthn) ceremonies — window.idraaWebAuthn.register()/.authenticate().
      `defer` since it's only invoked from inline onclick handlers after load. #}
   <script src="/static/js/webauthn.js?v={{ static_version }}" defer></script>
@@ -144,7 +148,14 @@
 <body class="min-h-screen bg-surface-2" hx-boost="true">
   {% include "layouts/_sidebar.html" %}
   {% include "layouts/_flash.html" %}
+  {#- data-help-slug carries the route-aware help default for the '?'
+      shortcut (help_hub.js). MUST live on <main> inside the swapped body,
+      NOT on <body> — hx-boost replaces <body>'s innerHTML, so a <body>
+      attribute goes stale for the rest of the session the moment a
+      boosted nav lands (Sec-I1/Arch-I2, same swap-semantics class as PR
+      #205's x-data global-read race). -#}
   <main id="main"
+        data-help-slug="{{ help_slug_for_path(request.url.path) or '' }}"
         class="
           bg-surface-0 min-h-screen
           ml-0 md:ml-60

@@ -2861,11 +2861,13 @@ def test_controls_help_url_uses_caller_base_url_never_hardcoded():
             build_single_run_let_workbook(run, _make_org(), base_url="https://idraa.app")
         )
     )
-    assert "https://idraa.app/help/control-value-robustness" in with_base
+    # Slug renamed control-value-robustness -> why-values-are-ranges
+    # (help-overhaul P1 T1); this pins the LIVE slug new exports emit.
+    assert "https://idraa.app/help/why-values-are-ranges" in with_base
 
     default = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org())))
     assert "idraa.fly.dev" not in default
-    assert "/help/control-value-robustness" in default
+    assert "/help/why-values-are-ranges" in default
 
 
 def test_controls_basis_note_absent_on_insufficient_budget_blob():

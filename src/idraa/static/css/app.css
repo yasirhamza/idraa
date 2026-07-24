@@ -524,3 +524,154 @@ form fieldset > legend {
 }
 /* Tighter vertical rhythm inside form sections (density, not air). */
 form fieldset .space-y-3 > * + * { margin-top: 0.55rem; }
+
+/* ---- help hub (P1) ==========================================================
+   Three-column docs-hub shell (help/article_page.html, help/_nav.html,
+   help/_toc.html) + the shared article prose layer (help/_article.html's
+   `.prose-help`). Token variables only — no hardcoded hex. Sizes mirror the
+   tailwind.config.js `text-body`/`text-meta` scale (this file is NOT run
+   through the Tailwind build — see _tailwind_entry.css — so the numbers are
+   spelled out literally here rather than referenced via a Tailwind theme
+   function). */
+
+/* Article tree links (help/_nav.html). 2px transparent left rail reserves
+   the space so the active state's brand rail doesn't shift layout. */
+.help-nav-link {
+  display: block;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-ink-2);
+  padding: 0.3rem 0.5rem;
+  border-left: 2px solid transparent;
+}
+.help-nav-link:hover {
+  background-color: var(--color-surface-2);
+}
+.help-nav-link-active {
+  color: var(--color-brand);
+  border-left-color: var(--color-brand);
+  background-color: var(--color-surface-2);
+  font-weight: 600;
+}
+
+/* On-page table of contents (help/_toc.html). Sticky so it tracks scroll
+   inside the xl three-column grid. */
+.help-toc {
+  position: sticky;
+  top: 1rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.help-toc-link {
+  display: block;
+  color: var(--color-ink-3);
+  border-left: 1px solid var(--color-border-subtle);
+  padding: 0.25rem 0 0.25rem 0.6rem;
+}
+.help-toc-link-active {
+  color: var(--color-brand);
+  border-left: 2px solid var(--color-brand);
+  font-weight: 600;
+}
+
+/* Prev/next article cards (article_page.html footer). */
+.help-pn {
+  display: block;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.5rem;
+  background-color: var(--color-surface-1);
+  padding: 0.9rem 1.1rem;
+}
+.help-pn:hover {
+  border-color: var(--color-brand);
+}
+
+/* Article prose (help/_article.html's <article class="prose-help">).
+   Numbered h2 sections via a CSS counter (Sec-N: purely presentational —
+   the numbers are NOT part of the derived TOC/anchor data, so they can
+   never drift out of sync with a renumbered article). */
+.prose-help {
+  counter-reset: help-h2;
+}
+.prose-help h2 {
+  counter-increment: help-h2;
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+}
+.prose-help h2::before {
+  content: counter(help-h2) " · ";
+  color: var(--color-ink-3);
+  font-weight: 500;
+}
+.prose-help p {
+  line-height: 1.55;
+  color: var(--color-ink-2);
+  margin-top: 0.75rem;
+}
+.prose-help table {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.375rem;
+  margin: 1rem 0;
+}
+.prose-help table th,
+.prose-help table td {
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0.5rem 0.75rem;
+}
+.prose-help table th {
+  text-align: left;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+/* Callouts (spec §Typography — P2 content lands on this layer; the CSS
+   ships now so P1 has nothing to retrofit). */
+.help-callout {
+  border-left: 3px solid var(--color-brand);
+  background-color: var(--color-surface-2);
+  border-radius: 0 0.375rem 0.375rem 0;
+  padding: 0.75rem 1rem;
+  margin: 1.25rem 0;
+}
+.help-callout-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-brand);
+  margin-bottom: 0.25rem;
+}
+
+/* First-party SVG figures (help/figures/**, Task 6). */
+.help-figure {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.5rem;
+  background-color: var(--color-surface-1);
+  padding: 1rem;
+  text-align: center;
+  margin: 1.5rem 0;
+}
+.help-figure svg {
+  max-width: 100%;
+  height: auto;
+}
+.help-figure figcaption {
+  font-size: 0.75rem;
+  color: var(--color-ink-3);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+/* Anchor-jump highlight (help_hub.js's drawer-swap handler, Task 5). Fades
+   from surface-2 to transparent so a `?open-help#anchor` landing is visibly
+   findable without a jarring permanent highlight. */
+@keyframes help-anchor-pulse {
+  from { background-color: var(--color-surface-2); }
+  to { background-color: transparent; }
+}
+.help-anchor-pulse {
+  animation: help-anchor-pulse 2s ease-out;
+}

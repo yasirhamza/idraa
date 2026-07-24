@@ -24,11 +24,14 @@ async def test_feature_page_has_help_trigger(authed_analyst, url, slug):
 
 @pytest.mark.asyncio
 async def test_reports_page_has_help_trigger(authed_analyst):
-    """Reports list (/reports) renders the 'reports' help trigger for analysts."""
+    """Reports list (/reports) renders the help trigger for analysts.
+
+    Slug renamed reports -> reports-and-workbook (help-overhaul P1 T1).
+    """
     client, _ = authed_analyst
     r = await client.get("/reports")
     assert r.status_code == 200
-    assert 'hx-get="/help/reports"' in r.text
+    assert 'hx-get="/help/reports-and-workbook"' in r.text
 
 
 @pytest.mark.asyncio
