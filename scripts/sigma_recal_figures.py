@@ -233,6 +233,7 @@ def prod_runs(active_only: bool) -> dict[str, object]:
     )
     if active_only:
         sql += " WHERE status = 'active'"
+    sql += " ORDER BY id"
     rows = db.execute(sql).fetchall()
     n_lognormal = sum(
         1
@@ -338,6 +339,45 @@ def portfolio_ale(active_only: bool) -> dict[str, object]:
     return out
 
 
+def _prod_revenue(db: sqlite3.Connection) -> float:
+    """Read the org's annual revenue and pin it against the REVENUE constant so
+    D8's denominator can never silently diverge from its source."""
+    row = db.execute("SELECT annual_revenue FROM organizations ORDER BY id LIMIT 1").fetchone()
+    revenue = float(row[0])
+    if revenue != REVENUE:
+        raise SystemExit(f"PIN FAILED: org annual_revenue {revenue} != REVENUE constant {REVENUE}")
+    return revenue
+
+
+def per_scenario_ale() -> list[tuple[str, float, float, float]] | dict[str, str]:
+    """[B-SCEN-ALE] per-scenario analytic ALE, today -> narrow_only, every active
+    scenario with a nonzero delta. This is the row the banner's 'per-scenario ALE
+    reductions up to X%' quote comes from — ALE, never a PL-mean."""
+    if not PROD_DB.exists():
+        return {"unavailable": str(PROD_DB)}
+    db = sqlite3.connect(PROD_DB)
+    _prod_revenue(db)
+    rows = db.execute(
+        "SELECT name, threat_event_frequency, vulnerability, primary_loss, secondary_loss "
+        "FROM scenarios WHERE status = 'active' ORDER BY id"
+    ).fetchall()
+    out: list[tuple[str, float, float, float]] = []
+    for name, tef, vuln, pl, sl in rows:
+        j = [json.loads(b) if b else None for b in (tef, vuln, pl, sl)]
+        lef = _dist_mean(j[0], "today", is_loss=False) * _dist_mean(j[1], "today", is_loss=False)
+        before = lef * (
+            _dist_mean(j[2], "today", is_loss=True) + _dist_mean(j[3], "today", is_loss=True)
+        )
+        after = lef * (
+            _dist_mean(j[2], "narrow_only", is_loss=True)
+            + _dist_mean(j[3], "narrow_only", is_loss=True)
+        )
+        if before > 0 and abs(after / before - 1.0) > 1e-12:
+            out.append((name, before, after, after / before - 1.0))
+    out.sort(key=lambda r: r[3])
+    return out
+
+
 def run_lm_sim() -> dict[str, object]:
     """[B-RUN-LM-SIM] simulated max single-event LM over the committed seed set.
 
@@ -353,7 +393,7 @@ def run_lm_sim() -> dict[str, object]:
 
     db = sqlite3.connect(PROD_DB)
     rows = db.execute(
-        "SELECT name, primary_loss, secondary_loss FROM scenarios WHERE status = 'active'"
+        "SELECT name, primary_loss, secondary_loss FROM scenarios WHERE status = 'active' ORDER BY id"
     ).fetchall()
     lognormal_scen: list[tuple[str, dict | None, dict | None]] = []
     pert_only_bound = 0.0
@@ -381,13 +421,19 @@ def run_lm_sim() -> dict[str, object]:
             return d["low"] + rng.beta(a, b, ITERS) * (d["high"] - d["low"])  # type: ignore[attr-defined]
         return 0.0
 
+    import hashlib
+
     out: dict[str, object] = {"pert_only_bound": pert_only_bound, "seeds": SIM_SEEDS}
     for rule in ("today", "narrow_only"):
         maxima = []
         for seed in SIM_SEEDS:
-            rng = np.random.default_rng(seed)
             worst = 0.0
-            for _name, pld, sld in lognormal_scen:
+            for name, pld, sld in lognormal_scen:
+                # Per-scenario substream keyed on a stable digest of the name:
+                # results are invariant to scenario iteration order and to DB
+                # re-creation, unlike a single shared stream per seed.
+                key = int.from_bytes(hashlib.sha256(name.encode()).digest()[:8], "big")
+                rng = np.random.default_rng([seed, key])
                 lm = draw(pld, rule, rng) + draw(sld, rule, rng)
                 worst = max(worst, float(np.max(lm)))
             maxima.append(worst)
@@ -486,6 +532,15 @@ def main() -> None:
         print(
             f"  today ${t:,.0f} -> narrow_only ${n:,.0f}  = {n / t - 1.0:+.2%}"  # type: ignore[operator]
         )
+
+    scen = per_scenario_ale()
+    print("\n[B-SCEN-ALE] per-scenario analytic ALE, today -> narrow_only (nonzero deltas)")
+    if isinstance(scen, dict):
+        print(f"  SKIPPED: {scen['unavailable']} not present")
+    else:
+        for name, before, after, delta in scen:
+            print(f"  {name[:44]:44} ${before:>13,.0f} -> ${after:>13,.0f}  {delta:+8.2%}")
+        print("  (all other active scenarios: delta 0 — no lognormal loss field above the default)")
 
     sim = run_lm_sim()
     print(f"\n[B-RUN-LM-SIM] simulated max LM, seeds={SIM_SEEDS}, active lognormal-bearing")
