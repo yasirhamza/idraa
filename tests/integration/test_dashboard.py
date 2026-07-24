@@ -670,14 +670,19 @@ async def test_dashboard_run_without_name_displays_scenario_name_fallback(
     assert 'data-localize="datetime"' in r.text
 
 
-# ---------- 10. PR omega T6: dual EPC + dual LEC side-by-side ----------
+# ---------- 10. PR omega T6: dual EPC + dual LEC tab toggle ----------
 
 
-async def test_dashboard_renders_dual_epc_alongside_dual_lec(
+async def test_dashboard_renders_dual_epc_and_dual_lec_toggle(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,
 ) -> None:
-    """Dashboard renders dual_lec + dual_epc side-by-side in Card 3."""
+    """Dashboard renders dual_lec + dual_epc in a TAB TOGGLE in Card 3, not a
+    side-by-side grid. The LEC figure carries an interactive controls row (the
+    p-slider + linear/log toggle) the EPC figure lacks, so a 2-col grid left
+    their plot areas vertically misaligned and drew the legend twice; the
+    toggle (mirroring runs/components/exceedance_chart.html) shows one at a
+    time. Both figures are still server-rendered (one pane hidden via x-show)."""
     client, org_id = authed_analyst
     s1, s2 = uuid.uuid4(), uuid.uuid4()
     run = _make_completed_aggregate_run(
@@ -700,7 +705,13 @@ async def test_dashboard_renders_dual_epc_alongside_dual_lec(
     # the retired container divs to the SVG contract.
     assert 'data-chart="dual-epc"' in body
     assert 'data-chart="dual-lec"' in body
-    assert "lg:grid-cols-2" in body
+    # Tabbed toggle, not a side-by-side grid: both panes present, one hidden.
+    assert "{ pane: 'lec' }" in body
+    assert ">Loss exceedance<" in body
+    assert ">Probability curve<" in body
+    assert "pane === 'epc'" in body
+    # EPC pane starts hidden with x-cloak (no flash-of-content before Alpine).
+    assert "x-show=\"pane === 'epc'\" x-cloak" in body
 
 
 # ---------- Quick-start card (whole-project-eval onboarding polish) ----------

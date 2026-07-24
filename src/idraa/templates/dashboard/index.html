@@ -98,16 +98,28 @@
   <div class="bg-surface-1 border border-border-subtle rounded-card p-6">
     <h2 class="font-mono uppercase tracking-[0.14em] text-[10.5px] text-ink-3 mb-3">Loss distributions</h2>
     {% if data.dual_lec %}
-      <p class="text-meta text-ink-2 mb-2">
-        <a class="link" href="/runs/{{ data.latest_aggregate.id }}">
-          {{ data.latest_aggregate_label }}
-        </a>
-      </p>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
+      {#- LEC and EPC are two views of the SAME distribution, shown one at a
+          time behind a tab toggle (mirrors runs/components/exceedance_chart.html),
+          NOT side-by-side. The LEC figure carries an interactive controls row
+          (p-slider + linear/log toggle) the EPC figure lacks, so a 2-col grid
+          left the two plot areas vertically misaligned and drew the shared
+          legend twice. Inline x-data literal — no window.* dependency (PR #205). -#}
+      <div x-data="{ pane: 'lec' }">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p class="text-meta text-ink-2">
+            <a class="link" href="/runs/{{ data.latest_aggregate.id }}">
+              {{ data.latest_aggregate_label }}
+            </a>
+          </p>
+          <div class="tabs tabs-boxed bg-surface-2">
+            <a class="tab tab-sm" :class="pane === 'lec' && 'tab-active'" @click="pane = 'lec'" role="button">Loss exceedance</a>
+            <a class="tab tab-sm" :class="pane === 'epc' && 'tab-active'" @click="pane = 'epc'" role="button">Probability curve</a>
+          </div>
+        </div>
+        <div x-show="pane === 'lec'">
           {{ dual_lec_curve(data.dual_lec, tolerance=data.loss_tolerance, currency=data.currency) }}
         </div>
-        <div>
+        <div x-show="pane === 'epc'" x-cloak>
           {{ dual_epc_curve(data.dual_epc, tolerance=data.loss_tolerance, currency=data.currency) }}
         </div>
       </div>
