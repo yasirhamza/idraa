@@ -88,6 +88,80 @@ def test_build_derived_rejects_script_in_figure(tmp_path) -> None:
         )
 
 
+def test_build_derived_rejects_quote_adjacent_event_handler_in_figure(tmp_path) -> None:
+    # PRSec-2: `<rect x="1"onload=alert(1)>` has NO whitespace or slash
+    # before `onload=` — just the closing quote of the PRECEDING attribute.
+    # Browsers parse this identically to the whitespace-separated form; the
+    # original `[\s/]on[a-z]+\s*=` pattern anchored only on whitespace/slash
+    # and missed it, so the quote char itself must anchor the match too.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    (figures_dir / "evil.html").write_text('<svg><rect x="1"onload=alert(1)></svg>')
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    with pytest.raises(ValueError, match="inline event-handler attribute not allowed"):
+        _build_derived(
+            articles=art,
+            redirects={},
+            route_map=(),
+            articles_dir=articles_dir,
+            figures_dir=figures_dir,
+        )
+
+
+def test_build_derived_scans_non_html_figure_files(tmp_path) -> None:
+    # PRSec-3: figures_dir.rglob("*.html") silently skipped a sibling .svg
+    # (invisible to the article parser too, since {% include %} is
+    # Jinja-stripped) — rglob("*") + is_file() scans every figure file
+    # regardless of extension.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    (figures_dir / "evil.svg").write_text("<svg><script>1</script></svg>")
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    with pytest.raises(ValueError, match="not allowed in help content"):
+        _build_derived(
+            articles=art,
+            redirects={},
+            route_map=(),
+            articles_dir=articles_dir,
+            figures_dir=figures_dir,
+        )
+
+
+def test_build_derived_rejects_foreign_object_in_figure(tmp_path) -> None:
+    # PRSec-4: <foreignObject> is SVG's arbitrary-HTML embedding hatch —
+    # it can carry a nested <script>/on* payload through a shape the
+    # script-tag and event-handler checks don't anticipate on their own.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    (figures_dir / "evil.html").write_text(
+        '<svg><foreignObject width="1" height="1">x</foreignObject></svg>'
+    )
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    with pytest.raises(ValueError, match="foreignObject"):
+        _build_derived(
+            articles=art,
+            redirects={},
+            route_map=(),
+            articles_dir=articles_dir,
+            figures_dir=figures_dir,
+        )
+
+
 def test_build_derived_failure_paths(tmp_path) -> None:
     # SC-I5: every _build_derived guard has a pinned failure (injectable
     # params keep the real registry untouched).

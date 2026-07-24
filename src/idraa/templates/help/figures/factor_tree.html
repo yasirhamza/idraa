@@ -1,10 +1,12 @@
 {#- src/idraa/templates/help/figures/factor_tree.html — static first-party
-    SVG figure (Task 6). Colors are literal graphite tokens, not CSS vars: an
-    SVG served through a Jinja include has no access to var(--color-…) at
-    paint time. #37464F = graphite strokes + primary labels (matches
-    pdf_theme/chart palette), #52525B = secondary labels. No script tags, no
-    on*= handlers, no Jinja expressions inside this figure — enforced by
-    help_content.py's import-time figure guard (Sec2-I3/Sec3-N2b). -#}
+    SVG figure (Task 6). Colors are literal graphite tokens, not CSS vars
+    (PRSC-N1): fill=/stroke= are SVG PRESENTATION ATTRIBUTES, which cannot
+    take var(--color-…) — only CSS properties set via a <style> block or
+    external sheet can reference a custom property. #37464F = graphite
+    strokes + primary labels (matches pdf_theme/chart palette), #52525B =
+    secondary labels. No script tags, no on*= handlers, no Jinja
+    expressions inside this figure — enforced by help_content.py's
+    import-time figure guard (Sec2-I3/Sec3-N2b). -#}
 <figure class="help-figure" data-figure="factor-tree">
   <svg viewBox="0 0 640 260" role="img" aria-labelledby="fig-factor-tree-title" xmlns="http://www.w3.org/2000/svg">
     <title id="fig-factor-tree-title">The FAIR factor tree as Idraa models it</title>

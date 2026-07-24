@@ -389,3 +389,58 @@ async def test_boosted_navigation_preserves_page_chrome(migrated_server_url: str
 
         await context.close()
         await browser.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_boosted_nav_from_drawer_closes_stranded_drawer(migrated_server_url: str) -> None:
+    """PRArch-I1: clicking a boosted nav link (help_trigger's "Open full
+    guide") from INSIDE the open drawer must close the drawer. A boosted
+    click replaces the whole <body> DOM (drawer included) via innerHTML
+    swap, but the Alpine `helpDrawer` store is a JS singleton that survives
+    that swap untouched — without the htmx:beforeSwap listener in
+    help_hub.js, the fresh page would land with `open` still true and
+    re-render stranded under an EMPTY slide-over (the new #help-drawer-body
+    is a bare, unpopulated <div> on a freshly-rendered page)."""
+    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import async_playwright, expect
+
+    base = migrated_server_url
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(headless=True)
+        except PlaywrightError as exc:  # browser binary not installed
+            pytest.skip(
+                "Playwright Chromium not installed "
+                f"(run `uv run playwright install chromium`): {exc}"
+            )
+        context = await browser.new_context(viewport=_DESKTOP_VIEWPORT)
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+
+        # /scenarios is a mapped route (HELP_ROUTE_MAP) -> build-a-scenario:
+        # the sidebar Help entry opens the drawer straight on that article.
+        await page.goto(f"{base}/scenarios")
+        await page.wait_for_function(
+            "() => window.Alpine && Alpine.store('helpDrawer') !== undefined"
+        )
+
+        trigger = page.locator("#sidebar [hx-get='/help/build-a-scenario']")
+        await trigger.click()
+
+        drawer = page.locator("#help-drawer")
+        await expect(drawer).to_be_visible()
+        await expect(page.locator("#help-drawer-body article h1")).to_have_text("Build a scenario")
+
+        # "Open full guide" is a boosted <a> inside the drawer body (hx-boost
+        # is on <body>; this link carries no explicit hx-get of its own).
+        await page.locator("#help-drawer-body a", has_text="Open full guide").click()
+        await page.wait_for_url(f"{base}/help/build-a-scenario")
+
+        await expect(drawer).to_be_hidden()
+        await expect(page.locator("article h1")).to_have_text("Build a scenario")
+
+        await context.close()
+        await browser.close()

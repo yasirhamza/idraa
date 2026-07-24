@@ -106,11 +106,26 @@ async def test_help_nav_active_on_article_page(authed_analyst):
 
 @pytest.mark.asyncio
 async def test_help_search_endpoint_returns_partial(authed_analyst) -> None:
+    # PRArch-N1: direct-nav (no HX-Request) now redirects to /help instead of
+    # emitting a headless partial — this test asserts the HX-driven partial
+    # shape specifically, so it must send the header rather than rely on the
+    # old no-header default (migrated deliberately, not blindly re-pinned).
     client, _ = authed_analyst
-    r = await client.get("/help/search", params={"q": "scenario"})
+    r = await client.get("/help/search", params={"q": "scenario"}, headers={"HX-Request": "true"})
     assert r.status_code == 200
     assert "/help/build-a-scenario" in r.text
     assert "<html" not in r.text  # partial, not a full page
+
+
+@pytest.mark.asyncio
+async def test_help_search_direct_nav_redirects_to_index(authed_analyst) -> None:
+    # PRArch-N1: a typed/bookmarked /help/search URL (no HX-Request) has no
+    # sensible bare-partial rendering — redirect to the index rather than
+    # serve a headless fragment with no page chrome.
+    client, _ = authed_analyst
+    r = await client.get("/help/search", params={"q": "scenario"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/help"
 
 
 @pytest.mark.asyncio

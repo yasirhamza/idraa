@@ -208,9 +208,24 @@ _WORDS_PER_MINUTE = 200
 _SCRIPT_TAG = re.compile(r"<\s*script", re.IGNORECASE)
 
 
-# [\s/] not \s alone (Sec4-N2): <svg/onload=…> slash-separated attributes
-# are valid HTML and classic pasted-payload notation.
-_EVENT_HANDLER_ATTR = re.compile(r"[\s/]on[a-z]+\s*=", re.IGNORECASE)
+# [\s/'"] not \s alone (Sec4-N2/PRSec-2): <svg/onload=…> slash-separated
+# attributes are valid HTML and classic pasted-payload notation; a quote
+# character can ALSO sit directly against on*= with zero whitespace (e.g.
+# <rect x="1"onload=alert(1)>, which every browser parses identically to
+# the whitespace-separated form) — the quote char itself must anchor the
+# match too, or that shape sails through unnoticed.
+_EVENT_HANDLER_ATTR = re.compile(r"[\s/'\"]on[a-z]+\s*=", re.IGNORECASE)
+
+# PRSec-4: <foreignObject> is SVG's arbitrary-HTML embedding hatch (it can
+# carry a nested <body onload=…>/<script> through a shape the two checks
+# above don't anticipate); xlink:href/an absolute http(s) href can point a
+# figure at an external resource. CSP blocks the fetch at runtime either
+# way (both are belt-and-suspenders against a pasted/AI-generated figure
+# landing the bytes in the first place) — this is import-time
+# defense-in-depth, not the only gate.
+_FOREIGN_OBJECT = re.compile(r"<\s*foreignobject", re.IGNORECASE)
+_XLINK_HREF = re.compile(r"xlink:href", re.IGNORECASE)
+_ABSOLUTE_HTTP_HREF = re.compile(r'href\s*=\s*"http', re.IGNORECASE)
 
 
 def _reject_scripts(source: str, *, name: str, check_event_handlers: bool = False) -> None:
@@ -222,12 +237,20 @@ def _reject_scripts(source: str, *, name: str, check_event_handlers: bool = Fals
 
     check_event_handlers (figures only, Sec3-N2b): pasted SVG's more common
     vector is an on*= attribute, not a script tag; article prose could
-    false-positive on words like 'online =', so the handler check is scoped
-    to figure sources."""
+    false-positive on words like 'online =', so the handler check (and the
+    foreignObject/xlink:href/absolute-href checks, PRSec-4) is scoped to
+    figure sources."""
     if _SCRIPT_TAG.search(source):
         raise ValueError(f"{name}: <script> not allowed in help content")
-    if check_event_handlers and _EVENT_HANDLER_ATTR.search(source):
-        raise ValueError(f"{name}: inline event-handler attribute not allowed in figures")
+    if check_event_handlers:
+        if _EVENT_HANDLER_ATTR.search(source):
+            raise ValueError(f"{name}: inline event-handler attribute not allowed in figures")
+        if _FOREIGN_OBJECT.search(source):
+            raise ValueError(f"{name}: <foreignObject> not allowed in figures")
+        if _XLINK_HREF.search(source):
+            raise ValueError(f"{name}: xlink:href not allowed in figures")
+        if _ABSOLUTE_HTTP_HREF.search(source):
+            raise ValueError(f"{name}: absolute http(s) href not allowed in figures")
 
 
 class _ArticleParser(HTMLParser):
@@ -299,8 +322,12 @@ def _build_derived(
     # Sec2-I3: figure sources are structurally invisible to the article
     # parser ({% include %} is stripped) — scan them directly. rglob so a
     # P2 subdirectory layout can't silently skip the scan (Sec3-N2a).
+    # PRSec-3: glob every FILE, not just "*.html" — an included .svg would
+    # ALSO be Jinja-stripped from the article parse (the include tag names
+    # a template path; the .svg's own bytes are never visible to it), so a
+    # "*.html"-only glob left it invisible to every guard in this module.
     if figures_dir.is_dir():
-        for fig in sorted(figures_dir.rglob("*.html")):
+        for fig in sorted(p for p in figures_dir.rglob("*") if p.is_file()):
             _reject_scripts(
                 fig.read_text(encoding="utf-8"), name=fig.name, check_event_handlers=True
             )

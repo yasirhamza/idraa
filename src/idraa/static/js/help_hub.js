@@ -63,6 +63,15 @@
     }
   });
 
+  // PRArch-I1: a boosted swap replaces the drawer's DOM but the Alpine store
+  // survives — close it or the destination renders under an empty slide-over.
+  document.addEventListener('htmx:beforeSwap', function (e) {
+    if (e.detail && e.detail.boosted && window.Alpine) {
+      var s = Alpine.store('helpDrawer');
+      if (s && s.open) s.open = false; // not hide(): focus-restore would fight the swap
+    }
+  });
+
   // '?' opens contextual help for the current route (carried on <main
   // id="main"> — NEVER on <body>, whose attributes go stale across
   // hx-boost's innerHTML swap; see the data-help-slug comment in base.html).

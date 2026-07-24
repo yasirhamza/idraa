@@ -137,15 +137,19 @@
       {%- set _mapped_help_slug = help_slug_for_path(request.url.path) -%}
       <li>
         {% if _mapped_help_slug %}
-        <button type="button"
-                hx-get="/help/{{ _mapped_help_slug }}"
-                hx-target="#help-drawer-body"
-                hx-swap="innerHTML"
-                @click="$store.helpDrawer.show()"
-                class="flex items-center w-full px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2">
+        {# PRArch-N2: a real <a href> now, not a bare <button> — middle-click,
+           "open in new tab", and JS-off all degrade to a plain navigation to
+           the mapped article; htmx only preventDefault()s a plain click, so
+           the drawer-opening behavior below is unaffected. #}
+        <a href="/help/{{ _mapped_help_slug }}"
+           hx-get="/help/{{ _mapped_help_slug }}"
+           hx-target="#help-drawer-body"
+           hx-swap="innerHTML"
+           @click="$store.helpDrawer.show()"
+           class="flex items-center w-full px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2">
           <span x-show="!collapsed">Help</span>
           <span x-show="collapsed" aria-hidden="true" class="text-meta">H</span>
-        </button>
+        </a>
         {% else %}
         <a href="/help"
            class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"

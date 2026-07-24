@@ -53,11 +53,19 @@ async def help_search(
     request: Request,
     q: str = Query("", max_length=256),  # Sec-N3: bound before template context
     user: User = Depends(require_user),
-) -> HTMLResponse:
+) -> Response:
+    if not is_htmx_request(request):
+        # PRArch-N1: direct-nav (typed/bookmarked URL, no HX-Request) has no
+        # sensible bare-partial rendering — a headless fragment with no page
+        # chrome is a worse landing than the index. This is now a SECOND
+        # response shape alongside the HX-driven partial below, so both vary
+        # on HX-Request.
+        return RedirectResponse("/help", status_code=303, headers={"Vary": "HX-Request"})
     return templates.TemplateResponse(
         request,
         "help/_search_results.html",
         {"current_user": user, "q": q, "hits": search_help(q)},
+        headers={"Vary": "HX-Request"},
     )
 
 
