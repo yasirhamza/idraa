@@ -1,0 +1,355 @@
+"""Single source of truth for every figure quoted in the sigma-recalibration design.
+
+Four review rounds each shipped at least one number computed on one basis and
+published under another. Hand-maintaining ~240 numeric tokens across five bases
+in prose does not converge; this script does the arithmetic once and labels each
+result with its basis, so the design quotes generated output instead of
+re-deriving values by hand.
+
+Bases (mirrors the design's register):
+  B-LIB-MEAN  sum of per-event means; PERT (5*low+high)/6, lognormal exp(mu+s^2/2)
+  B-LIB-MED   realized median of the SAMPLED shape (Vose BetaPERT gamma=4)
+  B-RUN-LM    max single-event Loss Magnitude = PL+SL, analytic, n=iters
+  B-PORT-ALE  portfolio ALE mean, analytic over prod scenarios
+
+Usage:  uv run python scripts/sigma_recal_figures.py
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import sqlite3
+import statistics as st
+from pathlib import Path
+
+from scipy.stats import beta as beta_dist
+from scipy.stats import norm
+
+ROOT = Path(__file__).resolve().parents[1]
+PROD_DB = Path.home() / "idraa-backups" / "idraa-prod-20260724T120747Z.db"
+
+Z95 = 1.6448536269514722
+SIGMA_DEFAULT = 1.7
+IC3_BEC_MEAN = 123005.0
+VENDOR_SLUGS = [
+    "agri-coop-bec-fraud",
+    "bec-fraud-financial",
+    "manufacturing-billing-fraud",
+    "professional-payroll-bec",
+    "telecom-sim-swap-fraud",
+]
+ITERS = 700_000
+Z_RUN = float(norm.ppf(1 - 1 / ITERS))
+REVENUE = 4_000_000_000.0
+
+
+def _entries() -> list[dict]:
+    out: list[dict] = []
+    for name in ("seed_library_entries.json", "seed_library_entries_extension.json"):
+        out.extend(json.loads((ROOT / "data" / name).read_text(encoding="utf-8")))
+    return out
+
+
+def _pert_ab(low: float, high: float) -> tuple[float, float]:
+    """Vose BetaPERT gamma=4 at mode==low, mirroring fair_core.py:155-164."""
+    g = 4.0
+    mean = (low + g * low + high) / (g + 2.0)
+    sd = (high - low) / (g + 2.0)
+    a = ((mean - low) / (high - low)) * (((mean - low) * (high - mean) / sd**2) - 1.0)
+    return a, a * (high - mean) / (mean - low)
+
+
+def _realized_median(low: float, high: float) -> float:
+    a, b = _pert_ab(low, high)
+    return low + float(beta_dist.ppf(0.5, a, b)) * (high - low)
+
+
+def _pert_mean(low: float, high: float) -> float:
+    return (5.0 * low + high) / 6.0
+
+
+def library() -> dict[str, object]:
+    """Capped + catastrophic re-derivation under the 149-median / 5-vendor-mean split."""
+    cap_old = cap_new = cat_old = cat_new = 0.0
+    med_ratios: list[float] = []
+    med_ratios_149: list[float] = []
+    high_cuts: list[float] = []
+    risers: list[tuple[str, float]] = []
+    sigmas: list[float] = []
+    n_capped = n_cat = 0
+
+    for e in _entries():
+        vendor = e.get("loss_tier") == "vendor"
+        for field in ("primary_loss", "secondary_loss"):
+            d = e.get(field) or {}
+            kind = d.get("distribution")
+            if kind == "PERT":
+                low, high = d["low"], d["high"]
+                mu = math.log(math.sqrt(low * high))
+                sigmas.append(math.log(high / low) / (2 * Z95))
+                is_mean_anchored = vendor and field == "primary_loss"
+                nmu = (math.log(IC3_BEC_MEAN) - SIGMA_DEFAULT**2 / 2) if is_mean_anchored else mu
+                nlow = math.exp(nmu - Z95 * SIGMA_DEFAULT)
+                nhigh = math.exp(nmu + Z95 * SIGMA_DEFAULT)
+                cap_old += _pert_mean(low, high)
+                cap_new += _pert_mean(nlow, nhigh)
+                high_cuts.append(high / nhigh)
+                ratio = _realized_median(low, high) / _realized_median(nlow, nhigh)
+                med_ratios.append(ratio)
+                if is_mean_anchored:
+                    risers.append((e["slug"], 1.0 / ratio))
+                else:
+                    med_ratios_149.append(ratio)
+                n_capped += 1
+            elif kind == "lognormal":
+                cat_old += math.exp(d["mean"] + d["sigma"] ** 2 / 2)
+                cat_new += math.exp(d["mean"] + SIGMA_DEFAULT**2 / 2)
+                n_cat += 1
+
+    return {
+        "n_capped": n_capped,
+        "n_catastrophic": n_cat,
+        "capped_mean_before": cap_old,
+        "capped_mean_after": cap_new,
+        "capped_pct": cap_new / cap_old,
+        "cat_mean_before": cat_old,
+        "cat_mean_after": cat_new,
+        "library_before": cap_old + cat_old,
+        "library_after": cap_new + cat_new,
+        "library_delta": (cap_new + cat_new) / (cap_old + cat_old) - 1.0,
+        "capped_only_delta": cap_new / cap_old - 1.0,
+        "median_sigma": st.median(sigmas),
+        "median_high_cut_154": st.median(high_cuts),
+        "median_high_cut_149": st.median(
+            [h for h, r in zip(high_cuts, med_ratios, strict=True) if r > 1]
+        ),
+        "med_ratio_min": min(med_ratios),
+        "med_ratio_max": max(med_ratios),
+        "med_ratio_median_154": st.median(med_ratios),
+        "med_ratio_median_149": st.median(med_ratios_149),
+        "risers": sorted(risers, key=lambda x: -x[1]),
+    }
+
+
+def pins() -> None:
+    """Fail loud if the library shape moved under the figures.
+
+    Without these every quoted figure silently re-bases on the next seed edit,
+    which is precisely the failure the generator exists to prevent.
+    """
+    entries = _entries()
+    capped = sum(
+        1
+        for e in entries
+        for f in ("primary_loss", "secondary_loss")
+        if (e.get(f) or {}).get("distribution") == "PERT"
+    )
+    cat = sum(
+        1
+        for e in entries
+        for f in ("primary_loss", "secondary_loss")
+        if (e.get(f) or {}).get("distribution") == "lognormal"
+    )
+    vendor = sorted(e["slug"] for e in entries if e.get("loss_tier") == "vendor")
+    if capped != 154:
+        raise SystemExit(f"PIN FAILED: expected 154 capped PERT loss fields, found {capped}")
+    if cat != 18:
+        raise SystemExit(f"PIN FAILED: expected 18 catastrophic lognormal loss fields, found {cat}")
+    if vendor != VENDOR_SLUGS:
+        raise SystemExit(f"PIN FAILED: vendor (mean-anchored) set drifted: {vendor}")
+
+
+def ic3_mean_preserved() -> list[tuple[str, float, float]]:
+    """The ONE external, citation-traced pass/fail check this epic actually has.
+
+    The 5 vendor entries are mean-preserving against the cited IC3 BEC mean.
+    Re-solving mu = ln(mean) - sigma^2/2 must preserve E[loss] EXACTLY, so a
+    non-trivial residual means the mean-anchor branch is wrong.
+    """
+    out: list[tuple[str, float, float]] = []
+    for e in _entries():
+        if e.get("loss_tier") != "vendor":
+            continue
+        nmu = math.log(IC3_BEC_MEAN) - SIGMA_DEFAULT**2 / 2
+        realized = math.exp(nmu + SIGMA_DEFAULT**2 / 2)
+        out.append((e["slug"], realized, abs(realized - IC3_BEC_MEAN) / IC3_BEC_MEAN))
+    return out
+
+
+def sigma_sensitivity() -> list[tuple[float, str, float, float]]:
+    """Library expected loss across the sigma bracket the design establishes.
+
+    The 90.2% drop rests on one unvalidated constant. Publishing the curve makes
+    the reader's exposure explicit instead of asserted -- the honest form of
+    "we cannot validate this point".
+    """
+    labels = {
+        1.357: "IRIS system_intrusion (type-conditioned)",
+        1.5: "p95-equivalent within-type read",
+        1.7: "CHOSEN sigma_default",
+        1.9687: "min revenue-tier read (size-conditioned)",
+        2.394: "sigma the withdrawn D9 gate demanded",
+    }
+    rows: list[tuple[float, str, float, float]] = []
+    base = None
+    for s in sorted(labels):
+        total = 0.0
+        for e in _entries():
+            vendor = e.get("loss_tier") == "vendor"
+            for field in ("primary_loss", "secondary_loss"):
+                d = e.get(field) or {}
+                if d.get("distribution") == "PERT":
+                    low, high = d["low"], d["high"]
+                    mu = math.log(math.sqrt(low * high))
+                    if vendor and field == "primary_loss":
+                        mu = math.log(IC3_BEC_MEAN) - s**2 / 2
+                    total += _pert_mean(math.exp(mu - Z95 * s), math.exp(mu + Z95 * s))
+                elif d.get("distribution") == "lognormal":
+                    total += math.exp(d["mean"] + s**2 / 2)
+        if base is None:
+            base = total
+        rows.append((s, labels[s], total, total))
+    before = 1_113_769_347.0
+    return [(s, lbl, tot, tot / before - 1.0) for s, lbl, tot, _ in rows]
+
+
+def prod_runs(active_only: bool) -> dict[str, object]:
+    """B-RUN-LM under each sweep rule. Requires the prod backup.
+
+    ``active_only`` is REQUIRED, not defaulted: the population filter swings the
+    portfolio ALE delta by ~30x (-17.35% active-only vs -0.57% over all 25), so
+    an undeclared filter is a basis defect.
+    """
+    if not PROD_DB.exists():
+        return {"unavailable": str(PROD_DB)}
+    db = sqlite3.connect(PROD_DB)
+    sql = (
+        "SELECT name, threat_event_frequency, vulnerability, primary_loss, secondary_loss "
+        "FROM scenarios"
+    )
+    if active_only:
+        sql += " WHERE status = 'active'"
+    rows = db.execute(sql).fetchall()
+    n_lognormal = sum(
+        1
+        for _n, _t, _v, pl, sl in rows
+        for blob in (pl, sl)
+        if blob and (json.loads(blob) or {}).get("distribution") == "lognormal"
+    )
+
+    def q(dist: dict | None, sigma_rule: str) -> float:
+        if not dist or dist.get("distribution") != "lognormal":
+            return 0.0
+        mu, s = dist["mean"], dist["sigma"]
+        if sigma_rule == "uniform" or (sigma_rule == "narrow_only" and s > SIGMA_DEFAULT):
+            s = SIGMA_DEFAULT
+        return math.exp(mu + Z_RUN * s)
+
+    out: dict[str, object] = {}
+    for rule in ("today", "narrow_only", "uniform"):
+        worst_lm = worst_pl = 0.0
+        holder = ""
+        for name, _tef, _vuln, pl, sl in rows:
+            pld = json.loads(pl) if pl else None
+            sld = json.loads(sl) if sl else None
+            pl_q, sl_q = q(pld, rule), q(sld, rule)
+            if pl_q + sl_q > worst_lm:
+                worst_lm, holder = pl_q + sl_q, name
+            worst_pl = max(worst_pl, pl_q)
+        out[rule] = {
+            "lm": worst_lm,
+            "lm_pct": worst_lm / REVENUE,
+            "pl_only": worst_pl,
+            "pl_only_pct": worst_pl / REVENUE,
+            "holder": holder,
+        }
+    out["population"] = {
+        "scenarios": len(rows),
+        "lognormal_loss_fields": n_lognormal,
+        "filter": "status='active'" if active_only else "ALL statuses",
+    }
+    return out
+
+
+def main() -> None:
+    pins()
+    lib = library()
+    print("=" * 78)
+    print("SIGMA-RECALIBRATION FIGURES — generated; quote these, do not re-derive by hand")
+    print(f"sigma_default={SIGMA_DEFAULT}  z95={Z95}  n_iters={ITERS}  z_run={Z_RUN:.9f}")
+    print("=" * 78)
+
+    print("\n[B-LIB-MEAN] library expected loss")
+    print(f"  capped fields             : {lib['n_capped']}")
+    print(f"  catastrophic fields       : {lib['n_catastrophic']}")
+    print(
+        f"  capped   before -> after  : ${lib['capped_mean_before']:,.0f} -> "
+        f"${lib['capped_mean_after']:,.0f}  ({lib['capped_pct']:.2%})"
+    )
+    print(
+        f"  catastrophic before->after: ${lib['cat_mean_before']:,.0f} -> "
+        f"${lib['cat_mean_after']:,.0f}"
+    )
+    print(
+        f"  LIBRARY-WIDE (both)       : ${lib['library_before']:,.0f} -> "
+        f"${lib['library_after']:,.0f}  = {lib['library_delta']:+.2%}"
+    )
+    print(
+        f"  capped population ONLY    : {lib['capped_only_delta']:+.2%}   <- never call this "
+        f"'library-wide'"
+    )
+
+    print("\n[B-LIB-MED] realized median of the sampled shape")
+    print(
+        f"  ratio range               : {lib['med_ratio_min']:.4f}x .. {lib['med_ratio_max']:.4f}x"
+    )
+    print(f"  median over all 154       : {lib['med_ratio_median_154']:.4f}x")
+    print(f"  median over the 149       : {lib['med_ratio_median_149']:.4f}x")
+    print(f"  fields that RISE          : {len(lib['risers'])}")
+    for slug, factor in lib["risers"]:  # type: ignore[union-attr]
+        print(f"      {slug:32} x{factor:.2f}")
+
+    print("\n[no basis — sigma distribution]")
+    print(f"  median implied sigma      : {lib['median_sigma']:.4f}")
+    print(f"  median high cut (all 154) : {lib['median_high_cut_154']:.4f}x")
+    print(f"  median high cut (149)     : {lib['median_high_cut_149']:.4f}x")
+
+    print("\n[external check] IC3 mean-preservation on the 5 vendor entries")
+    worst = 0.0
+    for slug, realized, rel in ic3_mean_preserved():
+        worst = max(worst, rel)
+        print(f"  {slug:32} E[loss]=${realized:,.2f}  rel.err={rel:.2e}")
+    print(
+        f"  -> max relative error {worst:.2e} (must be < 1e-9)  {'PASS' if worst < 1e-9 else 'FAIL'}"
+    )
+
+    print("\n[sigma sensitivity] library expected loss across the bracket")
+    print("  the 90.2% drop rests on ONE unvalidated constant; this is the curve it sits on")
+    for s, label, total, delta in sigma_sensitivity():
+        mark = "  <== CHOSEN" if abs(s - SIGMA_DEFAULT) < 1e-9 else ""
+        print(f"  sigma={s:<6.4g} {label:42} ${total:>13,.0f}  {delta:+7.2%}{mark}")
+
+    for active_only in (True, False):
+        runs = prod_runs(active_only=active_only)
+        pop = runs.get("population")
+        label = "active-only" if active_only else "ALL statuses"
+        print(f"\n[B-RUN-LM] prod worst single event — analytic, n=iters, population={label}")
+        if "unavailable" in runs:
+            print(f"  SKIPPED: {runs['unavailable']} not present")
+            break
+        print(
+            f"  population: {pop['scenarios']} scenarios, "  # type: ignore[index]
+            f"{pop['lognormal_loss_fields']} lognormal loss fields, filter={pop['filter']}"  # type: ignore[index]
+        )
+        for rule in ("today", "narrow_only", "uniform"):
+            r = runs[rule]  # type: ignore[index]
+            print(
+                f"  {rule:12} LM ${r['lm']:>18,.0f} ({r['lm_pct']:>8.2%})   "
+                f"PL-only ${r['pl_only']:>16,.0f} ({r['pl_only_pct']:>8.2%})  [{r['holder'][:26]}]"
+            )
+        print("  NOTE: 'uniform' is the WITHDRAWN rev-1 rule. The shipped rule is narrow_only.")
+
+
+if __name__ == "__main__":
+    main()
