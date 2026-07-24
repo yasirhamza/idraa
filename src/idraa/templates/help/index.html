@@ -1,6 +1,8 @@
 {# src/idraa/templates/help/index.html — registry-driven Help index.
-   `articles` is HELP_ARTICLES (already ordered so clusters are consecutive,
-   so groupby works without a pre-sort). #}
+   `articles` is HELP_ARTICLES; `track_titles` is TRACK_TITLES. MINIMAL
+   track-grouped rework (SC-B1/Arch-I1): groupby('cluster') breaks the
+   moment `cluster` is retired. Task 4 restyles this into panels with
+   minutes; this pass is deliberately bare so /help never 500s mid-plan. #}
 {% extends "base.html" %}
 {% block title %}Help &amp; User Guide{% endblock %}
 {% block content %}
@@ -13,11 +15,11 @@
     </p>
   </header>
 
-  {% for cluster, items in articles | groupby('cluster') %}
+  {% for track, title in track_titles.items() %}
   <section class="mb-8">
-    <h2 class="text-meta text-ink-3 mb-3 uppercase">{{ cluster }}</h2>
+    <h2 class="text-meta text-ink-3 mb-3 uppercase">{{ title }}</h2>
     <ul class="grid sm:grid-cols-2 gap-3">
-      {% for a in items %}
+      {% for a in articles if a.track == track %}
       <li>
         <a href="/help/{{ a.slug }}"
            class="block p-4 rounded-lg bg-surface-2 border border-border-subtle hover:border-brand">

@@ -47,6 +47,8 @@ def test_text_label_is_not_forced_into_a_circle():
     # to a one-glyph square, so a phrase like "Sub-function help" wrapped and
     # overlapped the neighbouring text on the control form header. The text
     # variant must drop btn-circle and size to its content.
-    html = _render_labeled("control-sub-functions", "Sub-function help")
+    # slug renamed control-sub-functions -> how-controls-change-the-numbers
+    # (help-overhaul P1 T1): help_url would otherwise KeyError at render time.
+    html = _render_labeled("how-controls-change-the-numbers", "Sub-function help")
     assert "Sub-function help" in html
     assert "btn-circle" not in html

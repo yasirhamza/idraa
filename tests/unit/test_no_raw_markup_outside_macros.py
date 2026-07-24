@@ -49,11 +49,13 @@ ALLOWED_DIRS = {"macros"}
 #       cannot be expressed via data_table.action_menu (static href/action only).
 #
 #   help/articles/controls-overlays.html
-#   help/articles/methodology-primer.html
+#   help/articles/fair-in-idraa-terms.html
 #   help/articles/raw-samples-export.html
-#   help/articles/reports.html
+#   help/articles/reports-and-workbook.html
 #   help/articles/run-and-read-analyses.html
-#       Static prose reference tables on the read-only Help article pages
+#       (fair-in-idraa-terms.html renamed from methodology-primer.html,
+#       reports-and-workbook.html renamed from reports.html — help-overhaul
+#       P1 T1.) Static prose reference tables on the read-only Help article pages
 #       (acronym glossary, outputs→action mapping, FAIR-CAM control tables,
 #       PDF contents table). Fixed content, not data-driven ORM row sets; the
 #       data_table macro (sortable/paginated/projected) is unsuitable for static
@@ -246,9 +248,11 @@ ALLOWLIST: set[str] = {
     "controls/import.html",
     "controls/maintenance.html",
     "help/articles/controls-overlays.html",
-    "help/articles/methodology-primer.html",
+    # renamed in help-overhaul P1 (methodology-primer.html -> fair-in-idraa-terms.html)
+    "help/articles/fair-in-idraa-terms.html",
     "help/articles/raw-samples-export.html",
-    "help/articles/reports.html",
+    # renamed in help-overhaul P1 (reports.html -> reports-and-workbook.html)
+    "help/articles/reports-and-workbook.html",
     "help/articles/run-and-read-analyses.html",
     "layouts/_sidebar.html",
     "library/browse.html",

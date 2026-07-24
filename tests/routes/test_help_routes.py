@@ -61,19 +61,18 @@ async def test_article_requires_login(anonymous_client, admin_user, db_session):
 
 
 @pytest.mark.asyncio
-async def test_index_groups_by_cluster_and_links_each_article(authed_analyst):
+async def test_index_groups_by_track_and_links_each_article(authed_analyst):
+    # Renamed from test_index_groups_by_cluster_and_links_each_article
+    # (help-overhaul P1 T1): `cluster` (5 headings) retired in favor of the
+    # two-track registry (TRACK_TITLES).
+    from idraa.help_content import TRACK_TITLES
+
     client, _ = authed_analyst
     r = await client.get("/help")
     body = r.text
-    # cluster headings present (assert autoescaped form — autoescape is ON)
-    for cluster in [
-        "Getting started",
-        "Core flow",
-        "Methodology",
-        "Libraries & data",
-        "Outputs & configuration",
-    ]:
-        assert str(escape(cluster)) in body
+    # track headings present (assert autoescaped form — autoescape is ON)
+    for title in TRACK_TITLES.values():
+        assert str(escape(title)) in body
     # each article linked to its URL
     for a in HELP_ARTICLES:
         assert f'href="/help/{a.slug}"' in body

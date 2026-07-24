@@ -1573,7 +1573,11 @@ def _write_controls_sheet(
     rows.row(
         [
             (
-                f"Learn how to read this: {help_base_url}/help/control-value-robustness",
+                # Slug renamed control-value-robustness -> why-values-are-ranges
+                # (help-overhaul P1 T1); baked into exported Excel artifacts, but
+                # already-exported workbooks keep working via the permanent 301 —
+                # this is the live slug for NEW exports only.
+                f"Learn how to read this: {help_base_url}/help/why-values-are-ranges",
                 styles.note_muted,
             )
         ]

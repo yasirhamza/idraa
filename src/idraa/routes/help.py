@@ -11,12 +11,19 @@ Spec: docs/plans/2026-06-13-help-section-design.md
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from idraa.app import templates
-from idraa.help_content import HELP_ARTICLES, HELP_BY_SLUG
+from idraa.help_content import (
+    HELP_ARTICLES,
+    HELP_BY_SLUG,
+    HELP_REDIRECTS,
+    TRACK_TITLES,
+    HelpArticle,
+)
 from idraa.models.user import User
+from idraa.routes._htmx import is_boosted, is_htmx_request
 from idraa.routes.deps import require_user
 
 router = APIRouter()
@@ -30,7 +37,7 @@ async def help_index(
     return templates.TemplateResponse(
         request,
         "help/index.html",
-        {"current_user": user, "articles": HELP_ARTICLES},
+        {"current_user": user, "articles": HELP_ARTICLES, "track_titles": TRACK_TITLES},
     )
 
 
@@ -39,18 +46,30 @@ async def help_article(
     request: Request,
     slug: str,
     user: User = Depends(require_user),
-) -> HTMLResponse:
-    is_hx = request.headers.get("HX-Request") is not None
-    entry = HELP_BY_SLUG.get(slug)
+) -> Response:
+    is_drawer = is_htmx_request(request) and not is_boosted(request)
+
+    entry: HelpArticle | None
+    target = HELP_REDIRECTS.get(slug)
+    if target is not None:
+        if is_drawer:
+            entry = HELP_BY_SLUG[target]  # drawers can't follow 301s — serve content
+        else:
+            # Boosted + plain navigations both take the 301: htmx uses
+            # xhr.responseURL for history, so the URL bar lands on the new slug.
+            return RedirectResponse(f"/help/{target}", status_code=301)
+    else:
+        entry = HELP_BY_SLUG.get(slug)
+
     if entry is None:
-        if is_hx:
+        if is_drawer:
             return templates.TemplateResponse(
                 request, "help/_not_found.html", {"current_user": user}, status_code=404
             )
         raise HTTPException(status_code=404)
 
     related = [HELP_BY_SLUG[s] for s in entry.related]
-    name = "help/_article.html" if is_hx else "help/article_page.html"
+    name = "help/_article.html" if is_drawer else "help/article_page.html"
     return templates.TemplateResponse(
         request,
         name,

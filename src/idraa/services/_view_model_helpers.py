@@ -123,7 +123,8 @@ TAIL_LADDER_DISPLAY_LABELS: dict[str, str] = {
 #
 # Task 5 (#419): robustness-framing disclosure. Plain-English rewrite (2026-06):
 # "modeled estimates shown as ranges" + a "too close to call" caveat; the
-# technical detail lives in the /help/control-value-robustness article.
+# technical detail lives in the /help/why-values-are-ranges article (slug
+# renamed from control-value-robustness in help-overhaul P1 T1).
 # All three surfaces receive the same byte-identical string — do NOT re-word
 # per-surface (drift would fork the disclosure across web/PDF/Excel). Kept
 # apostrophe/quote-free so it substring-matches under Jinja autoescape.

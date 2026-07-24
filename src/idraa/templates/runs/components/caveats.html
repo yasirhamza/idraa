@@ -26,7 +26,7 @@
         <strong>{{ e.title }}</strong>
         {{ e.body }}{# escaped plain text — registry bodies are never markup; do not add |safe #}
         {% if e.key == "weight-provenance" %}
-          <a class="text-brand hover:underline" href="/help/control-value-robustness">Learn how to read this</a>.
+          <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Learn how to read this</a>.
         {% endif %}
       </li>
       {% endfor %}
