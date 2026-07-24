@@ -98,8 +98,14 @@ exact existing label, never assumed**:
 - **5 vendor fields** (`loss_tier == "vendor"`; their `magnitude_basis`
   documents mean-preserving authoring verbatim) — **mean** authored against
   IC3 2025 BEC per-complaint mean $123,005: μ = ln(123,005) − 1.7²/2.
-  Post-recalibration all five share median $29,014 (risers ×1.05–×5.46);
   E[loss] = $123,005 exactly (appendix external check, rel. err 7.1e-16).
+  Two distinct medians, never conflated (T0-gate IMPORTANT-1): the shared
+  **parent-lognormal** median is exp(μ) = **$28,998**; the shared **realized
+  BetaPERT** median (0.11182 quantile of the emitted range) is **$54,695**,
+  and the appendix's rise ratios ×1.05–×5.46 are ratios of *realized*
+  medians. (The gate report proposed $63,039 for the realized value — that
+  figure is itself wrong; $54,695 verifies both by the BetaPERT quantile and
+  by the riser cross-check $10,021 × 5.4579.)
 
 **Precondition (fail-loud in the builder):** σ_default > z₀.₉₅ = 1.6449.
 1.7 clears by 3.35%. Below the threshold the capped-PERT collapse gains an
@@ -133,12 +139,23 @@ was false and is corrected here for the permanent record.
 
 ## Anchor-review decision table (plan Task 0 Step 4)
 
-**Check unit.** The named admissible anchors (`LOSS_BY_EVENT_TYPE_TREND`
-p50/p90, 2024) are **incident-total** statistics, so the check compares the
-**event total** (PL median + SL median, both components at σ_default) against
-the closest type-conditional p90 — judging an SL component alone against a
-whole-event anchor would be a category mismatch. Closest class: `ransomware`
-for the wiper (destructive-payload class), `system_intrusion` for all others.
+**Check unit and quantile choice (both deliberate).** The named admissible
+anchors (`LOSS_BY_EVENT_TYPE_TREND` p50/p90, 2024) are **incident-total**
+statistics, so the check compares the **event total** (PL median + SL median,
+both at σ_default — a comonotonic sum-of-medians approximation, coarse by
+construction) against the closest type-conditional p90. Judging an SL
+component alone against a whole-event anchor would be a category mismatch.
+The comparison is entry-**p95** against anchor-**p90** — an intentionally
+**lenient floor** ("a catastrophic entry's 95th percentile should comfortably
+clear the class's published 90th"), inflating the entry side ×1.854 relative
+to a like-for-like p90-vs-p90 read. On the consistent p90 basis two further
+entries read below the anchor (field-instrument −28.4%, solarwinds −22.9%)
+and telecom's gap is −51.1%; **no disposition changes** — the check flags
+entries for judgment, it does not auto-pass them, and the KEEP justifications
+below rest on the anchor's own limits, not on the margin. Closest class:
+`ransomware` for the wiper (destructive-payload class), `system_intrusion`
+for all others (default-by-elimination once ransomware is assigned and the
+accidental bucket is excluded).
 
 | slug | event median (PL+SL) | p95@1.7 | anchor p90 | check | decision |
 |---|---|---|---|---|---|
@@ -179,10 +196,14 @@ pre-activation is a contained event — the tail, not the median, carries
 activation. Consistent with the ordering rationale; no citable anchor
 supports moving it.
 
-**Justification (c).** telecom-lawful-intercept misses the cross-sector
-anchor by 9.4%. The reference class (telecom-infrastructure espionage) has no
-citable per-event loss anchor; a sub-10% miss against a cross-sector
-statistic is inside any honest error bar of both numbers.
+**Justification (c).** telecom-lawful-intercept: the reference class
+(telecom-infrastructure espionage) has no citable per-event loss anchor, and
+the comparison anchor is a single-year read of a volatile cross-sector series
+(the 2008 system-intrusion p90 was $221M against 2024's $7.4M) whose own
+year-to-year band dwarfs this entry's gap on any quantile basis. The KEEP
+rests on those anchor limits — NOT on the size of the margin, which is
+quantile-choice-dependent (−9.4% on the lenient floor, −51.1% on the
+consistent p90 basis) and is therefore not load-bearing.
 
 **Adjustment (d) — destructive-wiper-nationstate, the one entry that fails
 its own premise.** The entry exists (attack-coverage W1) precisely because
@@ -202,6 +223,12 @@ Resulting event p95 = $52.4M ≥ the $27.6M anchor p90 — check passes.
 "secondary_loss"): 336842.0`. This changes the appendix B-LIB-MEAN
 after-value; the builder cross-check reports both columns per the plan.
 
-**SL components on passing entries** (plc SE, safety SE, chemical SE,
-solarwinds SE, nation-ics SE, telecom SE, wiper SE): judged at event level
-per the check-unit rule above; no per-component adjustment.
+**All SL components** are judged at event level per the check-unit rule
+above; no per-component adjustment on any entry.
+
+*Reconstruction footnote for §5 (T0-gate N-1): "reaches 0.53" is the largest
+matched-sector estimator gap (healthcare 0.530; energy 0.521, professional
+0.541 nearby — no sector carries both a p90 and p95 read, so these are
+trend-vs-envelope pairs, representative not exact); "≈1.5" is the midpoint of
+the two p90-based type reads under the mean estimator ratio (1.6813 × 0.891 =
+1.498).*
