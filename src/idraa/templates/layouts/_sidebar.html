@@ -121,17 +121,40 @@
         ('/overlays', 'Overlays'),
         ('/library', 'Library'),
         ('/organization', 'Organization'),
-        ('/help', 'Help'),
       ] %}
       <li>
         <a href="{{ href }}"
            class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
-           {% if request.url.path == href or (href == '/help' and request.url.path.startswith('/help/')) %}aria-current="page"{% endif %}>
+           {% if request.url.path == href %}aria-current="page"{% endif %}>
           <span x-show="!collapsed">{{ label }}</span>
           <span x-show="collapsed" aria-hidden="true" class="text-meta">{{ label[0] }}</span>
         </a>
       </li>
       {% endfor %}
+      {# Help entry, pulled out of the loop (help-overhaul P1 T5): on a
+         route the help registry maps, it opens the drawer straight on the
+         relevant article instead of always sending the user to the index. #}
+      {%- set _mapped_help_slug = help_slug_for_path(request.url.path) -%}
+      <li>
+        {% if _mapped_help_slug %}
+        <button type="button"
+                hx-get="/help/{{ _mapped_help_slug }}"
+                hx-target="#help-drawer-body"
+                hx-swap="innerHTML"
+                @click="$store.helpDrawer.show()"
+                class="flex items-center w-full px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2">
+          <span x-show="!collapsed">Help</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">H</span>
+        </button>
+        {% else %}
+        <a href="/help"
+           class="flex items-center px-4 py-1.5 text-body text-ink-1 hover:bg-surface-2"
+           {% if request.url.path == '/help' or request.url.path.startswith('/help/') %}aria-current="page"{% endif %}>
+          <span x-show="!collapsed">Help</span>
+          <span x-show="collapsed" aria-hidden="true" class="text-meta">H</span>
+        </a>
+        {% endif %}
+      </li>
     </ul>
 
     {% if is_admin %}

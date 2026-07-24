@@ -2,7 +2,10 @@
    Shared shell included by BOTH the full page and the drawer partial, so the
    article content is byte-identical in both contexts. `article` is a
    HelpArticle; `related` is a list of HelpArticle. The body include uses the
-   registry-validated slug (safe — never raw user input). #}
+   registry-validated slug (safe — never raw user input). `is_drawer` (set by
+   routes/help.py's HX branch) additionally renders an inline mini-TOC and an
+   "Open full guide" footer link — the drawer's own space doesn't fit the
+   three-column chrome, so those affordances move inline (help-overhaul P1 T5). #}
 <article class="prose-help max-w-none">
   <h1 class="text-h2 text-ink-1">{{ article.title }}</h1>
   <p class="text-body text-ink-2 mt-1 mb-6">{{ article.summary }}</p>
@@ -12,6 +15,14 @@
     <span class="rounded-full border border-border-subtle bg-surface-2 px-2.5 py-0.5 text-ink-2">{{ track_title }}</span>
     <span>{{ minutes }} min read</span>
   </div>
+  {% endif %}
+
+  {% if is_drawer is defined and is_drawer and toc %}
+  <nav class="mb-6 flex flex-wrap gap-x-3 gap-y-1 text-meta" aria-label="On this page">
+    {% for anchor, heading in toc %}
+    <a class="text-brand hover:underline" href="#{{ anchor }}">{{ heading }}</a>
+    {% endfor %}
+  </nav>
   {% endif %}
 
   {% include "help/articles/" ~ article.slug ~ ".html" %}
@@ -24,6 +35,12 @@
       <li><a class="text-brand hover:underline" href="/help/{{ r.slug }}">{{ r.title }}</a></li>
       {% endfor %}
     </ul>
+  </footer>
+  {% endif %}
+
+  {% if is_drawer is defined and is_drawer %}
+  <footer class="mt-6 pt-4 border-t border-border-subtle">
+    <a class="text-brand hover:underline" href="/help/{{ article.slug }}">Open full guide →</a>
   </footer>
   {% endif %}
 </article>

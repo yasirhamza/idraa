@@ -148,7 +148,14 @@
 <body class="min-h-screen bg-surface-2" hx-boost="true">
   {% include "layouts/_sidebar.html" %}
   {% include "layouts/_flash.html" %}
+  {#- data-help-slug carries the route-aware help default for the '?'
+      shortcut (help_hub.js). MUST live on <main> inside the swapped body,
+      NOT on <body> — hx-boost replaces <body>'s innerHTML, so a <body>
+      attribute goes stale for the rest of the session the moment a
+      boosted nav lands (Sec-I1/Arch-I2, same swap-semantics class as PR
+      #205's x-data global-read race). -#}
   <main id="main"
+        data-help-slug="{{ help_slug_for_path(request.url.path) or '' }}"
         class="
           bg-surface-0 min-h-screen
           ml-0 md:ml-60

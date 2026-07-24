@@ -91,3 +91,13 @@ def test_route_map_longest_prefix_wins() -> None:
     assert help_slug_for_path("/scenarios/import") == "import-export"
     assert help_slug_for_path("/scenarios/123") == "build-a-scenario"
     assert help_slug_for_path("/nowhere") is None
+
+
+def test_help_url_accepts_live_anchor_and_rejects_dangling() -> None:
+    from idraa.help_content import HELP_ARTICLES, HELP_DERIVED, help_url
+
+    a = HELP_ARTICLES[0]
+    anchor = HELP_DERIVED[a.slug].toc[0][0]
+    assert help_url(a.slug, anchor) == f"/help/{a.slug}#{anchor}"
+    with pytest.raises(KeyError, match="anchor"):
+        help_url(a.slug, "not-a-real-anchor")

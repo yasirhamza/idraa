@@ -149,3 +149,20 @@ async def test_index_shows_track_panels_with_minutes(authed_analyst) -> None:
     assert "Using Idraa" in r.text
     assert str(escape("Methodology & verification")) in r.text
     assert "min" in r.text
+
+
+@pytest.mark.asyncio
+async def test_drawer_partial_has_full_guide_link_and_toc(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/build-a-scenario", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "Open full guide" in r.text
+    assert 'href="#' in r.text  # inline TOC anchors
+
+
+@pytest.mark.asyncio
+async def test_sidebar_help_is_route_aware(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/scenarios")
+    # Mapped route: the sidebar Help entry opens the drawer on the mapped article.
+    assert 'hx-get="/help/build-a-scenario"' in r.text

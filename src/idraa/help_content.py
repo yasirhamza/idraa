@@ -175,14 +175,20 @@ def help_slug_for_path(path: str) -> str | None:
     return best[1] if best else None
 
 
-def help_url(slug: str) -> str:
-    """Return the URL for a help slug, raising KeyError on an unknown slug.
+def help_url(slug: str, anchor: str | None = None) -> str:
+    """URL for a help slug (+ optional section anchor). Raises KeyError on an
+    unknown slug OR a dangling anchor, so a typo fails a render/test instead
+    of emitting a silently-broken trigger (Arch-N2; spec §Context-sensitive).
 
     Registered as a Jinja global so help_trigger(slug) fails a render/test on a
-    typo'd slug rather than emitting a silently-404ing button (Arch-N2).
+    typo'd slug rather than emitting a silently-404ing button.
     """
     if slug not in HELP_BY_SLUG:
         raise KeyError(f"Unknown help slug: {slug!r}")
+    if anchor is not None:
+        if anchor not in {i for i, _ in HELP_DERIVED[slug].toc}:
+            raise KeyError(f"Unknown help anchor for {slug!r}: {anchor!r}")
+        return f"/help/{slug}#{anchor}"
     return f"/help/{slug}"
 
 

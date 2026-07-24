@@ -11,8 +11,10 @@ document.addEventListener('alpine:init', function () {
     Alpine.store('helpDrawer', {
       open: false,
       _lastFocus: null,
-      show() {
+      pendingAnchor: null,
+      show(anchor) {
         this._lastFocus = document.activeElement;
+        this.pendingAnchor = anchor || null;
         this.open = true;
       },
       hide() {

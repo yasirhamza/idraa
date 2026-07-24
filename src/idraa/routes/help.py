@@ -113,6 +113,7 @@ async def help_article(
         "articles": HELP_ARTICLES,
         "track_titles": TRACK_TITLES,
         "help_derived": HELP_DERIVED,
+        "is_drawer": is_drawer,
     }
     name = "help/_article.html" if is_drawer else "help/article_page.html"
     return templates.TemplateResponse(
