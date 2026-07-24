@@ -1,4 +1,4 @@
-<h2 class="text-h3 text-ink-1 mb-3">What the file is</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="what-the-file-is">What the file is</h2>
 <p class="text-body text-ink-2 mb-3">
   Every completed analysis run also has a downloadable <strong>raw sample
   export</strong>: a gzipped, wide <strong>CSV</strong> holding the actual
@@ -27,7 +27,7 @@
   run&rsquo;s sample arrays are still retained (see Availability below).
 </p>
 
-<h2 class="text-h3 text-ink-1 mb-3">Column naming</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="column-naming">Column naming</h2>
 <p class="text-body text-ink-2 mb-3">
   The first column is always <span class="font-mono">iteration</span>, and it
   is <strong>0-based</strong> &mdash; the first simulated draw is row
@@ -82,7 +82,7 @@
   <span class="font-mono">scenario_&lt;hex&gt;_*</span> column pair by name.
 </p>
 
-<h2 class="text-h3 text-ink-1 mb-3">Precision</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="precision">Precision</h2>
 <p class="text-body text-ink-2 mb-6">
   Sample values are exported as <strong>float32</strong> &mdash; current-format
   runs store float32 natively; runs persisted in the older format are
@@ -97,7 +97,7 @@
   rounding, not a data error.
 </p>
 
-<h2 class="text-h3 text-ink-1 mb-3">Size envelope</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="size-envelope">Size envelope</h2>
 <p class="text-body text-ink-2 mb-6">
   At Idraa&rsquo;s production caps &mdash; 100,000 iterations, roughly 30
   scenarios in a single aggregate run &mdash; the export is on the order of
@@ -111,7 +111,7 @@
   chunks rather than building the whole file in memory first.
 </p>
 
-<h2 class="text-h3 text-ink-1 mb-3">Availability</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="availability">Availability</h2>
 <p class="text-body text-ink-2 mb-3">
   Raw samples are retained under Idraa&rsquo;s sample retention policy, which
   is shorter than how long the run&rsquo;s summary results (ALE, VaR, the
@@ -134,7 +134,7 @@
   import/export flows.
 </p>
 
-<h2 class="text-h3 text-ink-1 mb-3">Recomputing tail metrics yourself</h2>
+<h2 class="text-h3 text-ink-1 mb-3" id="recomputing-tail-metrics-yourself">Recomputing tail metrics yourself</h2>
 <p class="text-body text-ink-2 mb-3">
   The preamble lines all start with <span class="font-mono">#</span>, so any
   CSV reader that supports a comment prefix will skip them automatically and

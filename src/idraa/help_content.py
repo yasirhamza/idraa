@@ -12,7 +12,10 @@ docs/superpowers/specs/2026-07-24-help-overhaul-design.md (P1 section).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from html.parser import HTMLParser
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -181,3 +184,135 @@ def help_url(slug: str) -> str:
     if slug not in HELP_BY_SLUG:
         raise KeyError(f"Unknown help slug: {slug!r}")
     return f"/help/{slug}"
+
+
+@dataclass(frozen=True)
+class DerivedArticle:
+    """Never authored — parsed from the article template source at import."""
+
+    minutes: int
+    toc: tuple[tuple[str, str], ...]  # (h2 id, heading text)
+    search_text: str
+
+
+_ARTICLES_DIR = Path(__file__).parent / "templates" / "help" / "articles"
+_FIGURES_DIR = Path(__file__).parent / "templates" / "help" / "figures"
+_JINJA_TAG = re.compile(r"{%.*?%}|{{.*?}}|{#.*?#}", re.DOTALL)
+_WORDS_PER_MINUTE = 200
+_SCRIPT_TAG = re.compile(r"<\s*script", re.IGNORECASE)
+
+
+# [\s/] not \s alone (Sec4-N2): <svg/onload=…> slash-separated attributes
+# are valid HTML and classic pasted-payload notation.
+_EVENT_HANDLER_ATTR = re.compile(r"[\s/]on[a-z]+\s*=", re.IGNORECASE)
+
+
+def _reject_scripts(source: str, *, name: str, check_event_handlers: bool = False) -> None:
+    """Sec-N2/Sec2-N1: raw byte-level check on the UNSTRIPPED source. CSP
+    retains 'unsafe-inline' (Alpine), so an inline script in help content
+    WOULD execute. The raw check is immune to tokenizer differentials and
+    Jinja-stripped `|safe` payloads whose LITERAL SOURCE contains the tag
+    bytes (escaped &lt;script prose in an article never matches).
+
+    check_event_handlers (figures only, Sec3-N2b): pasted SVG's more common
+    vector is an on*= attribute, not a script tag; article prose could
+    false-positive on words like 'online =', so the handler check is scoped
+    to figure sources."""
+    if _SCRIPT_TAG.search(source):
+        raise ValueError(f"{name}: <script> not allowed in help content")
+    if check_event_handlers and _EVENT_HANDLER_ATTR.search(source):
+        raise ValueError(f"{name}: inline event-handler attribute not allowed in figures")
+
+
+class _ArticleParser(HTMLParser):
+    def __init__(self, slug: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.slug = slug
+        self.toc: list[tuple[str, str]] = []
+        self.text: list[str] = []
+        self._h2_id: str | None = None
+        self._in_h2 = False
+        self._h2_text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # (script rejection happens BEFORE parsing, on the raw source —
+        # _reject_scripts — so tokenizer differentials can't route around it.)
+        if tag == "h2":
+            hid = dict(attrs).get("id")
+            if not hid:
+                raise ValueError(f"{self.slug}: <h2> without id")
+            # Sec-N1: anchors ride hrefs, Alpine payloads, and querySelector —
+            # keep the charset structurally boring.
+            if not re.fullmatch(r"[a-z][a-z0-9-]*", hid):
+                raise ValueError(f"{self.slug}: h2 id {hid!r} outside [a-z][a-z0-9-]*")
+            if hid in {i for i, _ in self.toc}:
+                raise ValueError(f"{self.slug}: duplicate h2 id {hid!r}")
+            self._in_h2, self._h2_id, self._h2_text = True, hid, []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "h2" and self._in_h2:
+            assert self._h2_id is not None  # noqa: S101 -- mypy narrowing, not a runtime guard
+            self.toc.append((self._h2_id, " ".join("".join(self._h2_text).split())))
+            self._in_h2 = False
+
+    def handle_data(self, data: str) -> None:
+        self.text.append(data)
+        if self._in_h2:
+            self._h2_text.append(data)
+
+
+def parse_article_source(source: str, *, slug: str) -> DerivedArticle:
+    _reject_scripts(source, name=slug)  # BEFORE Jinja-strip — see helper docstring
+    p = _ArticleParser(slug)
+    p.feed(_JINJA_TAG.sub(" ", source))
+    p.close()
+    words = len(" ".join(p.text).split())
+    return DerivedArticle(
+        minutes=max(1, round(words / _WORDS_PER_MINUTE)),
+        toc=tuple(p.toc),
+        search_text=" ".join(" ".join(p.text).lower().split()),
+    )
+
+
+def _build_derived(
+    articles: tuple[HelpArticle, ...] | None = None,  # SC2-I1: explicit Optional (RUF013)
+    redirects: dict[str, str] | None = None,
+    route_map: tuple[tuple[str, str], ...] | None = None,
+    articles_dir: Path | None = None,
+    figures_dir: Path | None = None,
+) -> dict[str, DerivedArticle]:
+    """Module state by default; parameters exist so the failure paths are
+    unit-testable without corrupting the real registry (SC-I5)."""
+    articles = HELP_ARTICLES if articles is None else articles
+    redirects = HELP_REDIRECTS if redirects is None else redirects
+    route_map = HELP_ROUTE_MAP if route_map is None else route_map
+    articles_dir = _ARTICLES_DIR if articles_dir is None else articles_dir
+    figures_dir = _FIGURES_DIR if figures_dir is None else figures_dir
+    by_slug = {a.slug: a for a in articles}
+    out: dict[str, DerivedArticle] = {}
+    # Sec2-I3: figure sources are structurally invisible to the article
+    # parser ({% include %} is stripped) — scan them directly. rglob so a
+    # P2 subdirectory layout can't silently skip the scan (Sec3-N2a).
+    if figures_dir.is_dir():
+        for fig in sorted(figures_dir.rglob("*.html")):
+            _reject_scripts(
+                fig.read_text(encoding="utf-8"), name=fig.name, check_event_handlers=True
+            )
+    for a in articles:
+        f = articles_dir / f"{a.slug}.html"
+        if not f.is_file():
+            raise ValueError(f"help article body missing: {f.name}")
+        out[a.slug] = parse_article_source(f.read_text(encoding="utf-8"), slug=a.slug)
+        for r in a.related:
+            if r not in by_slug:
+                raise ValueError(f"{a.slug}: dangling related slug {r!r}")
+    for old, new in redirects.items():
+        if new not in by_slug or old in by_slug:
+            raise ValueError(f"bad redirect {old!r} -> {new!r}")
+    for _, slug in route_map:
+        if slug not in by_slug:
+            raise ValueError(f"route map -> dangling slug {slug!r}")
+    return out
+
+
+HELP_DERIVED: dict[str, DerivedArticle] = _build_derived()
