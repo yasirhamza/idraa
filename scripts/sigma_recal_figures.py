@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
 import statistics as st
 from pathlib import Path
@@ -27,7 +28,9 @@ from scipy.stats import beta as beta_dist
 from scipy.stats import norm
 
 ROOT = Path(__file__).resolve().parents[1]
-PROD_DB = Path.home() / "idraa-backups" / "idraa-prod-20260724T120747Z.db"
+# Deployment-specific, NEVER hardcoded (public repo): point SIGMA_RECAL_PROD_DB
+# at a prod-backup COPY. With no env var the prod-dependent sections are skipped.
+PROD_DB = Path(os.environ["SIGMA_RECAL_PROD_DB"]) if os.environ.get("SIGMA_RECAL_PROD_DB") else None
 
 Z95 = 1.6448536269514722
 SIGMA_DEFAULT = 1.7
@@ -160,6 +163,22 @@ def pins() -> None:
         raise SystemExit(f"PIN FAILED: expected 18 catastrophic lognormal loss fields, found {cat}")
     if vendor != VENDOR_SLUGS:
         raise SystemExit(f"PIN FAILED: vendor (mean-anchored) set drifted: {vendor}")
+    # Before-basis guard: this generator derives its "before" column from the
+    # CURRENT seeds. Once PR1's builder re-authors them, before==after and every
+    # delta degenerates to ~0 while the shape pins above still pass -- so refuse
+    # loudly instead of printing wrong numbers. The pre-change record is the
+    # frozen appendix (sigma-recalibration-figures.generated.txt @ 9ea361ed).
+    max_sigma = max(
+        math.log(d["high"] / d["low"]) / (2 * Z95)
+        for e in entries
+        for f in ("primary_loss", "secondary_loss")
+        if (d := (e.get(f) or {})).get("distribution") == "PERT"
+    )
+    if max_sigma < SIGMA_DEFAULT + 0.01:
+        raise SystemExit(
+            "REFUSING TO REGENERATE: seeds are already at the within-scenario "
+            "default -- the before-basis is gone. Quote the frozen appendix."
+        )
 
 
 def ic3_mean_preserved() -> list[tuple[str, float, float]]:
@@ -223,8 +242,8 @@ def prod_runs(active_only: bool) -> dict[str, object]:
     portfolio ALE delta by ~30x (-17.35% active-only vs -0.57% over all 25), so
     an undeclared filter is a basis defect.
     """
-    if not PROD_DB.exists():
-        return {"unavailable": str(PROD_DB)}
+    if PROD_DB is None or not PROD_DB.exists():
+        return {"unavailable": "SIGMA_RECAL_PROD_DB not set or missing"}
     db = sqlite3.connect(PROD_DB)
     sql = (
         "SELECT name, threat_event_frequency, vulnerability, primary_loss, secondary_loss "
@@ -317,8 +336,8 @@ def portfolio_ale(active_only: bool) -> dict[str, object]:
     Standalone estimator (no subtractor, no engine stream) -- suitable for
     before/after deltas, not for reproducing a specific run's output.
     """
-    if not PROD_DB.exists():
-        return {"unavailable": str(PROD_DB)}
+    if PROD_DB is None or not PROD_DB.exists():
+        return {"unavailable": "SIGMA_RECAL_PROD_DB not set or missing"}
     db = sqlite3.connect(PROD_DB)
     sql = (
         "SELECT threat_event_frequency, vulnerability, primary_loss, secondary_loss FROM scenarios"
@@ -359,8 +378,8 @@ def per_scenario_ale() -> list[tuple[str, float, float, float]] | dict[str, str]
     """[B-SCEN-ALE] per-scenario analytic ALE, today -> narrow_only, every active
     scenario with a nonzero delta. This is the row the banner's 'per-scenario ALE
     reductions up to X%' quote comes from — ALE, never a PL-mean."""
-    if not PROD_DB.exists():
-        return {"unavailable": str(PROD_DB)}
+    if PROD_DB is None or not PROD_DB.exists():
+        return {"unavailable": "SIGMA_RECAL_PROD_DB not set or missing"}
     db = sqlite3.connect(PROD_DB)
     _prod_revenue(db)
     rows = db.execute(
@@ -393,8 +412,8 @@ def run_lm_sim() -> dict[str, object]:
     engine (no shared stream, no vuln thinning): valid for seed-spread of the
     max, not for reproducing a run.
     """
-    if not PROD_DB.exists():
-        return {"unavailable": str(PROD_DB)}
+    if PROD_DB is None or not PROD_DB.exists():
+        return {"unavailable": "SIGMA_RECAL_PROD_DB not set or missing"}
     import numpy as np
 
     db = sqlite3.connect(PROD_DB)
@@ -515,14 +534,14 @@ def main() -> None:
         pop = runs.get("population")
         label = "active-only" if active_only else "ALL statuses"
         print(f"\n[B-RUN-LM] prod worst single event — analytic, n=iters, population={label}")
+        if "unavailable" in runs:
+            print(f"  SKIPPED: {runs['unavailable']}")
+            break
         if active_only:
             print(
                 f"  denominator: org annual_revenue ${runs['revenue']:,.0f} "
                 f"(READ FROM the backup DB — never hardcoded; a different deployment re-bases all %)"
             )
-        if "unavailable" in runs:
-            print(f"  SKIPPED: {runs['unavailable']} not present")
-            break
         print(
             f"  population: {pop['scenarios']} scenarios, "  # type: ignore[index]
             f"{pop['lognormal_loss_fields']} lognormal loss fields, filter={pop['filter']}"  # type: ignore[index]
