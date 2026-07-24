@@ -96,89 +96,37 @@ def test_route_map_prefixes_match_registered_routes() -> None:
         )
 
 
-# PRSec-1: a single regex anchored on `="[^"]*|tojson` (the prior approach)
-# is defeated by a nested string literal INSIDE the Jinja expression itself
-# — e.g. `(anchor or "")`, the exact shape macros/help_trigger.html uses:
-# the embedded `""` terminates a naive `[^"]*` character class before it
-# ever reaches the real `|tojson`, so a double-quoted attribute wrapping
-# THAT EXACT expression sails through undetected. A delimiter-walking
-# scanner sidesteps this: it never tries to match the whole span between
-# the attribute's `=` and `|tojson` in one shot — it walks back from the
-# tojson usage to the ENCLOSING `{{` first, then keeps walking back past
-# that to find the attribute's own `=`, so a stray quote nested inside the
-# expression is never mistaken for the attribute delimiter.
+# PRSec2-1: forward quoted-span scan. A backward walk cannot distinguish a
+# tag-close '>' from a value-internal '>' (Alpine `count > 5`), so it had
+# false-negative holes. Consuming the full quoted span makes quote state
+# structural. The `\{\{.*?\}\}` alternative treats a whole Jinja expression
+# as one atomic unit before considering it character-by-character —
+# otherwise a same-type quote embedded INSIDE the expression (e.g.
+# `(anchor or "")` under a double-quoted outer attribute) would be
+# mistaken for the outer delimiter and truncate the match before the real
+# `|tojson` is ever reached. Unquoted `= {{ ... | tojson }}` is covered by
+# _TOJSON_UNQUOTED.
+_QUOTED_ATTR = re.compile(
+    r"=\s*(?P<delim>[\"'])(?P<val>(?:\{\{.*?\}\}|(?!(?P=delim)).)*)(?P=delim)",
+    re.DOTALL,
+)
+_TOJSON_IN_VAL = re.compile(r"\|\s*tojson")
+
+# The fully-unquoted case (`attr={{ ... | tojson ... }}`, no delimiter at
+# all) never reaches _QUOTED_ATTR — there's no quote to anchor on — but
+# it's unsafe on its own terms: an unquoted HTML attribute value terminates
+# at the first whitespace/`>`, and tojson's rendered JSON (brackets,
+# commas, spaces) breaks the attribute long before quoting rules matter.
+_TOJSON_UNQUOTED = re.compile(r"=\s*\{\{(?:(?!\}\}).)*?\|\s*tojson(?:(?!\}\}).)*?\}\}", re.DOTALL)
+
+
 def _tojson_attr_offenders(src: str) -> list[int]:
-    """For each `| tojson` occurrence in ``src``, walk back to the
-    enclosing `{{`, then further back for the nearest `=` whose delimiter
-    (the first non-whitespace char after it) is a quote — or, for the
-    fully-unquoted case, whose delimiter position IS the `{{` itself.
-
-    Two things are deliberately skipped rather than examined character by
-    character, because their innards can contain an `=`/quote that is NOT
-    the enclosing attribute's own delimiter:
-
-    - A PRIOR sibling `{{ ... }}` expression (e.g. two `|tojson` calls in
-      the same `x-data=` object literal): its own kwargs — `map(attribute=
-      "id")` is a real, committed example (analyses/new.html) — must never
-      be mistaken for the CURRENT expression's attribute delimiter. Hitting
-      its closing `}}` jumps straight back to before its opening `{{`,
-      skipping the content entirely.
-    - A `==`/`!=`/`<=`/`>=` comparison (e.g. `state.loss_shape == "x"`, a
-      real committed example in scenarios/wizard/step_4_impact.html): the
-      whitespace-then-quote skip meant for `attr = "value"` formatting
-      would otherwise land on the comparison's quoted RHS and mistake it
-      for a delimiter. `=` signs that are neither part of such an operator
-      nor a genuine delimiter (e.g. JS `m=i` inside an already-open
-      attribute value, house convention in scenarios/form.html's
-      `hx-vals`) are skipped one at a time instead — their "delimiter"
-      char is neither a quote nor `{{`, so the walk keeps going.
-
-    A bare `>` crossed before any qualifying `=` means the `{{` sits in
-    plain text or a `<script>` body, not an attribute value at all — not
-    this lint's concern (an `=>` arrow function's `>` doesn't count as a
-    tag close).
-
-    Returns the offset of each unsafe `| tojson` occurrence — one whose
-    enclosing attribute delimiter is not a bare `'`.
-    """
-    offenders: list[int] = []
-    for m in re.finditer(r"\|\s*tojson", src):
-        start = m.start()
-        open_brace = src.rfind("{{", 0, start)
-        if open_brace == -1:
-            continue  # no enclosing Jinja expression -- not this lint's concern
-
-        i = open_brace - 1
-        delim: str | None = None
-        while i >= 0:
-            c = src[i]
-            if c == "}" and i > 0 and src[i - 1] == "}":
-                # tail of a PRIOR sibling {{ ... }} -- skip its whole body.
-                prior_open = src.rfind("{{", 0, i - 1)
-                if prior_open == -1:
-                    break
-                i = prior_open - 1
-                continue
-            if c == ">" and not (i > 0 and src[i - 1] == "="):
-                break  # crossed a real tag close -- not inside an attribute
-            if c == "=":
-                prev_c = src[i - 1] if i > 0 else ""
-                next_c = src[i + 1] if i + 1 < len(src) else ""
-                if next_c == "=" or prev_c in "=!<>":
-                    i -= 1
-                    continue  # part of ==/!=/<=/>=/=>, not an assignment
-                j = i + 1
-                while j < len(src) and src[j] in " \t\r\n":
-                    j += 1
-                ch = src[j] if j < len(src) else ""
-                if ch in ("'", '"') or j == open_brace:
-                    delim = ch
-                    break
-                # not a genuine attribute delimiter (e.g. JS `m=i` inside an
-                # already-open value) -- keep walking back for the true one.
-            i -= 1
-        if delim is not None and delim != "'":
-            offenders.append(start)
+    offenders = [
+        src.count("\n", 0, m.start()) + 1
+        for m in _QUOTED_ATTR.finditer(src)
+        if m.group("delim") == '"' and _TOJSON_IN_VAL.search(m.group("val"))
+    ]
+    offenders += [src.count("\n", 0, m.start()) + 1 for m in _TOJSON_UNQUOTED.finditer(src)]
     return offenders
 
 
@@ -203,6 +151,31 @@ _COMMITTED_SINGLE_QUOTED = """@click='$store.helpDrawer.show({{ (anchor or "") |
 _FLIPPED_DOUBLE_QUOTED = '''@click="$store.helpDrawer.show({{ (anchor or "") | tojson }})"'''
 
 
-def test_tojson_scanner_flags_flipped_quotes_and_passes_committed_form() -> None:
+def test_tojson_scanner_flags_true_positives_and_passes_safe_forms() -> None:
+    # (a) the committed macros/help_trigger.html line, verbatim, passes.
     assert _tojson_attr_offenders(_COMMITTED_SINGLE_QUOTED) == []
+    # (b) that SAME expression with its outer quotes flipped to double is
+    # flagged — the exact shape a naive `="[^"]*|tojson` regex misses
+    # because `(anchor or "")` embeds a `"` before the real tojson usage.
     assert _tojson_attr_offenders(_FLIPPED_DOUBLE_QUOTED) != []
+    # (c) PRSec2-1: each of these defeated the prior backward-walking
+    # scanner — a value-internal `>` (Alpine comparison / ternary /
+    # data-cmp) or a `}}{{` run inside a double-quoted attribute was
+    # mistaken for a tag-close or a prior-sibling boundary, so the walk
+    # never reached the attribute's own `=`. The forward scanner has no
+    # such blind spot: it consumes the WHOLE quoted span before ever
+    # looking for `|tojson` inside it, so quote state is structural.
+    defeated_the_old_scanner = [
+        '<div x-data="{ big: count > 5, items: {{ items | tojson }} }">',
+        '<div x-show="a >= 3 && {{ v | tojson }}">',
+        '<div x-bind="n > 0 ? {{ v | tojson }} : 0">',
+        '<div data-cmp="x > {{ v | tojson }}">',
+        '<div x-data="{ a:{ b:1 }}{{ v | tojson }}">',
+    ]
+    for probe in defeated_the_old_scanner:
+        assert _tojson_attr_offenders(probe) != [], f"probe not flagged: {probe!r}"
+    # (d) a single-quoted attribute with a double-quoted inner default (the
+    # house convention for tojson payloads) still passes — quote state is
+    # structural, so the nested opposite-type quote can't defeat it.
+    safe_nested_quote = """@click='$store.show({{ (anchor or "") | tojson }})'"""
+    assert _tojson_attr_offenders(safe_nested_quote) == []

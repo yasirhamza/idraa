@@ -54,18 +54,26 @@ async def help_search(
     q: str = Query("", max_length=256),  # Sec-N3: bound before template context
     user: User = Depends(require_user),
 ) -> Response:
-    if not is_htmx_request(request):
+    # PRArch2-N4: defensive parity with /help/{slug} — a BOOSTED nav ALSO
+    # sends HX-Request: true (htmx sets both headers on a boosted request),
+    # so checking HX-Request alone would swap this headless partial into
+    # the full-page body on a boosted click, destroying page chrome (the
+    # Arch-B1 bug /help/{slug} already guards against).
+    is_drawer = is_htmx_request(request) and not is_boosted(request)
+    if not is_drawer:
         # PRArch-N1: direct-nav (typed/bookmarked URL, no HX-Request) has no
         # sensible bare-partial rendering — a headless fragment with no page
         # chrome is a worse landing than the index. This is now a SECOND
         # response shape alongside the HX-driven partial below, so both vary
-        # on HX-Request.
-        return RedirectResponse("/help", status_code=303, headers={"Vary": "HX-Request"})
+        # on HX-Request, HX-Boosted.
+        return RedirectResponse(
+            "/help", status_code=303, headers={"Vary": "HX-Request, HX-Boosted"}
+        )
     return templates.TemplateResponse(
         request,
         "help/_search_results.html",
         {"current_user": user, "q": q, "hits": search_help(q)},
-        headers={"Vary": "HX-Request"},
+        headers={"Vary": "HX-Request, HX-Boosted"},
     )
 
 

@@ -65,8 +65,12 @@
 
   // PRArch-I1: a boosted swap replaces the drawer's DOM but the Alpine store
   // survives — close it or the destination renders under an empty slide-over.
+  // PRArch2-N3: e.detail.shouldSwap !== false — a no-swap boosted nav (5xx
+  // response, or a handler that opts out of swapping) never replaces the
+  // DOM at all, so closing the drawer here would just cost the user their
+  // open drawer for nothing.
   document.addEventListener('htmx:beforeSwap', function (e) {
-    if (e.detail && e.detail.boosted && window.Alpine) {
+    if (e.detail && e.detail.boosted && e.detail.shouldSwap !== false && window.Alpine) {
       var s = Alpine.store('helpDrawer');
       if (s && s.open) s.open = false; // not hide(): focus-restore would fight the swap
     }

@@ -218,14 +218,23 @@ _EVENT_HANDLER_ATTR = re.compile(r"[\s/'\"]on[a-z]+\s*=", re.IGNORECASE)
 
 # PRSec-4: <foreignObject> is SVG's arbitrary-HTML embedding hatch (it can
 # carry a nested <body onload=…>/<script> through a shape the two checks
-# above don't anticipate); xlink:href/an absolute http(s) href can point a
-# figure at an external resource. CSP blocks the fetch at runtime either
-# way (both are belt-and-suspenders against a pasted/AI-generated figure
-# landing the bytes in the first place) — this is import-time
-# defense-in-depth, not the only gate.
+# above don't anticipate); xlink:href/a bare SVG2 href pointing external
+# can point a figure at an external resource. CSP blocks the fetch at
+# runtime either way (both are belt-and-suspenders against a pasted/
+# AI-generated figure landing the bytes in the first place) — this is
+# import-time defense-in-depth, not the only gate.
 _FOREIGN_OBJECT = re.compile(r"<\s*foreignobject", re.IGNORECASE)
 _XLINK_HREF = re.compile(r"xlink:href", re.IGNORECASE)
-_ABSOLUTE_HTTP_HREF = re.compile(r'href\s*=\s*"http', re.IGNORECASE)
+# PRSec2-2: broadened from a double-quoted-only, literal-"http"-only check.
+# `href\s*=` matches both the legacy `xlink:href=` form and SVG2's bare
+# `href=` (valid on <use>/<image>/<a> since SVG2 — no xlink: prefix
+# required), so one regex covers both attribute shapes. `['"]?` accepts
+# single-quoted AND unquoted values (HTML5 doesn't require quoting when
+# the value has no whitespace, and a bare URL never does); `(?:https?:)?//`
+# accepts protocol-relative refs (`//evil.example/x`) — those reach the
+# network cross-origin exactly like an explicit `http://` would; no scheme
+# is required for the browser to resolve and fetch one.
+_EXTERNAL_HREF = re.compile(r"href\s*=\s*['\"]?\s*(?:https?:)?//", re.IGNORECASE)
 
 
 def _reject_scripts(source: str, *, name: str, check_event_handlers: bool = False) -> None:
@@ -249,8 +258,8 @@ def _reject_scripts(source: str, *, name: str, check_event_handlers: bool = Fals
             raise ValueError(f"{name}: <foreignObject> not allowed in figures")
         if _XLINK_HREF.search(source):
             raise ValueError(f"{name}: xlink:href not allowed in figures")
-        if _ABSOLUTE_HTTP_HREF.search(source):
-            raise ValueError(f"{name}: absolute http(s) href not allowed in figures")
+        if _EXTERNAL_HREF.search(source):
+            raise ValueError(f"{name}: absolute/protocol-relative href not allowed in figures")
 
 
 class _ArticleParser(HTMLParser):
@@ -328,9 +337,18 @@ def _build_derived(
     # "*.html"-only glob left it invisible to every guard in this module.
     if figures_dir.is_dir():
         for fig in sorted(p for p in figures_dir.rglob("*") if p.is_file()):
-            _reject_scripts(
-                fig.read_text(encoding="utf-8"), name=fig.name, check_event_handlers=True
-            )
+            if fig.name.startswith("."):
+                continue  # PRArch2-N2: dotfiles (.DS_Store, etc.) aren't figures
+            try:
+                fig_source = fig.read_text(encoding="utf-8")
+            except UnicodeDecodeError as e:
+                # PRArch2-N2: a binary file (e.g. a stray .png) dropped into
+                # figures/ would otherwise crash the boot-time scan with a
+                # raw UnicodeDecodeError instead of a legible guard message.
+                raise ValueError(
+                    f"{fig.name}: not readable as UTF-8 — binary files don't belong in figures/"
+                ) from e
+            _reject_scripts(fig_source, name=fig.name, check_event_handlers=True)
     for a in articles:
         f = articles_dir / f"{a.slug}.html"
         if not f.is_file():

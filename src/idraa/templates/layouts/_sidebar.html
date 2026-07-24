@@ -138,9 +138,14 @@
       <li>
         {% if _mapped_help_slug %}
         {# PRArch-N2: a real <a href> now, not a bare <button> — middle-click,
-           "open in new tab", and JS-off all degrade to a plain navigation to
-           the mapped article; htmx only preventDefault()s a plain click, so
-           the drawer-opening behavior below is unaffected. #}
+           context-menu "open in new tab", and JS-off all degrade to a plain
+           navigation to the mapped article (none of those fire the 'click'
+           event htmx listens on). PRArch2-N1: cmd/ctrl+click does NOT
+           degrade the same way — htmx 1.9.12 still intercepts a modified
+           left-click on an explicit hx-get anchor exactly like a plain one,
+           so don't rely on cmd/ctrl+click here for open-in-new-tab.
+           htmx only preventDefault()s a plain click, so the drawer-opening
+           behavior below is unaffected. #}
         <a href="/help/{{ _mapped_help_slug }}"
            hx-get="/help/{{ _mapped_help_slug }}"
            hx-target="#help-drawer-body"

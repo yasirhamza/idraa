@@ -162,6 +162,94 @@ def test_build_derived_rejects_foreign_object_in_figure(tmp_path) -> None:
         )
 
 
+def test_build_derived_skips_dotfiles_in_figures(tmp_path) -> None:
+    # PRArch2-N2: a stray dotfile (.DS_Store from macOS Finder browsing, an
+    # editor swapfile, etc.) dropped into figures/ is not a figure — skip it
+    # before read_text ever runs, so it can't crash the boot-time scan.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    # Real .DS_Store files open with non-UTF-8 bytes -- if the dotfile skip
+    # were missing, read_text(encoding="utf-8") would raise UnicodeDecodeError.
+    (figures_dir / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1\xff\xfe\x00\x01")
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    result = _build_derived(
+        articles=art,
+        redirects={},
+        route_map=(),
+        articles_dir=articles_dir,
+        figures_dir=figures_dir,
+    )
+    assert "a" in result
+
+
+def test_build_derived_rejects_non_utf8_figure(tmp_path) -> None:
+    # PRArch2-N2: a non-dotfile binary figure (e.g. a stray .png) must fail
+    # loud with a legible ValueError, not a raw UnicodeDecodeError.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    (figures_dir / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00\x01")
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    with pytest.raises(ValueError, match="not readable as UTF-8"):
+        _build_derived(
+            articles=art,
+            redirects={},
+            route_map=(),
+            articles_dir=articles_dir,
+            figures_dir=figures_dir,
+        )
+
+
+@pytest.mark.parametrize(
+    "figure_src",
+    [
+        # single-quoted: valid HTML/SVG attribute quoting the pre-PRSec2-2
+        # guard missed (it only matched `href\s*=\s*"http`).
+        "<svg><use href='http://evil.example/icon'></use></svg>",
+        # unquoted: also valid HTML/SVG when the value has no whitespace.
+        "<svg><use href=http://evil.example/icon></use></svg>",
+        # protocol-relative: no explicit scheme, but the browser still
+        # fetches it cross-origin exactly like an explicit http:// would.
+        '<svg><image href="//evil.example/icon.png"/></svg>',
+        # SVG2 bare href (no xlink: prefix -- valid since SVG2 on
+        # <use>/<image>/<a>) pointing at an absolute external URL.
+        '<svg><use href="http://evil.example/icon"></use></svg>',
+    ],
+    ids=["single-quoted", "unquoted", "protocol-relative", "svg2-bare-href"],
+)
+def test_build_derived_rejects_external_href_in_figure(tmp_path, figure_src) -> None:
+    # PRSec2-2: none of these carry an `xlink:` prefix, so the OLD
+    # `_XLINK_HREF`/`_ABSOLUTE_HTTP_HREF` pair missed all four -- the
+    # broadened `_EXTERNAL_HREF` regex (quote-style- and
+    # scheme-optionality-agnostic) is what catches them now.
+    from idraa.help_content import HelpArticle, _build_derived
+
+    articles_dir = tmp_path / "articles"
+    figures_dir = tmp_path / "figures"
+    articles_dir.mkdir()
+    figures_dir.mkdir()
+    (articles_dir / "a.html").write_text('<h2 id="s">S</h2><p>body</p>')
+    (figures_dir / "evil.html").write_text(figure_src)
+    art = (HelpArticle("a", "A", "guide", 1, "s", ()),)
+    with pytest.raises(ValueError, match="absolute/protocol-relative href not allowed"):
+        _build_derived(
+            articles=art,
+            redirects={},
+            route_map=(),
+            articles_dir=articles_dir,
+            figures_dir=figures_dir,
+        )
+
+
 def test_build_derived_failure_paths(tmp_path) -> None:
     # SC-I5: every _build_derived guard has a pinned failure (injectable
     # params keep the real registry untouched).
