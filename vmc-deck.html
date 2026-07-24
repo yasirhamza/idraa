@@ -483,10 +483,11 @@
           <div class="bnode"><b>weak-∧</b> Σ w<sub>i</sub>x<sub>i</sub> — deficiencies diminish, don't inhibit (§3.3)</div>
         </div>
       </div>
-      <div class="callout warn"><b>The strict ∧ has teeth</b>A control authored with only
-      VMC-Identification and no Correction partner in the scenario composes to
-      <strong>nothing</strong> — by §4 p.21 design, not by bug. If you've ever wondered why a
-      lone pen-test program can score $0, this is where.</div>
+      <div class="callout warn" style="margin-top:.6rem"><b>The strict ∧ has teeth</b>Lone VMC-Identification composes to
+      <strong>nothing</strong> until the scenario also carries Correction — in the taxonomy:
+      <em>Treatment selection</em> (§4.3.1) + <em>Implementation</em> (§4.3.2), the latter
+      load-bearing (absent it, Correction = 0). By design, not by bug — a lone pen-test
+      program scoring $0 is this gate.</div>
     </div>
     <div>
       <p class="inwords"><b>Wait — how do you OR probabilities?</b> By computing the probability <em>of
@@ -504,7 +505,7 @@
     </div>
   </div>
 
-  <p class="foot"><span class="ref">fair_cam/composition.py:99,129,182 · risk_engine/group_composition.py:325–392</span></p>
+  <p class="foot" style="margin-top:.6rem"><span class="ref">fair_cam/composition.py:99,129,182 · risk_engine/group_composition.py:325–392</span></p>
 </section>
 
 <!-- ============ 5 · KAPPA ============ -->
