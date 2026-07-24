@@ -117,3 +117,35 @@ async def test_help_search_endpoint_returns_partial(authed_analyst) -> None:
 async def test_help_search_requires_auth(client) -> None:
     r = await client.get("/help/search", params={"q": "scenario"})
     assert r.status_code in (302, 303, 307, 401, 403)
+
+
+@pytest.mark.asyncio
+async def test_article_page_has_three_column_chrome(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/run-and-read-analyses")
+    assert r.status_code == 200
+    assert "data-help-nav" in r.text  # article tree present
+    assert "data-help-toc" in r.text  # on-page TOC present
+    assert "Using Idraa" in r.text and "Methodology" in r.text
+    assert "min read" in r.text
+
+
+@pytest.mark.asyncio
+async def test_article_page_has_prev_next(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/build-a-scenario")
+    assert "/help/getting-started" in r.text  # prev
+    assert "/help/run-and-read-analyses" in r.text  # next
+
+
+@pytest.mark.asyncio
+async def test_index_shows_track_panels_with_minutes(authed_analyst) -> None:
+    from markupsafe import escape
+
+    client, _ = authed_analyst
+    r = await client.get("/help")
+    # SC-I2: autoescape renders the ampersand as &amp; — compare escaped,
+    # same convention as this file's existing title assertions.
+    assert "Using Idraa" in r.text
+    assert str(escape("Methodology & verification")) in r.text
+    assert "min" in r.text

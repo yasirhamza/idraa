@@ -7,6 +7,13 @@
   <h1 class="text-h2 text-ink-1">{{ article.title }}</h1>
   <p class="text-body text-ink-2 mt-1 mb-6">{{ article.summary }}</p>
 
+  {% if minutes is defined and minutes %}
+  <div class="flex gap-4 items-center text-meta text-ink-3 border-b border-border-subtle pb-3 mb-6">
+    <span class="rounded-full border border-border-subtle bg-surface-2 px-2.5 py-0.5 text-ink-2">{{ track_title }}</span>
+    <span>{{ minutes }} min read</span>
+  </div>
+  {% endif %}
+
   {% include "help/articles/" ~ article.slug ~ ".html" %}
 
   {% if related %}

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -223,6 +224,168 @@ async def test_help_section_usable_on_mobile_viewport(migrated_server_url: str) 
             f"the help article scrolls horizontally on a 390px viewport by {overflow}px "
             "— the article does not fit a phone screen"
         )
+
+        await context.close()
+        await browser.close()
+
+
+# Desktop width — clears the xl (1280px) breakpoint where the three-column
+# docs-hub layout (help/article_page.html) activates.
+_DESKTOP_VIEWPORT = {"width": 1440, "height": 900}
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_article_nav_disclosure_closed_on_mobile_toc_hidden(
+    migrated_server_url: str,
+) -> None:
+    """At 390px (help-overhaul P1 T4): the article tree is a CLOSED <details>
+    disclosure (Arch-I3) — summary visible, tree links revealed only on
+    click — and the on-page TOC column never renders at all."""
+    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import async_playwright, expect
+
+    base = migrated_server_url
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(headless=True)
+        except PlaywrightError as exc:  # browser binary not installed
+            pytest.skip(
+                "Playwright Chromium not installed "
+                f"(run `uv run playwright install chromium`): {exc}"
+            )
+        context = await browser.new_context(viewport=_MOBILE_VIEWPORT)
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+        await page.goto(f"{base}/help/run-and-read-analyses")
+
+        # The on-page TOC lives in a `hidden xl:block` column — never visible
+        # below the xl breakpoint.
+        await expect(page.locator("[data-help-toc]")).to_be_hidden()
+
+        details = page.locator("details.help-nav-shell")
+        summary = details.locator("summary")
+        await expect(summary).to_be_visible()
+        await expect(summary).to_have_text("All help articles")
+        assert await details.get_attribute("open") is None  # closed by default
+
+        nav_link = details.locator("a[href='/help/getting-started']")
+        await expect(nav_link).to_be_hidden()
+
+        await summary.click()
+        await expect(nav_link).to_be_visible()
+
+        await context.close()
+        await browser.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_three_column_layout_and_scrollspy_on_desktop(migrated_server_url: str) -> None:
+    """At 1440px (help-overhaul P1 T4): the article tree, article content,
+    and the on-page TOC all render simultaneously (three columns), and
+    scrolling toggles which TOC link carries `help-toc-link-active`."""
+    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import async_playwright, expect
+
+    base = migrated_server_url
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(headless=True)
+        except PlaywrightError as exc:  # browser binary not installed
+            pytest.skip(
+                "Playwright Chromium not installed "
+                f"(run `uv run playwright install chromium`): {exc}"
+            )
+        context = await browser.new_context(viewport=_DESKTOP_VIEWPORT)
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+        await page.goto(f"{base}/help/run-and-read-analyses")
+
+        # Three columns simultaneously visible at xl; the mobile disclosure
+        # wrapper (the OTHER rendered copy of _nav.html) is hidden entirely.
+        await expect(page.locator("[data-help-nav]:visible")).to_be_visible()
+        await expect(page.locator("[data-help-toc]:visible")).to_be_visible()
+        await expect(page.locator("article h1")).to_be_visible()
+        await expect(page.locator("details.help-nav-shell")).to_be_hidden()
+
+        # Scrollspy: scrolling a heading to the top of the viewport toggles
+        # the active class onto ITS toc link (and off whichever link had it).
+        # Both targets are chosen far enough from their neighboring headings
+        # (>270px, the observer's rootMargin-shrunk top band at this viewport
+        # height) that landing on one never ALSO pulls a neighbor into the
+        # same intersection batch — that would make the neighbor "win" the
+        # active class since the handler applies every isIntersecting entry
+        # in a batch in order. The article's LAST heading is avoided too:
+        # scrollIntoView on it can't reach block:'start' once the remaining
+        # scrollable height is shorter than the viewport.
+        first_target = "reading-the-outputs"
+        second_target = "random-seed-and-reproducibility"
+
+        await page.evaluate(
+            f"document.getElementById('{first_target}').scrollIntoView({{block: 'start'}})"
+        )
+        first_link = page.locator(f"[data-toc-link='{first_target}']")
+        await expect(first_link).to_have_class(re.compile(r"help-toc-link-active"))
+
+        await page.evaluate(
+            f"document.getElementById('{second_target}').scrollIntoView({{block: 'start'}})"
+        )
+        second_link = page.locator(f"[data-toc-link='{second_target}']")
+        await expect(second_link).to_have_class(re.compile(r"help-toc-link-active"))
+        await expect(first_link).not_to_have_class(re.compile(r"help-toc-link-active"))
+
+        await context.close()
+        await browser.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_boosted_navigation_preserves_page_chrome(migrated_server_url: str) -> None:
+    """Arch-B1: a real hx-boost CLICK from /help to an article, then a
+    next/prev card click, must never strip the sidebar/page chrome down to a
+    bare drawer partial."""
+    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import async_playwright, expect
+
+    base = migrated_server_url
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(headless=True)
+        except PlaywrightError as exc:  # browser binary not installed
+            pytest.skip(
+                "Playwright Chromium not installed "
+                f"(run `uv run playwright install chromium`): {exc}"
+            )
+        context = await browser.new_context(viewport=_DESKTOP_VIEWPORT)
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+        await page.goto(f"{base}/help")
+        await expect(page.locator("#sidebar")).to_be_visible()
+
+        # Real click (not page.goto) — exercises hx-boost's AJAX nav path.
+        await page.click("a[href='/help/build-a-scenario']")
+        await page.wait_for_url(f"{base}/help/build-a-scenario")
+        await expect(page.locator("#sidebar")).to_be_visible()
+        await expect(page.locator("article h1")).to_have_text("Build a scenario")
+
+        # Next-card click.
+        await page.click("a.help-pn[href='/help/run-and-read-analyses']")
+        await page.wait_for_url(f"{base}/help/run-and-read-analyses")
+        await expect(page.locator("#sidebar")).to_be_visible()
+        await expect(page.locator("article h1")).to_have_text("Run & read analyses")
+
+        # Prev-card click, back to build-a-scenario.
+        await page.click("a.help-pn[href='/help/build-a-scenario']")
+        await page.wait_for_url(f"{base}/help/build-a-scenario")
+        await expect(page.locator("#sidebar")).to_be_visible()
+        await expect(page.locator("article h1")).to_have_text("Build a scenario")
 
         await context.close()
         await browser.close()

@@ -242,6 +242,10 @@ ALLOWED_DIRS = {"macros"}
 #       password variant for factor-less accounts; form_field's text variant
 #       exposes neither.
 #
+#   help/_search_box.html
+#       HTMX active-search <input type="search">; no form_field search-input
+#       variant — same gap as library/browse.html (help-overhaul P1 T4).
+#
 ALLOWLIST: set[str] = {
     "analyses/new.html",
     "controls/_assignment_row.html",
@@ -299,6 +303,7 @@ ALLOWLIST: set[str] = {
     "auth/mfa_challenge.html",
     "account/security.html",
     "auth/step_up.html",
+    "help/_search_box.html",
 }
 
 
@@ -350,7 +355,10 @@ def test_allowlist_does_not_grow_silently() -> None:
     # 47 = 46 + help/articles/raw-samples-export.html (#109: static prose
     #      reference tables, same justification block as its four Help-article
     #      siblings — justified inline in ALLOWLIST).
-    assert len(ALLOWLIST) <= 47, (
+    # 48 = 47 + help/_search_box.html (help-overhaul P1 T4: HTMX active-search
+    #      <input type="search">, same form_field gap as library/browse.html —
+    #      justified inline in ALLOWLIST).
+    assert len(ALLOWLIST) <= 48, (
         f"Allowlist has grown to {len(ALLOWLIST)} entries. "
         "Each new entry must be justified in the comment block above ALLOWLIST."
     )

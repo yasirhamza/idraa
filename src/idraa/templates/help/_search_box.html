@@ -1,0 +1,11 @@
+{# src/idraa/templates/help/_search_box.html — HTMX active-search, shared by
+   the nav variants and the index. NO ids: the '/' shortcut and hx-target
+   resolve by class/data attribute so two rendered instances coexist. #}
+<div class="relative mb-4">
+  <input type="search" name="q" data-help-search placeholder="Search help…"
+         autocomplete="off" maxlength="64"
+         class="w-full rounded-md border border-border-strong bg-surface-0 px-3 py-1.5 text-body"
+         hx-get="/help/search" hx-trigger="input changed delay:300ms, search"
+         hx-target="next .help-search-results" hx-swap="innerHTML">
+  <div class="help-search-results absolute left-0 right-0 top-full mt-1 z-30 rounded-md border border-border-subtle bg-surface-1 shadow-lg empty:hidden"></div>
+</div>

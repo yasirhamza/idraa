@@ -1,12 +1,38 @@
-{# src/idraa/templates/help/article_page.html — full-page article (direct nav / JS-off / mobile). #}
+{# src/idraa/templates/help/article_page.html — three-column docs-hub article. #}
 {% extends "base.html" %}
 {% from "macros/breadcrumb.html" import breadcrumb %}
 {% block title %}{{ article.title }} — Help{% endblock %}
 {% block content %}
-<div class="max-w-4xl mx-auto px-4 py-6">
-  {{ breadcrumb([('Help', '/help'), (article.title, None)]) }}
-  <div class="mt-6">
-    {% include "help/_article.html" %}
+<div class="max-w-[82rem] mx-auto px-4 py-6 xl:grid xl:grid-cols-[16rem_minmax(0,1fr)_13rem] xl:gap-8">
+  {# Arch-I3: the side column exists only at xl. Below xl the tree is a
+     CLOSED disclosure (no `open`); at xl it's a plain column. Two renders
+     of one include — safe because _search_box/_nav carry no ids. #}
+  <details class="mb-4 xl:hidden help-nav-shell">
+    <summary class="text-body text-ink-2 cursor-pointer py-1">All help articles</summary>
+    {% with active_slug = article.slug %}{% include "help/_nav.html" %}{% endwith %}
+  </details>
+  <div class="hidden xl:block">
+    {% with active_slug = article.slug %}{% include "help/_nav.html" %}{% endwith %}
   </div>
+  {# div, not <main> — base.html already renders <main id="main"> around the
+     content block; nesting main elements is non-conforming and duplicates
+     the landmark for screen readers (Arch2-I2). #}
+  <div class="min-w-0">
+    {{ breadcrumb([('Help', '/help'), (track_title, '/help'), (article.title, None)]) }}
+    <div class="mt-4">{% include "help/_article.html" %}</div>
+    <div class="grid sm:grid-cols-2 gap-3 mt-10">
+      {% if prev_article %}
+      <a href="/help/{{ prev_article.slug }}" class="help-pn">
+        <span class="text-meta text-ink-3 uppercase">← Previous</span>
+        <span class="block text-body text-brand font-semibold mt-1">{{ prev_article.title }}</span>
+      </a>{% else %}<span></span>{% endif %}
+      {% if next_article %}
+      <a href="/help/{{ next_article.slug }}" class="help-pn text-right">
+        <span class="text-meta text-ink-3 uppercase">Next →</span>
+        <span class="block text-body text-brand font-semibold mt-1">{{ next_article.title }}</span>
+      </a>{% endif %}
+    </div>
+  </div>
+  <div class="hidden xl:block">{% include "help/_toc.html" %}</div>
 </div>
 {% endblock %}

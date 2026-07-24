@@ -18,6 +18,7 @@ from idraa.app import templates
 from idraa.help_content import (
     HELP_ARTICLES,
     HELP_BY_SLUG,
+    HELP_DERIVED,
     HELP_REDIRECTS,
     TRACK_TITLES,
     HelpArticle,
@@ -38,7 +39,12 @@ async def help_index(
     return templates.TemplateResponse(
         request,
         "help/index.html",
-        {"current_user": user, "articles": HELP_ARTICLES, "track_titles": TRACK_TITLES},
+        {
+            "current_user": user,
+            "articles": HELP_ARTICLES,
+            "track_titles": TRACK_TITLES,
+            "help_derived": HELP_DERIVED,
+        },
     )
 
 
@@ -92,10 +98,26 @@ async def help_article(
         raise HTTPException(status_code=404, headers={"Vary": "HX-Request, HX-Boosted"})
 
     related = [HELP_BY_SLUG[s] for s in entry.related]
+    derived = HELP_DERIVED[entry.slug]
+    siblings = sorted((a for a in HELP_ARTICLES if a.track == entry.track), key=lambda a: a.order)
+    idx = siblings.index(entry)
+    ctx = {
+        "current_user": user,
+        "article": entry,
+        "related": related,
+        "toc": derived.toc,
+        "minutes": derived.minutes,
+        "track_title": TRACK_TITLES[entry.track],
+        "prev_article": siblings[idx - 1] if idx > 0 else None,
+        "next_article": siblings[idx + 1] if idx + 1 < len(siblings) else None,
+        "articles": HELP_ARTICLES,
+        "track_titles": TRACK_TITLES,
+        "help_derived": HELP_DERIVED,
+    }
     name = "help/_article.html" if is_drawer else "help/article_page.html"
     return templates.TemplateResponse(
         request,
         name,
-        {"current_user": user, "article": entry, "related": related},
+        ctx,
         headers={"Vary": "HX-Request, HX-Boosted"},
     )

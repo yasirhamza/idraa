@@ -137,6 +137,10 @@
   {# Help slide-over drawer store. Non-defer, like sub_function_combobox.js, so
      its alpine:init listener registers before Alpine initializes. #}
   <script src="/static/js/help_drawer.js?v={{ static_version }}"></script>
+  {# Docs-hub behaviors (help-overhaul P1 T4): TOC scrollspy + '/' search
+     shortcut. `defer` since it only wires event listeners, no alpine:init
+     race like sub_function_combobox.js/help_drawer.js above. #}
+  <script src="/static/js/help_hub.js?v={{ static_version }}" defer></script>
   {# Passkey (WebAuthn) ceremonies — window.idraaWebAuthn.register()/.authenticate().
      `defer` since it's only invoked from inline onclick handlers after load. #}
   <script src="/static/js/webauthn.js?v={{ static_version }}" defer></script>
