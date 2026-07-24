@@ -14,6 +14,7 @@ async def test_old_slug_redirects_full_page(authed_analyst, old: str, new: str) 
     r = await client.get(f"/help/{old}", follow_redirects=False)
     assert r.status_code == 301
     assert r.headers["location"] == f"/help/{new}"
+    assert "HX-Boosted" in r.headers["vary"]
 
 
 @pytest.mark.asyncio
@@ -35,6 +36,7 @@ async def test_boosted_navigation_gets_full_page_not_partial(authed_analyst) -> 
     )
     assert r.status_code == 200
     assert "<html" in r.text  # full page, chrome intact
+    assert "HX-Boosted" in r.headers["vary"]
 
 
 @pytest.mark.asyncio
@@ -46,3 +48,4 @@ async def test_boosted_old_slug_takes_the_301(authed_analyst) -> None:
         follow_redirects=False,
     )
     assert r.status_code == 301  # htmx follows via xhr.responseURL
+    assert "HX-Boosted" in r.headers["vary"]

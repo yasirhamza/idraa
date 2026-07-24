@@ -1,0 +1,18 @@
+{#- src/idraa/templates/help/_search_results.html — HTMX active-search
+    partial. Whitespace-controlled throughout (Arch2-N2): the container
+    hides via CSS :empty, which whitespace text nodes defeat — an
+    empty/short-query response must be ZERO bytes. -#}
+{%- if hits -%}
+<ul class="help-search-hits">
+  {%- for h in hits %}
+  <li>
+    <a href="/help/{{ h.slug }}" class="block px-3 py-2 rounded hover:bg-surface-2">
+      <span class="text-body text-ink-1 font-medium">{{ h.title }}</span>
+      {% if h.heading %}<span class="block text-meta text-ink-3">§ {{ h.heading }}</span>{% endif %}
+    </a>
+  </li>
+  {%- endfor %}
+</ul>
+{%- elif q|length >= 2 -%}
+<p class="px-3 py-2 text-meta text-ink-3">No matches.</p>
+{%- endif -%}

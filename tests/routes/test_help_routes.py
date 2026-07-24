@@ -102,3 +102,18 @@ async def test_help_nav_active_on_article_page(authed_analyst):
         r'|<a[^>]*aria-current="page"[^>]*href="/help"'
     )
     assert anchor.search(r.text), "Help sidebar anchor not marked aria-current"
+
+
+@pytest.mark.asyncio
+async def test_help_search_endpoint_returns_partial(authed_analyst) -> None:
+    client, _ = authed_analyst
+    r = await client.get("/help/search", params={"q": "scenario"})
+    assert r.status_code == 200
+    assert "/help/build-a-scenario" in r.text
+    assert "<html" not in r.text  # partial, not a full page
+
+
+@pytest.mark.asyncio
+async def test_help_search_requires_auth(client) -> None:
+    r = await client.get("/help/search", params={"q": "scenario"})
+    assert r.status_code in (302, 303, 307, 401, 403)

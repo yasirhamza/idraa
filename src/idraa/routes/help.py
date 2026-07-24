@@ -11,7 +11,7 @@ Spec: docs/plans/2026-06-13-help-section-design.md
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from idraa.app import templates
@@ -25,6 +25,7 @@ from idraa.help_content import (
 from idraa.models.user import User
 from idraa.routes._htmx import is_boosted, is_htmx_request
 from idraa.routes.deps import require_user
+from idraa.services.help_search import search_help
 
 router = APIRouter()
 
@@ -38,6 +39,19 @@ async def help_index(
         request,
         "help/index.html",
         {"current_user": user, "articles": HELP_ARTICLES, "track_titles": TRACK_TITLES},
+    )
+
+
+@router.get("/help/search", response_class=HTMLResponse)
+async def help_search(
+    request: Request,
+    q: str = Query("", max_length=256),  # Sec-N3: bound before template context
+    user: User = Depends(require_user),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "help/_search_results.html",
+        {"current_user": user, "q": q, "hits": search_help(q)},
     )
 
 
@@ -57,16 +71,25 @@ async def help_article(
         else:
             # Boosted + plain navigations both take the 301: htmx uses
             # xhr.responseURL for history, so the URL bar lands on the new slug.
-            return RedirectResponse(f"/help/{target}", status_code=301)
+            return RedirectResponse(
+                f"/help/{target}",
+                status_code=301,
+                headers={"Vary": "HX-Request, HX-Boosted"},
+            )
     else:
         entry = HELP_BY_SLUG.get(slug)
 
     if entry is None:
         if is_drawer:
             return templates.TemplateResponse(
-                request, "help/_not_found.html", {"current_user": user}, status_code=404
+                request,
+                "help/_not_found.html",
+                {"current_user": user},
+                status_code=404,
+                headers={"Vary": "HX-Request, HX-Boosted"},
             )
-        raise HTTPException(status_code=404)
+        # Sec4-N1: the app-level exception handler propagates exc.headers.
+        raise HTTPException(status_code=404, headers={"Vary": "HX-Request, HX-Boosted"})
 
     related = [HELP_BY_SLUG[s] for s in entry.related]
     name = "help/_article.html" if is_drawer else "help/article_page.html"
@@ -74,4 +97,5 @@ async def help_article(
         request,
         name,
         {"current_user": user, "article": entry, "related": related},
+        headers={"Vary": "HX-Request, HX-Boosted"},
     )
