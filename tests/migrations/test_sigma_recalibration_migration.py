@@ -388,6 +388,82 @@ def test_audit_row_full_shape(alembic_config: Config, alembic_engine: Engine) ->
 # ---------------------------------------------------------------------------
 
 
+def test_mixture_partial_sweep_and_pin_on_mixture(
+    alembic_config: Config, alembic_engine: Engine
+) -> None:
+    """T3-review NTH-1: the mixture branch sweeps ONLY components above the
+    target (partial sweep), and an analyst_pin stamp wins for mixtures too."""
+    partial = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 10.0, "sigma": 2.4, "weight": 0.7},
+            {"mean": 11.0, "sigma": 1.5, "weight": 0.3},
+        ],
+    }
+    pinned_mixture = {
+        "distribution": "lognormal_mixture",
+        "components": [{"mean": 12.0, "sigma": 3.0, "weight": 1.0}],
+        "distribution_fit_metadata": {"sigma_recalibration": {"source": "analyst_pin"}},
+    }
+    command.upgrade(alembic_config, _PRE_REV)
+    with alembic_engine.begin() as conn:
+        sid_partial = _seed_scenario(conn, pl_node=partial, row_version=1)
+        sid_pinned = _seed_scenario(conn, pl_node=pinned_mixture, row_version=1)
+    command.upgrade(alembic_config, _REV)
+
+    with alembic_engine.connect() as conn:
+        comps = json.loads(_get_scenario(conn, sid_partial)["primary_loss"])["components"]
+        assert comps[0]["sigma"] == pytest.approx(_SIGMA_TARGET)  # 2.4 swept
+        assert comps[1]["sigma"] == pytest.approx(1.5)  # below target: untouched
+        assert comps[0]["mean"] == pytest.approx(10.0)
+        assert comps[1]["mean"] == pytest.approx(11.0)
+        pinned_after = json.loads(_get_scenario(conn, sid_pinned)["primary_loss"])
+        assert pinned_after == pinned_mixture  # analyst_pin wins for mixtures too
+        assert _audit_rows(conn, sid_pinned) == []
+
+
+def test_audit_prior_preserves_full_metadata_verbatim(
+    alembic_config: Config, alembic_engine: Engine
+) -> None:
+    """T3-review NTH-2: one test that seeds the full realistic fit-record
+    metadata AND asserts the audit row's changes.prior carries it verbatim."""
+    full_meta = {
+        "source": "quantile_lognormal_pool",
+        "fitter": "lognorm_native",
+        "pooled_meanlog": 12.0421,
+        "pooled_sdlog": 2.9269,
+        "schema_version": 2,
+        "q_low_quantile": 0.05,
+        "q_high_quantile": 0.95,
+        "pooled_min_support": 0.0,
+        "pooled_max_support": None,
+        "n_smes": 1,
+        "sme_ids": ["20505f1a-1fd1-4b9a-b7da-b5c666f600a9"],
+        "weights": [1.0],
+        "fitted_at": "2026-07-08T10:37:13.387531+00:00",
+    }
+    wide = {
+        "distribution": "lognormal",
+        "mean": 12.0421,
+        "sigma": 2.9269,
+        "distribution_fit_metadata": dict(full_meta),
+    }
+    command.upgrade(alembic_config, _PRE_REV)
+    with alembic_engine.begin() as conn:
+        sid = _seed_scenario(conn, pl_node=wide, row_version=1)
+    command.upgrade(alembic_config, _REV)
+
+    with alembic_engine.connect() as conn:
+        rows = _audit_rows(conn, sid)
+        assert len(rows) == 1
+        prior = json.loads(rows[0]["changes"])["prior"]
+        assert prior == wide  # byte-fidelity incl. the full metadata dict
+        node = json.loads(_get_scenario(conn, sid)["primary_loss"])
+        meta = node["distribution_fit_metadata"]
+        assert set(meta.keys()) == {"sigma_recalibration", "superseded_fit"}
+        assert meta["superseded_fit"] == full_meta  # original values verbatim
+
+
 def test_mixture_components_each_recalibrated(
     alembic_config: Config, alembic_engine: Engine
 ) -> None:
