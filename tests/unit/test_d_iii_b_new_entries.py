@@ -24,12 +24,27 @@ for p in (_PROJ / "src", _PROJ / "scripts", _PROJ / "tests" / "integration"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from idraa.services.calibration import WITHIN_SCENARIO_SIGMA_DEFAULT  # noqa: E402
 from idraa.services.seed_library_loader import LibraryEntrySeed  # noqa: E402
 
 _EXT = "data/seed_library_entries_extension.json"
 _ENV = "data/loss_form_envelopes.json"
 _ATTACK_FULL_DIIIB = "data/seed_attack_d_iii_b_full.json"
 _ATTACK_CATALOG = "data/seed_attack_catalog.json"
+
+# Task-0 carryover (docs/reference/within-scenario-sigma-calibration.md, anchor-
+# review decision table, adjustment (d)): destructive-wiper-nationstate's median
+# is re-anchored to the IRIS 2025 ransomware type-conditional p50_2024 ($3.2M),
+# split by the entry's own PL:SL share (416.5:49) -- NOT held at the envelope-
+# derived median like every other catastrophic/capped field. Keyed identically
+# to scripts/build_sigma_recalibration.py's `_ANCHOR_OVERRIDES` and
+# tests/integration/test_library_loss_differentiation.py's
+# `_T0_MEDIAN_OVERRIDES` -- keep all three textually identical. (No-op here:
+# the wiper is not one of this file's 8 D-iii-b slugs.)
+_T0_MEDIAN_OVERRIDES: dict[tuple[str, str], float] = {
+    ("destructive-wiper-nationstate", "primary_loss"): 2_863_158.0,
+    ("destructive-wiper-nationstate", "secondary_loss"): 336_842.0,
+}
 
 # The 8 D-iii-b slugs and whether they carry a secondary loss.
 _D_IIIB = {
@@ -83,13 +98,21 @@ def test_new_entry_reconstructs_from_envelope_and_shares(slug: str) -> None:
     e = _load()[slug]
     env = _envelopes()
     sec = _sector(e, _IND2SEC)
-    mu_s, sigma_s = env[sec]["mean"], env[sec]["sigma"]
+    # sigma is the within-scenario default, no longer the envelope's own sigma
+    # (#sigma-recalibration PR1 Task 2) -- only the envelope MEAN still anchors
+    # the mu-leg location.
+    mu_s = env[sec]["mean"]
     prof = e["loss_form_profile"]
     sp = sum(f["share"] for f in prof if f["kind"] == "primary" and f.get("share") is not None)
     ss = sum(f["share"] for f in prof if f["kind"] == "secondary" and f.get("share") is not None)
 
-    exp_pl_mu = round(mu_s + math.log(sp), 10)
-    exp_sigma = round(sigma_s, 10)
+    pl_override = _T0_MEDIAN_OVERRIDES.get((slug, "primary_loss"))
+    exp_pl_mu = (
+        round(math.log(pl_override), 10)
+        if pl_override is not None
+        else round(mu_s + math.log(sp), 10)
+    )
+    exp_sigma = WITHIN_SCENARIO_SIGMA_DEFAULT
     if slug in CATASTROPHIC_SLUGS:
         # Native lognormal (catastrophic): envelope x share params pinned directly.
         assert e["primary_loss"]["sigma"] == pytest.approx(exp_sigma, abs=1e-9)
@@ -106,7 +129,12 @@ def test_new_entry_reconstructs_from_envelope_and_shares(slug: str) -> None:
     if _D_IIIB[slug]:
         sl = e["secondary_loss"]
         assert sl is not None
-        exp_sl_mu = round(mu_s + math.log(ss), 10)
+        sl_override = _T0_MEDIAN_OVERRIDES.get((slug, "secondary_loss"))
+        exp_sl_mu = (
+            round(math.log(sl_override), 10)
+            if sl_override is not None
+            else round(mu_s + math.log(ss), 10)
+        )
         if slug in CATASTROPHIC_SLUGS:
             assert sl["distribution"] == "lognormal"
             assert sl["sigma"] == pytest.approx(exp_sigma, abs=1e-9)

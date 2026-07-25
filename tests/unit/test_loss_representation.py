@@ -1,12 +1,19 @@
 """Milestone B (#loss-pert-overhaul): library loss representation guard.
 
 91 capped entries: PL/SL are bounded PERT with mode == low < high (the
-analytic-mode clamp fires for every entry, sigma range 1.838-3.472 > 1.645).
-11 catastrophic entries: PL/SL stay uncapped lognormal, byte-unchanged (the
-attack-coverage gap-fill epic, #529, added the 11th -- W1
-destructive-wiper-nationstate). Every entry carries an explicit loss_shape.
-Spot pins anchor the mechanical conversion low/high = exp(mu -/+
-1.6448536269514722*sigma) and the untouched catastrophic params."""
+analytic-mode clamp fires for every entry). 11 catastrophic entries: PL/SL
+stay uncapped lognormal (the attack-coverage gap-fill epic, #529, added the
+11th -- W1 destructive-wiper-nationstate). Every entry carries an explicit
+loss_shape. Spot pins anchor the mechanical conversion low/high = exp(mu -/+
+1.6448536269514722*sigma) and the catastrophic params.
+
+#sigma-recalibration (PR1 Task 2): sigma is now the within-scenario default
+(1.7) everywhere -- the "sigma range 1.838-3.472 > 1.645" mode-clamp margin
+and the "byte-unchanged" catastrophic-param claim are pre-recalibration
+history; mu/mean stays held (median-anchored) except the two Task-0-overridden
+wiper fields (docs/reference/within-scenario-sigma-calibration.md adjustment
+(d)) -- none of this file's spot pins are the wiper, so every mean/mu below is
+unchanged from the pre-recalibration value, only sigma/low/high moved."""
 
 from __future__ import annotations
 
@@ -34,19 +41,25 @@ _CATASTROPHIC = frozenset(
     }
 )
 
-# Mechanical-conversion spot pins (plan pinned table): (pl_low, pl_high).
+# Mechanical-conversion spot pins, re-pinned post-#sigma-recalibration (PR1
+# Task 2): mu/mean held (median-anchored for the non-vendor pair; IC3
+# mean-anchored for the vendor pair -- both vendor entries land on the SAME
+# curve, the documented shared-curve consequence of the mean-anchor, D11'),
+# sigma -> WITHIN_SCENARIO_SIGMA_DEFAULT (1.7): (pl_low, pl_high).
 _SPOT_PERT = {
-    "ransomware-on-ehr": (15955.6628554057, 10080000.000343738),
-    "web-app-exploitation": (1134.0206187144, 42679999.99965714),
-    # Honest wide-sigma outliers (methodology-flagged, accepted):
-    "telecom-sim-swap-fraud": (0.9810565461, 89611.6799463846),
-    "bec-fraud-financial": (3.7573034111, 141409.8711597068),
+    "ransomware-on-ehr": (24478.8629170978, 6570284.009215002),
+    "web-app-exploitation": (13428.4606082079, 3604285.064272992),
+    # Vendor mean-anchor (IC3 $123,005): identical curve on both slugs.
+    "telecom-sim-swap-fraud": (1769.9898978414, 475076.6553840482),
+    "bec-fraud-financial": (1769.9898978414, 475076.6553840482),
 }
-# Catastrophic byte-unchanged spot pins: (pl_mean, pl_sigma).
+# Catastrophic spot pins, re-pinned post-#sigma-recalibration: mean/mu held
+# (none of these three is the destructive-wiper-nationstate override), sigma
+# -> WITHIN_SCENARIO_SIGMA_DEFAULT (1.7).
 _SPOT_LOGNORMAL = {
-    "chemical-process-safety-attack": (13.6876771865, 2.2723417799),
-    "nation-state-ics-supply-chain": (11.4605789846, 1.8377081683),
-    "solarwinds-class-supply-chain": (13.1275499041, 3.4721527617),
+    "chemical-process-safety-attack": (13.6876771865, 1.7),
+    "nation-state-ics-supply-chain": (11.4605789846, 1.7),
+    "solarwinds-class-supply-chain": (13.1275499041, 1.7),
 }
 
 

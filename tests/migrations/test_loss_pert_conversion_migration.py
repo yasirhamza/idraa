@@ -23,13 +23,29 @@ against, so the ``93``/``n_cat==10`` literals stay unchanged."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import sqlalchemy as sa
 from pytest_alembic import MigrationContext
 from sqlalchemy.engine import Engine
 
+import idraa
+
 _DOWN = "b8c4f2e6a1d3"
 _HEAD = "d9e5a3c7f2b4"
+
+
+def _root() -> Path:
+    return Path(idraa.__file__).resolve().parent.parent.parent
+
+
+def _entry_by_slug(slug: str) -> dict:
+    for name in ("seed_library_entries.json", "seed_library_entries_extension.json"):
+        for e in json.loads((_root() / "data" / name).read_text(encoding="utf-8")):
+            if e["slug"] == slug:
+                return e
+    raise KeyError(slug)
+
 
 # The 9 new attack-coverage gap-fill entries (#529) -- see module docstring.
 _ATTACK_COVERAGE_SLUGS = frozenset(
@@ -76,7 +92,12 @@ def test_loss_migration_lands_converted_pert(
     alembic_runner.migrate_up_one()
     row = _loss(alembic_engine, "ransomware-on-ehr")
     assert row["pl"]["distribution"] == "PERT"
-    assert (row["pl"]["low"], row["pl"]["high"]) == (15955.6628554057, 10080000.000343738)
+    # #sigma-recalibration (PR1 Task 2): shape-based, not value-pinned -- the
+    # converted PERT bounds shift whenever the builder re-authors loss
+    # dispersion (same seed-replaying-migration class as
+    # test_within_sector_detemplating.py / test_recurate_seed_ciii_a.py).
+    # Compare against the live seed JSON, the single source of truth.
+    assert row["pl"] == _entry_by_slug("ransomware-on-ehr")["primary_loss"]
     assert row["pl"]["mode"] == row["pl"]["low"]
 
 
