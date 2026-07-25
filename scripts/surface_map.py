@@ -71,12 +71,19 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     ("src/idraa/errors.py", "FAIRCAMValidationError"),
     ("fair_cam/quantile_pooling/_lognormal.py", "_qlnormtrunc"),
     ("src/idraa/services/run_executor.py", "execute_run"),
+    # Round-4: the multi-currency entry path. `max` inputs land inside the
+    # currency-scoped block whose siblings are converted to USD before parsing,
+    # so this surface is load-bearing on the cap's units.
+    ("src/idraa/services/scenario_currency.py", "convert_loss_inputs_to_usd"),
+    ("tests/migrations/conftest.py", "alembic_config"),
 ]
 
 # Class attributes the plan names (models are AnnAssigns, not defs). Same
 # fail-loud contract: a missing attribute is a fabricated claim.
 REQUIRED_ATTRS: list[tuple[str, str, str]] = [
     ("src/idraa/models/risk_analysis_run.py", "RiskAnalysisRun", "scenario_inputs_snapshot"),
+    # Sole justification for Task 1's mandatory Decimal test input.
+    ("src/idraa/models/organization.py", "Organization", "annual_revenue"),
 ]
 
 # Files this PR CREATES. Only these may be absent; any other missing path is a
@@ -89,13 +96,21 @@ EXPECTED_NEW_FILES = {
 
 # Symbols whose CALL SITES the plan makes claims about. Hand-counted censuses were
 # wrong twice (validate_fair_distributions, build_scenario_payload).
-CALL_SITE_SYMBOLS = [
-    "validate_fair_distributions",
-    "build_scenario_payload",
-    "dist_from_raw",
-    "dist_to_form",
-    "capacity_max_for_org",
-    "form_defaults",
+# (defining module | None, symbol). A module scope is REQUIRED whenever the name
+# is not unique repo-wide: `_validate_rows` is defined in BOTH scenario_import and
+# overlays_importer, so an unscoped census would report 4 call sites for a symbol
+# that has 2 — the same inflation the lookbehind fix removed, in another dimension.
+CALL_SITE_SYMBOLS: list[tuple[str | None, str]] = [
+    (None, "validate_fair_distributions"),
+    (None, "build_scenario_payload"),
+    (None, "dist_from_raw"),
+    (None, "dist_to_form"),
+    (None, "capacity_max_for_org"),
+    (None, "form_defaults"),
+    ("src/idraa/services/scenario_import.py", "_structural_dist_problem"),
+    ("src/idraa/services/scenario_import.py", "_validate_rows"),
+    ("src/idraa/services/scenario_currency.py", "convert_loss_inputs_to_usd"),
+    ("tests/migrations/conftest.py", "alembic_config"),
 ]
 
 
@@ -125,7 +140,11 @@ def _defs(path: Path) -> dict[str, tuple[int, str]]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             prefix = "async def " if isinstance(node, ast.AsyncFunctionDef) else "def "
-            sig = f"{prefix}{node.name}({ast.unparse(node.args)})"
+            # Return annotation included: the plan makes claims about RETURN shapes
+            # (e.g. "_dist_cells is a fixed 4-tuple, so CSV cannot carry max"), and
+            # an args-only signature cannot support them.
+            ret = f" -> {ast.unparse(node.returns)}" if node.returns is not None else ""
+            sig = f"{prefix}{node.name}({ast.unparse(node.args)}){ret}"
         elif isinstance(node, ast.ClassDef):
             bases = ", ".join(ast.unparse(b) for b in node.bases)
             sig = f"class {node.name}({bases})" if bases else f"class {node.name}"
@@ -221,7 +240,7 @@ def attrs_section() -> list[str]:
 
 def call_sites_section() -> list[str]:
     lines = ["", "[CALL SITES] every reference under src/ and fair_cam/, by symbol", ""]
-    for name in CALL_SITE_SYMBOLS:
+    for scope, name in CALL_SITE_SYMBOLS:
         # The leading boundary is LOAD-BEARING: a plain substring search for
         # `dist_from_raw(` also matches inside `pert_dist_from_raw(`, which
         # inflated that census from 2 to 5 and dragged a `def pert_...` line past
@@ -241,16 +260,29 @@ def call_sites_section() -> list[str]:
             for ln in proc.stdout.splitlines()
             if (ln.startswith("src/") or ln.startswith("fair_cam/"))
             and "test" not in ln.split(":")[0]
+            # Scope disambiguates WHICH definition the name refers to — it does
+            # NOT restrict where callers may live. A hit counts if it is in the
+            # defining module itself, OR in a module that does not define its own
+            # symbol of that name (so it must be importing the scoped one).
+            # Filtering to `== scope` instead would have dropped
+            # library_bundle_import's real call to scenario_import's chokepoint.
+            and (scope is None or ln.split(":")[0] == scope or not _defines(ln.split(":")[0], name))
         ]
         # Separate real calls from definitions and prose mentions in comments.
         calls = [h for h in hits if f"def {name}(" not in h and not _is_comment(h)]
+        label = name if scope is None else f"{scope}::{name}"
         lines.append(
-            f"  {name}: {len(calls)} call site(s) under src/ + fair_cam/ (excl. defs, comments)"
+            f"  {label}: {len(calls)} call site(s) under src/ + fair_cam/ (excl. defs, comments)"
         )
         for h in calls:
             path, lineno, text = h.split(":", 2)
             lines.append(f"      {path}:{lineno}  {text.strip()[:88]}")
     return lines
+
+
+def _defines(rel: str, name: str) -> bool:
+    """True if `rel` contains its own definition of `name` (so a call there is local)."""
+    return name in _defs(ROOT / rel)
 
 
 def _is_comment(grep_line: str) -> bool:
