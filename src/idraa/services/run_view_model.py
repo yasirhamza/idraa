@@ -18,10 +18,12 @@ multiply by a rate again (convert-once invariant).
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Any
 
 from babel.numbers import get_currency_symbol
+from scipy.special import ndtr
 
 # Was: def _strip_samples(...) and def _has_ci_band(...)
 # Now (preserve underscore aliases for PR nu backward compat):
@@ -42,11 +44,14 @@ from idraa.services._view_model_helpers import (
 from idraa.services.reporting_currency import ReportingCurrency
 
 __all__ = [
+    "_build_capacity_cap_note",
     "_build_control_effectiveness_rows",
     "_build_headline_ale",
     "_build_risk_comparison",
     "_build_tail_risk",
+    "_field_mean_and_retention",
     "_has_ci_band",
+    "_lognormal_retention",
     "_strip_samples",
     "build_display_results",
 ]
@@ -219,6 +224,10 @@ def build_display_results(run: Any, rc: ReportingCurrency = _USD_IDENTITY) -> di
             if_removed_by_control=_ir_primary,
             if_removed_by_control_typical=_ir_secondary,
         ),
+        # PR2 Task 8 (D16): per-scenario capacity-cap disclosure. None on
+        # legacy runs (no snapshot), and None when nothing in the scenario's
+        # PL/SL is actually capped -- see _build_capacity_cap_note.
+        "capacity_cap_note": _build_capacity_cap_note(run, rc),
     }
 
 
@@ -271,3 +280,220 @@ def _build_control_effectiveness_rows(
     ]
     rows.sort(key=lambda r: (-r["effectiveness"], r["name"]))
     return rows
+
+
+# ---------------------------------------------------------------------------
+# PR2 Task 8 (D16): per-scenario capacity-cap disclosure.
+#
+# Reads the AS-EXECUTED loss dicts from run.scenario_inputs_snapshot (T2/#351)
+# -- never the live scenario row, which can drift after the run completes.
+# Computed ANALYTICALLY (never a second Monte Carlo simulation) and scoped to
+# SINGLE-run detail: build_display_results (this module) is only ever called
+# for RunType.SINGLE (see routes/runs.py::_build_display_context); AGGREGATE
+# runs use build_aggregate_display_results, a separate view-model that does
+# not read the per-scenario snapshot and is explicitly out of scope here (a
+# different view-model would need its own wiring -- see the PR body).
+# ---------------------------------------------------------------------------
+
+
+def _dist_kind(d: dict[str, Any]) -> str:
+    """Case-insensitive distribution kind; an absent key defaults to PERT.
+
+    Mirrors run_executor._dict_to_fair_distribution's own kind resolution
+    (``str(payload.get("distribution", "pert")).lower()``). The prod backup
+    stores ``'PERT'`` UPPERCASE on 31 of 40 loss dicts (B-CAP-BASIS) -- a
+    naive ``== "pert"`` comparison silently drops every one of those fields
+    from the weighted sums below (reweighting the scenario composition) and
+    ``KeyError``s where the key is entirely absent. In-repo precedent for
+    this exact defect class: services/reports.py's UPPERCASE/lowercase
+    bucket-key bug (issue #90 Task 6.5).
+    """
+    return str(d.get("distribution", "pert")).lower()
+
+
+def _lognormal_retention(meanlog: float, sigma: float, cap: float) -> float:
+    """Truncated/untruncated mean ratio for ONE lognormal shape.
+
+    ``R_f = Phi(b - sigma) / Phi(b)``, ``b = (ln(cap) - meanlog) / sigma``.
+    Uses ``scipy.special.ndtr`` for Phi, matching the sampler
+    (fair_cam.risk_engine._truncation) and the store-time validator
+    (services.fair_cam_validation._validate_capacity_floor).
+
+    D19 guarantees ``cap`` is comfortably above this field's p95 for any row
+    written through the validated producers (Task 3b), so ``b`` is
+    comfortably positive and ``ndtr(b)`` is close to 1.0 in practice. This
+    function still guards the degenerate case -- a pre-D19 legacy row or a
+    raw-SQL-written snapshot could carry a cap at or below the field's own
+    shape, driving ``b`` deeply negative until ``ndtr(b)`` underflows to
+    EXACTLY 0.0 (not a small positive float, per the same footgun documented
+    in run_executor._validated_capacity_bound). A disclosure surface must
+    never 500 a run-detail page or divide by zero: a non-positive sigma, a
+    non-finite/non-positive cap, or a non-finite/underflowed denominator are
+    all treated as the cap being NON-BINDING for this field (R_f = 1.0)
+    rather than raised.
+    """
+    if sigma <= 0.0 or not math.isfinite(cap) or cap <= 0.0:
+        return 1.0
+    b = (math.log(cap) - meanlog) / sigma
+    denom = float(ndtr(b))
+    if not math.isfinite(denom) or denom <= 0.0:
+        return 1.0
+    numer = float(ndtr(b - sigma))
+    if not math.isfinite(numer):
+        return 1.0
+    # Both Phi's saturate towards 1.0 for large b; clamp so floating-point
+    # noise can never push the ratio a hair above 1.0 (which would make a
+    # downstream `1 - R` go negative).
+    return min(1.0, numer / denom)
+
+
+def _field_mean_and_retention(d: dict[str, Any] | None) -> tuple[float, float]:
+    """Return ``(E_f, R_f)`` for one PL/SL loss field dict.
+
+    ``E_f`` is the field's UNTRUNCATED parent mean; ``R_f`` is the truncated/
+    untruncated mean ratio (1.0 when the field carries no ``max``, or is not
+    a lognormal-family kind). PERT fields never carry a ``max`` (R_f = 1.0
+    always) but still contribute their ``E_f`` -- dropping a PERT field here
+    would silently reweight any mixed PERT-PL/lognormal-SL scenario, which is
+    the norm in the catastrophic library (both kinds must appear in BOTH the
+    numerator and denominator of the caller's composition).
+
+    Mixture fields (``lognormal_mixture``) get their own kernel -- no
+    in-repo precedent exists for this (scripts/capacity_bound_figures.py's
+    ``_dist_mean`` handles only lognormal + PERT and SystemExits on anything
+    else): ``R_f = sum_i(w_i * m_i * R_i) / sum_i(w_i * m_i)``, with
+    ``m_i = exp(mu_i + sigma_i**2/2)`` and ``R_i`` from ``_lognormal_retention``
+    using the SHARED top-level cap but each component's OWN (mu_i, sigma_i)
+    -- a component-independent single-field formula does not apply here.
+
+    Malformed field shapes (missing/non-numeric keys, an unknown
+    distribution kind) contribute ``(0.0, 1.0)`` -- excluded from both sums
+    rather than guessed at or allowed to raise on a disclosure-only surface.
+    """
+    if not d:
+        return 0.0, 1.0
+    kind = _dist_kind(d)
+    if kind == "pert":
+        try:
+            low, mode, high = float(d["low"]), float(d["mode"]), float(d["high"])
+        except (KeyError, TypeError, ValueError):
+            return 0.0, 1.0
+        return (low + 4.0 * mode + high) / 6.0, 1.0
+    if kind == "lognormal":
+        try:
+            meanlog, sigma = float(d["mean"]), float(d["sigma"])
+        except (KeyError, TypeError, ValueError):
+            return 0.0, 1.0
+        e_f = math.exp(meanlog + sigma**2 / 2.0)
+        cap_raw = d.get("max")
+        if cap_raw is None:
+            return e_f, 1.0
+        try:
+            cap = float(cap_raw)
+        except (TypeError, ValueError):
+            return e_f, 1.0
+        return e_f, _lognormal_retention(meanlog, sigma, cap)
+    if kind == "lognormal_mixture":
+        components = d.get("components")
+        if not isinstance(components, list) or not components:
+            return 0.0, 1.0
+        mix_cap_raw = d.get("max")
+        mix_cap: float | None
+        if mix_cap_raw is None:
+            mix_cap = None
+        else:
+            try:
+                mix_cap = float(mix_cap_raw)
+            except (TypeError, ValueError):
+                mix_cap = None
+        weighted_mean = 0.0
+        weighted_retained = 0.0
+        for component in components:
+            if not isinstance(component, dict):
+                continue
+            try:
+                w_i = float(component["weight"])
+                mu_i = float(component["mean"])
+                sigma_i = float(component["sigma"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            m_i = math.exp(mu_i + sigma_i**2 / 2.0)
+            r_i = 1.0 if mix_cap is None else _lognormal_retention(mu_i, sigma_i, mix_cap)
+            weighted_mean += w_i * m_i
+            weighted_retained += w_i * m_i * r_i
+        if weighted_mean <= 0.0:
+            return 0.0, 1.0
+        return weighted_mean, weighted_retained / weighted_mean
+    # Unknown/unsupported kind: exclude from both sums rather than guess.
+    return 0.0, 1.0
+
+
+def _build_capacity_cap_note(run: Any, rc: ReportingCurrency) -> dict[str, Any] | None:
+    """Per-scenario capacity-cap disclosure for the SINGLE run-detail page.
+
+    Returns None (no note, no 500) when:
+      - ``run.scenario_inputs_snapshot`` is missing/NULL (legacy pre-T2/#351
+        runs, or a run type that never carries one),
+      - the snapshot carries no scenarios,
+      - neither PL nor SL carries a ``max`` (nothing capped on this
+        scenario -- nothing to disclose), or
+      - the fields' combined untruncated mean is non-positive (degenerate
+        input; avoids a division by zero).
+
+    Basis (Decision 1 / B-CAP-DISC): ``scenario_inputs_snapshot`` holds
+    INHERENT inputs only, so this is an INHERENT-basis figure. The
+    residual-basis figure is NOT the same number -- each field's R_f is
+    invariant under a scale-both rule, but the scenario-level composition is
+    an E_f-weighted average and the residual weights are ``k_f * E_f`` with
+    INDEPENDENT PL/SL control multipliers, so the ratio moves (measured
+    spread: up to ~3.67x over an admissible (k_PL, k_SL) bracket, itself
+    bracket-conditional and growing unboundedly as the multiplier ratio
+    diverges). Re-deriving the residual-basis figure needs the node
+    multipliers plus the currency subtractor's non-linear post-transform --
+    out of scope here. The caller/template MUST label this figure
+    "inherent-basis" explicitly; it must never render as if it were the
+    as-reported (residual) figure.
+
+    ``R_scen = sum_f(E_f * R_f) / sum_f(E_f)`` over the scenario's
+    primary_loss and secondary_loss fields -- BOTH kinds (lognormal /
+    lognormal_mixture / PERT) appear in BOTH sums; LEF cancels and does not
+    appear. The disclosed cap effect is ``1 - R_scen``. Never quotes
+    B-CAP-PORT's portfolio figure (a different, mixed basis).
+    """
+    snapshot = getattr(run, "scenario_inputs_snapshot", None)
+    if not isinstance(snapshot, dict):
+        return None
+    scenarios = snapshot.get("scenarios")
+    if not isinstance(scenarios, list) or not scenarios:
+        return None
+    # SINGLE runs snapshot exactly one scenario (this builder is never
+    # called for AGGREGATE -- see the module-level note above).
+    scen = scenarios[0]  # adapter-iter: ok — SINGLE-run snapshot has exactly one scenario
+    if not isinstance(scen, dict):
+        return None
+    pl = scen.get("primary_loss")
+    sl = scen.get("secondary_loss")
+    fields = [f for f in (pl, sl) if isinstance(f, dict)]
+    if not fields:
+        return None
+    if not any(f.get("max") is not None for f in fields):
+        return None  # nothing capped on this scenario -- nothing to disclose
+
+    total_mean = 0.0
+    total_retained = 0.0
+    for f in fields:
+        e_f, r_f = _field_mean_and_retention(f)
+        total_mean += e_f
+        total_retained += e_f * r_f
+    if total_mean <= 0.0:
+        return None
+
+    r_scen = total_retained / total_mean
+    cap_effect_frac = max(0.0, min(1.0, 1.0 - r_scen))
+    pl_max = pl.get("max") if isinstance(pl, dict) else None
+    sl_max = sl.get("max") if isinstance(sl, dict) else None
+    return {
+        "cap_effect_frac": cap_effect_frac,
+        "pl_max": rc.convert(float(pl_max)) if pl_max is not None else None,
+        "sl_max": rc.convert(float(sl_max)) if sl_max is not None else None,
+    }

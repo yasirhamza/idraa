@@ -143,6 +143,41 @@
     </section>
   {% endif %}
 
+  {# PR2 Task 8 (D16): per-scenario capacity-cap disclosure. Honesty-class
+     banner mirroring the legacy_residual idiom (templates/scenarios/view.html)
+     -- computed LIVE for this run from run.scenario_inputs_snapshot (as-
+     executed inputs), never a hardcoded magnitude (display_results is None-
+     safe: absent entirely on AGGREGATE runs and on legacy runs with no
+     snapshot; None when nothing in this scenario is actually capped). #}
+  {%- set _cap_note = display_results.capacity_cap_note if display_results else none -%}
+  {% if _cap_note %}
+  <div class="alert alert-info mt-4" role="status">
+    <div>
+      <p class="font-semibold">Capacity cap applied to this scenario's loss draws.</p>
+      <p class="text-sm mt-1">
+        {%- if _cap_note.pl_max is not none and _cap_note.sl_max is not none %}
+        Primary loss is bounded above at {{ _csym }}{{ _cap_note.pl_max | format_money }}
+        and secondary loss at {{ _csym }}{{ _cap_note.sl_max | format_money }}.
+        {%- elif _cap_note.pl_max is not none %}
+        Primary loss is bounded above at {{ _csym }}{{ _cap_note.pl_max | format_money }}.
+        {%- elif _cap_note.sl_max is not none %}
+        Secondary loss is bounded above at {{ _csym }}{{ _cap_note.sl_max | format_money }}.
+        {%- endif %}
+        Applying the cap reduces this scenario's <strong>inherent-basis</strong> expected
+        loss by <strong>{{ _cap_note.cap_effect_frac | format_pct(precision=4) }}</strong>,
+        computed live from this run's as-executed inputs. That small effect is correct for
+        a tail guardrail: it stays near zero while the cap sits well above this scenario's
+        own 95th-percentile loss, and it grows toward tens of percent as the organization's
+        revenue &mdash; and therefore its cap &mdash; approaches the floor that keeps the
+        cap above every loss field's 95th percentile, a relationship that holds at any
+        organization size. Primary loss and secondary loss are each bounded separately;
+        a single loss event's combined total is bounded by the sum of the two caps, not by
+        one shared ceiling.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
   {# T7d: condensed controls snapshot component (spec §controls_snapshot).
      Verbatim v1/v2/v3 expansion body + v2-reinterpret banner + overridden
      badge, moved into the shared macro (single-source). #}
