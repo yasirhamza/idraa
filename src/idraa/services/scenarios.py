@@ -159,11 +159,16 @@ class ScenarioService:
             )
 
         # 2. FAIRCAM validation before any DB write.
+        # D15 (Task 6): require_loss_max=True -- a scenario-write call site,
+        # per the map's verified caller census (opt in: scenarios.py x3,
+        # scenario_import.py x1; library/override/bundle callers stay
+        # default False per D14).
         validate_fair_distributions(
             threat_event_frequency=form.threat_event_frequency,
             vulnerability=form.vulnerability,
             primary_loss=form.primary_loss,
             secondary_loss=form.secondary_loss,
+            require_loss_max=True,
         )
 
         # 2b. Epic #34 P1a (plan-gate SEC-R2-2, placement per SEC-R3-NTH):
@@ -504,11 +509,13 @@ class ScenarioService:
         # edit path previously bypassed it, letting an edit store non-finite
         # PERT (inf) or an unbounded lognormal (sigma>10) that create/import
         # reject (corruption / OOM vectors). Match _stamp_new_scenario exactly.
+        # D15 (Task 6): require_loss_max=True -- scenario-write call site.
         validate_fair_distributions(
             threat_event_frequency=form.threat_event_frequency,
             vulnerability=form.vulnerability,
             primary_loss=form.primary_loss,
             secondary_loss=form.secondary_loss,
+            require_loss_max=True,
         )
 
         # Audit-F2: an edit that CHANGES the vulnerability values was made
@@ -602,11 +609,14 @@ class ScenarioService:
             "entry_currency": scenario.entry_currency,
             "entry_rate": scenario.entry_rate,
         }
+        # D15 (Task 6): require_loss_max=True -- scenario-write call site
+        # (re-estimate).
         validate_fair_distributions(
             threat_event_frequency=form.threat_event_frequency,
             vulnerability=form.vulnerability,
             primary_loss=form.primary_loss,
             secondary_loss=form.secondary_loss,
+            require_loss_max=True,
         )
         self._apply_form_fields(scenario, form)
         scenario.source = ScenarioSource.EXPERT_JUDGMENT

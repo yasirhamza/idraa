@@ -424,11 +424,14 @@ def _validate_rows(
         # 3. FAIR distribution validation (same call ScenarioService.create makes;
         #    now incl. the v3 vulnerability [0,1] check added to the wrapper in Step 0).
         try:
+            # D15 (Task 6): require_loss_max=True -- the import-apply call
+            # site, per the map's verified caller census.
             validate_fair_distributions(
                 threat_event_frequency=form.threat_event_frequency,
                 vulnerability=form.vulnerability,
                 primary_loss=form.primary_loss,
                 secondary_loss=form.secondary_loss,
+                require_loss_max=True,
             )
         except FAIRCAMValidationError as exc:
             # Name the offending distribution from the first ValidationResult's

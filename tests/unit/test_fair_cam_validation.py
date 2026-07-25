@@ -532,3 +532,177 @@ def test_mixture_component_missing_mean_with_max_present_rejected_not_500():
     bad_component: dict[str, object] = {"sigma": 1.0, "weight": 0.5}
     with pytest.raises(FAIRCAMValidationError):
         _call(primary_loss=_mixture([_good_component(weight=0.5), bad_component]) | {"max": 100.0})
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — D15: `require_loss_max` requiredness at the chokepoint.
+#
+# Presence-only check, additive to (not a replacement of) Task 3b's
+# `_validate_capacity_floor` magnitude check above. Default False (opt-in);
+# only the scenario-write + scenario-import call sites flip it to True
+# (services/scenarios.py:162,507,605; services/scenario_import.py:427).
+# library_bundle_import.py:278 and scenario_library.py:375 stay on the
+# default per D14 (org-agnostic templates carry no `max`).
+# ---------------------------------------------------------------------------
+
+
+def test_require_loss_max_default_false_lognormal_without_max_accepted():
+    """Default (require_loss_max omitted) -- unaffected by this task. A
+    library/override/bundle caller (which never passes require_loss_max)
+    keeps accepting a max-less lognormal loss."""
+    _call(primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0})
+
+
+def test_require_loss_max_true_lognormal_without_max_rejected():
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0},
+            require_loss_max=True,
+        )
+    assert "max" in str(exc_info.value).lower()
+
+
+def test_require_loss_max_true_lognormal_max_none_rejected():
+    """An explicit `max: None` is "no usable max" -- same absence reading
+    the Task 3b floor NO-OP uses (`dist.get("max") is None`), not a
+    malformed-type error."""
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": None,
+            },
+            require_loss_max=True,
+        )
+
+
+def test_require_loss_max_true_lognormal_with_valid_max_accepted():
+    mean, sigma = 10.0, 1.0
+    p95 = math.exp(mean + _Z95 * sigma)
+    _call(
+        primary_loss={
+            "distribution": "lognormal",
+            "mean": mean,
+            "sigma": sigma,
+            "max": p95 * 1.5,
+        },
+        require_loss_max=True,
+    )
+
+
+def test_require_loss_max_true_pert_unaffected():
+    """PERT is the distribution-kind default; requiredness never applies
+    to it regardless of require_loss_max."""
+    _call(
+        primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0},
+        require_loss_max=True,
+    )
+
+
+def test_require_loss_max_true_mixture_without_max_rejected():
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss=_mixture(
+                [
+                    _good_component(mean=8.06, sigma=0.70, weight=0.5),
+                    _good_component(mean=15.77, sigma=1.19, weight=0.5),
+                ]
+            ),
+            require_loss_max=True,
+        )
+    assert "max" in str(exc_info.value).lower()
+
+
+def test_require_loss_max_true_mixture_with_valid_max_accepted():
+    components = _mixture_components(_MIXTURE_MEANS_SIGMAS)
+    worst_p95 = _worst_p95(_MIXTURE_MEANS_SIGMAS)
+    _call(
+        primary_loss=_mixture(components) | {"max": worst_p95 * 2.0},
+        require_loss_max=True,
+    )
+
+
+def test_require_loss_max_true_secondary_loss_without_max_rejected():
+    """SL is checked the same as PL -- not exempted."""
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            secondary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0},
+            require_loss_max=True,
+        )
+    assert "secondary_loss" in str(exc_info.value).lower()
+
+
+def test_require_loss_max_true_secondary_loss_none_is_noop():
+    """secondary_loss=None stays optional -- requiredness never fires on
+    an absent field, only on a present-but-max-less lognormal field."""
+    _call(secondary_loss=None, require_loss_max=True)
+
+
+def test_require_loss_max_true_tef_lognormal_still_yields_d12_message():
+    """TEF is out of scope for the max rule entirely (PERT-only per D12) --
+    a lognormal TEF must still raise D12's message, not a max-requiredness
+    message, even when require_loss_max=True."""
+    with pytest.raises(FAIRCAMValidationError, match="strictly a loss distribution"):
+        _call(
+            threat_event_frequency={"distribution": "lognormal", "mean": 0.5, "sigma": 0.3},
+            require_loss_max=True,
+        )
+
+
+@pytest.mark.parametrize("bad_max", [0.0, -1.0, float("inf"), float("nan"), "a lot", None])
+def test_require_loss_max_true_malformed_max_rejected_not_500(bad_max):
+    """Every malformed-but-present `max` (0/-1/inf/nan/str) is caught by
+    the EXISTING `_validate_capacity_floor` type/finite/positive guards,
+    not a new requiredness code path -- `None` is the ONE value the
+    requiredness check itself claims (treated as absence). All six must
+    raise FAIRCAMValidationError, never a 500, with require_loss_max=True."""
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": bad_max,
+            },
+            require_loss_max=True,
+        )
+
+
+def test_require_loss_max_true_bool_max_rejected_not_treated_as_present():
+    """Sec-B1-style bool-before-int guard: `max: True` must NOT be accepted
+    as "a max is present" via `isinstance(True, int)` -- it must be
+    rejected as a malformed numeric type by `_validate_capacity_floor`
+    (which checks `isinstance(x, bool)` ahead of the numeric-type
+    acceptance), never silently treated as `max=1`."""
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": True,
+            },
+            require_loss_max=True,
+        )
+
+
+def test_require_loss_max_true_huge_mean_with_present_max_no_overflow():
+    """The requiredness flag composes safely with Task 3b's log-space
+    floor: a huge (but finite) mean + a present `max` must still block via
+    FAIRCAMValidationError, never `OverflowError`, when require_loss_max
+    is also True."""
+    mean, sigma = 1000.0, 1.0
+    max_value = 1e300  # ln(max_value) ~= 690.78 << mean + z95*sigma ~= 1001.6
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": mean,
+                "sigma": sigma,
+                "max": max_value,
+            },
+            require_loss_max=True,
+        )
+    assert "p95" in str(exc_info.value).lower()

@@ -366,6 +366,38 @@ def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]
     return []
 
 
+def _validate_loss_max_required(field_name: str, dist: dict[str, Any]) -> list[str]:
+    """D15 (Task 6): reject a lognormal/lognormal_mixture LOSS field that
+    carries no ``max`` at all, when the caller opts in via
+    ``require_loss_max=True`` on ``validate_fair_distributions``.
+
+    PRESENCE check only -- deliberately separate from
+    ``_validate_capacity_floor``'s MAGNITUDE check (``max > p95``) just
+    above. "No usable max" mirrors that function's own definition of
+    absence exactly (``dist.get("max") is None``): a malformed-but-present
+    ``max`` (0, negative, inf, nan, a string, a bool) is NOT a requiredness
+    failure -- it is caught by ``_validate_capacity_floor``'s own
+    type/finite/positive guards, which run unconditionally in the same
+    error batch regardless of ``require_loss_max``. Two separate concerns,
+    two separate functions; no duplicate floor logic here.
+
+    PERT (the distribution-kind default) is out of scope: only
+    lognormal/lognormal_mixture loss fields are ever compared against
+    capacity at all (D19), and per D12 (lognormal is strictly a loss
+    distribution) TEF/vulnerability never reach this function in the
+    first place -- callers only invoke this for primary_loss/secondary_loss.
+    """
+    kind = str(dist.get("distribution", "pert")).lower()
+    if kind not in ("lognormal", "lognormal_mixture"):
+        return []
+    if dist.get("max") is None:
+        return [
+            f"{field_name}.max is required for a {kind} loss distribution "
+            "(D15 capacity-bound requiredness) but was not provided"
+        ]
+    return []
+
+
 @dataclass(frozen=True)
 class FAIRCAMValidationResult:
     """Returned when validation passes (severity == ERROR raises, not returns).
@@ -388,6 +420,7 @@ def validate_fair_distributions(
     vulnerability: dict[str, Any] | None,
     primary_loss: dict[str, Any],
     secondary_loss: dict[str, Any] | None,
+    require_loss_max: bool = False,
 ) -> FAIRCAMValidationResult:
     """Validate the four FAIR distributions through fair_cam's validator.
 
@@ -397,6 +430,20 @@ def validate_fair_distributions(
     ``vulnerability`` is optional; passing it is forward-compatible with
     future fair_cam vulnerability validation without breaking callers that
     already pass it via keyword (services/scenarios.py).
+
+    ``require_loss_max`` (D15, Task 6): when True, a lognormal/
+    lognormal_mixture ``primary_loss``/``secondary_loss`` MUST carry a
+    ``max`` key (see ``_validate_loss_max_required``) -- a presence check,
+    additive to (not a replacement of) the ``_validate_capacity_floor``
+    magnitude check below. Default False. Only the scenario-write and
+    scenario-import call sites opt in (verified caller census):
+    ``services/scenarios.py`` lines 162/507/605 (create / update /
+    re-estimate) and ``services/scenario_import.py`` line 427 (CSV/JSON
+    import apply). ``services/library_bundle_import.py`` line 278 and
+    ``services/scenario_library.py`` line 375 (override writes) stay on
+    the default False (D14) -- those callers author org-agnostic
+    templates/overrides that carry no ``max``, and flipping them would
+    reject every existing library/override write.
     """
     risk_data: dict[str, Any] = {
         "threat_event_frequency": threat_event_frequency,
@@ -439,6 +486,14 @@ def validate_fair_distributions(
                 f"{_fname}.distribution {_kind} not allowed: lognormal is "
                 "strictly a loss distribution (TEF and vulnerability are PERT-only)"
             )
+    # D15 (Task 6): requiredness -- opt-in only (see docstring). A presence
+    # check, evaluated BEFORE the floor's magnitude check below so a
+    # completely max-less lognormal loss gets the clearer "max is required"
+    # message rather than silently NO-OP'ing through the floor too.
+    if require_loss_max:
+        _finite_errors += _validate_loss_max_required("primary_loss", primary_loss)
+        if secondary_loss is not None:
+            _finite_errors += _validate_loss_max_required("secondary_loss", secondary_loss)
     # D19 (Task 3b): the `max > p95` floor -- loss fields only (the only
     # fields lognormal/lognormal_mixture are allowed on, per D12 above).
     # NO-OP until `max` is present on a stored dict (Tasks 4a/5 mint it).

@@ -140,12 +140,22 @@ async def test_create_blank_max_mints_capacity_on_both_pl_and_sl(
 
 
 @pytest.mark.asyncio
-async def test_create_blank_max_revenue_unset_leaves_uncapped(
+async def test_create_blank_max_revenue_unset_rejected_422(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:
-    """D14: no revenue -> no invented number. The expert form is the D18
-    escape hatch, so this is NOT blocked (unlike wizard/import) — it simply
-    stores the lognormal field without a "max" key."""
+    """D14: no revenue -> no invented number (the minter still refuses to
+    conjure a cap). D15/Task 6 supersedes this scenario's OLD "not blocked"
+    behavior, though: D15 states "When annual_revenue is NULL the
+    authoring surface asks for revenue or an explicit max -- there is no
+    silent rule", enforced (per D15) "at the store-time validation
+    chokepoint" -- i.e. `require_loss_max` on the create call site, landed
+    by Task 6. Blank field + unset revenue means the minter can produce no
+    `max` AND the analyst supplied no explicit one, so the create is
+    REJECTED with a 422 rather than silently persisting an uncapped
+    catastrophic scenario -- closing the exact "silent rule" gap D15 names.
+    (Superseded a prior version of this test pinned at Task 4c time, before
+    Task 6's chokepoint enforcement landed; see the design doc's D15/D17
+    rows for the full sequencing.)"""
     client, org_id = authed_analyst
     payload = {
         "name": "D17-no-revenue",
@@ -156,9 +166,17 @@ async def test_create_blank_max_revenue_unset_leaves_uncapped(
         "pl_high": "5000000",
     }
     r = await csrf_post(client, "/scenarios", payload, follow_redirects=False)
-    assert r.status_code == 303, r.text
-    s = await _get_scenario(db_session, org_id, "D17-no-revenue")
-    assert "max" not in s.primary_loss
+    assert r.status_code == 422, r.text
+    assert "max" in r.text.lower()
+    # No silent rule (D15): the scenario is NOT persisted uncapped.
+    s = (
+        await db_session.execute(
+            select(Scenario).where(
+                Scenario.organization_id == org_id, Scenario.name == "D17-no-revenue"
+            )
+        )
+    ).scalar_one_or_none()
+    assert s is None
 
 
 # ---------------------------------------------------------------------------
