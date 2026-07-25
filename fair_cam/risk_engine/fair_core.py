@@ -376,6 +376,17 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
     Helper for FAIRParameters.scaled. Distribution-shape-aware:
     log-space LOGNORMAL parameters get the additive log-shift; everything
     else gets a simple multiplicative scale on the magnitude parameters.
+
+    PR2 capacity bound (Task 3): an optional `max` key present on
+    LOGNORMAL/LOGNORMAL_MIXTURE parameters is scaled by the same
+    `multiplier` — see the LOGNORMAL branch below for the scale-
+    equivariance derivation (why `max * multiplier`, not "leave it fixed").
+    A `multiplier == 0` (uniform-zero, perfect control) never reaches this
+    function: `FAIRParameters.apply_node_multipliers`'s `_node` helper
+    short-circuits a zero multiplier to a `UNIFORM(0, 0)` point mass before
+    calling here (`_scale_distribution` cannot represent a real-space-zero
+    distribution in log-space — `log(0)`), so no `max` handling is needed
+    for that path.
     """
     # dict[str, Any] (not dict[str, float]): the LOGNORMAL_MIXTURE branch
     # below assigns a nested {"components": [...]} value (issue #27 Task 3).
@@ -406,6 +417,21 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
             "mean": dist.parameters["mean"] + math.log(multiplier),
             "sigma": dist.parameters["sigma"],
         }
+        max_value = dist.parameters.get("max")
+        if max_value is not None:
+            # PR2 capacity bound (Task 3) — scale-equivariance: the
+            # truncated sampler's boundary parameter is
+            # b = (ln(max) - meanlog) / sigma (_truncation.py). Substituting
+            # meanlog' = meanlog + ln(k) and max' = k * max:
+            #   ln(max') - meanlog' = ln(k) + ln(max) - meanlog - ln(k)
+            #                       = ln(max) - meanlog
+            # so b' == b exactly — the truncation point in standardized
+            # space never moves, and the truncated residual equals k times
+            # the truncated inherent draw. NOT "otherwise uncapped" (that
+            # phrasing is false): leaving `max` fixed in real-space while
+            # meanlog shifts underneath it would silently change how much
+            # of the tail the cap removes.
+            new_params["max"] = max_value * multiplier
     elif dist.distribution_type == DistributionType.LOGNORMAL_MIXTURE:
         # Same log-space additive shift as plain LOGNORMAL, applied to
         # EVERY component -- each component's meanlog shifts by +ln(k);
@@ -423,6 +449,13 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
                 for c in dist.parameters["components"]
             ]
         }
+        max_value = dist.parameters.get("max")
+        if max_value is not None:
+            # Same scale-equivariance rationale as the LOGNORMAL branch
+            # above: the one shared cap scales by the same k that shifts
+            # EVERY component's meanlog, keeping every component's b_i
+            # invariant simultaneously.
+            new_params["max"] = max_value * multiplier
     elif dist.distribution_type == DistributionType.BETA:
         raise ValueError(
             "Cannot scale BETA distribution via FAIRParameters.scaled — "

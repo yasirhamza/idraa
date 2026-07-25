@@ -124,6 +124,46 @@ _ZERO_SECONDARY_LOSS = FAIRDistribution(
 )
 
 
+def _validated_capacity_bound(max_value: float, *, meanlog: float) -> float:
+    """Guard an optional `max` (PR2 capacity bound) read from a stored
+    distribution dict, beyond the finite/positive check
+    ``fair_cam.risk_engine._truncation.truncated_lognormal`` already
+    performs on its own.
+
+    Rejects a cap at or below the distribution's median (``exp(meanlog)``).
+    For ``LOGNORMAL_MIXTURE``, callers pass the LARGEST-meanlog component's
+    meanlog here — every component shares the one top-level cap, and
+    medians are ``exp(mu_i)``, so the largest-meanlog component has the
+    largest median and is the binding one. This "largest-meanlog" reading
+    is specific to THIS median guard and must NOT be reused for the
+    ``max > p95`` floor (Task 3b, ``services/fair_cam_validation.py``):
+    components carry independent sigma, so ``argmax_i mu_i != argmax_i
+    p95_i`` there.
+
+    Why fail loud HERE rather than let the sampler catch it:
+    ``truncated_lognormal`` only rejects a ``max`` that is non-finite or
+    <= 0. A small-but-finite, positive cap sitting inside the
+    distribution's core drives ``b = (ln(max) - meanlog) / sigma`` deeply
+    negative, and ``scipy.special.ndtr(b)`` underflows SILENTLY to exactly
+    0.0 (not a small positive float) once ``b`` is roughly <= -38 — every
+    draw becomes exactly $0, which is finite, so the engine's
+    finite-output guard never fires. ``services/fair_cam_validation.py``
+    already blocks a too-small ``max`` at store time, but a raw-SQL
+    migration row bypasses that chokepoint. This read adapter is the LAST
+    chokepoint before the sampler, so a too-small cap must fail loud here
+    rather than silently produce an all-$0 run.
+    """
+    median = math.exp(meanlog)
+    if not math.isfinite(max_value) or max_value <= median:
+        raise ValueError(
+            f"max={max_value!r} must be finite and exceed the distribution's "
+            f"median (exp(meanlog)={median!r}); a cap at or below the median "
+            f"risks the ndtr(b) underflow footgun (silent all-$0 draws) in "
+            f"the truncated-lognormal sampler"
+        )
+    return max_value
+
+
 def _dict_to_fair_distribution(payload: dict[str, Any]) -> FAIRDistribution:
     """Build a FAIRDistribution from the JSON dict the wizard writes.
 
@@ -154,7 +194,14 @@ def _dict_to_fair_distribution(payload: dict[str, Any]) -> FAIRDistribution:
         # rng.lognormal(mean, sigma). Finite/positive-sigma is enforced
         # upstream by services/fair_cam_validation._validate_finite at
         # store time; this adapter coerces types only.
-        params = {"mean": float(payload["mean"]), "sigma": float(payload["sigma"])}
+        meanlog = float(payload["mean"])
+        params = {"mean": meanlog, "sigma": float(payload["sigma"])}
+        # PR2 capacity bound (Task 3): optional support-bound cap, a sibling
+        # key of mean/sigma. Absent -> no key invented, matching the pre-PR2
+        # default (FAIRDistribution.sample's untruncated rng.lognormal path).
+        max_raw = payload.get("max")
+        if max_raw is not None:
+            params["max"] = _validated_capacity_bound(float(max_raw), meanlog=meanlog)
     elif kind == DistributionType.LOGNORMAL_MIXTURE:
         # Issue #27 Task 5/6: catastrophic multi-SME pl/sl stores a linear-
         # opinion-pool mixture, {"components": [{"mean" (log-space meanlog),
@@ -165,16 +212,26 @@ def _dict_to_fair_distribution(payload: dict[str, Any]) -> FAIRDistribution:
         # services/fair_cam_validation._validate_finite at store time; this
         # adapter coerces types only, same contract as the plain LOGNORMAL
         # branch above.
-        params = {
-            "components": [
-                {
-                    "mean": float(component["mean"]),
-                    "sigma": float(component["sigma"]),
-                    "weight": float(component["weight"]),
-                }
-                for component in payload["components"]
-            ]
-        }
+        components = [
+            {
+                "mean": float(component["mean"]),
+                "sigma": float(component["sigma"]),
+                "weight": float(component["weight"]),
+            }
+            for component in payload["components"]
+        ]
+        params = {"components": components}
+        # PR2 capacity bound (Task 3): a top-level `max`, sibling of
+        # "components" (NOT nested inside a component) -- bounds every
+        # component's draw to a SHARED cap (mirrors fair_core.py's
+        # LOGNORMAL_MIXTURE sample() branch). The median guard's
+        # "largest-meanlog" reading walks EVERY component via max() (not an
+        # index), so no component is skipped by the adapter-iteration
+        # contract.
+        max_raw = payload.get("max")
+        if max_raw is not None:
+            largest_meanlog = max(c["mean"] for c in components)
+            params["max"] = _validated_capacity_bound(float(max_raw), meanlog=largest_meanlog)
     else:
         raise ValueError(
             f"Wizard does not produce {kind.value} distributions; got payload={payload!r}"
