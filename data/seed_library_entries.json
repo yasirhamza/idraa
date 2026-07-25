@@ -42,21 +42,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 15955.6628554057,
-      "mode": 15955.6628554057,
-      "high": 10080000.000343738
+      "low": 24478.8629170978,
+      "mode": 24478.8629170978,
+      "high": 6570284.009215002
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 5540.1607139477,
-      "mode": 5540.1607139477,
-      "high": 3500000.00028685
+      "low": 8499.6051799546,
+      "mode": 8499.6051799546,
+      "high": 2281348.6144199492
     },
     "calibration_anchor": {
       "industry": "healthcare",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 healthcare pair (p50=$557,000, p95=$14,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9602032156. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.3333333333"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 healthcare pair (p50=$557,000, p95=$14,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 1.9602032156 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.3333333333"
     },
     "suggested_control_ids": [
       "email-security-protection",
@@ -167,21 +167,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4973.733333749,
-      "mode": 4973.733333749,
-      "high": 2100000.0000271937
+      "low": 6238.130336978,
+      "mode": 6238.130336978,
+      "high": 1674354.243465197
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1776.3333334483,
-      "mode": 1776.3333334483,
-      "high": 749999.9999955812
+      "low": 2227.9036917359,
+      "mode": 2227.9036917359,
+      "high": 597983.6583691587
     },
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -292,18 +292,18 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 13.5923670067,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 11.2897819137,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "calibration_anchor": {
       "industry": "manufacturing",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.2723417799 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -406,18 +406,18 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 13.6529916285,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 11.4075649493,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "calibration_anchor": {
       "industry": "manufacturing",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.2723417799 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -519,14 +519,14 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 11.6682183494,
-      "sigma": 1.8377081683
+      "sigma": 1.7
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -616,16 +616,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4476.3600001853,
-      "mode": 4476.3600001853,
-      "high": 1889999.9999447674
+      "low": 5614.3173030434,
+      "mode": 5614.3173030434,
+      "high": 1506918.819055126
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -707,21 +707,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4689.5200000305,
-      "mode": 4689.5200000305,
-      "high": 1979999.999873047
+      "low": 5881.6657458403,
+      "mode": 5881.6657458403,
+      "high": 1578676.8580026645
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 923.6933333993,
-      "mode": 923.6933333993,
-      "high": 390000.0000003013
+      "low": 1158.5099197104,
+      "mode": 1158.5099197104,
+      "high": 310951.5023540398
     },
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -814,18 +814,18 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 11.4605789846,
-      "sigma": 1.8377081683
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 10.1765634726,
-      "sigma": 1.8377081683
+      "sigma": 1.7
     },
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "third-party-risk-management",
@@ -917,16 +917,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3197.4000002002,
-      "mode": 3197.4000002002,
-      "high": 1349999.9999891848
+      "low": 4010.2266451161,
+      "mode": 4010.2266451161,
+      "high": 1076370.58506221
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -1004,9 +1004,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3.7573034111,
-      "mode": 3.7573034111,
-      "high": 141409.8711597068
+      "low": 1769.9898978414,
+      "mode": 1769.9898978414,
+      "high": 475076.6553840482
     },
     "secondary_loss": null,
     "calibration_anchor": {
@@ -1027,7 +1027,7 @@
       {
         "form": "replacement",
         "kind": "primary",
-        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the financial_services envelope (disclosed shape assumption, A1 parity).",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma = the within-scenario default 1.7 (mean preserved exactly; see docs/reference/within-scenario-sigma-calibration.md) (disclosed shape assumption, A1 parity).",
         "citations": [
           "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
         ],
@@ -1085,21 +1085,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 16190.4761903013,
-      "mode": 16190.4761903013,
-      "high": 28560000.003033664
+      "low": 41506.1509700854,
+      "mode": 41506.1509700854,
+      "high": 11140517.471190868
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3333.3333331668,
-      "mode": 3333.3333331668,
-      "high": 5880000.000394365
+      "low": 8545.3840229183,
+      "mode": 8545.3840229183,
+      "high": 2293635.949861257
     },
     "calibration_anchor": {
       "industry": "manufacturing",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.2723417799 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -1196,21 +1196,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1030.9278351993,
-      "mode": 1030.9278351993,
-      "high": 38799999.999856174
+      "low": 12207.6914620596,
+      "mode": 12207.6914620596,
+      "high": 3276622.7857167795
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1546.3917527864,
-      "mode": 1546.3917527864,
-      "high": 58199999.99930907
+      "low": 18311.5371929403,
+      "mode": 18311.5371929403,
+      "high": 4914934.178535162
     },
     "calibration_anchor": {
       "industry": "financial",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.2026303573 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
     },
     "suggested_control_ids": [
       "data-loss-prevention",
@@ -1302,21 +1302,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4285.714285582,
-      "mode": 4285.714285582,
-      "high": 7560000.000651396
+      "low": 10986.9223153904,
+      "mode": 10986.9223153904,
+      "high": 2948960.507020777
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3571.4285712968,
-      "mode": 3571.4285712968,
-      "high": 6300000.000504745
+      "low": 9155.7685961034,
+      "mode": 9155.7685961034,
+      "high": 2457467.0891691465
     },
     "calibration_anchor": {
       "industry": "manufacturing",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.2723417799. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.1000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair (p50=$1,000,000, p95=$42,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.2723417799 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.1000000000"
     },
     "suggested_control_ids": [
       "data-loss-prevention",
@@ -1406,21 +1406,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1377.8982489497,
-      "mode": 1377.8982489497,
-      "high": 125859999.99355005
+      "low": 25418.8551608134,
+      "mode": 25418.8551608134,
+      "high": 6822583.964020367
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 356.3529953981,
-      "mode": 356.3529953981,
-      "high": 32549999.996515933
+      "low": 6573.8418515673,
+      "mode": 6573.8418515673,
+      "high": 1764461.3699067147
     },
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -1510,21 +1510,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 451.3804608538,
-      "mode": 451.3804608538,
-      "high": 41229999.99706164
+      "low": 8326.8663456171,
+      "mode": 8326.8663456171,
+      "high": 2234984.4019619343
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1069.0589862285,
-      "mode": 1069.0589862285,
-      "high": 97649999.9926619
+      "low": 19721.5255553319,
+      "mode": 19721.5255553319,
+      "high": 5293384.109889215
     },
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
     },
     "suggested_control_ids": [
       "secure-coding-practices",
@@ -1621,21 +1621,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1804.1237115349,
-      "mode": 1804.1237115349,
-      "high": 67899999.99734288
+      "low": 21363.4600578477,
+      "mode": 21363.4600578477,
+      "high": 5734089.874801289
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 412.3711340691,
-      "mode": 412.3711340691,
-      "high": 15519999.999541325
+      "low": 4883.0765846978,
+      "mode": 4883.0765846978,
+      "high": 1310649.114252896
     },
     "calibration_anchor": {
       "industry": "financial",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.2026303573 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
     },
     "suggested_control_ids": [
       "ddos-protection",
@@ -1725,12 +1725,12 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 13.1275499041,
-      "sigma": 3.4721527617
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 11.8747869356,
-      "sigma": 3.4721527617
+      "sigma": 1.7
     },
     "calibration_anchor": {
       "industry": "information",
@@ -1827,21 +1827,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 7647.4729415425,
-      "mode": 7647.4729415425,
-      "high": 4080000.0000424404
+      "low": 10781.8330988525,
+      "mode": 10781.8330988525,
+      "high": 2893913.244227347
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 18800.0376468725,
-      "mode": 18800.0376468725,
-      "high": 10029999.99952489
+      "low": 26505.3396998144,
+      "mode": 26505.3396998144,
+      "high": 7114203.3916479
     },
     "calibration_anchor": {
       "industry": "professional",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9088254741. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 1.9088254741 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
     },
     "suggested_control_ids": [
       "web-application-firewall",
@@ -1940,21 +1940,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1496.6825806882,
-      "mode": 1496.6825806882,
-      "high": 136709999.98682648
+      "low": 27610.1357768794,
+      "mode": 27610.1357768794,
+      "high": 7410737.75368782
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 308.839262691,
-      "mode": 308.839262691,
-      "high": 28209999.998127893
+      "low": 5697.3296049242,
+      "mode": 5697.3296049242,
+      "high": 1529199.8539815634
     },
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
     },
     "suggested_control_ids": [
       "endpoint-detection-response",
@@ -2045,21 +2045,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3694.7733335236,
-      "mode": 3694.7733335236,
-      "high": 1559999.9999701746
+      "low": 4634.0396787493,
+      "mode": 4634.0396787493,
+      "high": 1243806.0093914003
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 852.6400000383,
-      "mode": 852.6400000383,
-      "high": 359999.999990751
+      "low": 1069.393772012,
+      "mode": 1069.393772012,
+      "high": 287032.156011513
     },
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 energy_utilities pair (p50=$146,000, p95=$3,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.8377081683. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 energy_utilities pair (p50=$146,000, p95=$3,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
     },
     "suggested_control_ids": [
       "secure-web-gateway",
@@ -2151,21 +2151,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 522.6510599402,
-      "mode": 522.6510599402,
-      "high": 47739999.99698552
+      "low": 9641.6347160557,
+      "mode": 9641.6347160557,
+      "high": 2587876.6759768827
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1259.1139171365,
-      "mode": 1259.1139171365,
-      "high": 115009999.99345027
+      "low": 23227.5745433694,
+      "mode": 23227.5745433694,
+      "high": 6234430.173983017
     },
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
     },
     "suggested_control_ids": [
       "cloud-security-posture-management",
@@ -2263,15 +2263,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1330.3845161093,
-      "mode": 1330.3845161093,
-      "high": 121519999.9829903
+      "low": 24542.3429117117,
+      "mode": 24542.3429117117,
+      "high": 6587322.4474353045
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 380.1098617818,
-      "mode": 380.1098617818,
-      "high": 34719999.99845117
+      "low": 7012.0979754438,
+      "mode": 7012.0979754438,
+      "high": 1882092.1280182318
     },
     "calibration_anchor": {
       "industry": "information",
@@ -2362,16 +2362,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1546.3917527864,
-      "mode": 1546.3917527864,
-      "high": 58199999.99930907
+      "low": 18311.5371929403,
+      "mode": 18311.5371929403,
+      "high": 4914934.178535162
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "financial",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.2026303573 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
     },
     "suggested_control_ids": [
       "ddos-protection",
@@ -2451,21 +2451,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 7233.4500003516,
-      "mode": 7233.4500003516,
-      "high": 4199999.999727714
+      "low": 10639.003108356,
+      "mode": 10639.003108356,
+      "high": 2855576.7575296722
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1240.0200000124,
-      "mode": 1240.0200000124,
-      "high": 719999.9999255008
+      "low": 1823.8291042191,
+      "mode": 1823.8291042191,
+      "high": 489527.4441290367
     },
     "calibration_anchor": {
       "industry": "education",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 education pair (p50=$249,000, p95=$6,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9345562423. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 education pair (p50=$249,000, p95=$6,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 1.9345562423 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2500000000"
     },
     "suggested_control_ids": [
       "email-security-protection",
@@ -2564,21 +2564,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 22305.1294128007,
-      "mode": 22305.1294128007,
-      "high": 11900000.000106998
+      "low": 31447.0132049419,
+      "mode": 31447.0132049419,
+      "high": 8440580.29565119
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 4779.6705882047,
-      "mode": 4779.6705882047,
-      "high": 2549999.9998881537
+      "low": 6738.6456864171,
+      "mode": 6738.6456864171,
+      "high": 1808695.777543946
     },
     "calibration_anchor": {
       "industry": "professional",
       "revenue_tier": "10m_to_100m",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.9088254741. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 professional_services pair (p50=$736,000, p95=$17,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 1.9088254741 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.2000000000"
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -2676,21 +2676,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 6430.8515557352,
-      "mode": 6430.8515557352,
-      "high": 23400000.00031829
+      "low": 23678.0383586496,
+      "mode": 23678.0383586496,
+      "high": 6355337.554864601
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1855.0533333466,
-      "mode": 1855.0533333466,
-      "high": 6749999.999951531
+      "low": 6830.2033725454,
+      "mode": 6830.2033725454,
+      "high": 1833270.4484805346
     },
     "calibration_anchor": {
       "industry": "retail",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.4924358626. secondary sigma inherited from primary; location scaled by analyst-judged campaign-level secondary/primary ratio R=1.0000000000 (rule 7 override: pre-curation per-ATO R=200 semantically inapplicable after campaign reinterpretation)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.4924358626 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged campaign-level secondary/primary ratio R=1.0000000000 (rule 7 override: pre-curation per-ATO R=200 semantically inapplicable after campaign reinterpretation)"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -2777,21 +2777,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 570.164792668,
-      "mode": 570.164792668,
-      "high": 52079999.99725153
+      "low": 10518.1469630794,
+      "mode": 10518.1469630794,
+      "high": 2823138.192004187
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 237.5686636007,
-      "mode": 237.5686636007,
-      "high": 21699999.997854467
+      "low": 4382.5612344143,
+      "mode": 4382.5612344143,
+      "high": 1176307.579947481
     },
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.4721527617. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 technology_saas pair (p50=$718,000, p95=$217,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.4000000000"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -2867,15 +2867,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 13739.5985709077,
-      "mode": 13739.5985709077,
-      "high": 8680000.000911977
+      "low": 21079.0208467746,
+      "mode": 21079.0208467746,
+      "high": 5657744.563892181
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 4432.1285712211,
-      "mode": 4432.1285712211,
-      "high": 2800000.000269268
+      "low": 6799.6841440603,
+      "mode": 6799.6841440603,
+      "high": 1825078.8915618842
     },
     "calibration_anchor": {
       "industry": "healthcare",
@@ -2992,16 +2992,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 213.1600000138,
-      "mode": 213.1600000138,
-      "high": 89999.9999994778
+      "low": 267.3484430083,
+      "mode": 267.3484430083,
+      "high": 71758.0390043028
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -3074,21 +3074,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 2473.4044445814,
-      "mode": 2473.4044445814,
-      "high": 9000000.000369353
+      "low": 9106.9378304997,
+      "mode": 9106.9378304997,
+      "high": 2444360.5980919134
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 5194.1493334683,
-      "mode": 5194.1493334683,
-      "high": 18900000.00022038
+      "low": 19124.5694434875,
+      "mode": 19124.5694434875,
+      "high": 5133157.255842193
     },
     "calibration_anchor": {
       "industry": "retail",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.4924358626. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=1.0000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 retail_ecommerce pair (p50=$746,000, p95=$45,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.4924358626 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=1.0000000000"
     },
     "suggested_control_ids": [
       "data-loss-prevention",
@@ -3178,15 +3178,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 498.8941935468,
-      "mode": 498.8941935468,
-      "high": 45569999.99415558
+      "low": 9203.3785919994,
+      "mode": 9203.3785919994,
+      "high": 2470245.917817102
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 665.1922580945,
-      "mode": 665.1922580945,
-      "high": 60759999.99513729
+      "low": 12271.1714565912,
+      "mode": 12271.1714565912,
+      "high": 3293661.223915026
     },
     "calibration_anchor": {
       "industry": "information",

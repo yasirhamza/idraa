@@ -14,6 +14,8 @@ import sqlalchemy as sa
 from pytest_alembic import MigrationContext
 from sqlalchemy.engine import Engine
 
+from idraa.services.calibration import WITHIN_SCENARIO_SIGMA_DEFAULT
+
 _DOWN = "c8e2f1a4b6d3"
 _HEAD = "d4918202a23a"
 
@@ -84,4 +86,7 @@ def test_within_sector_detemplating_migration_lands_differentiated_values(
     solarwinds = _row(alembic_engine, "solarwinds-class-supply-chain")
     expected_mean = round(_MU_S_TECHNOLOGY_SAAS + math.log(0.20), 10)
     assert solarwinds["sl"]["mean"] == expected_mean
-    assert solarwinds["sl"]["sigma"] == 3.4721527617
+    # #sigma-recalibration (PR1 Task 2): sigma is no longer the envelope's own
+    # sigma (was 3.4721527617) -- every catastrophic field re-authored onto the
+    # within-scenario default.
+    assert solarwinds["sl"]["sigma"] == WITHIN_SCENARIO_SIGMA_DEFAULT

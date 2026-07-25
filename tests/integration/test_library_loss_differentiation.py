@@ -27,6 +27,25 @@ import pytest
 # Pinned here so the envelope-consistency guard fails loudly if the builder anchor drifts.
 _IC3_BEC_MEAN = 123005.0
 
+# #sigma-recalibration (PR1 Task 2): loss sigma is no longer the sector envelope's
+# own sigma -- it is the within-scenario default. Literal pin (not an import) so
+# this test fails loudly on its own if the seeds and the constant ever drift;
+# `test_sigma_default_traces_to_iris_type_reads` below cross-checks this literal
+# against `idraa.services.calibration.WITHIN_SCENARIO_SIGMA_DEFAULT`.
+_SIGMA_DEFAULT = 1.7
+
+# Task-0 carryover (docs/reference/within-scenario-sigma-calibration.md, anchor-
+# review decision table, adjustment (d)): destructive-wiper-nationstate's median
+# is re-anchored to the IRIS 2025 ransomware type-conditional p50_2024 ($3.2M),
+# split by the entry's own PL:SL share (416.5:49) -- NOT held at the envelope-
+# derived median like every other catastrophic/capped field. Keyed identically to
+# the builder's `_ANCHOR_OVERRIDES` (scripts/build_sigma_recalibration.py). Never
+# widen this exception beyond these two fields.
+_T0_MEDIAN_OVERRIDES: dict[tuple[str, str], float] = {
+    ("destructive-wiper-nationstate", "primary_loss"): 2_863_158.0,
+    ("destructive-wiper-nationstate", "secondary_loss"): 336_842.0,
+}
+
 _IND2SEC = {
     "agriculture": "food_agriculture",
     "education": "education",
@@ -130,10 +149,14 @@ def _check_node_reconstructs(
 
 def test_loss_params_reconstruct_from_envelope_and_shares() -> None:
     """Methodology IMPORTANT-1 (plan-gate R12), re-scoped for Milestone B
-    (#loss-pert-overhaul): every loss node must reconstruct EXACTLY from the
-    sector envelope + its loss_form_profile shares. Catastrophic entries pin
-    sigma == sigma_s and mu == mu_s + ln(Sum shares) natively (BEC vendor tier
-    uses the mean-preserving IC3 parameterization); capped entries pin the
+    (#loss-pert-overhaul) and again for #sigma-recalibration (PR1 Task 2): every
+    loss node must reconstruct EXACTLY from the sector envelope + its
+    loss_form_profile shares for the mu-leg (the envelope file still anchors
+    LOCATION), and from the within-scenario default for the sigma-leg (sigma is
+    no longer the envelope's own sigma_s). Catastrophic entries pin
+    sigma == _SIGMA_DEFAULT and mu == mu_s + ln(Sum shares) natively (BEC vendor
+    tier uses the mean-preserving IC3 parameterization; the wiper uses the
+    Task-0 median override, see _T0_MEDIAN_OVERRIDES); capped entries pin the
     mechanical PERT conversion of that SAME lognormal -- so the citation chain
     is preserved through the shape change.
 
@@ -151,12 +174,14 @@ def test_loss_params_reconstruct_from_envelope_and_shares() -> None:
             continue
         pl = e.get("primary_loss") or {}
         sec = _sector(e)
-        mu_s, sigma_s = env[sec]["mean"], env[sec]["sigma"]
-        expected_sigma = round(sigma_s, 10)
+        mu_s = env[sec]["mean"]
+        # sigma is no longer the envelope's own sigma -- every field re-authored
+        # onto the within-scenario default (#sigma-recalibration PR1 Task 2).
+        expected_sigma = _SIGMA_DEFAULT
 
         if e.get("loss_tier") == "vendor":
             # Beyond-envelope BEC: mean-preserving mu = ln(mean) - sigma^2/2 so E[loss] = mean.
-            expected_mu = round(math.log(_IC3_BEC_MEAN) - sigma_s**2 / 2, 10)
+            expected_mu = round(math.log(_IC3_BEC_MEAN) - _SIGMA_DEFAULT**2 / 2, 10)
             _check_node_reconstructs(
                 slug, "primary", pl, shape, expected_mu, expected_sigma, mismatches
             )
@@ -164,20 +189,32 @@ def test_loss_params_reconstruct_from_envelope_and_shares() -> None:
                 mismatches.append(f"{slug}: BEC entries must have null secondary_loss")
             continue
 
-        # In-envelope: mu = mu_s + ln(Sum primary shares); secondary likewise when present.
+        # In-envelope: mu = mu_s + ln(Sum primary shares); secondary likewise when
+        # present -- EXCEPT the Task-0 wiper override, whose median no longer
+        # derives from the envelope x share (see _T0_MEDIAN_OVERRIDES above).
         prof = e.get("loss_form_profile") or []
         sp = _share_sum(prof, "primary")
         if sp <= 0:
             mismatches.append(f"{slug}: no primary share to reconstruct mu")
             continue
-        expected_pl_mu = round(mu_s + math.log(sp), 10)
+        pl_override = _T0_MEDIAN_OVERRIDES.get((slug, "primary_loss"))
+        expected_pl_mu = (
+            round(math.log(pl_override), 10)
+            if pl_override is not None
+            else round(mu_s + math.log(sp), 10)
+        )
         _check_node_reconstructs(
             slug, "primary", pl, shape, expected_pl_mu, expected_sigma, mismatches
         )
         sl = e.get("secondary_loss")
         ss = _share_sum(prof, "secondary")
         if sl is not None:
-            expected_sl_mu = round(mu_s + math.log(ss), 10)
+            sl_override = _T0_MEDIAN_OVERRIDES.get((slug, "secondary_loss"))
+            expected_sl_mu = (
+                round(math.log(sl_override), 10)
+                if sl_override is not None
+                else round(mu_s + math.log(ss), 10)
+            )
             _check_node_reconstructs(
                 slug, "secondary", sl, shape, expected_sl_mu, expected_sigma, mismatches
             )
@@ -305,3 +342,23 @@ def test_tef_globally_distinct_across_library() -> None:
         if len(slugs) > 1 and not any(slugs <= a for a in _TEF_GLOBAL_ALLOWLIST)
     }
     assert not offenders, f"un-allowlisted global TEF collisions: {offenders}"
+
+
+def test_sigma_default_traces_to_iris_type_reads() -> None:
+    """sigma is no longer the envelope's -- its citation chain runs to the IRIS
+    type-conditioned reads instead. Two sources, or the guard is a tautology."""
+    import math
+
+    from fair_cam.data.iris_2025 import LOSS_BY_EVENT_TYPE_TREND as T
+    from fair_cam.data.iris_2025 import LOSS_BY_REVENUE_TIER_2024 as R
+    from scipy.stats import norm
+
+    from idraa.services.calibration import WITHIN_SCENARIO_SIGMA_DEFAULT
+
+    z90, z95 = float(norm.ppf(0.90)), float(norm.ppf(0.95))
+    ransomware = math.log(T["ransomware"]["p90_2024"] / T["ransomware"]["p50_2024"]) / z90
+    tier_min = min(
+        math.log(v["p95"] / v["p50"]) / z95 for v in R.values()
+    )  # derived, not 1.9687 hardcoded
+    assert ransomware <= WITHIN_SCENARIO_SIGMA_DEFAULT < tier_min
+    assert _SIGMA_DEFAULT == WITHIN_SCENARIO_SIGMA_DEFAULT  # literal pin vs constant

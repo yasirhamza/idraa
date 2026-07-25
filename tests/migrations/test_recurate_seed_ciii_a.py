@@ -371,8 +371,17 @@ def test_stale_heal(
     Milestone B (#loss-pert-overhaul): ``ransomware-on-ehr`` is capped, so the
     seed value the heal lands is now itself a bounded PERT — the heal is proven
     by VALUES (the injected stale triple differs from the converted seed
-    triple), not by a shape flip. Pinned target (plan conversion table):
-      (low, mode, high) = (15955.6628554057, 15955.6628554057, 10080000.000343738)
+    triple), not by a shape flip.
+
+    #sigma-recalibration (PR1 Task 2): this is a seed-replaying migration test
+    (same class as tests/migrations/test_loss_pert_conversion_migration.py and
+    tests/migrations/test_within_sector_detemplating.py) -- the healed low/
+    mode/high shift whenever the builder re-authors loss dispersion, so no
+    triple is hardcoded here. The full-dict comparison against the live seed
+    JSON below already proves both the heal AND the specific values; a second,
+    literal-pinned assertion is redundant and goes stale on every re-authoring
+    pass. The median is unchanged by the sigma recalibration (verified:
+    sqrt(low*high) == 401,039.9999850062 both before and after this pass).
     """
     alembic_runner.migrate_up_to(_PREV_REV)
 
@@ -396,11 +405,7 @@ def test_stale_heal(
         "stale primary_loss must be healed to the seed JSON value by the C-iii-a migration"
     )
     assert row_after["primary_loss"]["distribution"] == "PERT"
-    assert (
-        row_after["primary_loss"]["low"],
-        row_after["primary_loss"]["mode"],
-        row_after["primary_loss"]["high"],
-    ) == (15955.6628554057, 15955.6628554057, 10080000.000343738)
+    assert row_after["primary_loss"]["mode"] == row_after["primary_loss"]["low"]
     assert row_after["loss_tier"] == "paginated", (
         "stale anecdotal loss_tier must be healed to 'paginated' after C-iii-a migration"
     )

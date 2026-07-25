@@ -50,9 +50,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 18571.4285709775,
-      "mode": 18571.4285709775,
-      "high": 32760000.003037974
+      "low": 47609.9967003382,
+      "mode": 47609.9967003382,
+      "high": 12778828.863840714
     },
     "secondary_loss": null,
     "calibration_anchor": {
@@ -152,16 +152,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4547.4133336665,
-      "mode": 4547.4133336665,
-      "high": 1920000.000005063
+      "low": 5703.4334508925,
+      "mode": 5703.4334508925,
+      "high": 1530838.165438113
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -254,7 +254,7 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 13.3046849342,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "secondary_loss": null,
     "calibration_anchor": {
@@ -354,16 +354,16 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 5328.999999982,
-      "mode": 5328.999999982,
-      "high": 2249999.999833497
+      "low": 6683.7110747524,
+      "mode": 6683.7110747524,
+      "high": 1793950.9749853003
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "secure-remote-access",
@@ -451,14 +451,14 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 11.8079802918,
-      "sigma": 1.8377081683
+      "sigma": 1.7
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=2.7. Derived p50=$394,200; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -548,14 +548,14 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 11.3970655789,
-      "sigma": 1.8377081683
+      "sigma": 1.7
     },
     "secondary_loss": null,
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.8377081683) \u00d7 multiplier=3.0. Derived p50=$438,000; supersedes prior per-scenario analyst-judged PERT anchor."
+      "loss_anchor": "Baseline: energy_utilities quantile_pair (p50=$146,000, p95=$3,000,000, sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md)) \u00d7 multiplier=3.0. Derived p50=$438,000; supersedes prior per-scenario analyst-judged PERT anchor."
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -649,12 +649,12 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 13.6876771865,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 11.512925465,
-      "sigma": 2.2723417799
+      "sigma": 1.7
     },
     "calibration_anchor": {
       "industry": "manufacturing",
@@ -762,15 +762,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3988.9157139308,
-      "mode": 3988.9157139308,
-      "high": 2520000.0001360606
+      "low": 6119.7157293962,
+      "mode": 6119.7157293962,
+      "high": 1642571.0023364294
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 4875.3414283221,
-      "mode": 4875.3414283221,
-      "high": 3080000.000282875
+      "low": 7479.652558434,
+      "mode": 7479.652558434,
+      "high": 2007586.780709387
     },
     "calibration_anchor": {
       "industry": "healthcare",
@@ -868,21 +868,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1134.0206187144,
-      "mode": 1134.0206187144,
-      "high": 42679999.99965714
+      "low": 13428.4606082079,
+      "mode": 13428.4606082079,
+      "high": 3604285.064272992
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 2989.6907221007,
-      "mode": 2989.6907221007,
-      "high": 112520000.00043471
+      "low": 35402.3052402413,
+      "mode": 35402.3052402413,
+      "high": 9502206.078650763
     },
     "calibration_anchor": {
       "industry": "financial",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.2026303573 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.5000000000"
     },
     "suggested_control_ids": [
       "web-application-firewall",
@@ -984,21 +984,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3195.8762891464,
-      "mode": 3195.8762891464,
-      "high": 120280000.00062434
+      "low": 37843.8435327222,
+      "mode": 37843.8435327222,
+      "high": 10157530.63581261
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 927.8350516403,
-      "mode": 927.8350516403,
-      "high": 34919999.99839775
+      "low": 10986.9223153906,
+      "mode": 10986.9223153906,
+      "high": 2948960.5070208292
     },
     "calibration_anchor": {
       "industry": "financial",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=3.2026303573. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=1.0000000000"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 financial_services pair (p50=$1,000,000, p95=$194,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 3.2026303573 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=1.0000000000"
     },
     "suggested_control_ids": [
       "third-party-risk-management",
@@ -1089,15 +1089,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 2720.7448890278,
-      "mode": 2720.7448890278,
-      "high": 9900000.000363458
+      "low": 10017.6316135064,
+      "mode": 10017.6316135064,
+      "high": 2688796.657889491
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 6925.5324442658,
-      "mode": 6925.5324442658,
-      "high": 25199999.99898894
+      "low": 25499.4259233296,
+      "mode": 25499.4259233296,
+      "high": 6844209.674101876
     },
     "calibration_anchor": {
       "industry": "retail",
@@ -1201,21 +1201,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1780.9555556243,
-      "mode": 1780.9555556243,
-      "high": 12600000.000388924
+      "low": 9143.5609047619,
+      "mode": 9143.5609047619,
+      "high": 2454190.4664157913
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 305.3066666667,
-      "mode": 305.3066666667,
-      "high": 2159999.9999832045
+      "low": 1567.467583613,
+      "mode": 1567.467583613,
+      "high": 420718.3656550529
     },
     "calibration_anchor": {
       "industry": "public",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 government_public pair (p50=$214,000, p95=$18,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.6945564938. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.3333333333"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 government_public pair (p50=$214,000, p95=$18,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.6945564938 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.3333333333"
     },
     "suggested_control_ids": [
       "email-security-protection",
@@ -1315,21 +1315,21 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 7516.1739125932,
-      "mode": 7516.1739125932,
-      "high": 16560000.000502756
+      "low": 21534.3677372516,
+      "mode": 21534.3677372516,
+      "high": 5779962.59351553
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1252.695652134,
-      "mode": 1252.695652134,
-      "high": 2760000.000161223
+      "low": 3589.0612896426,
+      "mode": 3589.0612896426,
+      "high": 963327.0989462755
     },
     "calibration_anchor": {
       "industry": "transportation",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 transportation_logistics pair (p50=$490,000, p95=$23,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=2.3399310679. secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.1666666667"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 transportation_logistics pair (p50=$490,000, p95=$23,000,000); supersedes prior per-scenario analyst-judged PERT anchor. sigma=1.7 (within-scenario default; prior envelope dispersion 2.3399310679 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by curated secondary/primary ratio R=0.1666666667"
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -1429,22 +1429,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 475.1373272204,
-      "mode": 475.1373272204,
-      "high": 43399999.99744733
+      "low": 8765.1224691793,
+      "mode": 8765.1224691793,
+      "high": 2352615.159989121
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1330.3845161093,
-      "mode": 1330.3845161093,
-      "high": 121519999.9829903
+      "low": 24542.3429117117,
+      "mode": 24542.3429117117,
+      "high": 6587322.4474353045
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "information",
       "revenue_tier": "10b_to_100b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Information sector pair (p50=$718,000, p95=$217,000,000); sigma=3.4721527617. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (subscriber data breach secondary: notification + FCC regulatory exposure + class-action ~30% of primary; telecom class-action caps and CPNI enforcement patterns bound secondary below primary)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Information sector pair (p50=$718,000, p95=$217,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 3.4721527617 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (subscriber data breach secondary: notification + FCC regulatory exposure + class-action ~30% of primary; telecom class-action caps and CPNI enforcement patterns bound secondary below primary)"
     },
     "suggested_control_ids": [
       "data-at-rest-encryption",
@@ -1546,22 +1546,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1277.4193548585,
-      "mode": 1277.4193548585,
-      "high": 13640000.000647925
+      "low": 8057.0763646507,
+      "mode": 8057.0763646507,
+      "high": 2162571.038490227
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3193.5483869094,
-      "mode": 3193.5483869094,
-      "high": 34099999.99909113
+      "low": 20142.6909101328,
+      "mode": 20142.6909101328,
+      "high": 5406427.595824636
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "hospitality",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=2.8196794735. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.35 (PCI card-brand assessments + notification ~35% of primary; significant secondary for hospitality bounded by PCI DSS remediation structure)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.8196794735 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.35 (PCI card-brand assessments + notification ~35% of primary; significant secondary for hospitality bounded by PCI DSS remediation structure)"
     },
     "suggested_control_ids": [
       "network-segmentation",
@@ -1661,22 +1661,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1045.1612902992,
-      "mode": 1045.1612902992,
-      "high": 11160000.000107713
+      "low": 6592.1533890101,
+      "mode": 6592.1533890101,
+      "high": 1769376.304152293
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1045.1612902992,
-      "mode": 1045.1612902992,
-      "high": 11160000.000107713
+      "low": 6592.1533890101,
+      "mode": 6592.1533890101,
+      "high": 1769376.304152293
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "hospitality",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=2.8196794735. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.20 (loyalty-ATO secondary: customer compensation + points-fraud notification + identity-theft remediation ~20% of primary; operational loss from fraudulent redemptions dominates, secondary regulatory/reputational tail is moderate)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.8196794735 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.20 (loyalty-ATO secondary: customer compensation + points-fraud notification + identity-theft remediation ~20% of primary; operational loss from fraudulent redemptions dominates, secondary regulatory/reputational tail is moderate)"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -1757,22 +1757,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 870.9677419107,
-      "mode": 870.9677419107,
-      "high": 9300000.000033557
+      "low": 5493.4611574751,
+      "mode": 5493.4611574751,
+      "high": 1474480.2534513017
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 929.0322580961,
-      "mode": 929.0322580961,
-      "high": 9920000.000655083
+      "low": 5859.6919016726,
+      "mode": 5859.6919016726,
+      "high": 1572778.93711293
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "hospitality",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=2.8196794735. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.40 (insider guest-data secondary: GDPR/CCPA fines + litigation + brand remediation ~40% of primary; insider breaches in hospitality drive regulatory tail and guest notification comparable to external breach)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Hospitality sector pair (p50=$600,000, p95=$62,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.8196794735 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.40 (insider guest-data secondary: GDPR/CCPA fines + litigation + brand remediation ~40% of primary; insider breaches in hospitality drive regulatory tail and guest notification comparable to external breach)"
     },
     "suggested_control_ids": [
       "user-access-control",
@@ -1853,22 +1853,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 2066.7000000909,
-      "mode": 2066.7000000909,
-      "high": 1199999.9999166445
+      "low": 3039.7151738019,
+      "mode": 3039.7151738019,
+      "high": 815879.0735761295
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 2893.3800000659,
-      "mode": 2893.3800000659,
-      "high": 1679999.9998476657
+      "low": 4255.6012432324,
+      "mode": 4255.6012432324,
+      "high": 1142230.702982354
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "education",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Education sector pair (p50=$249,000, p95=$6,000,000); sigma=1.9345562423. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (FERPA + state-law notification secondary ~30% of primary; education insider loss predominantly notification-driven, secondary regulatory fraction is moderate)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Education sector pair (p50=$249,000, p95=$6,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 1.9345562423 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (FERPA + state-law notification secondary ~30% of primary; education insider loss predominantly notification-driven, secondary regulatory fraction is moderate)"
     },
     "suggested_control_ids": [
       "user-access-control",
@@ -1960,9 +1960,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 839.5933333514,
-      "mode": 839.5933333514,
-      "high": 5940000.000081644
+      "low": 4310.5358550283,
+      "mode": 4310.5358550283,
+      "high": 1156975.5055762285
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -1970,7 +1970,7 @@
       "industry": "public",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=2.6945564938. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.20 (government DDoS secondary: incident response + citizen notification + public trust remediation ~20% of primary; DDoS secondary is largely ops-disruption class, secondary regulatory tail is low)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.6945564938 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.20 (government DDoS secondary: incident response + citizen notification + public trust remediation ~20% of primary; DDoS secondary is largely ops-disruption class, secondary regulatory tail is low)"
     },
     "suggested_control_ids": [
       "ddos-protection",
@@ -2052,22 +2052,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1195.784444418,
-      "mode": 1195.784444418,
-      "high": 8459999.99974761
+      "low": 6139.2480356817,
+      "mode": 6139.2480356817,
+      "high": 1647813.5987791393
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 356.1911111014,
-      "mode": 356.1911111014,
-      "high": 2519999.999911716
+      "low": 1828.7121808319,
+      "mode": 1828.7121808319,
+      "high": 490838.0932508215
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "public",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=2.6945564938. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.50 (insider records tampering secondary: legal/litigation costs + public trust remediation + compliance investigation ~50% of primary; government records tampering triggers significant downstream legal/compliance secondary)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.6945564938 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.50 (insider records tampering secondary: legal/litigation costs + public trust remediation + compliance investigation ~50% of primary; government records tampering triggers significant downstream legal/compliance secondary)"
     },
     "suggested_control_ids": [
       "user-access-control",
@@ -2159,22 +2159,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 457.9599999963,
-      "mode": 457.9599999963,
-      "high": 3239999.9999483526
+      "low": 2351.2013754003,
+      "mode": 2351.2013754003,
+      "high": 631077.54847742
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 407.0755555752,
-      "mode": 407.0755555752,
-      "high": 2880000.0001164796
+      "low": 2089.9567782514,
+      "mode": 2089.9567782514,
+      "high": 560957.8209004333
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "public",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=2.6945564938. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.40 (government insider leak secondary: investigation + legal exposure + remediation + public communications ~40% of primary; insider disclosure triggers both legal and reputational secondary costs)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Public sector pair (p50=$214,000, p95=$18,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.6945564938 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.40 (government insider leak secondary: investigation + legal exposure + remediation + public communications ~40% of primary; insider disclosure triggers both legal and reputational secondary costs)"
     },
     "suggested_control_ids": [
       "user-access-control",
@@ -2259,22 +2259,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4285.714285582,
-      "mode": 4285.714285582,
-      "high": 7560000.000651396
+      "low": 10986.9223153904,
+      "mode": 10986.9223153904,
+      "high": 2948960.507020777
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3571.4285712968,
-      "mode": 3571.4285712968,
-      "high": 6300000.000504745
+      "low": 9155.7685961034,
+      "mode": 9155.7685961034,
+      "high": 2457467.0891691465
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "manufacturing",
       "revenue_tier": "1b_to_10b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Manufacturing sector pair (p50=$1,000,000, p95=$42,000,000); sigma=2.2723417799. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.15 (competitor IP-theft secondary: trade-secret litigation + brand harm + customer loss ~15% of primary; IP theft secondary is legal/reputational tail well below primary economic-value loss)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Manufacturing sector pair (p50=$1,000,000, p95=$42,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 2.2723417799 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.15 (competitor IP-theft secondary: trade-secret litigation + brand harm + customer loss ~15% of primary; IP theft secondary is legal/reputational tail well below primary economic-value loss)"
     },
     "suggested_control_ids": [
       "data-loss-prevention",
@@ -2368,9 +2368,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 221.5264694521,
-      "mode": 221.5264694521,
-      "high": 390772.6921593037
+      "low": 1769.9898978414,
+      "mode": 1769.9898978414,
+      "high": 475076.6553840482
     },
     "secondary_loss": null,
     "loss_tier": "vendor",
@@ -2378,7 +2378,7 @@
       "industry": "manufacturing",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Manufacturing sector pair (p50=$1,000,000, p95=$42,000,000); sigma=2.2723417799. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.25 (billing fraud secondary: audit remediation + regulatory reporting + controls enhancement ~25% of primary; insider billing fraud secondary bounded by audit and governance remediation costs)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Manufacturing sector pair (p50=$1,000,000, p95=$42,000,000); sigma=1.7 (within-scenario default; mean-preserved against IC3 $123,005 \u2014 prior envelope dispersion 2.2723417799). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.25 (billing fraud secondary: audit remediation + regulatory reporting + controls enhancement ~25% of primary; insider billing fraud secondary bounded by audit and governance remediation costs)"
     },
     "suggested_control_ids": [
       "user-access-control",
@@ -2393,7 +2393,7 @@
       {
         "form": "replacement",
         "kind": "primary",
-        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the manufacturing envelope (disclosed shape assumption, A1 parity).",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma = the within-scenario default 1.7 (mean preserved exactly; see docs/reference/within-scenario-sigma-calibration.md) (disclosed shape assumption, A1 parity).",
         "citations": [
           "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
         ],
@@ -2455,22 +2455,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 5761.7671421986,
-      "mode": 5761.7671421986,
-      "high": 3640000.000104382
+      "low": 8839.5893866819,
+      "mode": 8839.5893866819,
+      "high": 2372602.5588703253
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 5983.3735708473,
-      "mode": 5983.3735708473,
-      "high": 3780000.000173235
+      "low": 9179.5735940193,
+      "mode": 9179.5735940193,
+      "high": 2463856.5034845187
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "healthcare",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Healthcare sector pair (p50=$557,000, p95=$14,000,000); sigma=1.9602032156. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.45 (HIPAA breach notification + OCR investigation + class-action ~45% of primary; regulatory tail for PHI breach is significant secondary component in healthcare)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Healthcare sector pair (p50=$557,000, p95=$14,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 1.9602032156 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.45 (HIPAA breach notification + OCR investigation + class-action ~45% of primary; regulatory tail for PHI breach is significant secondary component in healthcare)"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -2564,9 +2564,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 861.2927293789,
-      "mode": 861.2927293789,
-      "high": 459507.9136290085
+      "low": 1769.9898978414,
+      "mode": 1769.9898978414,
+      "high": 475076.6553840482
     },
     "secondary_loss": null,
     "loss_tier": "vendor",
@@ -2574,7 +2574,7 @@
       "industry": "professional",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Professional sector pair (p50=$736,000, p95=$17,000,000); sigma=1.9088254741. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.70 (payroll BEC secondary: employer wage-repayment obligation under FLSA/state wage-payment statutes + incident response/forensics + wire-recovery costs ~70% of primary; misdirected payroll requires employees to be made whole regardless of fraud, driving secondary comparable to primary direct loss)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Professional sector pair (p50=$736,000, p95=$17,000,000); sigma=1.7 (within-scenario default; mean-preserved against IC3 $123,005 \u2014 prior envelope dispersion 1.9088254741). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.70 (payroll BEC secondary: employer wage-repayment obligation under FLSA/state wage-payment statutes + incident response/forensics + wire-recovery costs ~70% of primary; misdirected payroll requires employees to be made whole regardless of fraud, driving secondary comparable to primary direct loss)"
     },
     "suggested_control_ids": [
       "multi-factor-authentication",
@@ -2589,7 +2589,7 @@
       {
         "form": "replacement",
         "kind": "primary",
-        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the professional_services envelope (disclosed shape assumption, A1 parity).",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma = the within-scenario default 1.7 (mean preserved exactly; see docs/reference/within-scenario-sigma-calibration.md) (disclosed shape assumption, A1 parity).",
         "citations": [
           "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
         ],
@@ -2650,22 +2650,22 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3268.4533334766,
-      "mode": 3268.4533334766,
-      "high": 1379999.9999630337
+      "low": 4099.3427927084,
+      "mode": 4099.3427927084,
+      "high": 1100289.931376263
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 710.533333361,
-      "mode": 710.533333361,
-      "high": 299999.999990479
+      "low": 891.1614766713,
+      "mode": 891.1614766713,
+      "high": 239193.4633414887
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
       "industry": "utilities",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 Utilities sector pair (p50=$146,000, p95=$3,000,000); sigma=1.8377081683. secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (billing system tampering secondary: regulatory reporting + customer notifications + forensic audit ~30% of primary; energy billing fraud secondary is regulatory + remediation class, moderate fraction)"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 Utilities sector pair (p50=$146,000, p95=$3,000,000); sigma=1.7 (within-scenario default; prior envelope dispersion 1.8377081683 \u2014 see docs/reference/within-scenario-sigma-calibration.md). secondary sigma inherited from primary; location scaled by analyst-judged secondary/primary ratio R=0.30 (billing system tampering secondary: regulatory reporting + customer notifications + forensic audit ~30% of primary; energy billing fraud secondary is regulatory + remediation class, moderate fraction)"
     },
     "suggested_control_ids": [
       "file-integrity-monitoring",
@@ -2751,9 +2751,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1164.0864516241,
-      "mode": 1164.0864516241,
-      "high": 106329999.9877238
+      "low": 21474.5500482735,
+      "mode": 21474.5500482735,
+      "high": 5763907.141647022
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -2837,9 +2837,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 0.9810565461,
-      "mode": 0.9810565461,
-      "high": 89611.6799463846
+      "low": 1769.9898978414,
+      "mode": 1769.9898978414,
+      "high": 475076.6553840482
     },
     "secondary_loss": null,
     "loss_tier": "vendor",
@@ -2861,7 +2861,7 @@
       {
         "form": "replacement",
         "kind": "primary",
-        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the technology_saas envelope (disclosed shape assumption, A1 parity).",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma = the within-scenario default 1.7 (mean preserved exactly; see docs/reference/within-scenario-sigma-calibration.md) (disclosed shape assumption, A1 parity).",
         "citations": [
           "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
         ],
@@ -2916,15 +2916,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1211.6001843269,
-      "mode": 1211.6001843269,
-      "high": 110669999.98570664
+      "low": 22351.0622948361,
+      "mode": 22351.0622948361,
+      "high": 5999168.657550538
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 213.8117972316,
-      "mode": 213.8117972316,
-      "high": 19529999.997245383
+      "low": 3944.3051108064,
+      "mode": 3944.3051108064,
+      "high": 1058676.821908055
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3017,9 +3017,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1021.5452534835,
-      "mode": 1021.5452534835,
-      "high": 93309999.99081914
+      "low": 18845.0133079903,
+      "mode": 18845.0133079903,
+      "high": 5058122.593776604
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -3115,15 +3115,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 14999.9999996066,
-      "mode": 14999.9999996066,
-      "high": 26460000.00240247
+      "low": 38454.2281040448,
+      "mode": 38454.2281040448,
+      "high": 10321361.774620572
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 2619.047618961,
-      "mode": 2619.047618961,
-      "high": 4620000.0003878875
+      "low": 6714.2303038349,
+      "mode": 6714.2303038349,
+      "high": 1802142.5320642788
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3230,15 +3230,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 11428.5714280847,
-      "mode": 11428.5714280847,
-      "high": 20160000.001500644
+      "low": 29298.4595073642,
+      "mode": 29298.4595073642,
+      "high": 7863894.685296549
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 5238.0952381319,
-      "mode": 5238.0952381319,
-      "high": 9240000.001145853
+      "low": 13428.4606082077,
+      "mode": 13428.4606082077,
+      "high": 3604285.064272953
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3342,9 +3342,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 11904.7619040138,
-      "mode": 11904.7619040138,
-      "high": 21000000.00113781
+      "low": 30519.2286528863,
+      "mode": 30519.2286528863,
+      "high": 8191556.96368465
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -3438,9 +3438,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 221.5264694521,
-      "mode": 221.5264694521,
-      "high": 390772.6921593037
+      "low": 1769.9898978414,
+      "mode": 1769.9898978414,
+      "high": 475076.6553840482
     },
     "secondary_loss": null,
     "loss_tier": "vendor",
@@ -3462,7 +3462,7 @@
       {
         "form": "replacement",
         "kind": "primary",
-        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma borrowed from the food_agriculture envelope (disclosed shape assumption, A1 parity).",
+        "magnitude_basis": "IC3 2025 BEC-specific per-complaint mean $123,005 (beyond-envelope own distribution; funds-transfer loss). Mean-preserving lognormal: mu = ln(mean) - sigma^2/2 so E[loss] = mean exactly; median = mean*exp(-sigma^2/2). sigma = the within-scenario default 1.7 (mean preserved exactly; see docs/reference/within-scenario-sigma-calibration.md) (disclosed shape assumption, A1 parity).",
         "citations": [
           "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
         ],
@@ -3523,15 +3523,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4285.714285582,
-      "mode": 4285.714285582,
-      "high": 7560000.000651396
+      "low": 10986.9223153904,
+      "mode": 10986.9223153904,
+      "high": 2948960.507020777
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3571.4285712968,
-      "mode": 3571.4285712968,
-      "high": 6300000.000504745
+      "low": 9155.7685961034,
+      "mode": 9155.7685961034,
+      "high": 2457467.0891691465
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3625,9 +3625,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1916.1290322721,
-      "mode": 1916.1290322721,
-      "high": 20460000.000804838
+      "low": 12085.6145468773,
+      "mode": 12085.6145468773,
+      "high": 3243856.557708855
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -3713,15 +3713,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1860.0300000033,
-      "mode": 1860.0300000033,
-      "high": 1079999.9998794333
+      "low": 2735.7436563063,
+      "mode": 2735.7436563063,
+      "high": 734291.1661875362
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1550.0249999934,
-      "mode": 1550.0249999934,
-      "high": 899999.9998940871
+      "low": 2279.7863802415,
+      "mode": 2279.7863802415,
+      "high": 611909.3051525843
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3817,15 +3817,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 5010.7826084364,
-      "mode": 5010.7826084364,
-      "high": 11040000.000425272
+      "low": 14356.245158285,
+      "mode": 14356.245158285,
+      "high": 3853308.395708482
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1565.8695651453,
-      "mode": 1565.8695651453,
-      "high": 3450000.0001525045
+      "low": 4486.3266119896,
+      "mode": 4486.3266119896,
+      "high": 1204158.8736657526
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -3920,9 +3920,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4697.6086955856,
-      "mode": 4697.6086955856,
-      "high": 10350000.000787579
+      "low": 13458.9798363978,
+      "mode": 13458.9798363978,
+      "high": 3612476.6211124226
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -4019,15 +4019,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 427.6235944804,
-      "mode": 427.6235944804,
-      "high": 39059999.99605532
+      "low": 7888.6102219294,
+      "mode": 7888.6102219294,
+      "high": 2117353.6439010943
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 261.3255299596,
-      "mode": 261.3255299596,
-      "high": 23869999.99753664
+      "low": 4820.8173578345,
+      "mode": 4820.8173578345,
+      "high": 1293938.3379365343
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4123,9 +4123,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1116.5727189054,
-      "mode": 1116.5727189054,
-      "high": 101989999.98828287
+      "low": 20598.0378014171,
+      "mode": 20598.0378014171,
+      "high": 5528645.625664613
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -4221,9 +4221,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 2319.5876291606,
-      "mode": 2319.5876291606,
-      "high": 87299999.99825081
+      "low": 27467.3057891858,
+      "mode": 27467.3057891858,
+      "high": 7372401.267742444
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -4318,15 +4318,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 2577.3195878072,
-      "mode": 2577.3195878072,
-      "high": 96999999.9924474
+      "low": 30519.2286528861,
+      "mode": 30519.2286528861,
+      "high": 8191556.963684621
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1340.2061856687,
-      "mode": 1340.2061856687,
-      "high": 50439999.99640871
+      "low": 15869.9988996067,
+      "mode": 15869.9988996067,
+      "high": 4259609.621144428
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4431,15 +4431,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 10415.5021417856,
-      "mode": 10415.5021417856,
-      "high": 6580000.000263855
+      "low": 15979.2577376458,
+      "mode": 15979.2577376458,
+      "high": 4288935.394929958
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 5761.7671421986,
-      "mode": 5761.7671421986,
-      "high": 3640000.000104382
+      "low": 8839.5893866819,
+      "mode": 8839.5893866819,
+      "high": 2372602.5588703253
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4544,9 +4544,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4328.4577778641,
-      "mode": 4328.4577778641,
-      "high": 15750000.00008841
+      "low": 15937.1412028099,
+      "mode": 15937.1412028099,
+      "high": 4277631.046509309
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -4633,15 +4633,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1259.1139171365,
-      "mode": 1259.1139171365,
-      "high": 115009999.99345027
+      "low": 23227.5745433694,
+      "mode": 23227.5745433694,
+      "high": 6234430.173983017
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 403.8667281365,
-      "mode": 403.8667281365,
-      "high": 36889999.997748174
+      "low": 7450.3540987864,
+      "mode": 7450.3540987864,
+      "high": 1999722.885986447
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4735,15 +4735,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 10833.9199997795,
-      "mode": 10833.9199997795,
-      "high": 5779999.999665845
+      "low": 15274.2635556657,
+      "mode": 15274.2635556657,
+      "high": 4099710.429042416
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 3186.4470588291,
-      "mode": 3186.4470588291,
-      "high": 1699999.999939316
+      "low": 4492.4304576481,
+      "mode": 4492.4304576481,
+      "high": 1205797.1850391338
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4838,15 +4838,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1236.7022222412,
-      "mode": 1236.7022222412,
-      "high": 4500000.000004428
+      "low": 4553.4689150675,
+      "mode": 4553.4689150675,
+      "high": 1222180.2989970194
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 989.361777807,
-      "mode": 989.361777807,
-      "high": 3600000.000054693
+      "low": 3642.7751321058,
+      "mode": 3642.7751321058,
+      "high": 977744.2392115006
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -4932,9 +4932,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 15952.3809519716,
-      "mode": 15952.3809519716,
-      "high": 28140000.002570946
+      "low": 40895.7663963883,
+      "mode": 40895.7663963883,
+      "high": 10976686.331745557
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -5031,15 +5031,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1237.1134022467,
-      "mode": 1237.1134022467,
-      "high": 46560000.00010896
+      "low": 14649.2297545604,
+      "mode": 14649.2297545604,
+      "high": 3931947.3428840097
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 721.6494845953,
-      "mode": 721.6494845953,
-      "high": 27159999.998235248
+      "low": 8545.3840229182,
+      "mode": 8545.3840229182,
+      "high": 2293635.9498612243
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -5124,9 +5124,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4443.4050000196,
-      "mode": 4443.4050000196,
-      "high": 2579999.999718695
+      "low": 6535.3876234155,
+      "mode": 6535.3876234155,
+      "high": 1754140.008119267
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -5231,15 +5231,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 16666.6666669325,
-      "mode": 16666.6666669325,
-      "high": 29400000.003909294
+      "low": 42726.9201174072,
+      "mode": 42726.9201174072,
+      "high": 11468179.750062102
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 6666.6666666007,
-      "mode": 6666.6666666007,
-      "high": 11760000.001259757
+      "low": 17090.7680465211,
+      "mode": 17090.7680465211,
+      "high": 4587271.899906274
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -5359,15 +5359,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4121.0933336898,
-      "mode": 4121.0933336898,
-      "high": 1740000.0000276463
+      "low": 5168.7365649398,
+      "mode": 5168.7365649398,
+      "high": 1387322.0874466621
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1563.17333345,
-      "mode": 1563.17333345,
-      "high": 660000.0000026347
+      "low": 1960.555248747,
+      "mode": 1960.555248747,
+      "high": 526225.6193700691
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -5470,15 +5470,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3410.5600000854,
-      "mode": 3410.5600000854,
-      "high": 1439999.9999343604
+      "low": 4277.5750879631,
+      "mode": 4277.5750879631,
+      "high": 1148128.624023218
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1065.8000000327,
-      "mode": 1065.8000000327,
-      "high": 449999.9999820443
+      "low": 1336.742214996,
+      "mode": 1336.742214996,
+      "high": 358790.195009287
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
@@ -5581,9 +5581,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 12853.1728566386,
-      "mode": 12853.1728566386,
-      "high": 8120000.000842363
+      "low": 19719.0840179243,
+      "mode": 19719.0840179243,
+      "high": 5292728.7855695505
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -5667,15 +5667,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 763.2666666864,
-      "mode": 763.2666666864,
-      "high": 5400000.000097575
+      "low": 3918.6689591336,
+      "mode": 3918.6689591336,
+      "high": 1051795.914164762
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 686.9399999888,
-      "mode": 686.9399999888,
-      "high": 4859999.999882856
+      "low": 3526.8020630716,
+      "mode": 3526.8020630716,
+      "high": 946616.3227083709
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -5769,15 +5769,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4180.6451611137,
-      "mode": 4180.6451611137,
-      "high": 44639999.999543056
+      "low": 26368.613555516,
+      "mode": 26368.613555516,
+      "high": 7077505.2164684655
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 696.7741935385,
-      "mode": 696.7741935385,
-      "high": 7440000.000132555
+      "low": 4394.7689260426,
+      "mode": 4394.7689260426,
+      "high": 1179584.2027778348
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -5882,12 +5882,12 @@
     "primary_loss": {
       "distribution": "lognormal",
       "mean": 12.6857171518,
-      "sigma": 3.4721527617
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
       "mean": 11.3639613118,
-      "sigma": 3.4721527617
+      "sigma": 1.7
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -5980,15 +5980,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 14339.0117650714,
-      "mode": 14339.0117650714,
-      "high": 7649999.999908422
+      "low": 20215.9370598961,
+      "mode": 20215.9370598961,
+      "high": 5426087.332804897
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 8922.0517648897,
-      "mode": 8922.0517648897,
-      "high": 4759999.999919768
+      "low": 12578.8052816517,
+      "mode": 12578.8052816517,
+      "high": 3376232.1181732104
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6090,15 +6090,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3616.7250000309,
-      "mode": 3616.7250000309,
-      "high": 2099999.999779741
+      "low": 5319.5015539649,
+      "mode": 5319.5015539649,
+      "high": 1427788.3787076408
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 2273.3700000901,
-      "mode": 2273.3700000901,
-      "high": 1319999.9999026004
+      "low": 3343.6866911676,
+      "mode": 3343.6866911676,
+      "high": 897466.98092985
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6190,9 +6190,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 3926.7299998884,
-      "mode": 3926.7299998884,
-      "high": 2279999.9996765684
+      "low": 5775.4588298055,
+      "mode": 5775.4588298055,
+      "high": 1550170.2396824188
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -6278,15 +6278,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 1144.9000000202,
-      "mode": 1144.9000000202,
-      "high": 8100000.000080228
+      "low": 5878.0034386523,
+      "mode": 5878.0034386523,
+      "high": 1577693.8712342277
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 559.7288889055,
-      "mode": 559.7288889055,
-      "high": 3960000.000086762
+      "low": 2873.6905700423,
+      "mode": 2873.6905700423,
+      "high": 771317.0037237805
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6395,15 +6395,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 22305.1294128007,
-      "mode": 22305.1294128007,
-      "high": 11900000.000106998
+      "low": 31447.0132049419,
+      "mode": 31447.0132049419,
+      "high": 8440580.29565119
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 6372.8941179135,
-      "mode": 6372.8941179135,
-      "high": 3400000.0000148197
+      "low": 8984.860915656,
+      "mode": 8984.860915656,
+      "high": 2411594.370174873
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6519,15 +6519,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 950.2746543839,
-      "mode": 950.2746543839,
-      "high": 86799999.98969129
+      "low": 17530.2449373084,
+      "mode": 17530.2449373084,
+      "high": 4705230.3196963295
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 285.0823963226,
-      "mode": 285.0823963226,
-      "high": 26039999.997582823
+      "low": 5259.0734813292,
+      "mode": 5259.0734813292,
+      "high": 1411569.0959456032
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6623,9 +6623,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 902.7609216535,
-      "mode": 902.7609216535,
-      "high": 82459999.98918009
+      "low": 16653.7326902359,
+      "mode": 16653.7326902359,
+      "high": 4469968.803655957
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -6722,15 +6722,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 13095.2380943586,
-      "mode": 13095.2380943586,
-      "high": 23100000.001151655
+      "low": 33571.1515180299,
+      "mode": 33571.1515180299,
+      "high": 9010712.660014164
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1904.7619047342,
-      "mode": 1904.7619047342,
-      "high": 3360000.0003443765
+      "low": 4883.0765846977,
+      "mode": 4883.0765846977,
+      "high": 1310649.1142528541
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6837,15 +6837,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 5441.4897777293,
-      "mode": 5441.4897777293,
-      "high": 19799999.99953997
+      "low": 20035.2632258116,
+      "mode": 20035.2632258116,
+      "high": 5377593.315456556
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 1236.7022222412,
-      "mode": 1236.7022222412,
-      "high": 4500000.000004428
+      "low": 4553.4689150675,
+      "mode": 4553.4689150675,
+      "high": 1222180.2989970194
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -6941,15 +6941,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 712.3822222313,
-      "mode": 712.3822222313,
-      "high": 5040000.000025311
+      "low": 3657.4243618102,
+      "mode": 3657.4243618102,
+      "high": 981676.1865409397
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 254.4222222207,
-      "mode": 254.4222222207,
-      "high": 1799999.9999751223
+      "low": 1306.2229863363,
+      "mode": 1306.2229863363,
+      "high": 350598.6380437499
     },
     "loss_tier": "paginated",
     "source_citations": [
@@ -7045,9 +7045,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 15238.0952381811,
-      "mode": 15238.0952381811,
-      "high": 26880000.003297012
+      "low": 39064.6126783695,
+      "mode": 39064.6126783695,
+      "high": 10485192.914234327
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -7144,9 +7144,9 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 5219.5652170155,
-      "mode": 5219.5652170155,
-      "high": 11500000.000210056
+      "low": 14954.4220395773,
+      "mode": 14954.4220395773,
+      "high": 4013862.9121150193
     },
     "secondary_loss": null,
     "loss_tier": "paginated",
@@ -7232,7 +7232,7 @@
       "industry": "transportation",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-      "loss_anchor": "IRIS 2025 Figure A3 p.35 transportation_logistics envelope; Epic D-iii envelopexshare"
+      "loss_anchor": "IRIS 2025 Figure A3 p.35 transportation_logistics envelope; Epic D-iii envelopexshare \u2014 medians re-anchored to IRIS 2025 Fig 15 ransomware p50 $3.2M (event, PL:SL share-split; see the calibration reference, adjustment d)"
     },
     "threat_event_frequency": {
       "distribution": "PERT",
@@ -7248,13 +7248,13 @@
     },
     "primary_loss": {
       "distribution": "lognormal",
-      "mean": 12.9396417406,
-      "sigma": 2.3399310679
+      "mean": 14.8674357694,
+      "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
-      "mean": 10.7995755771,
-      "sigma": 2.3399310679
+      "mean": 12.7273692567,
+      "sigma": 1.7
     },
     "loss_tier": "paginated",
     "source_citations": [
