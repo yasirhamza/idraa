@@ -207,6 +207,33 @@ def pins() -> None:
         )
 
 
+def assert_prod_mu_not_public(db: sqlite3.Connection) -> None:
+    """[I-SEC-1] The public variant's rule (b) is a PRECONDITION — enforce it.
+
+    Prod-derived retention and %-of-revenue columns are publishable only because
+    prod mu is NOT published. If an active scenario were instantiated from a
+    catastrophic LIBRARY entry, its mu WOULD be public (the seed JSON is tracked),
+    and the public `worst.retain` column would inverts to annual_revenue exactly
+    as the round-2 blocker did: solve retention for b, then rev = exp(mu + b*sigma)/k.
+
+    This held on the 2026-07-25 backup, but it was a one-off manual check written
+    into a docstring — and Task 9 MANDATES regenerating against a fresh backup.
+    A future backup containing one library-instantiated active scenario would
+    silently emit an invertible "public" artifact. So the precondition is executed
+    on every run, not asserted once.
+    """
+    lib_mus = [d["mean"] for e in _entries() for _, d in _loss_fields(e)]
+    for name, pld, sld in _active_scenarios(db):
+        for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld}):
+            if any(abs(d["mean"] - m) <= 1e-9 * max(1.0, abs(m)) for m in lib_mus):
+                raise SystemExit(
+                    f"PIN FAILED: active prod field [{name} {f}] carries a mu matching a "
+                    "PUBLIC seed-library entry. Rule (b) no longer holds — prod-derived "
+                    "retention/%-rev columns become invertible to annual_revenue. "
+                    "Reclassify those rows to priv() before regenerating."
+                )
+
+
 def _prod() -> tuple[sqlite3.Connection, float, str]:
     db = sqlite3.connect(PROD_DB)
     rev = db.execute(
@@ -264,11 +291,22 @@ def basis(db: sqlite3.Connection, rev: float, head: str) -> dict[str, object]:
             f"(exceeds the default by {worst[0]:.3e}) -- this backup is NOT the post-PR1 "
             "state. Point at a fresher backup."
         )
+    # [I-METH-4] The MIGRATION backfills `scenarios` with NO status filter, but
+    # every other basis here is active-only. Quoting the active-only count as the
+    # migration's expected row count is a population-filter error by construction.
+    # Both counts are published so the plan can name the right one.
+    all_status = 0
+    for pl, sl in db.execute("SELECT primary_loss, secondary_loss FROM scenarios"):
+        for raw in (pl, sl):
+            d = json.loads(raw) if raw else None
+            if isinstance(d, dict) and d.get("distribution") in ("lognormal", "lognormal_mixture"):
+                all_status += 1
     return {
         "head": head,
         "revenue": rev,
         "scenarios": len(scen),
         "lognormal_fields": len(fields),
+        "lognormal_fields_all_status": all_status,
         "worst_sigma_dev": worst[0],
         "worst_sigma_field": f"{worst[1]} {worst[2]}",
     }
@@ -421,6 +459,7 @@ def main() -> None:
     r.pub("cap — since k_capacity is published and cap = k x revenue, those invert to revenue.")
 
     db, rev, head = _prod()
+    assert_prod_mu_not_public(db)
     b = basis(db, rev, head)
     r.priv("")
     r.priv("[B-CAP-BASIS] input assertions")
@@ -429,7 +468,11 @@ def main() -> None:
         f"  annual_revenue          : ${b['revenue']:,.0f}   (READ FROM the backup, never hardcoded)"
     )
     r.priv(f"  active scenarios        : {b['scenarios']}")
-    r.priv(f"  lognormal loss fields   : {b['lognormal_fields']}")
+    r.priv(f"  lognormal loss fields   : {b['lognormal_fields']}  (active-only)")
+    r.priv(
+        f"  lognormal loss fields   : {b['lognormal_fields_all_status']}  (ALL statuses — this is "
+        "the migration's population, NOT the active-only count above)"
+    )
     r.priv(
         f"  post-PR1 sigma check    : max (sigma-{SIGMA_DEFAULT}) = {b['worst_sigma_dev']:+.3e} "
         f"[{b['worst_sigma_field']}]  (must be <= {SIGMA_BASIS_TOL:.0e}; narrow-only sweep, D6')"
@@ -624,6 +667,31 @@ def main() -> None:
     # Library population is rule (e): its mu is public, so retention at the cap inverts.
     r.priv(f"  library population, k -> 0 supremum: {_diverge(lib_pairs, None) * 100:.4f}%")
     r.pub("  library population: WITHHELD (rule e).")
+
+    r.both("")
+    r.both("[B-CAP-FLOOR] D19's band: which catastrophic library entries are uninstantiable")
+    r.both("  at which org revenue, because the minted cap would violate the max > p95 floor.")
+    r.both("  Inputs are the PUBLIC seed library (mu, sigma) and the published k ONLY -- no")
+    r.both("  deployment data, so this whole basis is publishable under rule (a). The revenue")
+    r.both("  column is a HYPOTHETICAL sweep, not this deployment's figure.")
+    r.both(
+        f"  a field is uninstantiable at revenue R when k*R <= p95 = exp(mu + z95*sigma), k={K_CAPACITY}"
+    )
+    lib_p95 = sorted(
+        (math.exp(d["mean"] + Z95 * d["sigma"]), e["slug"], f)
+        for e in _entries()
+        for f, d in _loss_fields(e)
+    )
+    r.both(f"  {'hypothetical revenue':>22}  {'entries blocked':>16}")
+    for hyp in (1e7, 2.5e7, 5e7, 1e8, 1e9):
+        blocked = sum(1 for p95, _, _ in lib_p95 if K_CAPACITY * hyp <= p95)
+        r.both(f"  ${hyp:>21,.0f}  {blocked:>10}/{len(lib_p95):<5}")
+    worst_p95, worst_slug, worst_f = lib_p95[-1]
+    r.both("  binding threshold: every catastrophic library entry is instantiable only above")
+    r.both(f"  revenue = max(p95)/k = ${worst_p95 / K_CAPACITY:,.0f}  [{worst_slug} {worst_f}]")
+    r.both("  Below it, D19 blocks with the floor-conflict message rather than clamping the")
+    r.both("  cap up (which would void D13's policy meaning) or dropping the floor (which")
+    r.both("  would unbound B-CAP-MIX's distortion, whose worst case that floor IS).")
 
     r.both("")
     r.both("[B-CAP-ALT] the REJECTED quantile-anchored fallback (why D14 has no fallback)")
