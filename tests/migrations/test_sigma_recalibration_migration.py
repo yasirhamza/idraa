@@ -63,7 +63,7 @@ _FIT_RECORD_KEYS = (
 
 _FULL_FIT_METADATA = {
     "pooled_meanlog": 14.5,
-    "pooled_sdlog": 2.9269,
+    "pooled_sdlog": 2.9,
     "component_meanlogs": [14.5],
     "component_sdlogs": [2.9269],
     "pooling_method": "linear_opinion_pool_v1",
@@ -430,17 +430,17 @@ def test_audit_prior_preserves_full_metadata_verbatim(
     full_meta = {
         "source": "quantile_lognormal_pool",
         "fitter": "lognorm_native",
-        "pooled_meanlog": 12.0421,
-        "pooled_sdlog": 2.9269,
+        "pooled_meanlog": 12.0,
+        "pooled_sdlog": 2.9,
         "schema_version": 2,
         "q_low_quantile": 0.05,
         "q_high_quantile": 0.95,
         "pooled_min_support": 0.0,
         "pooled_max_support": None,
         "n_smes": 1,
-        "sme_ids": ["20505f1a-1fd1-4b9a-b7da-b5c666f600a9"],
+        "sme_ids": ["11111111-1111-1111-1111-111111111111"],
         "weights": [1.0],
-        "fitted_at": "2026-07-08T10:37:13.387531+00:00",
+        "fitted_at": "2026-01-01T00:00:00+00:00",
     }
     wide = {
         "distribution": "lognormal",

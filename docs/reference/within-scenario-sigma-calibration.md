@@ -131,6 +131,12 @@ band). What stands instead:
   citation-traced pass/fail check available — passes at 7.1e-16.
 - The owner-signed σ decision itself, methodology-gated.
 
+Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
+basis** (isolating the σ effect); the **shipped** library-wide after-value is
+**$121,139,423** with the wiper re-anchor applied (−89.12%) — a future reader
+quoting only the frozen appendix's LIBRARY-WIDE row would understate the
+shipped library by ~$11.6M.
+
 ## 10. Capped-PERT provenance (D4' record)
 
 All **154** capped PERT loss ranges are mechanically
