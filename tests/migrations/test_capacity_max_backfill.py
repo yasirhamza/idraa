@@ -350,9 +350,13 @@ def test_mixture_backfilled_with_one_shared_max_across_every_component(
 def test_mixture_floor_conflict_on_worst_component_skips(
     alembic_config: Config, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # comp1's p95 sits ABOVE the candidate cap (revenue) even though comp0's
-    # p95 alone would clear it -- proves the floor is checked against the
-    # WORST component, not just one arbitrary component.
+    # comp1's p95 sits ABOVE the candidate cap (revenue). NOTE: comp0's p95
+    # (~7.73) also sits above ln(candidate) (~6.91) here, so this fixture
+    # alone does NOT discriminate every-component logic from a
+    # largest-mean-only or components[0]-only regression -- both would
+    # still skip. See
+    # test_mixture_floor_check_discriminates_worst_component_from_largest_mean
+    # below for the fixture built specifically to catch that regression.
     #
     # NOTE on capsys-vs-caplog: alembic/env.py calls logging.config.fileConfig()
     # on every command.upgrade() call, which (per stdlib logging.config's
@@ -380,6 +384,62 @@ def test_mixture_floor_conflict_on_worst_component_skips(
     with alembic_engine.connect() as conn:
         node = json.loads(_get_scenario(conn, sid)["primary_loss"])
         assert "max" not in node
+        assert _audit_rows(conn, sid) == []
+    assert "floor conflict" in capsys.readouterr().err
+
+
+def test_mixture_floor_check_discriminates_worst_component_from_largest_mean(
+    alembic_config: Config, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Discriminating regression guard for the every-component floor check.
+
+    Unlike the two mixture tests above (whose candidates clear -- or are
+    blocked by -- BOTH components, so a largest-mean-only or
+    components[0]-only regression would still pass them), this fixture
+    places ``ln(candidate)`` STRICTLY BETWEEN the two components' p95s:
+
+    - ``comp_bigmean`` has the LARGER mean but SMALLER sigma -> its p95
+      sits BELOW ``ln(candidate)``. A largest-mean-only (or
+      components[0]-only, since it's listed first) bug would see this
+      component clear and wrongly BACKFILL.
+    - ``comp_worst`` has the SMALLER mean but LARGER sigma -> its p95 sits
+      ABOVE ``ln(candidate)``, making it the true worst (max-p95)
+      component. Correct every-component logic must SKIP.
+
+    Concretely: mean=ln(1e6)~=13.816, sigma=0.5 -> p95~=14.638
+    (comp_bigmean); mean=ln(2e5)~=12.206, sigma=2.5 -> p95~=16.318
+    (comp_worst). The candidate is picked so ``ln(candidate)~=15.478``,
+    the midpoint -- strictly between the two, and the test asserts this
+    ordering explicitly before touching the migration.
+    """
+    comp_bigmean = {"mean": math.log(1_000_000.0), "sigma": 0.5, "weight": 0.5}
+    comp_worst = {"mean": math.log(200_000.0), "sigma": 2.5, "weight": 0.5}
+    p95_bigmean = _ln_p95(comp_bigmean["mean"], comp_bigmean["sigma"])
+    p95_worst = _ln_p95(comp_worst["mean"], comp_worst["sigma"])
+    assert p95_bigmean < p95_worst  # comp_bigmean is NOT the worst component
+
+    candidate = math.exp((p95_bigmean + p95_worst) / 2.0)
+    ln_candidate = math.log(candidate)
+    assert p95_bigmean < ln_candidate < p95_worst  # the discriminating window
+
+    mixture_pl = {
+        "distribution": "lognormal_mixture",
+        "components": [dict(comp_bigmean), dict(comp_worst)],
+    }
+    command.upgrade(alembic_config, _PRE_REV)
+    with alembic_engine.begin() as conn:
+        # K_CAPACITY == 1.0 (module-level _K_CAPACITY above), so
+        # candidate == revenue exactly -- see the migration's own inlined
+        # _K_CAPACITY docstring rationale.
+        org_id = _seed_org(conn, revenue=candidate)
+        sid = _seed_scenario(conn, organization_id=org_id, pl_node=dict(mixture_pl))
+    command.upgrade(alembic_config, _REV)
+
+    with alembic_engine.connect() as conn:
+        row = _get_scenario(conn, sid)
+        node = json.loads(row["primary_loss"])
+        assert "max" not in node  # correct every-component logic: SKIP
+        assert row["row_version"] == 1  # never bumped
         assert _audit_rows(conn, sid) == []
     assert "floor conflict" in capsys.readouterr().err
 
