@@ -59,6 +59,17 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     ("src/idraa/services/verification_workbook_let.py", "_assert_numeric_dist"),
     ("src/idraa/services/loss_capacity.py", "capacity_max_for_org"),
     ("fair_cam/risk_engine/fair_core.py", "_scale_distribution"),
+    # rev-3 additions: every symbol the thin plan names must be verified here.
+    ("src/idraa/services/scenarios.py", "_apply_form_fields"),
+    ("fair_cam/risk_engine/fair_core.py", "sample"),
+    ("fair_cam/risk_engine/fair_core.py", "calculate_risk"),
+    ("src/idraa/app.py", "_money_filter"),
+]
+
+# Class attributes the plan names (models are AnnAssigns, not defs). Same
+# fail-loud contract: a missing attribute is a fabricated claim.
+REQUIRED_ATTRS: list[tuple[str, str, str]] = [
+    ("src/idraa/models/risk_analysis_run.py", "RiskAnalysisRun", "scenario_inputs_snapshot"),
 ]
 
 # Files this PR CREATES. Only these may be absent; any other missing path is a
@@ -130,6 +141,43 @@ def symbols_section() -> list[str]:
             + "\n  ".join(missing)
             + "\nFix the plan (or the REQUIRED_SYMBOLS list) -- do not publish a map "
             "that asserts a symbol the tree does not have."
+        )
+    return lines
+
+
+def attrs_section() -> list[str]:
+    """Class attributes: AnnAssign/Assign targets inside the named class body."""
+    lines = ["", "[ATTRS] class attributes the plan names, extracted from the AST", ""]
+    missing: list[str] = []
+    for rel, cls, attr in REQUIRED_ATTRS:
+        path = ROOT / rel
+        found: tuple[int, str] | None = None
+        if path.exists():
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not (isinstance(node, ast.ClassDef) and node.name == cls):
+                    continue
+                for stmt in node.body:
+                    if (
+                        isinstance(stmt, ast.AnnAssign)
+                        and isinstance(stmt.target, ast.Name)
+                        and stmt.target.id == attr
+                    ):
+                        found = (stmt.lineno, ast.unparse(stmt.annotation))
+                    elif isinstance(stmt, ast.Assign) and any(
+                        isinstance(t, ast.Name) and t.id == attr for t in stmt.targets
+                    ):
+                        found = (stmt.lineno, "<untyped assign>")
+        if found is None:
+            missing.append(f"{rel}::{cls}.{attr}")
+            lines.append(f"  {rel}::{cls}.{attr}")
+            lines.append("      *** ATTRIBUTE NOT FOUND ***")
+        else:
+            lines.append(f"  {rel}:{found[0]}")
+            lines.append(f"      {cls}.{attr}: {found[1]}")
+    if missing:
+        raise SystemExit(
+            "SURFACE MAP FAILED: attributes named by the plan do not exist in the tree:\n  "
+            + "\n  ".join(missing)
         )
     return lines
 
@@ -223,7 +271,7 @@ def main() -> None:
     print("Regenerate:  uv run python scripts/surface_map.py")
     print("Fails loud if a symbol the plan names does not exist in the tree.")
     print()
-    for section in (symbols_section(), call_sites_section(), collection_section()):
+    for section in (symbols_section(), attrs_section(), call_sites_section(), collection_section()):
         print("\n".join(section))
 
 
