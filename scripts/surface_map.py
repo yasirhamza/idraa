@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import ast
+import re
 import subprocess  # fixed first-party argv lists; never shell=True
 import sys
 from pathlib import Path
@@ -64,6 +65,12 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     ("fair_cam/risk_engine/fair_core.py", "sample"),
     ("fair_cam/risk_engine/fair_core.py", "calculate_risk"),
     ("src/idraa/app.py", "_money_filter"),
+    # Round-3 additions. Every symbol the plan names must appear here — round 3
+    # named these three WITHOUT map verification, and the first one was asserted
+    # (wrongly) not to exist at all.
+    ("src/idraa/errors.py", "FAIRCAMValidationError"),
+    ("fair_cam/quantile_pooling/_lognormal.py", "_qlnormtrunc"),
+    ("src/idraa/services/run_executor.py", "execute_run"),
 ]
 
 # Class attributes the plan names (models are AnnAssigns, not defs). Same
@@ -93,17 +100,38 @@ CALL_SITE_SYMBOLS = [
 
 
 def _defs(path: Path) -> dict[str, tuple[int, str]]:
-    """Map every top-level and nested function name to (lineno, signature)."""
+    """Map every function AND CLASS name to (lineno, signature).
+
+    CLASSES ARE INCLUDED DELIBERATELY. Walking only FunctionDef made this tool
+    structurally blind to classes, so probing it for a class name returned
+    "SYMBOL NOT FOUND" — indistinguishable from "does not exist in the tree".
+    That misreading produced a false claim in the rev-3 plan (that
+    FAIRCAMValidationError, which is defined in errors.py and re-exported by the
+    very module the plan edits, did not exist) — i.e. this tool CAUSED an
+    instance of the defect it exists to prevent. A blind spot in a fail-loud
+    verifier is worse than no verifier, because its silence reads as evidence.
+
+    Returns ALL definitions per name. Ambiguity is reported to the caller rather
+    than silently last-wins: a name-keyed map cannot distinguish a method from a
+    module-level function of the same name, and would pin a real symbol at the
+    wrong location. Only ambiguity in a name the PLAN references is fatal
+    (ordinary dunders collide constantly and are nobody's claim).
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return {}
-    out: dict[str, tuple[int, str]] = {}
+    out: dict[str, list[tuple[int, str]]] = {}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            args = ast.unparse(node.args)
             prefix = "async def " if isinstance(node, ast.AsyncFunctionDef) else "def "
-            out[node.name] = (node.lineno, f"{prefix}{node.name}({args})")
+            sig = f"{prefix}{node.name}({ast.unparse(node.args)})"
+        elif isinstance(node, ast.ClassDef):
+            bases = ", ".join(ast.unparse(b) for b in node.bases)
+            sig = f"class {node.name}({bases})" if bases else f"class {node.name}"
+        else:
+            continue
+        out.setdefault(node.name, []).append((node.lineno, sig))
     return out
 
 
@@ -131,7 +159,16 @@ def symbols_section() -> list[str]:
             lines.append(f"  {rel}::{name}")
             lines.append("      *** SYMBOL NOT FOUND ***")
             continue
-        lineno, sig = defs[name]
+        if len(defs[name]) > 1:
+            # Fatal only for a name the plan actually references.
+            missing.append(
+                f"{rel}::{name} (AMBIGUOUS — defined at "
+                f"{', '.join(str(ln) for ln, _ in defs[name])})"
+            )
+            lines.append(f"  {rel}::{name}")
+            lines.append("      *** AMBIGUOUS — multiple definitions ***")
+            continue
+        lineno, sig = defs[name][0]
         lines.append(f"  {rel}:{lineno}")
         lines.append(f"      {sig}")
     if missing:
@@ -185,8 +222,15 @@ def attrs_section() -> list[str]:
 def call_sites_section() -> list[str]:
     lines = ["", "[CALL SITES] every reference under src/ and fair_cam/, by symbol", ""]
     for name in CALL_SITE_SYMBOLS:
+        # The leading boundary is LOAD-BEARING: a plain substring search for
+        # `dist_from_raw(` also matches inside `pert_dist_from_raw(`, which
+        # inflated that census from 2 to 5 and dragged a `def pert_...` line past
+        # the "excl. defs" filter. A plan quoting an inflated count inherits a
+        # wrong claim from the very artifact declared authoritative.
+        # -P with a negative lookbehind, NOT -w: `-w` is unreliable when the
+        # pattern ends in a non-word character like `(`.
         proc = subprocess.run(  # noqa: S603
-            ["git", "grep", "-n", f"{name}("],
+            ["git", "grep", "-nP", "-e", rf"(?<![A-Za-z0-9_]){name}\("],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -246,8 +290,10 @@ def collection_section() -> list[str]:
             argv, cwd=ROOT, capture_output=True, text=True, check=False
         )
         tail = [ln for ln in proc.stdout.splitlines() if ln.strip()][-1:] or ["<no output>"]
+        # Strip pytest's wall-clock suffix: it churns the committed artifact on
+        # every regeneration, so a real drift is hidden among timing-only diffs.
         lines.append(f"  {label}")
-        lines.append(f"      {tail[0].strip()[:96]}")
+        lines.append(f"      {re.sub(r' in [0-9.]+s$', '', tail[0].strip())[:96]}")
     fair_cam_default = subprocess.run(  # noqa: S603
         [py, "-m", "pytest", "-q", "--no-cov", "--collect-only"],
         cwd=ROOT,
