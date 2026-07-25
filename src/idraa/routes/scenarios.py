@@ -61,6 +61,7 @@ from idraa.app import _csrf_token_from_request, templates
 from idraa.config import get_settings
 from idraa.errors import (
     ConflictError,
+    FAIRCAMValidationError,
     LibraryEntryNotFoundError,
     LibraryEntryStatusError,
     NotFoundError,
@@ -126,6 +127,7 @@ from idraa.services.calibration import (
 from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService, is_selectable_currency
 from idraa.services.library_calibration import library_calibrated_pre_fill
+from idraa.services.loss_capacity import capacity_max_for_org
 from idraa.services.run_executor import _dict_to_fair_distribution
 from idraa.services.scenario_control_recommendations import recommended_controls_for
 from idraa.services.scenario_currency import convert_loss_inputs_to_usd
@@ -2132,6 +2134,61 @@ async def get_wizard_step(
     )
 
 
+# PR2 D13/D18: capacity-bound epic (docs/superpowers/specs/2026-07-25-
+# capacity-bound-design.md). D18 verbatim pinned copy (owner-signed
+# 2026-07-25) -- do not reword.
+_D18_REVENUE_MESSAGE = (
+    "Modeling catastrophic loss needs your organization's annual revenue: it "
+    "sets the per-scenario loss cap. Set it in Organization settings, or "
+    "build this scenario in the expert form with an explicit cap."
+)
+_ORG_SETTINGS_HREF = "/organization"
+_ORG_SETTINGS_HREF_TEXT = "Open organization settings"
+
+
+async def _capacity_max_for_org(db: AsyncSession, organization_id: uuid.UUID) -> float | None:
+    """D13/D18: mint the per-loss-component capacity cap from the TARGET
+    org's OWN revenue.
+
+    Reads via ``db.get(Organization, organization_id)`` -- NEVER
+    ``get_sole_org``/``require_sole_org`` (``services/org.py``) or any
+    ``ORDER BY id LIMIT 1`` shape, both forbidden on this path (Phase 1 is
+    single-org so this is latent, not live, but ``max`` is the first value to
+    hard-code a *financial* property of one org into another org's row).
+    Returns ``None`` (D14: never an invented number) when the org row is
+    missing or its ``annual_revenue`` is unset/non-positive -- the caller is
+    responsible for treating ``None`` as the D18 precondition failure.
+    """
+    organization = await db.get(Organization, organization_id)
+    if organization is None:
+        return None
+    return capacity_max_for_org(organization.annual_revenue, get_settings().capacity_k)
+
+
+def _existing_capacity_max(scenario: Scenario) -> float | None:
+    """Preserve-existing (D13 "snapshot-frozen at author time"): read a
+    previously-minted/authored PR2 capacity cap off the TARGET scenario's
+    OWN stored loss dicts, so a wizard re-estimate never silently replaces an
+    analyst's explicit cap with ``k * CURRENT revenue`` -- exactly the
+    silent-strip class the wizard already refuses to commit for
+    ``legacy_residual``.
+
+    PL and SL share ONE minted cap by construction (``loss_capacity.py``: the
+    per-loss-component cap is applied identically to both fields at mint
+    time), so either field's stored ``"max"`` is authoritative for the
+    scenario; ``primary_loss`` is checked first, ``secondary_loss`` as a
+    fallback (defensive -- covers a hand-authored asymmetric cap from the
+    expert form, D17/Task 4c, which is out of this task's scope but not one
+    to silently mis-read here).
+    """
+    for dist in (scenario.primary_loss, scenario.secondary_loss):
+        if isinstance(dist, dict):
+            existing = dist.get("max")
+            if isinstance(existing, (int, float)) and not isinstance(existing, bool):
+                return float(existing)
+    return None
+
+
 @router.post("/scenarios/new/wizard/step/{n}")
 async def post_wizard_step(
     n: int,
@@ -2184,6 +2241,32 @@ async def post_wizard_step(
                 uuid.UUID(state.tx_id),
                 step=n,
                 message=_step3_flash_message(exc),
+            )
+        # PR2 D18 (round-6-fixed): the toggle stays ENABLED; block ONLY a
+        # SUBMITTED catastrophic choice when the org's annual revenue is
+        # unset. An unchecked submission is an honest analyst downgrade to
+        # "capped" and is NEVER gated here (see the loss_shape assignment
+        # below, reached only when this block does not return) -- gating on
+        # the *incoming* state instead would trap the legitimate unchecked ->
+        # capped choice on the 11 catastrophic library seeds. Mirrors the
+        # validation-failure branch above: a blocked POST leaves BOTH
+        # state.sme_estimates and state.loss_shape UNCHANGED (the merge below
+        # never runs). `and` short-circuits, so the org lookup only runs once
+        # n==4 and the checkbox was actually submitted.
+        if (
+            n == 4
+            and form.get("loss_catastrophic")
+            and await _capacity_max_for_org(db, user.organization_id) is None
+        ):
+            return await _render_fair_page_with_flash(
+                request,
+                db,
+                user,
+                uuid.UUID(state.tx_id),
+                step=4,
+                message=_D18_REVENUE_MESSAGE,
+                href=_ORG_SETTINGS_HREF,
+                href_text=_ORG_SETTINGS_HREF_TEXT,
             )
         # Merge: update only this page's fieldsets, preserving the other half.
         merged = dict(state.sme_estimates)
@@ -2382,6 +2465,30 @@ def _step3_flash_message(exc: Exception) -> str:
     return f"Invalid input: {exc}. Please try again."
 
 
+# PR2 D19: the Task-3b validator (services/fair_cam_validation.py
+# ``_validate_capacity_floor``) raises the FACTUAL "max > p95" floor-conflict
+# string inside a FAIRCAMValidationError -- this marker (a verbatim substring
+# of that function's own error text) distinguishes it from every OTHER
+# FAIRCAMValidationError (non-finite params, PERT ordering, etc.), which get
+# the generic _step3_flash_message treatment instead.
+_D19_FLOOR_MARKER = "capacity floor"
+
+
+def _wrap_d19_floor_message(exc: FAIRCAMValidationError) -> str:
+    """D19 operator-facing copy: wrap the validator's FACTUAL p95-vs-cap
+    string with the three remedies the design pins (the validator produces
+    the fact; producer surfaces like this one add the remedies — see
+    ``_validate_capacity_floor``'s docstring). The wizard authors in USD only
+    (P2), so ``exc``'s amounts are USD.
+    """
+    return (
+        f"{exc} (amounts in USD). To resolve this: lower the loss estimates so "
+        "the scenario's 95th percentile sits below the cap; correct your "
+        "organization's annual revenue if it's understated; or build this "
+        "scenario in the expert form with an explicit max cap."
+    )
+
+
 async def _render_fair_page_with_flash(
     request: Request,
     db: AsyncSession,
@@ -2390,10 +2497,14 @@ async def _render_fair_page_with_flash(
     *,
     step: int,
     message: str,
+    href: str | None = None,
+    href_text: str | None = None,
 ) -> HTMLResponse:
     """Re-render a FAIR-param page (step 3 Likelihood or step 4 Impact) with a
     flash banner at HTTP 422. Used by the per-page step-3/step-4 POST handlers
-    when ``_validate_page_rows`` rejects the submitted SME rows.
+    when ``_validate_page_rows`` rejects the submitted SME rows, and (PR2 D18)
+    by the step-4 catastrophic-without-revenue gate, which passes ``href`` to
+    deep-link the flash to Organization settings.
 
     Rebuilds the same template-context the GET-side handler uses (via
     :func:`_fair_page_context`), drops a flash in, and returns 422 — the analyst
@@ -2436,7 +2547,7 @@ async def _render_fair_page_with_flash(
         available_overlays=available_overlays,
         sme_directory_for_dropdown=sme_dir,
     )
-    ctx_dict["flash"] = build_flash(message, "error")
+    ctx_dict["flash"] = build_flash(message, "error", href=href, href_text=href_text)
     template = (
         "scenarios/wizard/step_3_likelihood.html"
         if step == 3
@@ -2498,13 +2609,16 @@ async def _render_review_with_flash(
     tx: uuid.UUID,
     *,
     message: str,
+    href: str | None = None,
+    href_text: str | None = None,
 ) -> HTMLResponse:
     """Re-render the step-6 review page with a flash banner at HTTP 422.
 
     2026-05-28 step-3 split (D6): finalize is state-sourced; a malformed /
     incomplete draft (e.g. an empty required fieldset) routes here instead of
     emitting FastAPI's raw 422 JSON dump. The operator lands back on the review
-    page with a readable error.
+    page with a readable error. ``href``/``href_text`` (PR2 D18) deep-link the
+    flash to Organization settings for the revenue-precondition backstop.
 
     Plan-gate S-N1: the ``state`` is read FRESH from the DB so
     ``state.version_token`` reflects the current column value, and the review
@@ -2542,7 +2656,7 @@ async def _render_review_with_flash(
         "scenarios/wizard/step_6_review.html",
         {
             "current_user": user,
-            "flash": build_flash(message, "error"),
+            "flash": build_flash(message, "error", href=href, href_text=href_text),
             "state": state,
             "step": 6,
             **extra_ctx,
@@ -2656,26 +2770,17 @@ async def finalize_wizard(
             )
         except WizardDraftConflictError as exc:
             raise HTTPException(409, "Draft modified in another session; reload.") from exc
-        # Sec-20 PR3: offload the scipy.optimize loop off the event loop.
-        try:
-            results = await run_in_threadpool(process_sme_estimates, state)
-        except FinalizeBudgetExceededError as e:
-            # Narrower subclass first; dispatch on class rather than sniffing
-            # the aggregate_timeout flag on the parent (kept for back-compat).
-            raise HTTPException(422, str(e)) from e
-        except FinalizationError as e:
-            raise HTTPException(422, detail={"field_errors": e.field_errors}) from e
-        payload = build_scenario_payload(results, state)
-        # Arch-10 PR1: rename payload keys -> ScenarioForm column names.
-        form_kwargs = {_PAYLOAD_TO_FORM[fs]: payload[fs] for fs in payload}
-        # T5: state.basic_fields() exposes step-2 fields (name, threat_*,
-        # asset_class, attack_vector, library_entry_id) as a ScenarioForm-
-        # splattable dict.
+
         # #56: a targeted draft (target_scenario_id set) finalizes into an
-        # UPDATE of that scenario instead of a CREATE. The wizard never
-        # collects status / effect / scenario_type / the descriptive version
-        # label, so those are pulled from the live row and spliced onto the
-        # form the wizard DID collect.
+        # UPDATE of that scenario instead of a CREATE. Hoisted here (PR2
+        # D13/D18, PLAN-GATE ordering note) -- BEFORE build_scenario_payload
+        # -- so preserve-existing (below) can peek at the target's already-
+        # stored capacity `max`. This is the FIRST (and only) locked read of
+        # the target row; it is reused again below for status / effect /
+        # scenario_type / the descriptive version label (the wizard never
+        # collects those, so they're pulled from the live row and spliced
+        # onto the form the wizard DID collect) -- do not add a second,
+        # unlocked read.
         is_reestimate = state.target_scenario_id is not None
         target: Scenario | None = None
         if is_reestimate:
@@ -2703,6 +2808,61 @@ async def finalize_wizard(
                     message="This scenario no longer exists — it was deleted "
                     "while you were estimating. Cancel to discard this draft.",
                 )
+
+        # PR2 D13/D17/D18/D19: mint (or preserve) the catastrophic-loss
+        # capacity cap BEFORE running the scipy fit, so a blocked finalize
+        # never runs it needlessly.
+        #   - Preserve-existing is the DEFAULT on a re-estimate: an already-
+        #     minted/authored cap on the target (D13 "snapshot-frozen at
+        #     author time") is carried forward untouched -- a re-estimate
+        #     must not silently replace an analyst's explicit cap with
+        #     k * CURRENT revenue (a revenue edit is exactly how that could
+        #     happen). Only a FRESH create, or a re-estimate with no prior
+        #     cap (switching capped -> catastrophic just now), mints anew.
+        #   - D18 finalize backstop (TOCTOU): a stale catastrophic draft
+        #     (create OR re-estimate) whose org has since lost its revenue
+        #     blocks HERE with the same D18 copy -- a 422 re-render, never a
+        #     silently-uncapped scenario.
+        capacity_max: float | None = None
+        if state.loss_shape == "catastrophic":
+            capacity_max = _existing_capacity_max(target) if target is not None else None
+            if capacity_max is None:
+                capacity_max = await _capacity_max_for_org(db, user.organization_id)
+                if capacity_max is None:
+                    await db.rollback()
+                    return await _render_review_with_flash(
+                        request,
+                        db,
+                        user,
+                        tx,
+                        message=_D18_REVENUE_MESSAGE,
+                        href=_ORG_SETTINGS_HREF,
+                        href_text=_ORG_SETTINGS_HREF_TEXT,
+                    )
+
+        # Sec-20 PR3: offload the scipy.optimize loop off the event loop.
+        try:
+            results = await run_in_threadpool(process_sme_estimates, state)
+        except FinalizeBudgetExceededError as e:
+            # Narrower subclass first; dispatch on class rather than sniffing
+            # the aggregate_timeout flag on the parent (kept for back-compat).
+            raise HTTPException(422, str(e)) from e
+        except FinalizationError as e:
+            raise HTTPException(422, detail={"field_errors": e.field_errors}) from e
+        payload = build_scenario_payload(results, state, capacity_max=capacity_max)
+        # Arch-10 PR1: rename payload keys -> ScenarioForm column names.
+        form_kwargs = {_PAYLOAD_TO_FORM[fs]: payload[fs] for fs in payload}
+        # T5: state.basic_fields() exposes step-2 fields (name, threat_*,
+        # asset_class, attack_vector, library_entry_id) as a ScenarioForm-
+        # splattable dict.
+        if is_reestimate:
+            if target is None:
+                # Unreachable: the hoisted locked read above already returned
+                # a 404 flash when target was None. Re-checked here (not a
+                # bare `assert`, which -O strips and this repo's ruff config
+                # bans in application code) purely so mypy narrows
+                # `target: Scenario` for the attribute access below.
+                raise AssertionError("unreachable: target resolved above when is_reestimate")
             form = ScenarioForm(
                 **form_kwargs,
                 **state.basic_fields(),
@@ -2786,6 +2946,14 @@ async def finalize_wizard(
             # (the regular form-create path already catches ValidationError -> 422;
             # this closes the same gap on the wizard-finalize path).
             #
+            # PR2 D19: a minted/preserved `capacity_max` that sits at or below
+            # the distribution's p95 is ALSO rejected here, as a
+            # FAIRCAMValidationError carrying the D19 floor marker (Task 3b's
+            # _validate_capacity_floor) -- wrap its FACTUAL p95-vs-cap string
+            # with the three operator remedies the design pins, instead of the
+            # generic _step3_flash_message treatment every other
+            # ValidationError gets.
+            #
             # advance_step (above) bumped the CAS version_token in this still-
             # uncommitted transaction; roll it back so a rejected finalize does
             # NOT consume the token (A-I3) — the same token stays re-submittable
@@ -2794,9 +2962,12 @@ async def finalize_wizard(
             # so the rollback's real job is unwinding the advance_step flush; it
             # also covers any ValidationError subclass that raises post-flush.)
             await db.rollback()
-            return await _render_review_with_flash(
-                request, db, user, tx, message=_step3_flash_message(exc)
+            message = (
+                _wrap_d19_floor_message(exc)
+                if isinstance(exc, FAIRCAMValidationError) and _D19_FLOOR_MARKER in str(exc)
+                else _step3_flash_message(exc)
             )
+            return await _render_review_with_flash(request, db, user, tx, message=message)
         if not is_reestimate:
             # Wizard authors in USD only (P2); native-currency entry is the
             # expert form's path. Explicit stamp (not just the column

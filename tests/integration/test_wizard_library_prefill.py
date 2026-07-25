@@ -13,6 +13,7 @@ via ``_form_from_entry``), this drives the REAL wizard endpoints end to end.
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import pytest
 from fair_cam.quantile_pooling._lognormal_native import lognormal_quantiles
@@ -21,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.models.user import User
@@ -340,6 +342,16 @@ async def test_catastrophic_library_entry_finalizes_lognormal(
     """Milestone B: a loss_shape='catastrophic' entry seeds state.loss_shape ->
     finalize stores pl as native lognormal, p5/p95 round-trip within 1%."""
     analyst_client, org_id = authed_analyst
+    # PR2 D18 finalize backstop: this flow never POSTs step 4 (auto-seed via
+    # GET only, see _finalize_from_entry), so state.loss_shape stays
+    # "catastrophic" straight from the library entry and finalize itself
+    # mints the capacity cap -- the seeded org needs revenue or the D18
+    # backstop blocks it (the whole point of this test is the p5/p95
+    # round-trip, not the revenue precondition).
+    org = await db_session.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal("500000000")
+    await db_session.commit()
     curated_pl = {"distribution": "lognormal", "mean": 13.0, "sigma": 1.0}
     entry = ScenarioLibraryEntry(
         **_entry_kwargs("cat-loss-prefill"),

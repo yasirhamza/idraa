@@ -15,12 +15,14 @@ PERT-dist fields to SME-row state.
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.organization import Organization
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
 from tests.conftest import csrf_post
@@ -109,6 +111,12 @@ async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
     client, org_id = authed_analyst
     user_id = await _resolve_analyst_user_id(db_session)
     sme_id = await _seed_one_sme(db_session, org_id=org_id, created_by=user_id)
+    # PR2 D18: the step-4 catastrophic toggle now gates on org revenue -- the
+    # re-POST below submits loss_catastrophic=1, so the seeded org needs one.
+    org = await db_session.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal("500000000")
+    await db_session.commit()
     await db_session.close()
 
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
