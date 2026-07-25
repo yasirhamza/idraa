@@ -328,3 +328,68 @@ async def test_finalize_advisory_flags_wide_stored_dispersion(
     follow = await client.get(resp.headers["location"])
     assert follow.status_code == 200, follow.text
     assert "dispersion" in follow.text
+
+
+@pytest.mark.asyncio
+async def test_view_scenario_loss_wide_query_param_no_stale_flash_when_narrow(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Methodology re-gate finding: ?loss_wide=1 re-derives the CONDITION,
+    not just the value. A scenario whose stored sigma is AT/BELOW the
+    default must not render a false, self-contradictory advisory when the
+    query param is replayed (back-button / bookmarked finalize redirect,
+    or a scenario later re-estimated narrower)."""
+    import math
+
+    client, org_id = authed_analyst
+    user_id = await _analyst_id(db_session, org_id)
+    tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
+
+    z = 1.6448536269514722
+    sigma_narrow = 1.5  # <= WITHIN_SCENARIO_SIGMA_DEFAULT (1.7)
+    median = 1_000_000.0
+    low = median * math.exp(-z * sigma_narrow)
+    high = median * math.exp(z * sigma_narrow)
+
+    r3 = await csrf_post(
+        client,
+        f"/scenarios/new/wizard/step/3?tx={tx}",
+        data={
+            "tef_sme_id_0": "",
+            "tef_sme_name_0": "Analyst A",
+            "tef_low_0": "1.0",
+            "tef_high_0": "12.0",
+            "vuln_sme_id_0": "",
+            "vuln_sme_name_0": "Analyst A",
+            "vuln_low_0": "0.05",
+            "vuln_high_0": "0.5",
+        },
+    )
+    assert r3.status_code in (302, 303), r3.text
+    r4 = await csrf_post(
+        client,
+        f"/scenarios/new/wizard/step/4?tx={tx}",
+        data={
+            "pl_sme_id_0": "",
+            "pl_sme_name_0": "Analyst A",
+            "pl_low_0": str(low),
+            "pl_high_0": str(high),
+            "loss_catastrophic": "1",
+        },
+    )
+    assert r4.status_code in (302, 303), r4.text
+    db_session.expire_all()
+    vt = await _current_version_token(db_session, tx)
+    resp = await csrf_post(
+        client, f"/scenarios/new/wizard/finalize?tx={tx}", data={"version_token": str(vt)}
+    )
+    assert resp.status_code == 303, resp.text
+    # Narrow dispersion -> the redirect itself carries NO ?loss_wide=1.
+    assert not resp.headers["location"].endswith("?loss_wide=1"), resp.headers["location"]
+
+    db_session.expire_all()
+    scen = await _latest_scenario(db_session, org_id)
+    # Replay the query param anyway (back-button / bookmark / stale link).
+    replay = await client.get(f"/scenarios/{scen.id}?loss_wide=1")
+    assert replay.status_code == 200, replay.text
+    assert "dispersion" not in replay.text

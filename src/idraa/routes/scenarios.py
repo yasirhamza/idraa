@@ -912,10 +912,14 @@ async def view_scenario(
     # the sigma reading from the scenario's own live dicts -- the
     # ?loss_wide=1 flag carries no value, only a "check" instruction, so a
     # scenario later edited narrower does not keep flashing a stale figure.
+    # Methodology re-gate finding: re-derive the CONDITION too, not just the
+    # value -- revisiting ?loss_wide=1 (back-button/bookmark) on a scenario
+    # since narrowed to sigma <= the default must NOT render a false,
+    # self-contradictory advisory. Mirrors the redirect's own gate exactly.
     flash = None
     if loss_wide == 1:
         wide_sigma = _max_stored_loss_sigma(scenario)
-        if wide_sigma is not None:
+        if wide_sigma is not None and wide_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT:
             flash = build_flash(
                 f"This scenario's loss dispersion (sigma={wide_sigma:.2f}) is "
                 f"wider than the within-scenario default "
