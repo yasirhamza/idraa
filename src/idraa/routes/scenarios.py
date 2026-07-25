@@ -44,6 +44,7 @@ never call ``await db.commit()`` directly — same pattern as
 from __future__ import annotations
 
 import contextlib
+import math
 import re
 import uuid
 from typing import Any
@@ -119,6 +120,7 @@ from idraa.services.attack_mappings import (
 )
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.calibration import (
+    WITHIN_SCENARIO_SIGMA_DEFAULT,
     calibration_context_from_org,
 )
 from idraa.services.flash import build_flash
@@ -747,12 +749,98 @@ def _loss_was_recalibrated(scenario: Scenario) -> bool:
     return False
 
 
+# Canonical 95th-percentile z-score (``scipy.stats.norm.ppf(0.95)``), NOT
+# ``_quantile_pair``'s truncated ``1.645`` (wizard_helpers.py:116-118) --
+# the truncated constant is fine for that module's own render-only prefill
+# math, but reusing it here would drift the finalize-advisory / view-time
+# sigma reads a few ulp away from the migration's own ``_recalibrate_dist``
+# and Task 1's pinned ``WITHIN_SCENARIO_SIGMA_DEFAULT`` bound argument.
+_Z_0_95 = 1.6448536269514722
+
+
+def _stored_loss_sigma(dist: Any) -> float | None:
+    """Sigma implied by one stored PL/SL distribution dict, or ``None`` when
+    the shape carries no dispersion reading.
+
+    Mirrors ``run_executor._dict_to_fair_distribution``'s key-read contract
+    (``distribution`` optional, defaults ``"pert"``, case-insensitive) and
+    the migration's ``_recalibrate_dist`` shape handling:
+
+      - ``lognormal`` -> the distribution's own ``sigma``.
+      - ``lognormal_mixture`` -> ``max(component sigma)`` (worst-case read;
+        a catastrophic multi-SME scenario stores no top-level ``sigma``
+        key, so a naive ``dist["sigma"]`` would 500 the scenario view).
+      - ``PERT`` -> implied sigma ``ln(high/low) / (2 * Z_0_95)`` (D4'
+        provenance: capped ranges are mechanically
+        ``exp(mu -+ Z_0_95 * sigma)`` of the underlying lognormal fit).
+
+    Every access is isinstance-guarded: prod dicts can be ``None`` from
+    literal JSON text ``"null"`` (same F1/migration precedent), or carry
+    missing/malformed keys on a legacy row.
+    """
+    if not isinstance(dist, dict):
+        return None
+    kind = str(dist.get("distribution", "pert")).lower()
+    if kind == "lognormal":
+        sigma = dist.get("sigma")
+        return float(sigma) if isinstance(sigma, int | float) else None
+    if kind == "lognormal_mixture":
+        comps = dist.get("components")
+        if not isinstance(comps, list) or not comps:
+            return None
+        sigmas = [
+            float(c["sigma"])
+            for c in comps
+            if isinstance(c, dict) and isinstance(c.get("sigma"), int | float)
+        ]
+        return max(sigmas) if sigmas else None
+    if kind == "pert":
+        low, high = dist.get("low"), dist.get("high")
+        if not (isinstance(low, int | float) and isinstance(high, int | float)):
+            return None
+        if not (low > 0 < high):
+            return None
+        return math.log(high / low) / (2 * _Z_0_95)
+    return None
+
+
+def _max_stored_loss_sigma(scenario: Scenario) -> float | None:
+    """Max of the PL/SL implied sigmas currently stored on ``scenario``, or
+    ``None`` when neither field yields a reading. Shared by the finalize
+    advisory redirect and ``view_scenario``'s ``?loss_wide=1`` re-derivation
+    so both read the SAME live dicts -- no value smuggling through the URL.
+    """
+    sigmas = [
+        s
+        for s in (
+            _stored_loss_sigma(scenario.primary_loss),
+            _stored_loss_sigma(scenario.secondary_loss),
+        )
+        if s is not None
+    ]
+    return max(sigmas) if sigmas else None
+
+
 @router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
 async def view_scenario(
     request: Request,
     scenario_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
+    loss_wide: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "Finalize-advisory flash flag (Task 5, plan "
+            "2026-07-25-sigma-recal-pr1): set to 1 by the wizard finalize "
+            "POST's redirect when a stored PL/SL sigma exceeds the "
+            "within-scenario default. Mirrors the ?deleted=1 mechanics "
+            "(routes/scenarios.py:220-226) -- the value itself is NOT "
+            "smuggled through the URL; this handler re-derives it from the "
+            "scenario's own stored dicts."
+        ),
+    ),
 ) -> HTMLResponse:
     """Render the scenario detail page.
 
@@ -820,12 +908,28 @@ async def view_scenario(
                 "updated_at": draft_row.updated_at,
             }
 
+    # Task 5 finalize advisory (plan 2026-07-25-sigma-recal-pr1): re-derive
+    # the sigma reading from the scenario's own live dicts -- the
+    # ?loss_wide=1 flag carries no value, only a "check" instruction, so a
+    # scenario later edited narrower does not keep flashing a stale figure.
+    flash = None
+    if loss_wide == 1:
+        wide_sigma = _max_stored_loss_sigma(scenario)
+        if wide_sigma is not None:
+            flash = build_flash(
+                f"This scenario's loss dispersion (sigma={wide_sigma:.2f}) is "
+                f"wider than the within-scenario default "
+                f"({WITHIN_SCENARIO_SIGMA_DEFAULT:g}) — see the calibration "
+                "reference.",
+                "warning",
+            )
+
     return templates.TemplateResponse(
         request,
         "scenarios/view.html",
         {
             "current_user": user,
-            "flash": None,
+            "flash": flash,
             "scenario": scenario,
             "recommendations": recommendations,
             "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
@@ -1436,18 +1540,45 @@ def _iris_seed_rows(
     row per fieldset. Fieldsets where ``iris_form`` returned ``None``
     (missing data, unsupported distribution_type) are omitted from the
     output so the UI renders them empty rather than as ``(0, 0)``.
+
+    Task 5 (plan 2026-07-25-sigma-recal-pr1): narrow-only re-spread on the
+    ``pl``/``sl`` pairs ONLY -- never ``tef``/``vuln``. The IRIS industry
+    baseline's PL/SL quantile pair carries the same mis-applied cross-firm
+    envelope dispersion Tasks 2-3 re-authored out of the library and
+    scenario tables; the wizard's OWN IRIS-seeding path needed the same
+    fix so it stops re-introducing the contamination on every new scenario.
+
+    Signature is UNCHANGED (no ``loss_shape`` parameter) -- capped and
+    catastrophic shapes converge on the same seeded range (both target
+    ``WITHIN_SCENARIO_SIGMA_DEFAULT``), so this fix covers both before
+    ``loss_shape`` is even known (it is only assigned on the step-4 POST).
+
+    NARROW-ONLY: a pair whose implied sigma is already <= the default is
+    left untouched -- this is what auto-excludes the D10' AGRICULTURE/
+    MINING-class IRIS priors (already narrower than the default) with no
+    hardcoded exclusion list to drift.
     """
-    return {
-        fs: [
-            {
-                "sme_id": iris_sme_id,
-                "low": iris_form[fs]["low"],  # type: ignore[index]
-                "high": iris_form[fs]["high"],  # type: ignore[index]
-            }
-        ]
-        for fs in ("tef", "vuln", "pl", "sl")
-        if iris_form.get(fs)
-    }
+    out: dict[str, list[dict[str, Any]]] = {}
+    for fs in ("tef", "vuln", "pl", "sl"):
+        pair = iris_form.get(fs)
+        if not pair:
+            continue
+        low, high = pair["low"], pair["high"]
+        if fs in ("pl", "sl") and low > 0 < high:
+            # Canonical z (NOT _quantile_pair's truncated 1.645, above) --
+            # the flow test's pytest.approx(1.7) fails ~8.9e-6 off under the
+            # truncated constant.
+            s = math.log(high / low) / (2 * _Z_0_95)
+            if s > WITHIN_SCENARIO_SIGMA_DEFAULT:
+                # Re-emit around the geometric midpoint at the default --
+                # valid because _quantile_pair returns symmetric log-
+                # quantiles, so the geometric midpoint IS the prior's
+                # median (verified round 3, N-M1).
+                mid = math.sqrt(low * high)
+                low = mid * math.exp(-_Z_0_95 * WITHIN_SCENARIO_SIGMA_DEFAULT)
+                high = mid * math.exp(_Z_0_95 * WITHIN_SCENARIO_SIGMA_DEFAULT)
+        out[fs] = [{"sme_id": iris_sme_id, "low": low, "high": high}]
+    return out
 
 
 def _library_seed_rows(
@@ -2788,8 +2919,21 @@ async def finalize_wizard(
         # r2 BLOCKER 13 ordering: delete BEFORE commit, inside the FOR UPDATE.
         await db.delete(draft)
         await db.commit()
+        # Finalize advisory (Task 5, gate round 1 BLOCKER): the success path
+        # is a 303 redirect and this codebase's flash is per-render with NO
+        # session persistence (flash.py:10-11) -- a build_flash() built here
+        # would be silently discarded by the redirect. Ride the established
+        # ?deleted=1 query-param idiom (routes/scenarios.py:220-226) instead:
+        # view_scenario re-derives the sigma from the scenario's own stored
+        # dicts when it sees ?loss_wide=1 (no value smuggled through the URL).
+        max_sigma = _max_stored_loss_sigma(scenario)
+        wide_suffix = (
+            "?loss_wide=1"
+            if max_sigma is not None and max_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT
+            else ""
+        )
         return RedirectResponse(
-            url=f"/scenarios/{scenario.id}",
+            url=f"/scenarios/{scenario.id}{wide_suffix}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
