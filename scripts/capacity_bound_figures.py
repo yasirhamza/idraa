@@ -73,13 +73,19 @@ K_BRACKET = (0.001, 0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.10, 1.20, 1.50, 2.00)
 # n is LOAD-BEARING on D8's verdict and must be declared, not inherited. The max
 # of an unbounded heavy-tailed sample grows without bound in n, so an uncapped
 # D8 reading is only meaningful against a stated iteration count. This is pinned
-# to Settings.mc_iterations_max -- the server-side ceiling an operator can
-# actually request, i.e. the WORST case over the supported range. (The parked
-# design's 700_000 was an artifact of one exemplar run and justified against
-# neither Settings value; at Settings.mc_iterations_default = 10_000 the
-# UNCAPPED state passes D8, which would have made the pathology invisible.)
+# to the SHIPPED default of Settings.mc_iterations_max. (The parked design's
+# 700_000 was an artifact of one exemplar run and justified against neither
+# Settings value; at Settings.mc_iterations_default = 10_000 the UNCAPPED state
+# passes D8, which would have made the pathology invisible.)
+#
+# NOT the worst case over the SUPPORTED range: mc_iterations_max is itself
+# tunable, and its own Field permits up to 10_000_000 (config.py:47), so a
+# deployment can legitimately request 10x this basis. N_SENSITIVITY therefore
+# carries that configurable ceiling as a row -- D8 must be shown to hold across
+# the whole range an operator can configure, not just at the shipped default.
 ITERS = 1_000_000
-N_SENSITIVITY = (10_000, 100_000, 700_000, 1_000_000)
+_MC_ITERATIONS_FIELD_CEILING = 10_000_000  # config.py:47 Field(le=...)
+N_SENSITIVITY = (10_000, 100_000, 700_000, 1_000_000, _MC_ITERATIONS_FIELD_CEILING)
 SIM_SEEDS = tuple(range(10))  # committed seed set; never vary silently
 
 
@@ -478,7 +484,12 @@ def main() -> None:
         globals()["ITERS"] = n
         unc = _sim_max(ln, None)["median"] / rev * 100
         cpd = _sim_max(ln, cap)["median"] / rev * 100
-        tag = "  <== BASIS (Settings.mc_iterations_max)" if n == saved else ""
+        if n == saved:
+            tag = "  <== BASIS (shipped Settings.mc_iterations_max)"
+        elif n == _MC_ITERATIONS_FIELD_CEILING:
+            tag = "  <== CONFIGURABLE CEILING (config.py Field le=)"
+        else:
+            tag = ""
         # Ratios over prod fields (rule b) plus verdicts (rule c): public.
         r.both(
             f"  {n:>10,}  {unc:>14.2f}%  {'PASS' if unc <= 100 else 'FAIL':>6}  "
@@ -486,7 +497,10 @@ def main() -> None:
         )
     globals()["ITERS"] = saved
     r.both("  NOTE: at Settings.mc_iterations_default the UNCAPPED state passes D8 -- the")
-    r.both("  pathology is invisible there. The basis is pinned to the supported CEILING.")
+    r.both("  pathology is invisible there. The basis is the SHIPPED mc_iterations_max; the")
+    r.both("  last row is the ceiling that Setting's own Field still permits an operator to")
+    r.both("  configure, so D8 is shown to hold across the whole configurable range -- with")
+    r.both("  its TIGHTEST margin there, which is the number to quote as the worst case.")
 
     r.both("")
     r.both("[B-CAP-K] D8 across the k_capacity bracket, with the retention columns")
@@ -549,6 +563,47 @@ def main() -> None:
     )
     r.pub("  library catastrophic   WITHHELD — library mu is public, so its retention under the")
     r.pub("                         cap inverts to annual_revenue.")
+
+    r.both("")
+    r.both("[B-CAP-SCALE] residual-path divergence: scaling `max` by k vs leaving it unscaled")
+    r.both("  Under a magnitude multiplier k, _scale_distribution shifts mu -> mu + ln k. The")
+    r.both("  CHOSEN treatment scales the cap too, leaving b = (ln(k*max) - mu - ln k)/sigma")
+    r.both("  INVARIANT -- the residual is then exactly k x the inherent capped distribution.")
+    r.both("  The rejected alternative leaves `max` fixed, so the residual truncates at a")
+    r.both("  LESS binding point. Divergence in the residual mean is therefore")
+    r.both("    mean_retained(mu + ln k, sigma, max) / mean_retained(mu, sigma, max) - 1,")
+    r.both("  which is >= 0 for k <= 1 and rises monotonically as k falls. Its SUPREMUM over")
+    r.both("  k is the k -> 0 limit, 1/mean_retained(mu, sigma, max) - 1.")
+    r.both("  This decides nothing: the design's choice rests on the equivariance argument")
+    r.both("  alone (common random numbers preserved at every uniform). The figure exists")
+    r.both("  only to support the claim that the choice is materially INERT.")
+
+    def _diverge(pairs: list[tuple[float, float]], k: float | None) -> float:
+        """Worst-case divergence over a population; k=None gives the k->0 supremum.
+
+        At k -> 0 the unscaled cap stops binding at all, so its retention -> 1.
+        """
+        worst = 0.0
+        for mu, sg in pairs:
+            base = mean_retained(mu, sg, cap)
+            alt = 1.0 if k is None else mean_retained(mu + math.log(k), sg, cap)
+            worst = max(worst, alt / base - 1.0)
+        return worst
+
+    prod_pairs = [
+        (d["mean"], d["sigma"])
+        for _, pld, sld in ln
+        for _, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
+    ]
+    lib_pairs = [(d["mean"], d["sigma"]) for e in _entries() for _, d in _loss_fields(e)]
+    r.both(f"  {'multiplier k':>14}  {'worst divergence (prod)':>24}")
+    for k in (0.75, 0.50, 0.25, 0.10):
+        # Prod-derived (rule b): mu is not published, so this does not invert.
+        r.both(f"  {k:>14.2f}  {_diverge(prod_pairs, k) * 100:>23.4f}%")
+    r.both(f"  {'k -> 0 (sup)':>14}  {_diverge(prod_pairs, None) * 100:>23.4f}%")
+    # Library population is rule (e): its mu is public, so retention at the cap inverts.
+    r.priv(f"  library population, k -> 0 supremum: {_diverge(lib_pairs, None) * 100:.4f}%")
+    r.pub("  library population: WITHHELD (rule e).")
 
     r.both("")
     r.both("[B-CAP-ALT] the REJECTED quantile-anchored fallback (why D14 has no fallback)")
