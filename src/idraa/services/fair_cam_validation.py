@@ -235,6 +235,27 @@ def validate_fair_distributions(
     _finite_errors += _validate_finite("primary_loss", primary_loss)
     if secondary_loss is not None:
         _finite_errors += _validate_finite("secondary_loss", secondary_loss)
+    # D12 (owner, 2026-07-25): "lognormal is strictly a loss distribution."
+    # lognormal / lognormal_mixture are permitted ONLY on primary/secondary
+    # loss; TEF and vulnerability are PERT-only in v3 storage. Enforced HERE
+    # (not only at the import allow-tables) because this chokepoint covers
+    # every write path — direct create, update, wizard finalize, scenario
+    # import, and library-bundle import. Kind resolution mirrors
+    # run_executor._dict_to_fair_distribution: the key is optional
+    # (defaults PERT — prod vulnerability dicts carry no kind key) and
+    # matching is case-insensitive.
+    for _fname, _dist in (
+        ("threat_event_frequency", threat_event_frequency),
+        ("vulnerability", vulnerability),
+    ):
+        if not isinstance(_dist, dict):
+            continue
+        _kind = str(_dist.get("distribution", "pert")).lower()
+        if _kind in ("lognormal", "lognormal_mixture"):
+            _finite_errors.append(
+                f"{_fname}.distribution {_kind} not allowed: lognormal is "
+                "strictly a loss distribution (TEF and vulnerability are PERT-only)"
+            )
     if _finite_errors:
         raise FAIRCAMValidationError(
             "FAIRCAM validation failed: " + "; ".join(_finite_errors),

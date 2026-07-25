@@ -93,3 +93,14 @@ def test_no_provenance_string_contradicts_the_data() -> None:
                     e["slug"],
                     m.group(0),
                 )
+
+
+def test_no_seed_tef_or_vuln_is_lognormal() -> None:
+    """D12: lognormal is strictly a loss distribution. TEF and vulnerability
+    are PERT-only in v3 storage; the library must never reintroduce the
+    Epic-B-era lognormal TEF shape (102/102 PERT as of the tef-pert-revert)."""
+    for e in _entries():
+        for field in ("threat_event_frequency", "vulnerability"):
+            d = e.get(field) or {}
+            kind = str(d.get("distribution", "pert")).lower()
+            assert kind not in ("lognormal", "lognormal_mixture"), (e["slug"], field, kind)

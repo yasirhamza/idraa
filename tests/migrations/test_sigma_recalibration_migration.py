@@ -112,6 +112,7 @@ def _seed_scenario(
     sl_node: dict | None = None,
     sl_raw: str | None = None,
     tef_node: dict | None = None,
+    tef_raw: str | None = None,
     name: str = "probe",
     row_version: int = 1,
 ) -> str:
@@ -152,6 +153,9 @@ def _seed_scenario(
     if sl_raw is not None:
         assert sl_node is None, "sl_node and sl_raw are mutually exclusive"
         explicit["secondary_loss"] = sl_raw
+    if tef_raw is not None:
+        assert tef_node is None, "tef_node and tef_raw are mutually exclusive"
+        explicit["threat_event_frequency"] = tef_raw
     elif sl_node is not None:
         explicit["secondary_loss"] = json.dumps(sl_node)
     cols = conn.execute(sa.text("PRAGMA table_info(scenarios)")).mappings().all()

@@ -283,14 +283,24 @@ def test_valid_lognormal_pl_becomes_create() -> None:
     assert forms[0] is not None
 
 
-def test_valid_lognormal_tef_and_sl_become_create() -> None:
-    # lognormal allowed on tef / pl / sl.
+def test_lognormal_sl_accepted_but_lognormal_tef_rejected() -> None:
+    # D12 (owner, 2026-07-25): lognormal is strictly a loss distribution.
+    # SL keeps lognormal legally; TEF is PERT-only (was accepted through the
+    # Epic-B native-lognormal era -- this test was the acceptance pin).
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(threat_event_frequency=_lognormal(mean=0.0), secondary_loss=_lognormal()))],
+        [(2, _fd(secondary_loss=_lognormal()))],
         existing_names=set(),
     )
     assert errors == []
     assert preview[0]["action"] == "create"
+
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(threat_event_frequency=_lognormal(mean=0.0)))],
+        existing_names=set(),
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+    assert errors and "threat_event_frequency" in errors[0]["column"]
 
 
 def test_lognormal_vulnerability_is_rejected() -> None:
@@ -547,7 +557,8 @@ def test_mixture_component_count_over_cap_is_error() -> None:  # Sec-N1
 # (not just inferred from the shared allow_ln wiring in _validate_rows).
 
 
-def test_mixture_tef_is_accepted() -> None:
+def test_mixture_tef_is_rejected() -> None:
+    # D12: lognormal_mixture is a loss shape; TEF is PERT-only.
     mix = _mixture(
         [
             _mix_component(mean=8.06, sigma=0.70, weight=0.5),
@@ -557,9 +568,9 @@ def test_mixture_tef_is_accepted() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(threat_event_frequency=mix))], existing_names=set()
     )
-    assert errors == []
-    assert preview[0]["action"] == "create"
-    assert forms[0] is not None
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+    assert errors and "threat_event_frequency" in errors[0]["column"]
 
 
 def test_mixture_secondary_loss_is_accepted() -> None:
