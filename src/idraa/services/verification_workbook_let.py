@@ -81,13 +81,26 @@ def _invcdf(dist_dict: dict[str, Any], uniform_var: str, u_sel: str | None = Non
         alpha=g1*(g2-1); beta=alpha*(high-mean)/(mean-low). Degenerate
         ``high <= low`` -> the constant ``low``.
       - lognormal (verification_workbook.py:187-193): EXP(NORM.INV(u, mean, sigma))
-        in LOG-space params.
+        in LOG-space params. PR2 capacity bound (Task 7): when the dist_dict
+        carries a "max" key, emits the TRUNCATED inverse-CDF instead --
+        EXP(NORM.INV(u * NORM.DIST(LN(max), mean, sigma, TRUE), mean, sigma))
+        -- reproducing ``fair_cam.risk_engine._truncation.truncated_lognormal``'s
+        ``b = (ln(max)-mean)/sigma; u' = u*Phi(b); x = exp(mean+sigma*Phi^-1(u'))``
+        exactly (``NORM.DIST(x, mean, sigma, TRUE)`` IS Excel's Phi(x) in
+        (mean, sigma)-space; ``NORM.INV(p, mean, sigma) = mean + sigma*Phi^-1(p)``).
+        Absent "max" (the pre-Task-7 default): byte-identical to the untruncated
+        form above.
       - uniform (verification_workbook.py:196-198): low + u*(high-low).
       - triangular (verification_workbook.py:201-214): split at Fc=(mode-low)/(high-low).
       - beta (verification_workbook.py:217-219): BETA.INV(u, alpha, beta), vuln-only.
       - lognormal_mixture (issue #27 Task 8, catastrophic multi-SME pl/sl only):
         nested cumulative-weight IFs on an INDEPENDENT ``u_sel`` array selecting
-        which component's ``EXP(NORM.INV(u, mean_i, sigma_i))`` applies. ``u_sel``
+        which component's ``EXP(NORM.INV(u, mean_i, sigma_i))`` applies (or, PR2
+        capacity bound Task 7, the TRUNCATED per-component variant above when a
+        SHARED top-level "max" key is present on the mixture dist_dict -- EACH
+        component emits its OWN ``NORM.DIST(LN(max), mean_i, sigma_i, TRUE)``
+        factor, since ``b_i = (ln(max)-mean_i)/sigma_i`` differs per component;
+        a single factor shared across components would be wrong). ``u_sel``
         MUST be independent of ``uniform_var`` — a mixture must never reuse one
         uniform for both component selection and inversion (that is a comonotonic
         coupling, not a linear-opinion-pool draw; Task 8 binding decision rule).
@@ -134,7 +147,20 @@ def _invcdf(dist_dict: dict[str, Any], uniform_var: str, u_sel: str | None = Non
         # LN(mult) here — log-space scaling lives in scaled_params, not here.
         mean = round(dist_dict["mean"], _FMT)
         sigma = round(dist_dict["sigma"], _FMT)
-        return f"EXP(NORM.INV({uniform_var}, {mean}, {sigma}))"
+        max_value = dist_dict.get("max")
+        if max_value is None:
+            return f"EXP(NORM.INV({uniform_var}, {mean}, {sigma}))"
+        # PR2 capacity bound (Task 7): truncated inverse-CDF, reproducing
+        # truncated_lognormal's b=(ln(max)-mean)/sigma; u'=u*Phi(b);
+        # x=exp(mean+sigma*Phi^-1(u')) exactly. NORM.DIST(x, mean, sigma, TRUE)
+        # is Excel's Phi(x) in (mean, sigma)-space (its OWN cumulative form,
+        # not the standard-normal one) — BARE, like NORM.INV: xlsxwriter adds
+        # the _xlfn. prefix, do not hand-prefix it here.
+        max_r = round(max_value, _FMT)
+        return (
+            f"EXP(NORM.INV({uniform_var} * NORM.DIST(LN({max_r}), {mean}, {sigma}, TRUE), "
+            f"{mean}, {sigma}))"
+        )
     if kind == "beta":
         alpha = round(dist_dict["alpha"], _FMT)
         beta = round(dist_dict["beta"], _FMT)
@@ -151,11 +177,24 @@ def _invcdf(dist_dict: dict[str, Any], uniform_var: str, u_sel: str | None = Non
         components = dist_dict.get("components") or []
         if not components:
             raise ValueError("_invcdf: lognormal_mixture requires >=1 component")
+        # PR2 capacity bound (Task 7): ONE shared top-level "max" (a sibling
+        # of "components", never nested inside one) truncates EVERY
+        # component -- but each component gets its OWN NORM.DIST(...) factor
+        # below, since b_i = (ln(max)-mean_i)/sigma_i differs per component
+        # (mirrors truncated_lognormal_mixture_gather's per-component Phi(b_i),
+        # NOT a single shared factor across components).
+        max_value = dist_dict.get("max")
 
         def _component_expr(c: dict[str, Any]) -> str:
             mean = round(c["mean"], _FMT)
             sigma = round(c["sigma"], _FMT)
-            return f"EXP(NORM.INV({uniform_var}, {mean}, {sigma}))"
+            if max_value is None:
+                return f"EXP(NORM.INV({uniform_var}, {mean}, {sigma}))"
+            max_r = round(max_value, _FMT)
+            return (
+                f"EXP(NORM.INV({uniform_var} * NORM.DIST(LN({max_r}), {mean}, {sigma}, TRUE), "
+                f"{mean}, {sigma}))"
+            )
 
         # Nested cumulative-weight IFs: component i owns u_sel in
         # [cum_{i-1}, cum_i). The LAST component is the unconditional "else"
@@ -189,11 +228,17 @@ def scaled_params(dist_dict: dict[str, Any], mult: float) -> dict[str, Any]:
     - PERT/triangular: scale ``low``/``mode``/``high`` (fair_core.py:303-308).
     - uniform: scale ``low``/``high`` (fair_core.py:309-313).
     - lognormal: LOG-space ``mean += ln(mult)`` (mult<1 LOWERS mean), ``sigma``
-      unchanged (fair_core.py:319-325).
+      unchanged (fair_core.py:319-325). PR2 capacity bound (Task 7): a "max"
+      key, if present, scales by the SAME ``mult`` (fair_core.py:420-434,
+      scale-equivariance -- keeps ``b=(ln(max)-mean)/sigma`` invariant under
+      the shift); absent "max" -> no "max" key on the output either.
     - lognormal_mixture (issue #27 Task 8, catastrophic multi-SME pl/sl only):
       the SAME log-space shift applied to EVERY component's ``mean``; each
       component's ``sigma``/``weight`` unchanged (mirrors the plain-lognormal
-      shift, extended elementwise over the mixture).
+      shift, extended elementwise over the mixture). PR2 capacity bound
+      (Task 7): the ONE shared top-level "max", if present, scales by the
+      SAME ``mult`` (fair_core.py:452-458 -- same rationale, applied once to
+      the shared cap rather than per component).
 
     BETA is rejected (vuln-only, sample-level; never param-scaled — fair_core.py:326).
     Returns a NEW dict (does not mutate input); scaled constants rounded to _FMT dp.
@@ -224,18 +269,25 @@ def scaled_params(dist_dict: dict[str, Any], mult: float) -> dict[str, Any]:
         }
     if kind == "lognormal":
         # fair_core.py:319-325 — log-space additive shift; sigma unchanged.
-        return {
+        out: dict[str, Any] = {
             "distribution": "lognormal",
             "mean": round(dist_dict["mean"] + math.log(mult), _FMT),
             "sigma": dist_dict["sigma"],
         }
+        # PR2 capacity bound (Task 7): scale-equivariance (fair_core.py:420-434)
+        # — max scales by the SAME mult that shifts mean, keeping
+        # b=(ln(max)-mean)/sigma invariant. Absent "max" -> no "max" key added.
+        max_value = dist_dict.get("max")
+        if max_value is not None:
+            out["max"] = round(max_value * mult, _FMT)
+        return out
     if kind == "lognormal_mixture":
         # fair_core.py:319-325 mirror, applied per component (Task 8): the SAME
         # log-space additive shift on EVERY component's mean; sigma/weight
         # unchanged. mult==0 never reaches here — the generic collapse above
         # already returned the degenerate constant-0 UNIFORM.
         components = dist_dict["components"]
-        return {
+        out_mix: dict[str, Any] = {
             "distribution": "lognormal_mixture",
             "components": [
                 {
@@ -246,6 +298,14 @@ def scaled_params(dist_dict: dict[str, Any], mult: float) -> dict[str, Any]:
                 for c in components
             ],
         }
+        # PR2 capacity bound (Task 7): the ONE shared top-level max scales by
+        # the SAME mult (fair_core.py:452-458) that shifts EVERY component's
+        # mean — same scale-equivariance rationale as plain lognormal above,
+        # applied once to the shared cap.
+        max_value = dist_dict.get("max")
+        if max_value is not None:
+            out_mix["max"] = round(max_value * mult, _FMT)
+        return out_mix
     if kind == "beta":
         raise ValueError(
             "scaled_params: BETA is unscaled [0,1] (vulnerability-only, sample-level "
