@@ -18,7 +18,10 @@ Verified against fair_cam/validation/input_validator.py behaviour:
 
 from __future__ import annotations
 
+import math
+
 import pytest
+from scipy.stats import norm
 
 from idraa.config import get_settings
 from idraa.errors import FAIRCAMValidationError
@@ -26,6 +29,11 @@ from idraa.services.fair_cam_validation import (
     FAIRCAMValidationResult,
     validate_fair_distributions,
 )
+
+# Independently derived (NOT imported from the implementation) so the tests
+# actually check the implementation's constant matches the codebase-wide
+# convention rather than trivially agreeing with itself.
+_Z95 = float(norm.ppf(0.95))
 
 
 def test_validate_clean_distribution_returns_no_errors_no_warnings() -> None:
@@ -307,3 +315,220 @@ def test_mixture_sigma_at_bound_accepted():
             ]
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 3b — D19: `max > p95` floor at the validation chokepoint.
+# Only the floor fires here; `require_loss_max` requiredness is Task 6.
+# ---------------------------------------------------------------------------
+
+
+def test_max_absent_is_noop():
+    """No `max` key at all -> the floor never fires, even for a dist that
+    would fail it if `max` were present. Existing behaviour must be
+    unchanged until the producers (Tasks 4a/5) start minting `max`."""
+    _call(primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0})
+
+
+def test_max_none_is_noop():
+    """An explicit `"max": None` (e.g. a round-tripped dict) is also a NO-OP,
+    not a malformed-type error -- absence-of-cap, not presence-of-garbage."""
+    _call(primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0, "max": None})
+
+
+def test_max_present_on_non_lognormal_kind_is_noop():
+    """D19: `max` is applied to lognormal / lognormal_mixture loss fields
+    ONLY. A stray `max` key on a PERT dict is inert here -- the design
+    doc is explicit that a PERT-only scenario is never compared against
+    capacity at all."""
+    _call(primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0, "max": 0.5})
+
+
+def test_max_above_p95_lognormal_accepted():
+    mean, sigma = 10.0, 1.0
+    p95 = math.exp(mean + _Z95 * sigma)
+    _call(
+        primary_loss={"distribution": "lognormal", "mean": mean, "sigma": sigma, "max": p95 * 1.5}
+    )
+
+
+def test_max_at_p95_boundary_lognormal_rejected():
+    """`max == p95` exactly is REJECTED ("at or below" blocks) -- the floor
+    requires strictly exceeding the p95, not merely reaching it."""
+    mean, sigma = 10.0, 1.0
+    p95 = math.exp(mean + _Z95 * sigma)
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(primary_loss={"distribution": "lognormal", "mean": mean, "sigma": sigma, "max": p95})
+    assert "p95" in str(exc_info.value).lower()
+
+
+def test_max_below_p95_lognormal_rejected():
+    mean, sigma = 10.0, 1.0
+    p95 = math.exp(mean + _Z95 * sigma)
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": mean,
+                "sigma": sigma,
+                "max": p95 * 0.5,
+            }
+        )
+
+
+def test_secondary_loss_floor_also_enforced():
+    """The floor fires on secondary_loss too, not just primary_loss."""
+    mean, sigma = 10.0, 1.0
+    p95 = math.exp(mean + _Z95 * sigma)
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            secondary_loss={"distribution": "lognormal", "mean": mean, "sigma": sigma, "max": p95}
+        )
+
+
+def test_max_huge_mean_blocks_without_overflow():
+    """The load-bearing overflow-safety case: mean=1000 makes
+    `exp(mean + z95*sigma)` OverflowError (`math.exp(1000)` is already
+    far beyond a float64's ~1.8e308 ceiling). A correct log-space
+    comparison rejects this cleanly via FAIRCAMValidationError; a buggy
+    real-space comparison would raise OverflowError instead, which is NOT
+    caught by FAIRCAMValidationError-oriented callers and would 500."""
+    mean, sigma = 1000.0, 1.0
+    max_value = 1e300  # finite float64; ln(max_value) ~= 690.78, well under
+    # ln(p95) = mean + z95*sigma ~= 1001.6449 -> must BLOCK.
+    assert math.log(max_value) < mean + _Z95 * sigma  # sanity-check the test's own premise
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": mean,
+                "sigma": sigma,
+                "max": max_value,
+            }
+        )
+    assert "p95" in str(exc_info.value).lower()
+
+
+def test_max_nonnumeric_rejected():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": "a lot",
+            }
+        )
+
+
+@pytest.mark.parametrize("bad_max", [0.0, -1.0, float("inf"), float("nan")])
+def test_max_non_positive_or_non_finite_rejected(bad_max):
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": bad_max,
+            }
+        )
+
+
+def test_max_present_but_mean_missing_rejected_not_500():
+    """Malformed input (missing `mean` alongside a present `max`) must
+    surface as FAIRCAMValidationError, never let a TypeError/AttributeError
+    escape as a 500."""
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss={"distribution": "lognormal", "sigma": 1.0, "max": 100.0})
+
+
+def test_max_present_but_sigma_missing_rejected_not_500():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss={"distribution": "lognormal", "mean": 10.0, "max": 100.0})
+
+
+# ---- mixture floor: every-component p95, NOT largest-meanlog -------------
+
+
+_MIXTURE_MEANS_SIGMAS: list[tuple[float, float]] = [(8.0, 0.7), (10.0, 0.9)]
+
+
+def _mixture_components(means_sigmas: list[tuple[float, float]]) -> list[dict[str, object]]:
+    n = len(means_sigmas)
+    return [_good_component(mean=mean, sigma=sigma, weight=1.0 / n) for mean, sigma in means_sigmas]
+
+
+def _worst_p95(means_sigmas: list[tuple[float, float]]) -> float:
+    return max(math.exp(mean + _Z95 * sigma) for mean, sigma in means_sigmas)
+
+
+def test_mixture_floor_accepts_when_max_exceeds_every_component_p95():
+    components = _mixture_components(_MIXTURE_MEANS_SIGMAS)
+    worst_p95 = _worst_p95(_MIXTURE_MEANS_SIGMAS)
+    _call(primary_loss=_mixture(components) | {"max": worst_p95 * 2.0})
+
+
+def test_mixture_floor_rejects_when_max_at_or_below_any_component_p95():
+    components = _mixture_components(_MIXTURE_MEANS_SIGMAS)
+    worst_p95 = _worst_p95(_MIXTURE_MEANS_SIGMAS)
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture(components) | {"max": worst_p95 * 0.9})
+
+
+def test_mixture_floor_uses_every_component_not_largest_meanlog():
+    """THE discriminating case: component A has the LARGEST meanlog but a
+    tiny sigma (small p95); component B has a smaller meanlog but a much
+    larger sigma, giving it the LARGEST p95. `argmax_i mu_i` (A) !=
+    `argmax_i p95_i` (B) here by construction.
+
+    `max` is set strictly between the two p95s. The correct
+    every-component reading must REJECT (max <= B's p95). A largest-
+    meanlog implementation would incorrectly compare only against A's
+    (smaller) p95, see max > p95_A, and ACCEPT -- so this test FAILS
+    (no exception raised) under that wrong reading, which is exactly the
+    conflation Task 3's methodology review flagged must not recur here.
+    """
+    mean_a, sigma_a = 10.0, 0.1  # largest meanlog, small p95
+    mean_b, sigma_b = 8.0, 3.0  # smaller meanlog, LARGEST p95
+    ln_p95_a = mean_a + _Z95 * sigma_a
+    ln_p95_b = mean_b + _Z95 * sigma_b
+    assert mean_a > mean_b  # A is argmax_i mu_i ...
+    assert ln_p95_b > ln_p95_a  # ... but B is argmax_i p95_i. This is the conflation.
+
+    ln_max = (ln_p95_a + ln_p95_b) / 2.0  # strictly between the two thresholds
+    assert ln_p95_a < ln_max < ln_p95_b
+    max_value = math.exp(ln_max)
+
+    components = _mixture_components([(mean_a, sigma_a), (mean_b, sigma_b)])
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(primary_loss=_mixture(components) | {"max": max_value})
+    assert "p95" in str(exc_info.value).lower()
+
+
+def test_mixture_components_non_list_with_max_present_rejected_not_500():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss={
+                "distribution": "lognormal_mixture",
+                "components": "not-a-list",
+                "max": 100.0,
+            }
+        )
+
+
+def test_mixture_components_empty_with_max_present_rejected():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture([]) | {"max": 100.0})
+
+
+def test_mixture_component_non_dict_with_max_present_rejected_not_500():
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss=_mixture([_good_component(), "not-a-dict"]) | {"max": 100.0}  # type: ignore[list-item]
+        )
+
+
+def test_mixture_component_missing_mean_with_max_present_rejected_not_500():
+    bad_component: dict[str, object] = {"sigma": 1.0, "weight": 0.5}
+    with pytest.raises(FAIRCAMValidationError):
+        _call(primary_loss=_mixture([_good_component(weight=0.5), bad_component]) | {"max": 100.0})

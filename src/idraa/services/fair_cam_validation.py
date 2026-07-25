@@ -31,6 +31,7 @@ from fair_cam.validation.input_validator import (
     ValidationResult,
     ValidationSeverity,
 )
+from scipy.stats import norm
 
 from idraa.config import get_settings
 from idraa.errors import FAIRCAMValidationError as FAIRCAMValidationError
@@ -44,6 +45,16 @@ _FAIR_CAM_VALIDATOR = FAIRCAMValidator()
 # magnitude p5->p95, beyond any defensible cyber-loss range. An extreme-but-finite
 # sigma is a user-controllable OOM/DoS path to the engine sampler at the 100k cap.
 _SIGMA_MAX: float = 10.0
+
+# Canonical 95th-percentile standard-normal z-score, used by the D19
+# ``max > p95`` floor below (``services/loss_capacity.py``'s PR2 capacity
+# bound). Matches the constant every other p95 reader in the codebase uses
+# (``routes/scenarios.py``'s ``_Z_0_95``, ``services/pdf_report.py``'s
+# ``_Z_P95``, ``fair_cam/quantile_pooling/_lognormal_native.py``'s
+# ``Z_0_95``) -- computed via scipy here rather than re-hardcoding the
+# literal, since this module already has a real (non-test) scipy transitive
+# dependency via ``fair_cam.validation.input_validator``.
+_Z95: float = float(norm.ppf(0.95))
 
 
 def _validate_vulnerability(vuln: dict[str, Any]) -> list[str]:
@@ -183,6 +194,178 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
     return errs
 
 
+def _p95_repr(ln_p95: float) -> str:
+    """Real-space p95 for a factual error message, guarded against the
+    ``OverflowError`` an extreme-but-validator-permitted stored ``mean``
+    would raise from ``math.exp``. Display-only: the D19 floor comparison
+    itself NEVER calls ``exp()`` (see ``_validate_capacity_floor``) -- this
+    helper only formats a value that has ALREADY been compared in log space,
+    so a failure here can only ever affect message prettiness, never the
+    block/accept decision.
+    """
+    try:
+        return repr(math.exp(ln_p95))
+    except OverflowError:
+        return f"exp({ln_p95!r}) [too large to represent as a float]"
+
+
+def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]:
+    """D19 (owner-signed 2026-07-25): reject a stored PR2 capacity-bound
+    ``max`` that sits at or below the loss distribution's p95.
+
+    Scope and gating (both must hold for the check to fire; otherwise NO-OP):
+    - ``max`` must be present (not ``None``). No existing row carries ``max``
+      until the producer surfaces (Tasks 4a/5) mint one, so landing this
+      check early changes NO existing behaviour -- proven by a full-suite
+      run at this task's commit.
+    - the distribution's ``distribution`` kind must be ``lognormal`` or
+      ``lognormal_mixture``. Per the design (``docs/superpowers/specs/
+      2026-07-25-capacity-bound-design.md`` §Problem): "``max`` is applied
+      to lognormal / lognormal_mixture loss fields ONLY" -- a PERT field is
+      never compared against capacity at all, so a spurious ``max`` key on
+      a non-lognormal kind is inert here, not an error.
+
+    Compares in LOG SPACE ONLY: reject when ``ln(max) <= meanlog +
+    z95*sigma``. This function and its mixture branch NEVER compute
+    ``exp(meanlog + z95*sigma)`` to perform the comparison -- an
+    operator-entered ``mean`` need not be small (D17 lets an analyst type
+    an explicit cap; nothing bounds the paired mean/sigma at this layer),
+    and ``math.exp`` of a large-but-finite log-space value raises
+    ``OverflowError`` (500), not a validation error. ``z95`` is
+    ``_Z95 = float(norm.ppf(0.95))``, the same constant used everywhere
+    else in the codebase a p95 is read off a lognormal.
+
+    Mixture semantics (the crux -- get this reading wrong and
+    ``B-CAP-MIX``'s published mixture-deviation bounds are void): the
+    accept condition is ``max > max_i p95_i`` -- i.e. reject if ``max`` is
+    at or below EVERY SINGLE component's own p95 (equivalently: reject if
+    ANY component's p95 is at or above ``max``). This is DELIBERATELY NOT
+    the largest-meanlog component (contrast
+    ``run_executor._validated_capacity_bound``, a separate, median-based,
+    read-adapter underflow guard that correctly uses the largest-meanlog
+    component for ITS OWN purpose -- medians are ``exp(mu_i)``, so the
+    largest-meanlog component has the largest median). p95 is
+    sigma-driven, not just mu-driven, and each mixture component carries
+    an INDEPENDENT sigma: ``argmax_i mu_i`` need not be ``argmax_i p95_i``.
+    A component with a smaller meanlog but a much larger sigma can have the
+    largest p95 and be the binding one. Using the largest-meanlog
+    component here would silently drop the floor for every other
+    component.
+
+    Malformed input -- missing/non-numeric ``mean``/``sigma``,
+    non-list/empty/non-dict ``components``, or a non-numeric/non-finite/
+    non-positive ``max`` -- returns an error string rather than raising or
+    letting an exception (``TypeError``/``ValueError`` from ``math.log`` of
+    a non-positive value, or iterating a non-list) escape. The caller
+    (``validate_fair_distributions``) folds every returned string into ONE
+    ``FAIRCAMValidationError`` (-> 422), so malformed input here is always a
+    validation error, never a 500. This is intentionally STRICTER than
+    ``_validate_finite``'s own non-list-``components`` handling (which
+    defers to the import-path shape gate and stays silent) -- THAT gate
+    runs unconditionally on every write, so it can afford to defer; THIS
+    check only activates when ``max`` is present, and once active it cannot
+    safely skip a components shape it cannot interpret, because "cannot
+    interpret" and "the floor holds" are not the same claim. Fails closed.
+
+    Only the FACTUAL error string (p95 vs cap) is produced here. Surface
+    remedy copy (three actionable alternatives for the operator) is added
+    by the three producer surfaces (Tasks 4a/4b/4c), which wrap this error.
+    """
+    if dist.get("max") is None:
+        return []
+    kind = str(dist.get("distribution", "pert")).lower()
+    if kind not in ("lognormal", "lognormal_mixture"):
+        return []  # D19 floor governs lognormal loss shapes only
+
+    max_raw = dist["max"]
+    if not isinstance(max_raw, (int, float)) or isinstance(max_raw, bool):
+        return [
+            f"{field_name}.max must be numeric to validate the max > p95 floor, got {max_raw!r}"
+        ]
+    if not math.isfinite(max_raw) or max_raw <= 0:
+        return [
+            f"{field_name}.max must be a finite positive number to validate the max > p95 "
+            f"floor, got {max_raw!r}"
+        ]
+    ln_max = math.log(float(max_raw))
+
+    if kind == "lognormal":
+        mean = dist.get("mean")
+        sigma = dist.get("sigma")
+        if not isinstance(mean, (int, float)) or isinstance(mean, bool):
+            return [
+                f"{field_name}.mean must be numeric to validate the max > p95 floor, got {mean!r}"
+            ]
+        if not isinstance(sigma, (int, float)) or isinstance(sigma, bool):
+            return [
+                f"{field_name}.sigma must be numeric to validate the max > p95 floor, got {sigma!r}"
+            ]
+        if not math.isfinite(mean) or not math.isfinite(sigma):
+            # Non-finite mean/sigma is already rejected by _validate_finite
+            # in the same error batch -- skip here rather than emit a
+            # second, less-precise message about the same root cause.
+            return []
+        ln_p95 = float(mean) + _Z95 * float(sigma)
+        if ln_max <= ln_p95:
+            return [
+                f"{field_name}.max={max_raw!r} must exceed the distribution's p95 "
+                f"({_p95_repr(ln_p95)}); a cap at or below the p95 violates the D19 "
+                f"capacity floor"
+            ]
+        return []
+
+    # kind == "lognormal_mixture"
+    components = dist.get("components")
+    if not isinstance(components, list) or not components:
+        return [
+            f"{field_name}.components must be a non-empty list to validate the max > p95 "
+            f"floor, got {components!r}"
+        ]
+    errs: list[str] = []
+    worst_ln_p95: float | None = None
+    worst_i: int | None = None
+    for i, comp in enumerate(components):
+        if not isinstance(comp, dict):
+            errs.append(
+                f"{field_name}.components[{i}] must be an object to validate the max > p95 "
+                f"floor, got {comp!r}"
+            )
+            continue
+        c_mean = comp.get("mean")
+        c_sigma = comp.get("sigma")
+        if not isinstance(c_mean, (int, float)) or isinstance(c_mean, bool):
+            errs.append(
+                f"{field_name}.components[{i}].mean must be numeric to validate the max > "
+                f"p95 floor, got {c_mean!r}"
+            )
+            continue
+        if not isinstance(c_sigma, (int, float)) or isinstance(c_sigma, bool):
+            errs.append(
+                f"{field_name}.components[{i}].sigma must be numeric to validate the max > "
+                f"p95 floor, got {c_sigma!r}"
+            )
+            continue
+        if not math.isfinite(c_mean) or not math.isfinite(c_sigma):
+            continue  # _validate_finite already raises for this component
+        ln_p95_i = float(c_mean) + _Z95 * float(c_sigma)
+        # EVERY component walked via max() over ln_p95_i (an adapter-iter
+        # contract: no component is skipped, mirroring
+        # _dict_to_fair_distribution's own "walks EVERY component" note) --
+        # this is the every-component reading, NOT an argmax over c_mean.
+        if worst_ln_p95 is None or ln_p95_i > worst_ln_p95:
+            worst_ln_p95 = ln_p95_i
+            worst_i = i
+    if errs:
+        return errs
+    if worst_ln_p95 is not None and ln_max <= worst_ln_p95:
+        return [
+            f"{field_name}.max={max_raw!r} must exceed EVERY component's p95 "
+            f"(components[{worst_i}] p95={_p95_repr(worst_ln_p95)} is the binding one); "
+            f"a cap at or below any component's p95 violates the D19 capacity floor"
+        ]
+    return []
+
+
 @dataclass(frozen=True)
 class FAIRCAMValidationResult:
     """Returned when validation passes (severity == ERROR raises, not returns).
@@ -256,6 +439,12 @@ def validate_fair_distributions(
                 f"{_fname}.distribution {_kind} not allowed: lognormal is "
                 "strictly a loss distribution (TEF and vulnerability are PERT-only)"
             )
+    # D19 (Task 3b): the `max > p95` floor -- loss fields only (the only
+    # fields lognormal/lognormal_mixture are allowed on, per D12 above).
+    # NO-OP until `max` is present on a stored dict (Tasks 4a/5 mint it).
+    _finite_errors += _validate_capacity_floor("primary_loss", primary_loss)
+    if secondary_loss is not None:
+        _finite_errors += _validate_capacity_floor("secondary_loss", secondary_loss)
     if _finite_errors:
         raise FAIRCAMValidationError(
             "FAIRCAM validation failed: " + "; ".join(_finite_errors),
