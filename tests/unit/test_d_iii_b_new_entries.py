@@ -3,7 +3,7 @@
 Per-entry reconstruction + curation invariants: each new entry's loss nodes
 must rebuild EXACTLY from the sector envelope + its loss_form_profile shares
 (PERT via the Milestone B mechanical conversion for capped entries; native
-lognormal mu = mu_s + ln(Sum shares), sigma = sigma_s for catastrophic), all
+lognormal mu = mu_s + ln(Sum shares), sigma = WITHIN_SCENARIO_SIGMA_DEFAULT (post sigma-recalibration; was sigma_s) for catastrophic), all
 validate through LibraryEntrySeed, carry loss_tier=paginated + the IRIS
 envelope cite + an attestation cite, and keep Sum(shares) <= 1 with a
 differentiated PERT TEF/vuln. Also pins the builder's IND2SEC to the

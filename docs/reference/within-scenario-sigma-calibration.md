@@ -98,7 +98,11 @@ exact existing label, never assumed**:
 - **5 vendor fields** (`loss_tier == "vendor"`; their `magnitude_basis`
   documents mean-preserving authoring verbatim) — **mean** authored against
   IC3 2025 BEC per-complaint mean $123,005: μ = ln(123,005) − 1.7²/2.
-  E[loss] = $123,005 exactly (appendix external check, rel. err 7.1e-16).
+  E[loss] = $123,005 exactly **for the parent lognormal** (appendix external
+  check, rel. err 7.1e-16); the *realized* capped-BetaPERT mean the engine
+  simulates is $80,654 — the same parent-vs-realized distinction as the
+  medians above, a pre-existing property of capping (Milestone B / D4'),
+  preserved not introduced here.
   Two distinct medians, never conflated (T0-gate IMPORTANT-1): the shared
   **parent-lognormal** median is exp(μ) = **$28,998**; the shared **realized
   BetaPERT** median (0.11182 quantile of the emitted range) is **$54,695**,
