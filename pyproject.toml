@@ -179,7 +179,10 @@ exclude_dirs = [".venv", "tests", "notebooks", "fair_cam", "alembic/versions"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+# fair_cam/tests is included so fair_cam's own regression/pin suite runs in
+# the default (merge-path) selection — see tests/contracts/test_fair_cam_tests_collected.py
+# for the tracked pin that guards against this line being reverted.
+testpaths = ["tests", "fair_cam/tests"]
 addopts = [
   "-ra",
   "--strict-markers",
