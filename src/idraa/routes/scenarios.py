@@ -124,6 +124,11 @@ from idraa.services.calibration import (
     WITHIN_SCENARIO_SIGMA_DEFAULT,
     calibration_context_from_org,
 )
+from idraa.services.capacity_bound_copy import (
+    D18_REVENUE_MESSAGE,
+    D19_FLOOR_MARKER,
+    wrap_d19_floor_message,
+)
 from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService, is_selectable_currency
 from idraa.services.library_calibration import library_calibrated_pre_fill
@@ -2135,13 +2140,12 @@ async def get_wizard_step(
 
 
 # PR2 D13/D18: capacity-bound epic (docs/superpowers/specs/2026-07-25-
-# capacity-bound-design.md). D18 verbatim pinned copy (owner-signed
-# 2026-07-25) -- do not reword.
-_D18_REVENUE_MESSAGE = (
-    "Modeling catastrophic loss needs your organization's annual revenue: it "
-    "sets the per-scenario loss cap. Set it in Organization settings, or "
-    "build this scenario in the expert form with an explicit cap."
-)
+# capacity-bound-design.md). D18's pinned copy now lives in
+# services/capacity_bound_copy.py (Task 4b extracted it there so the
+# scenario importer reuses the SAME string instead of re-typing it -- drift
+# risk). Re-exported under the module-local name so every existing
+# reference below is unchanged.
+_D18_REVENUE_MESSAGE = D18_REVENUE_MESSAGE
 _ORG_SETTINGS_HREF = "/organization"
 _ORG_SETTINGS_HREF_TEXT = "Open organization settings"
 
@@ -2465,28 +2469,12 @@ def _step3_flash_message(exc: Exception) -> str:
     return f"Invalid input: {exc}. Please try again."
 
 
-# PR2 D19: the Task-3b validator (services/fair_cam_validation.py
-# ``_validate_capacity_floor``) raises the FACTUAL "max > p95" floor-conflict
-# string inside a FAIRCAMValidationError -- this marker (a verbatim substring
-# of that function's own error text) distinguishes it from every OTHER
-# FAIRCAMValidationError (non-finite params, PERT ordering, etc.), which get
-# the generic _step3_flash_message treatment instead.
-_D19_FLOOR_MARKER = "capacity floor"
-
-
-def _wrap_d19_floor_message(exc: FAIRCAMValidationError) -> str:
-    """D19 operator-facing copy: wrap the validator's FACTUAL p95-vs-cap
-    string with the three remedies the design pins (the validator produces
-    the fact; producer surfaces like this one add the remedies — see
-    ``_validate_capacity_floor``'s docstring). The wizard authors in USD only
-    (P2), so ``exc``'s amounts are USD.
-    """
-    return (
-        f"{exc} (amounts in USD). To resolve this: lower the loss estimates so "
-        "the scenario's 95th percentile sits below the cap; correct your "
-        "organization's annual revenue if it's understated; or build this "
-        "scenario in the expert form with an explicit max cap."
-    )
+# PR2 D19: services/capacity_bound_copy.py owns the marker + wrap function
+# (Task 4b extracted them so the scenario importer reuses the SAME pinned
+# copy instead of re-typing it). Re-exported under the module-local names so
+# every existing reference below is unchanged.
+_D19_FLOOR_MARKER = D19_FLOOR_MARKER
+_wrap_d19_floor_message = wrap_d19_floor_message
 
 
 async def _render_fair_page_with_flash(

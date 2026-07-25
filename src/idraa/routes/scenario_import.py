@@ -19,6 +19,7 @@ Transaction commit is owned by the ``get_db`` dependency.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
@@ -26,7 +27,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
+from idraa.config import get_settings
 from idraa.models.enums import UserRole
+from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
@@ -34,7 +37,7 @@ from idraa.routes.deps import (
     get_db,
     require_role,
 )
-from idraa.services.org import require_sole_org
+from idraa.services.loss_capacity import capacity_max_for_org
 from idraa.services.scenario_import import (
     PreviewExpiredError,
     apply_validated_preview,
@@ -44,6 +47,38 @@ from idraa.services.scenario_import import (
 )
 
 router = APIRouter()
+
+
+async def _capacity_max_for_importing_org(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> tuple[Organization, float | None]:
+    """D13/D18 (Task 4b): resolve the TARGET org and mint its PR2 capacity
+    cap. Reads via ``db.get(Organization, organization_id)`` -- NEVER
+    ``require_sole_org``/``get_sole_org`` (``services/org.py``) or any
+    ``ORDER BY id LIMIT 1`` shape, both forbidden on this minting path
+    exactly as in Tasks 4a/4c. Mirrors ``routes/scenarios.py``'s
+    ``_capacity_max_for_org`` helper (kept local rather than cross-imported
+    from that route module to avoid a routes-to-routes coupling; the D18/D19
+    COPY reuse that actually matters for drift lives in
+    ``services/capacity_bound_copy.py`` instead).
+
+    Returns the ``Organization`` row (both import routes need ``.id`` for
+    org-scoping beyond capacity minting) alongside the minted ``max``
+    (``None`` when revenue is unset/non-positive -- D18's precondition
+    failure, surfaced downstream as a row-level error by
+    ``services/scenario_import._validate_rows``).
+
+    A missing Organization row for an authenticated user's own
+    ``organization_id`` cannot happen under the FK + ``setup_guard``
+    invariants -- this mirrors ``require_sole_org``'s "should not happen"
+    ``RuntimeError`` posture (a defensive signal, not a user-facing 4xx)
+    rather than silently importing against a nonexistent org.
+    """
+    organization = await db.get(Organization, organization_id)
+    if organization is None:
+        raise RuntimeError("No organization set up")
+    capacity_max = capacity_max_for_org(organization.annual_revenue, get_settings().capacity_k)
+    return organization, capacity_max
 
 
 @router.get("/scenarios/import", response_class=HTMLResponse)
@@ -96,14 +131,15 @@ async def scenario_import_post(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Upload too large (max 5 MB)")
 
-    org = await require_sole_org(db)
+    organization, capacity_max = await _capacity_max_for_importing_org(db, user.organization_id)
     token, preview, errors = await validate_upload(
         db,
-        org_id=org.id,
+        org_id=organization.id,
         user_id=user.id,
         data=data,
         filename=file.filename,
         content_type=file.content_type,
+        capacity_max=capacity_max,
     )
     return templates.TemplateResponse(
         request,
@@ -132,14 +168,15 @@ async def scenario_import_confirm(
     if not token:
         raise HTTPException(status_code=422, detail="token required")
 
-    org = await require_sole_org(db)
+    organization, capacity_max = await _capacity_max_for_importing_org(db, user.organization_id)
     try:
         imported, skipped, errors = await apply_validated_preview(
             db,
             token=token,
-            org_id=org.id,
+            org_id=organization.id,
             user=user,
             ip_address=client_ip(request),
+            capacity_max=capacity_max,
         )
     except PreviewExpiredError as exc:
         return templates.TemplateResponse(

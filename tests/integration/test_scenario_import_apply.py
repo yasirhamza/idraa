@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -289,8 +290,25 @@ from idraa.services.scenario_import_parsers import (  # noqa: E402
     parse_json_nested,
 )
 
+# PR2 D13/D18/D19 (Task 4b): both pipeline helpers default `capacity_max` to
+# a generous synthetic value (comfortably above every fixture's p95 in this
+# file) so the pre-PR2 "valid lognormal -> create" contract still holds
+# under the new D18/D19 gate (fixture fix, not an assertion change -- see
+# CLAUDE.md's fixture-churn rule). The malformed-input tests below reach
+# "error" at an earlier step (structural/finite) regardless of this value.
+# Dedicated D18/D19/mint/preserve/library-flag coverage lives in
+# test_scenario_import_capacity_bound.py.
+_GENEROUS_CAPACITY_MAX = 1e9
 
-def _csv_pipeline(pl_dist: str, pl_low: str, pl_high: str, pl_mode: str = "") -> list[dict]:
+
+def _csv_pipeline(
+    pl_dist: str,
+    pl_low: str,
+    pl_high: str,
+    pl_mode: str = "",
+    *,
+    capacity_max: float | None = _GENEROUS_CAPACITY_MAX,
+) -> list[dict[str, Any]]:
     """Drive a single-row CSV through parse_csv_flat → _validate_rows; return preview."""
     cells = dict.fromkeys(CSV_HEADERS, "")
     cells.update(
@@ -319,7 +337,9 @@ def _csv_pipeline(pl_dist: str, pl_low: str, pl_high: str, pl_mode: str = "") ->
     w.writerow([cells[h] for h in CSV_HEADERS])
     pairs, errs = parse_csv_flat(buf.getvalue().encode())
     assert errs == [] and pairs is not None
-    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(pairs, existing_names=set())
+    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
+        pairs, existing_names=set(), capacity_max=capacity_max
+    )
     return preview
 
 
@@ -329,7 +349,9 @@ def test_lognormal_csv_valid_reaches_create() -> None:
     assert preview[0]["action"] == "create"
 
 
-def _json_pipeline(primary_loss: dict) -> list[dict]:
+def _json_pipeline(
+    primary_loss: dict[str, Any], *, capacity_max: float | None = _GENEROUS_CAPACITY_MAX
+) -> list[dict[str, Any]]:
     obj = {
         "name": "LN",
         "threat_category": "ransomware",
@@ -339,7 +361,9 @@ def _json_pipeline(primary_loss: dict) -> list[dict]:
     }
     pairs, errs = parse_json_nested(json.dumps([obj]).encode())
     assert errs == [] and pairs is not None
-    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(pairs, existing_names=set())
+    preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
+        pairs, existing_names=set(), capacity_max=capacity_max
+    )
     return preview
 
 

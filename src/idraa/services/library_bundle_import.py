@@ -240,6 +240,12 @@ def _validate_entries(
         #    tef/pl/sl — Epic B #326). Reuses the SAME helper as the scenario
         #    import §2.5 guard so the two enforcement points cannot drift. vuln
         #    stays PERT-only. Numeric finiteness + sigma bound are step 4.
+        #    PR2 D14 (Task 4b): allow_max=False -- library entries are
+        #    org-agnostic and must NEVER carry a `max` (a foreign org's
+        #    capacity cap). Without this flag, widening the SAME chokepoint
+        #    to tolerate an optional `max` for scenario-import rows would
+        #    also silently tolerate one smuggled onto a global template;
+        #    here it is rejected exactly like any other unknown key.
         dist_bad = None
         dist_reason = ""
         for col, allow_ln in (
@@ -254,7 +260,7 @@ def _validate_entries(
             d = seed[col]
             if d is None:
                 continue
-            problem = _structural_dist_problem(col, d, allow_lognormal=allow_ln)
+            problem = _structural_dist_problem(col, d, allow_lognormal=allow_ln, allow_max=False)
             if problem is not None:
                 dist_bad = col
                 dist_reason = problem

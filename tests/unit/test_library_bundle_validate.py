@@ -144,3 +144,47 @@ def test_lognormal_bundle_non_numeric_mean_is_error() -> None:
         existing_slugs=set(),
     )
     assert preview[0]["action"] == "error"
+
+
+# --- PR2 D14 (Task 4b): library entries must NOT acquire `max` ---------------
+# library_bundle_import shares scenario_import's _structural_dist_problem
+# chokepoint; the widened key-set that lets a SCENARIO row optionally carry a
+# `max` (Task 4b) must not also let a smuggled foreign-org cap onto an
+# org-agnostic library template (D14). allow_max=False at that call site
+# rejects `max` exactly like any other unknown key.
+
+
+def test_lognormal_bundle_entry_with_max_is_rejected() -> None:
+    preview, errors, seeds = _validate_entries(
+        [
+            (
+                0,
+                _e(
+                    primary_loss={
+                        "distribution": "lognormal",
+                        "mean": 6.9,
+                        "sigma": 1.0,
+                        "max": 1_000_000_000.0,
+                    }
+                ),
+            )
+        ],
+        existing_slugs=set(),
+    )
+    assert preview[0]["action"] == "error"
+    assert seeds[0] is None
+    assert errors and "primary_loss" in errors[0]["field"]
+
+
+def test_lognormal_mixture_bundle_entry_with_max_is_rejected() -> None:
+    mix = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+        "max": 1_000_000_000.0,
+    }
+    preview, errors, seeds = _validate_entries([(0, _e(primary_loss=mix))], existing_slugs=set())
+    assert preview[0]["action"] == "error"
+    assert seeds[0] is None
