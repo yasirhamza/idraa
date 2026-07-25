@@ -1275,4 +1275,139 @@ async def test_view_pure_lognormal_scenario_unregressed_by_mixture_branch(
     # lognormal scenario.
     assert "Lognormal mixture" not in r.text
     assert "expert opinions" not in r.text
+
+
+# ---- sigma-recalibration review banner (Task 4, plan
+# 2026-07-25-sigma-recal-pr1.md) -----------------------------------------
+
+
+def _seed_scenario_with_pl_metadata(
+    db: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    name: str,
+    metadata: dict | None,
+    secondary_loss: dict | None = None,
+) -> Scenario:
+    """Seed a lognormal-PL scenario with an arbitrary
+    ``distribution_fit_metadata`` sidecar (or none), for
+    ``_loss_was_recalibrated`` banner tests."""
+    import math
+
+    primary_loss: dict = {
+        "distribution": "lognormal",
+        "mean": math.log(560_000),
+        "sigma": 1.7,
+    }
+    if metadata is not None:
+        primary_loss["distribution_fit_metadata"] = metadata
+
+    s = Scenario(
+        organization_id=org_id,
+        name=name,
+        scenario_type=ScenarioType.CUSTOM,
+        threat_category=ThreatCategory.RANSOMWARE,
+        threat_event_frequency={
+            "distribution": "PERT",
+            "low": 0.1,
+            "mode": 0.5,
+            "high": 2.0,
+        },
+        vulnerability={
+            "distribution": "PERT",
+            "low": 0.2,
+            "mode": 0.4,
+            "high": 0.6,
+        },
+        primary_loss=primary_loss,
+        secondary_loss=secondary_loss,
+        status=EntityStatus.ACTIVE,
+    )
+    db.add(s)
+    return s
+
+
+async def test_view_shows_recalibration_banner_for_migration_stamp(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """A PL carrying the migration's own stamp shows the review banner."""
+    client, org_id = authed_analyst
+    s = _seed_scenario_with_pl_metadata(
+        db_session,
+        org_id=org_id,
+        name="RecalibratedPL",
+        metadata={
+            "sigma_recalibration": {
+                "source": "migration_recalibration",
+                "prior_sigma": 2.9269,
+                "revision": "c4e4d441087c",
+            },
+        },
+    )
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+    assert "Loss dispersion was recalibrated" in r.text
+
+
+async def test_view_no_recalibration_banner_when_unstamped(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """A scenario with no distribution_fit_metadata sidecar at all (the
+    common case, and the shape of every pre-migration lognormal row) never
+    shows the banner."""
+    client, org_id = authed_analyst
+    s = _seed_lognormal_scenario(db_session, org_id=org_id, name="UnstampedPL")
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+    assert "Loss dispersion was recalibrated" not in r.text
+
+
+async def test_view_no_recalibration_banner_for_analyst_pin(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """An analyst_pin-sourced sigma_recalibration stamp must NOT trip the
+    banner -- only the migration's own stamp does."""
+    client, org_id = authed_analyst
+    s = _seed_scenario_with_pl_metadata(
+        db_session,
+        org_id=org_id,
+        name="AnalystPinnedPL",
+        metadata={"sigma_recalibration": {"source": "analyst_pin"}},
+    )
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+    assert "Loss dispersion was recalibrated" not in r.text
+
+
+async def test_view_recalibration_banner_helper_survives_none_secondary_loss(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """``_loss_was_recalibrated`` must not crash when secondary_loss is None
+    (no secondary loss configured) -- the PL stamp alone still trips the
+    banner and the page still renders 200."""
+    client, org_id = authed_analyst
+    s = _seed_scenario_with_pl_metadata(
+        db_session,
+        org_id=org_id,
+        name="NoneSecondaryLoss",
+        metadata={
+            "sigma_recalibration": {
+                "source": "migration_recalibration",
+                "prior_sigma": 2.9269,
+                "revision": "c4e4d441087c",
+            },
+        },
+        secondary_loss=None,
+    )
+    await db_session.commit()
+
+    r = await client.get(f"/scenarios/{s.id}")
+    assert r.status_code == 200
+    assert "Loss dispersion was recalibrated" in r.text
     assert "pooled mixture" not in r.text

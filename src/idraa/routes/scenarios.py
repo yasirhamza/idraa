@@ -719,6 +719,34 @@ async def scenario_attack_mapping_row_partial(
 # router precedent).
 
 
+def _loss_was_recalibrated(scenario: Scenario) -> bool:
+    """True when either loss node carries the sigma-recalibration migration's
+    stamp (Task 3, plan ``2026-07-25-sigma-recal-pr1.md``, revision
+    ``c4e4d441087c``).
+
+    Defensive on every layer: ``primary_loss`` / ``secondary_loss`` may be
+    ``None`` (no secondary loss configured; some prod rows also stored the
+    literal JSON text ``"null"``, which parses to Python ``None`` same as
+    SQL NULL); ``distribution_fit_metadata`` may be absent entirely (a PERT
+    node, or a legacy row with no sidecar) or present but not a dict;
+    ``sigma_recalibration`` may likewise be absent or non-dict. Only the
+    migration's own stamp (``source == "migration_recalibration"``) trips
+    the banner -- ``analyst_pin`` and any other source must NOT.
+    """
+    for dist in (scenario.primary_loss, scenario.secondary_loss):
+        if not isinstance(dist, dict):
+            continue
+        meta = dist.get("distribution_fit_metadata")
+        if not isinstance(meta, dict):
+            continue
+        stamp = meta.get("sigma_recalibration")
+        if not isinstance(stamp, dict):
+            continue
+        if stamp.get("source") == "migration_recalibration":
+            return True
+    return False
+
+
 @router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
 async def view_scenario(
     request: Request,
@@ -802,6 +830,7 @@ async def view_scenario(
             "recommendations": recommendations,
             "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
             "reestimate_draft": reestimate_draft,
+            "loss_recalibrated": _loss_was_recalibrated(scenario),
         },
     )
 
