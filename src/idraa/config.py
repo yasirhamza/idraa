@@ -330,6 +330,22 @@ class Settings(BaseSettings):
     auth_ip_window_seconds: int = Field(default=900, ge=0)
     auth_ip_lockout_seconds: int = Field(default=900, ge=0)
 
+    capacity_k: float = Field(default=1.0, gt=0)
+    # PR2 capacity-bound epic, D13 (owner-signed 2026-07-25): the per-loss-
+    # component cap is ``capacity_k * Organization.annual_revenue`` — a
+    # single loss component is not modeled to exceed one year's revenue.
+    # k=1.0 is a CONVENTION (v3 view-model policy knob), NOT a FAIR-grounded
+    # constant, and specifically NOT "the least-interventionist value that
+    # satisfies D8": D8 is a ONE-SIDED (upper) gate with no lower bound at
+    # all — it passes for every k below the binding value, including caps
+    # aggressive enough to destroy most of the expected loss. 1.0 is the
+    # largest round value with a statable policy meaning that still clears
+    # the upper gate; what discriminates the low end is the retention
+    # columns (appendix B-CAP-K), not D8. Tunable per deployment via
+    # CAPACITY_K — case-insensitive env matching already binds it without an
+    # alias (see retention_vacuum_enabled's note above for why no
+    # ``alias=`` is needed here either).
+
     @property
     def webauthn_origin_list(self) -> list[str]:
         """WEBAUTHN_ORIGINS parsed: comma-split, trimmed, blanks dropped."""
