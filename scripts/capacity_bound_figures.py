@@ -533,6 +533,26 @@ def main() -> None:
             f"{st.median(rets) * 100:>10.3f}% {rets[0] * 100:>12.3f}%{mark}"
         )
 
+    # The bracket above is measured at the BASIS. Since D8's verdict rises with n,
+    # WHICH k values pass is itself n-conditional -- so the neighbourhood of the
+    # chosen k is re-measured at the configurable ceiling. Without this, "a slightly
+    # larger k also passes" reads as unconditional when it holds only at the basis.
+    r.both("  the same neighbourhood re-measured at the CONFIGURABLE CEILING:")
+    saved_iters = globals()["ITERS"]
+    globals()["ITERS"] = _MC_ITERATIONS_FIELD_CEILING
+    for k in (1.00, 1.10, 1.20):
+        res = _sim_max(ln, k * rev)
+        pct = res["median"] / rev * 100
+        mark = "  <== CHOSEN" if k == K_CAPACITY else ""
+        r.both(
+            f"  {k:>7.3f} {pct:>7.2f}% {'PASS' if res['median'] <= rev else 'FAIL':>5}"
+            f"{'':>26}{mark}"
+        )
+    globals()["ITERS"] = saved_iters
+    r.both("  At the ceiling the chosen k is very nearly BINDING: the next bracket step up")
+    r.both("  FAILS. So 'a slightly larger k also passes' holds at the basis and NOT at the")
+    r.both("  ceiling -- D13's claim must be stated with its n, exactly as D8's must.")
+
     r.both("")
     r.both(f"[B-CAP-DRIFT] realized-mean retention under the k={K_CAPACITY} cap (100% = no cost)")
     r.both("  the cap is a TAIL guardrail: post-PR1 it costs essentially nothing in expected loss.")
