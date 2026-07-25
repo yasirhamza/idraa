@@ -20,13 +20,13 @@ NOT by importing the module under test -- see the docstring on each test):
     cap_effect = 0.24573423200410938
 
   Case C (lognormal_mixture, 2 components, UNEQUAL sigma, shared cap):
-    w=(0.4, 0.6); (mu1=ln(1_000), s1=0.5); (mu2=ln(1_000_000_000), s2=0.5)
+    w=(0.4, 0.6); (mu1=ln(1_000), s1=0.5); (mu2=ln(1_000_000_000), s2=0.8)
     cap=5_000_000_000
-    m1=1133.148453066826, m2=1133148453.0668256
-    r1=1.0 (Phi(b1) saturates), r2=0.9973665667726783
-    E_f = w1*m1 + w2*m2 = 679889525.0994766
-    R_mix = (w1*m1*r1 + w2*m2*r2) / E_f = 0.9973665685282993
-    cap_effect = 0.002633431471700698
+    m1=1133.148453066826, m2=1377127764.3359566
+    r1=1.0 (Phi(b1) saturates), r2=0.9072745281775271
+    E_f = w1*m1 + w2*m2 = 826277111.8609551
+    R_mix = (w1*m1*r1 + w2*m2*r2) / E_f = 0.9072745790426537
+    cap_effect = 0.09272542095734626
 
   Case D (ndtr underflow guard): mu=ln(1e9), sigma=0.3, cap=1.0 ->
     b = -69.07755278982137 -> ndtr(b) == 0.0 exactly (underflow).
@@ -181,20 +181,28 @@ def test_field_mean_and_retention_lognormal_capped_matches_case_a() -> None:
 def test_field_mean_and_retention_mixture_kernel_matches_hand_math_case_c() -> None:
     """The mixture kernel (R_f = sum_i w_i*m_i*R_i / sum_i w_i*m_i) is NEW
     code with no in-repo precedent -- the single-field formula does not
-    apply. Uses UNEQUAL component sigma so the test cannot pass under a
-    scalar-sigma-blind implementation (every b_i would be invariant to
-    which sigma is hoisted if sigma were equal across components)."""
+    apply. Uses UNEQUAL component sigma (0.5 vs 0.8) so the fixture actually
+    discriminates a scalar-sigma-blind implementation: with EQUAL sigma
+    across components, every b_i = (ln(cap) - mu_i) / sigma would come out
+    identical whether the kernel reads each component's OWN sigma_i or a
+    single sigma hoisted from e.g. components[0] -- the divergence between
+    components would come entirely from the differing mu_i, so a
+    sigma-blind implementation would still pass. With UNEQUAL sigma, hoisting
+    a single shared sigma changes b_i (and therefore R_i, m_i, and the
+    disclosed cap_effect) for at least one component relative to the
+    per-component-sigma-correct kernel, so only an implementation that
+    actually threads each component's own sigma_i can match this anchor."""
     field = {
         "distribution": "lognormal_mixture",
         "components": [
             {"weight": 0.4, "mean": math.log(1_000.0), "sigma": 0.5},
-            {"weight": 0.6, "mean": math.log(1_000_000_000.0), "sigma": 0.5},
+            {"weight": 0.6, "mean": math.log(1_000_000_000.0), "sigma": 0.8},
         ],
         "max": 5_000_000_000.0,
     }
     e_f, r_f = _field_mean_and_retention(field)
-    assert e_f == pytest.approx(679889525.0994766, rel=1e-9)  # w1*m1 + w2*m2
-    assert r_f == pytest.approx(0.9973665685282993, rel=1e-9)
+    assert e_f == pytest.approx(826277111.8609551, rel=1e-9)  # w1*m1 + w2*m2
+    assert r_f == pytest.approx(0.9072745790426537, rel=1e-9)
 
 
 def test_field_mean_and_retention_mixture_no_cap_is_non_binding() -> None:
@@ -220,6 +228,24 @@ def test_field_mean_and_retention_unknown_kind_excluded_not_crashed() -> None:
     a disclosure surface must not 500 on it) contributes to neither sum."""
     e_f, r_f = _field_mean_and_retention({"distribution": "uniform", "low": 0.0, "high": 1.0})
     assert (e_f, r_f) == (0.0, 1.0)
+
+
+def test_field_mean_and_retention_null_distribution_text_and_json_null_excluded() -> None:
+    """A literal `distribution: "null"` string (a plausible malformed/legacy
+    export artifact) and a JSON-null `distribution` value (key present, value
+    None) must both be treated as an unknown kind -- excluded from both sums,
+    never crashed. `_dist_kind` only defaults to 'pert' when the key is
+    ABSENT (`dict.get` with a default); when the key is present with value
+    None, `.get` returns None (not the default), so `str(None).lower()` ==
+    'none' -- a distinct, still-unknown-kind string, not 'pert'."""
+    text_null = _field_mean_and_retention(
+        {"distribution": "null", "low": 0.0, "mode": 0.5, "high": 1.0}
+    )
+    json_null = _field_mean_and_retention(
+        {"distribution": None, "low": 0.0, "mode": 0.5, "high": 1.0}
+    )
+    assert text_null == (0.0, 1.0)
+    assert json_null == (0.0, 1.0)
 
 
 def test_field_mean_and_retention_malformed_lognormal_missing_keys_excluded() -> None:
@@ -320,18 +346,23 @@ def test_pert_uppercase_and_absent_distribution_key_do_not_change_composition() 
 
 
 def test_mixture_field_case_c() -> None:
+    """End-to-end through _build_capacity_cap_note with the same UNEQUAL-sigma
+    (0.5 vs 0.8) Case C fixture as
+    test_field_mean_and_retention_mixture_kernel_matches_hand_math_case_c --
+    see that test's docstring for why equal sigma would not discriminate a
+    scalar-sigma-blind implementation."""
     pl = {
         "distribution": "lognormal_mixture",
         "components": [
             {"weight": 0.4, "mean": math.log(1_000.0), "sigma": 0.5},
-            {"weight": 0.6, "mean": math.log(1_000_000_000.0), "sigma": 0.5},
+            {"weight": 0.6, "mean": math.log(1_000_000_000.0), "sigma": 0.8},
         ],
         "max": 5_000_000_000.0,
     }
     run = SimpleNamespace(scenario_inputs_snapshot=_snapshot(pl=pl, sl=None))
     note = _build_capacity_cap_note(run, _USD)
     assert note is not None
-    assert note["cap_effect_frac"] == pytest.approx(0.002633431471700698, rel=1e-9)
+    assert note["cap_effect_frac"] == pytest.approx(0.09272542095734626, rel=1e-9)
 
 
 def test_ndtr_underflow_never_500s_case_d() -> None:
