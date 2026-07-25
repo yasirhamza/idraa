@@ -364,8 +364,15 @@ THREADING_EXEMPT: dict[str, str] = {}
 
 # Store / table names the Threading table names as bare identifiers (no file
 # extension), so the file-path regex below cannot see them. Checked by name
-# against the plan's task region.
-THREADING_STORES = ("scenarios", "scenario_library_entries", "scenario_library_overrides")
+# against the plan's task region. (All FOUR the design's Stores row names — round 7
+# found `wizard_drafts` had been omitted, so a store the design names went
+# unenforced while the check reported "pass".)
+THREADING_STORES = (
+    "scenarios",
+    "scenario_library_entries",
+    "scenario_library_overrides",
+    "wizard_drafts",
+)
 
 # Symbols the map verifies as supporting CONTEXT rather than because a task names
 # them. Every other REQUIRED_SYMBOLS entry must be reachable from some task, so a
@@ -441,8 +448,13 @@ def coherence_section() -> list[str]:
         return len(hits) > 1
 
     # Full path tokens as the design WROTE them (strip a trailing ::symbol), over a
-    # wider extension set than py/html so goldens (.json) and config (.toml) count.
-    tokens = sorted(set(re.findall(r"[\w./_-]+\.(?:py|html|json|toml|js|css|sql)", threading)))
+    # wider extension set than py/html. A GLOB path (`tests/equivalence/golden/*.json`)
+    # is not a literal token — the `*` breaks it — so glob dirs are extracted
+    # separately and checked as bare identifiers (their directory must be named by a
+    # task). Round 7 found the bare extension-widening was inert without this.
+    tokens = set(re.findall(r"[\w./_-]+\.(?:py|html|json|toml|js|css|sql)", threading))
+    tokens |= {str(Path(g).parent) for g in re.findall(r"[\w./_-]+/\*\.\w+", threading)}
+    tokens = sorted(tokens)
     missing: list[str] = []
     for tok in tokens:
         base = Path(tok).name

@@ -1033,6 +1033,16 @@ def main() -> None:
         "-- light components under-weighted"
     )
     r.both("    Both are suprema over admissible configurations, approached but never attained.")
+    r.both("  They are ATTAINED ONLY IN THE VANISHING-WEIGHT LIMIT; at representative weights the")
+    r.both("  UP distortion (other component at F=1, floor at Phi(z95)) is much smaller:")
+    r.both(f"    {'w_i':>8}  {'UP distortion':>14}")
+    for w in (0.5, 0.1):
+        # Analytic in (z95, w): (w*Phi(z95) + (1-w)*1)/Phi(z95) - 1. No deployment
+        # input, mu cancels -> rule (a), public. Generated so a floor-quantile retune
+        # updates it in lockstep with the +-5% suprema instead of going stale in prose.
+        dist_w = (w * ndtr(Z95) + (1.0 - w)) / ndtr(Z95) - 1.0
+        r.both(f"    {w:>8.2f}  {dist_w * 100:>13.3f}%")
+    r.both("  so the +-5% bounds are EXTREMAL, not typical magnitudes.")
     deep_b = (math.log(cap) - min(d["mean"] for _, _, d in lib)) / SIGMA_DEFAULT
     r.priv(
         f"    at the SHIPPED cap the components sit at z >= {min(zs):.3f}, so F_i > "
