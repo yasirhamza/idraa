@@ -356,12 +356,16 @@ DESIGN_DOC = ROOT / "docs/superpowers/specs/2026-07-25-capacity-bound-design.md"
 PLAN_DOC = ROOT / "docs/superpowers/plans/2026-07-25-capacity-bound-pr2.md"
 
 # Files the design's Threading table names that NO task needs to modify, with the
-# reason. Anything not listed here MUST appear in the plan: that is the check.
-THREADING_EXEMPT = {
-    # Named only to record the CORRECTION that it needs no independent change --
-    # it delegates to scenario_import's chokepoint, which Task 4b owns.
-    "library_bundle_import.py": "no independent structural logic; Task 4b's chokepoint covers it",
-}
+# reason. Anything not listed here MUST appear in a plan TASK: that is the check.
+# (Empty today: `library_bundle_import.py` was here as "no independent change", but
+# Task 4b now names it explicitly for the library-vs-scenario flag, so the entry
+# was inert and is removed. Keep the mechanism for a genuine future exemption.)
+THREADING_EXEMPT: dict[str, str] = {}
+
+# Store / table names the Threading table names as bare identifiers (no file
+# extension), so the file-path regex below cannot see them. Checked by name
+# against the plan's task region.
+THREADING_STORES = ("scenarios", "scenario_library_entries", "scenario_library_overrides")
 
 # Symbols the map verifies as supporting CONTEXT rather than because a task names
 # them. Every other REQUIRED_SYMBOLS entry must be reachable from some task, so a
@@ -392,8 +396,23 @@ def coherence_section() -> list[str]:
 
     A design is not executable. A Threading row with no task ships as a cap whose
     units depend on the analyst's entry currency. So the coupling is checked here,
-    mechanically, in the same spirit as the symbol checks above: the design names
-    the surfaces, the plan must name them back.
+    mechanically: the design names the surfaces, the plan's TASK region must name
+    them back.
+
+    WHAT THIS CATCHES (round 6 hardened all three): a surface named in a
+    non-`.py`/`.html` file (goldens `.json`, config `.toml`) via a wider extension
+    set; a store/table named as a bare identifier (THREADING_STORES); a surface
+    named only in the plan's PROSE and not in a task (the plan is sliced to the
+    task region); and a same-basename collision (`routes/scenarios.py` vs
+    `services/scenarios.py`) — when a basename is ambiguous repo-wide the DIR-
+    QUALIFIED path the design wrote is required, not just the basename.
+
+    WHAT IT STILL CANNOT CATCH, stated so nobody mistakes it for complete: a
+    surface the design describes in PROSE outside the `## Threading` section; a
+    name that appears in a task body as incidental prose rather than a real
+    `**Files:**`/criterion line (it checks presence in the task region, not role
+    within it). Report's line-by-line classification and human review remain the
+    backstop for those.
     """
     lines = ["", "[DESIGN<->PLAN COHERENCE] every design surface must be named by a task", ""]
     if not (DESIGN_DOC.exists() and PLAN_DOC.exists()):
@@ -402,9 +421,11 @@ def coherence_section() -> list[str]:
         return lines
     design = DESIGN_DOC.read_text(encoding="utf-8")
     plan = PLAN_DOC.read_text(encoding="utf-8")
+    # Slice the plan to its TASK region: a surface mentioned only in the intro
+    # prose is NOT "named by a task". The first "### Task" heading starts it.
+    task_split = re.search(r"\n### Task\b", plan)
+    plan_tasks = plan[task_split.start() :] if task_split else plan
 
-    # The Threading table is the design's enumeration of every surface that
-    # populates / persists / scales / imports / validates a loss dict.
     m = re.search(r"\n## Threading\b(.*?)(?=\n## )", design, re.S)
     if not m:
         raise SystemExit(
@@ -413,22 +434,42 @@ def coherence_section() -> list[str]:
             "silently pass by finding nothing."
         )
     threading = m.group(1)
-    # Basenames, not full paths: the design writes fair_cam/risk_engine/fair_core.py
-    # while the plan writes fair_core.py, and both are legitimate.
-    named = sorted({Path(p).name for p in re.findall(r"[\w./_-]+\.(?:py|html)", threading)})
-    missing = [f for f in named if f not in plan and f not in THREADING_EXEMPT]
-    for f in named:
-        why = THREADING_EXEMPT.get(f)
-        status = "EXEMPT" if why else ("in plan" if f in plan else "*** NOT NAMED BY ANY TASK ***")
-        lines.append(f"  {f:<34} {status}{'  — ' + why if why else ''}")
+
+    def _ambiguous(basename: str) -> bool:
+        """True if >1 tracked file under src/ or fair_cam/ shares this basename."""
+        hits = list((ROOT / "src").rglob(basename)) + list((ROOT / "fair_cam").rglob(basename))
+        return len(hits) > 1
+
+    # Full path tokens as the design WROTE them (strip a trailing ::symbol), over a
+    # wider extension set than py/html so goldens (.json) and config (.toml) count.
+    tokens = sorted(set(re.findall(r"[\w./_-]+\.(?:py|html|json|toml|js|css|sql)", threading)))
+    missing: list[str] = []
+    for tok in tokens:
+        base = Path(tok).name
+        # For an ambiguous basename, require the dir-qualified path the design used
+        # (so routes/scenarios.py cannot be satisfied by services/scenarios.py); for
+        # an unambiguous one, the basename in the plan's task region is enough.
+        needle = tok if ("/" in tok and _ambiguous(base)) else base
+        present = needle in plan_tasks
+        exempt = THREADING_EXEMPT.get(base)
+        status = (
+            "EXEMPT" if exempt else ("in a task" if present else "*** NOT NAMED BY ANY TASK ***")
+        )
+        lines.append(f"  {needle:<44} {status}{'  — ' + exempt if exempt else ''}")
+        if not present and not exempt:
+            missing.append(needle)
+    for store in THREADING_STORES:
+        present = bool(re.search(rf"\b{re.escape(store)}\b", plan_tasks))
+        lines.append(f"  {store:<44} {'in a task' if present else '*** STORE NOT NAMED ***'}")
+        if not present:
+            missing.append(store)
     if missing:
         raise SystemExit(
-            "SURFACE MAP FAILED: the design's Threading table names surfaces that the "
-            "PLAN never mentions:\n  "
+            "SURFACE MAP FAILED: the design's Threading table names surfaces the plan's "
+            "TASK region never mentions:\n  "
             + "\n  ".join(missing)
-            + "\nThis is the round-5 entry-currency blocker's exact signature: a fix applied "
-            "to the design only. Add a task (or add the file to THREADING_EXEMPT with a "
-            "reason) -- a design row with no task does not ship."
+            + "\nThis is the round-5 entry-currency blocker's signature: a fix applied to the "
+            "design only. Add a task (or add the file to THREADING_EXEMPT with a reason)."
         )
 
     # Reverse direction: a verified symbol no task names is either a stale
