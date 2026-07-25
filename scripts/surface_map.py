@@ -76,6 +76,14 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     # so this surface is load-bearing on the cap's units.
     ("src/idraa/services/scenario_currency.py", "convert_loss_inputs_to_usd"),
     ("tests/migrations/conftest.py", "alembic_config"),
+    # Round-5: the DISPLAY consumers. The Threading table stopped at surfaces that
+    # populate/persist/scale/validate the dict and never enumerated the ones that
+    # RENDER it, so post-PR2 these would state a mean and p95 from a distribution
+    # the engine no longer samples -- on screen and in the circulated PDF.
+    ("src/idraa/app.py", "lognormal_display_rows"),
+    ("src/idraa/app.py", "lognormal_mixture_display_rows"),
+    ("src/idraa/services/pdf_report.py", "_lognormal_input_percentiles"),
+    ("src/idraa/services/pdf_report.py", "_lognormal_mixture_percentiles"),
 ]
 
 # Class attributes the plan names (models are AnnAssigns, not defs). Same
@@ -341,6 +349,108 @@ def collection_section() -> list[str]:
     return lines
 
 
+# Operator-local (gitignored) planning documents. Absent in a fresh clone and in
+# CI, where the coherence check simply does not run -- it is a authoring-time gate,
+# not a merge gate.
+DESIGN_DOC = ROOT / "docs/superpowers/specs/2026-07-25-capacity-bound-design.md"
+PLAN_DOC = ROOT / "docs/superpowers/plans/2026-07-25-capacity-bound-pr2.md"
+
+# Files the design's Threading table names that NO task needs to modify, with the
+# reason. Anything not listed here MUST appear in the plan: that is the check.
+THREADING_EXEMPT = {
+    # Named only to record the CORRECTION that it needs no independent change --
+    # it delegates to scenario_import's chokepoint, which Task 4b owns.
+    "library_bundle_import.py": "no independent structural logic; Task 4b's chokepoint covers it",
+}
+
+# Symbols the map verifies as supporting CONTEXT rather than because a task names
+# them. Every other REQUIRED_SYMBOLS entry must be reachable from some task, so a
+# dropped task cannot leave a silently-unused verification behind.
+CONTEXT_ONLY_SYMBOLS = {
+    "render_scenario_form": "signature quoted to show the pre-fill has no rate in scope",
+    "form_defaults": "census establishes the expert form's default-construction path",
+    "_assert_numeric_dist": "LET-path caveat, carried as a deferred nice-to-have",
+    "execute_run": "adapter-raise behaviour (run flips FAILED) cited by Task 3's guard",
+    "_qlnormtrunc": "Task 2's empirical-agreement reference",
+    "alembic_config": "fixture location claim for Task 5",
+    "calculate_risk": "secondary_loss_subtractor ordering pin in Task 2",
+    "sample": "the branch Task 2 modifies, named via fair_core.py::sample",
+}
+
+
+def coherence_section() -> list[str]:
+    """[DESIGN<->PLAN COHERENCE] the check no mechanism performed before round 6.
+
+    WHY THIS EXISTS. Rounds 1-3's blocker class was "claims about the codebase
+    written from memory"; the sections above killed it, and round 5 returned zero
+    blockers of that class. What replaced it was a DIFFERENT class: a fix applied
+    to ONE of the two coupled planning documents. Round 4 fixed the Task-3b hoist
+    in the plan but left three stale pointers; round 5 found the entry-currency
+    surface added to the design's Threading table with NO task, no file, and no
+    criterion -- caught by two reviewers independently, three rounds after the same
+    signature first appeared.
+
+    A design is not executable. A Threading row with no task ships as a cap whose
+    units depend on the analyst's entry currency. So the coupling is checked here,
+    mechanically, in the same spirit as the symbol checks above: the design names
+    the surfaces, the plan must name them back.
+    """
+    lines = ["", "[DESIGN<->PLAN COHERENCE] every design surface must be named by a task", ""]
+    if not (DESIGN_DOC.exists() and PLAN_DOC.exists()):
+        lines.append("  design and/or plan not present (fresh clone or CI) — check SKIPPED")
+        lines.append("      these documents are operator-local; this is an authoring-time gate")
+        return lines
+    design = DESIGN_DOC.read_text(encoding="utf-8")
+    plan = PLAN_DOC.read_text(encoding="utf-8")
+
+    # The Threading table is the design's enumeration of every surface that
+    # populates / persists / scales / imports / validates a loss dict.
+    m = re.search(r"\n## Threading\b(.*?)(?=\n## )", design, re.S)
+    if not m:
+        raise SystemExit(
+            "SURFACE MAP FAILED: could not locate the design's '## Threading' section. "
+            "If it was renamed, update this check -- do not let the coherence gate "
+            "silently pass by finding nothing."
+        )
+    threading = m.group(1)
+    # Basenames, not full paths: the design writes fair_cam/risk_engine/fair_core.py
+    # while the plan writes fair_core.py, and both are legitimate.
+    named = sorted({Path(p).name for p in re.findall(r"[\w./_-]+\.(?:py|html)", threading)})
+    missing = [f for f in named if f not in plan and f not in THREADING_EXEMPT]
+    for f in named:
+        why = THREADING_EXEMPT.get(f)
+        status = "EXEMPT" if why else ("in plan" if f in plan else "*** NOT NAMED BY ANY TASK ***")
+        lines.append(f"  {f:<34} {status}{'  — ' + why if why else ''}")
+    if missing:
+        raise SystemExit(
+            "SURFACE MAP FAILED: the design's Threading table names surfaces that the "
+            "PLAN never mentions:\n  "
+            + "\n  ".join(missing)
+            + "\nThis is the round-5 entry-currency blocker's exact signature: a fix applied "
+            "to the design only. Add a task (or add the file to THREADING_EXEMPT with a "
+            "reason) -- a design row with no task does not ship."
+        )
+
+    # Reverse direction: a verified symbol no task names is either a stale
+    # allowlist entry or a dropped task. Both are worth a conscious decision.
+    orphans = [
+        name
+        for _, name in REQUIRED_SYMBOLS
+        if name not in plan and name not in CONTEXT_ONLY_SYMBOLS
+    ]
+    lines.append("")
+    lines.append(f"  REQUIRED_SYMBOLS not named by any task: {len(orphans)}")
+    if orphans:
+        raise SystemExit(
+            "SURFACE MAP FAILED: symbols are verified here but named by no task:\n  "
+            + "\n  ".join(orphans)
+            + "\nEither a task was dropped, or the entry is context-only — in which case add "
+            "it to CONTEXT_ONLY_SYMBOLS with the reason it is verified."
+        )
+    lines.append(f"      ({len(CONTEXT_ONLY_SYMBOLS)} allowlisted as context-only, with reasons)")
+    return lines
+
+
 def main() -> None:
     print("=" * 78)
     print("SURFACE MAP — machine-extracted; the plan QUOTES this, never hand-writes it")
@@ -349,7 +459,13 @@ def main() -> None:
     print("Regenerate:  uv run python scripts/surface_map.py")
     print("Fails loud if a symbol the plan names does not exist in the tree.")
     print()
-    for section in (symbols_section(), attrs_section(), call_sites_section(), collection_section()):
+    for section in (
+        symbols_section(),
+        attrs_section(),
+        call_sites_section(),
+        collection_section(),
+        coherence_section(),
+    ):
         print("\n".join(section))
 
 

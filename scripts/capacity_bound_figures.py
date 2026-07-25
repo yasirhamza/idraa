@@ -55,7 +55,14 @@ SPECS = ROOT / "docs" / "superpowers" / "specs"
 FULL_OUT = SPECS / "capacity-bound-figures.generated.txt"
 PUBLIC_OUT = SPECS / "capacity-bound-figures.public.txt"
 
-Z95 = 1.6448536269514722
+# Sourced from norm.ppf, NOT hand-typed: the hand-typed literal was 1 ULP above
+# float(norm.ppf(0.95)), which is what lognormal_from_quantiles uses to FIT sigma.
+# Numerically inert (3.8e-16 relative on a recomputed p95), but the D19 floor is a
+# STRICT `max > p95`, so an analyst typing a p95 of exactly one year's revenue -- a
+# plausible authoring act -- has the block decided by a 1-ULP disagreement between
+# two spellings of the same constant rather than by policy. Same source as the fit
+# means the equality case is decided by D19, which is where that decision belongs.
+Z95 = float(norm.ppf(0.95))
 SIGMA_DEFAULT = 1.7
 # Stored sigma is NOT exactly the default on fields that went through the wizard
 # re-spread (quantiles round-trip through dollar values, so sigma is re-derived
@@ -109,12 +116,33 @@ class Report:
       (a) an analytic identity in (sigma_default, z_q, k_capacity) with NO
           deployment input -- mu cancels, e.g. the quantile-anchor retentions
           and the mixture distortion bounds;
-      (b) a ratio or retention statistic over PROD fields, whose mu is not
-          published -- >= 2 unknowns per field, so it does not invert.
-          (Verified 2026-07-25 against the backup: 0 of 9 active prod lognormal
-          loss fields carry a mu matching any seed-library mu, and prod sigma is
-          NOT uniformly the default -- these fields are independently authored,
-          not library copies.);
+      (a') a figure over the TRACKED PUBLIC seed library evaluated at a
+          HYPOTHETICAL revenue sweep, with no deployment input anywhere in it
+          (B-CAP-FLOOR). Dollar-denominated and named, so it looks like rules
+          (d)/(f) -- it is public because the dollars are the library's own and
+          the revenue column is a stated hypothetical, NOT this deployment's.
+          This case is why the informal "no `$` in the public variant" heuristic
+          is false and why assert_public_artifact_is_clean checks values rather
+          than shapes;
+      (b) a HOMOGENEOUS statistic over PROD fields, computed over the
+          non-derivable subset. The test is a GAUGE INVARIANCE, not a count of
+          unknowns: a prod-derived line may go public only if it is unchanged
+          when every prod loss field's mu increases by ln(lambda) and revenue is
+          multiplied by lambda. Every published prod row here satisfies it
+          (%-of-revenue, retention ratios, scale divergences, the ALE ratio), so
+          only `ln R - mu_f` is ever identifiable and revenue needs an external
+          anchor on some mu_f -- which is exactly what the mu census and
+          assert_public_prod_basis_safe deny.
+          DO NOT use the older "">= 2 unknowns per field, so it does not invert"
+          reasoning: it is arithmetically false. B-CAP-K publishes 11 points of a
+          2-parameter retention curve, which over-determines the field and
+          recovers sigma exactly (verified: sigma_w to 4.6e-06 from the published
+          3-decimal text). ONE unknown survives, not two, and the guard is
+          load-bearing for rule (b) rather than a belt-and-braces check.
+          Corollary, and the trap this wording exists to close: a ratio that
+          divides a prod-derived quantity by a LIBRARY or otherwise ABSOLUTE
+          dollar amount satisfies the old wording and is NOT homogeneous -- it
+          inverts to revenue immediately. Never combine the two in one number;
       (c) a PASS/FAIL verdict, an iteration count, a k value, or another
           non-deployment constant.
 
@@ -180,6 +208,35 @@ def _assert_no_mixtures(dicts: list[dict | None], where: str) -> None:
             )
 
 
+def assert_settings_basis() -> None:
+    """The two Settings numbers this whole basis rests on are ASSERTED, not copied.
+
+    ITERS and _MC_ITERATIONS_FIELD_CEILING are hand-copied from config.py so the
+    committed artifact stays deterministic -- but a hand-copy is exactly the
+    stale-fact hazard this generator exists to remove. CLAUDE.md records
+    mc_iterations_max going stale in a doc for ~3 weeks, and the design makes the
+    ceiling row's margin the number to quote everywhere, so a moved Field(le=)
+    would keep printing a row LABELLED "configurable ceiling" that no longer is one.
+    """
+    from idraa.config import Settings
+
+    field = Settings.model_fields["mc_iterations_max"]
+    default = field.default
+    le = next((getattr(m, "le", None) for m in field.metadata if hasattr(m, "le")), None)
+    if default != ITERS:
+        raise SystemExit(
+            f"BASIS FAILED: Settings.mc_iterations_max default is {default!r}, but this "
+            f"generator's ITERS basis is {ITERS!r}. The shipped basis moved -- update ITERS "
+            "and N_SENSITIVITY, then regenerate every quoted figure."
+        )
+    if le != _MC_ITERATIONS_FIELD_CEILING:
+        raise SystemExit(
+            f"BASIS FAILED: config.py's Field(le=) is {le!r}, but this generator labels "
+            f"{_MC_ITERATIONS_FIELD_CEILING!r} as the CONFIGURABLE CEILING. The design quotes "
+            "that row's margin as the worst case, so the label must not go stale."
+        )
+
+
 def pins() -> None:
     """Fail loud if the library shape moved under the figures.
 
@@ -210,17 +267,74 @@ def pins() -> None:
         )
 
 
-def _public_mu_candidates() -> list[tuple[float, str]]:
-    """Every mu an attacker can derive from the PUBLIC repo.
+# Every AUTHORING SURFACE that can fit a lognormal loss field from values the
+# public repo reproduces. This is a CENSUS, not a list that grows one family per
+# gate round: round 3 added family A, round 4 added B, and round 5 found C and D
+# still missing -- with D already matching a live prod field to 1 ULP while the
+# guard passed. The census is the durable form of the control; adding a family
+# without adding it here is the defect that recurred three rounds running.
+#
+#   A  native-lognormal library entries          -> mean read directly
+#   B  library PERT -> catastrophic flip         -> beta p05/p95 fitted
+#   C  library PERT endpoints read as p5/p95     -> expert-form kind switch
+#   D  IRIS industry baselines                   -> wizard from-scratch seed
+#
+# A family belongs here when a PUBLIC input (tracked JSON, a committed fair_cam
+# table) reaches `lognormal_from_quantiles` (or an equivalent fit) by any route an
+# operator can drive. Routes AUDITED AND EXCLUDED, with the reason:
+#   - seed_qualitative_bands.json  : the qualitative converter emits PERT only and
+#     has no automatic route to a lognormal fit (services/qualitative_converter.py).
+#   - loss_form_envelopes.json / loss_anchor_tables.json : build-script inputs; no
+#     runtime path fits a scenario loss field from them.
+#   - library-override and bundle-import payloads : operator-supplied, not
+#     reproducible from the public repo.
+_MU_FAMILIES = ("A native-lognormal", "B PERT->catastrophic", "C PERT-endpoints", "D IRIS-baseline")
 
-    Rule (b) needs "prod mu is not published", and the seed library's 18 native
-    lognormal fields are only ONE source. The wizard can seed step-3 SME rows from
-    a cloned library entry's p5/p95 pair and the analyst can then flip loss_shape
-    to catastrophic at step 4, which fits mu = (ln p5 + ln p95)/2 -- so EVERY
-    library loss field, including the ~154 PERT ones, is a publicly derivable mu.
-    Enumerating only the native-lognormal family leaves that route unwatched.
+
+def _iris_loss_mus() -> list[tuple[float, str]]:
+    """Family D: mu values the wizard's from-scratch IRIS seed can produce.
+
+    The step-3 "IRIS prior" button seeds SME rows from
+    ``iris_baseline_for_form_v2``, a deterministic function of
+    ``(industry, revenue_tier, IRIS_YEAR)`` over fair_cam's COMMITTED tables --
+    fully public. Flipping loss_shape to catastrophic at step 4 then fits those
+    p5/p95 pairs to {mean, sigma}. Loss uses the per-industry prior and is NOT
+    tier-scaled (see CalibrationContext's docstring), so the 108
+    (industry, tier, fieldset) combos collapse to far fewer distinct mu values;
+    they are deduplicated here so the reported candidate count is meaningful.
     """
-    out: list[tuple[float, str]] = []
+    from fair_cam.quantile_pooling import lognormal_from_quantiles
+
+    from idraa.services.calibration import (  # local: keeps the prod-less path import-free
+        _REVENUE_TIER_THRESHOLDS,
+        CalibrationContext,
+    )
+    from idraa.services.industry_mapping import V3_TO_FAIR_CAM_INDUSTRY
+    from idraa.services.wizard_helpers import iris_baseline_for_form_v2
+
+    tiers = [t for _, t in _REVENUE_TIER_THRESHOLDS] + ["more_than_100b"]
+    seen: dict[float, str] = {}
+    for slug in V3_TO_FAIR_CAM_INDUSTRY:
+        for tier in tiers:
+            base = iris_baseline_for_form_v2(CalibrationContext(industry=slug, revenue_tier=tier))
+            if not base:
+                continue
+            for fs in ("pl", "sl"):
+                pair = base.get(fs)
+                if not pair or pair["low"] <= 0 or pair["high"] <= pair["low"]:
+                    continue
+                mu = lognormal_from_quantiles(pair["low"], pair["high"])["mean"]
+                seen.setdefault(mu, f"iris {slug}/{fs} (tier-invariant for loss)")
+    return list(seen.items())
+
+
+def _public_mu_candidates() -> list[tuple[float, str, str]]:
+    """Every mu an attacker can derive from the PUBLIC repo, tagged by family.
+
+    Rule (b) needs "prod mu is not published". See _MU_FAMILIES for the census
+    this enumerates and for the routes audited and deliberately excluded.
+    """
+    out: list[tuple[float, str, str]] = []
     for e in _entries():
         slug = e.get("slug", "?")
         for f in ("primary_loss", "secondary_loss"):
@@ -229,92 +343,226 @@ def _public_mu_candidates() -> list[tuple[float, str]]:
                 continue
             kind = str(d.get("distribution", "pert")).lower()
             if kind == "lognormal":
-                out.append((float(d["mean"]), f"{slug} {f} (native lognormal)"))
+                out.append((float(d["mean"]), f"{slug} {f}", _MU_FAMILIES[0]))
             elif kind == "pert" and all(k in d for k in ("low", "mode", "high")):
-                # The catastrophic-flip route: PERT p5/p95 -> lognormal fit.
                 a, b = _pert_ab(d["low"], d["mode"], d["high"])
                 span = d["high"] - d["low"]
                 q05 = d["low"] + float(beta.ppf(0.05, a, b)) * span
                 q95 = d["low"] + float(beta.ppf(0.95, a, b)) * span
                 if q05 > 0 and q95 > 0:
                     out.append(
-                        ((math.log(q05) + math.log(q95)) / 2.0, f"{slug} {f} (PERT->catastrophic)")
+                        ((math.log(q05) + math.log(q95)) / 2.0, f"{slug} {f}", _MU_FAMILIES[1])
                     )
+                # Family C: pert_dist_to_form renders the PERT low/high endpoints
+                # into the SAME {prefix}_low/{prefix}_high inputs that
+                # dist_from_raw's lognormal branch reads as p5/p95, so switching
+                # the kind selector to "lognormal" on the expert form fits
+                # mu = (ln low + ln high)/2 -- a DIFFERENT value from family B's
+                # beta quantiles, and a route B does not cover.
+                if d["low"] > 0 and d["high"] > 0:
+                    out.append(
+                        (
+                            (math.log(float(d["low"])) + math.log(float(d["high"]))) / 2.0,
+                            f"{slug} {f}",
+                            _MU_FAMILIES[2],
+                        )
+                    )
+    out.extend((mu, origin, _MU_FAMILIES[3]) for mu, origin in _iris_loss_mus())
     return out
 
 
 # Calibrated to the guard's ACTUAL job: detecting that a prod field was DERIVED
-# from a public value, which would make one attacker candidate an exact hit and
-# collapse the ambiguity that rule (b) rests on. Derivation is deterministic
-# (mu = (ln p5 + ln p95)/2, and the truncated z cancels in the mean-of-logs), so a
-# real match lands at float noise; 1e-6 absorbs that plus display round-tripping.
+# from a public value, which makes one attacker candidate an EXACT hit and
+# collapses the freedom rule (b) rests on. Derivation is deterministic and lands
+# at bit-exact equality, not merely "float noise": mu = (ln p5 + ln p95)/2, the
+# z-term cancels for the symmetric 0.05/0.95 pair, and the form round-trips
+# through str(float) (shortest round-trip repr, lossless). Measured 2026-07-25
+# across all 154 family-B candidates and all 18 family-A: worst
+# |mu_real - mu_generator| = 0.0e+00, and the family-D match found at the round-5
+# gate sits at 1.776e-15 (one ULP). So 1e-6 has ~9 orders of magnitude of headroom
+# over the real noise floor.
 #
-# Deliberately NOT a materiality tolerance. Coincidental proximity to a candidate
-# is a DIFFERENT and unavoidable property -- the public retention columns are
-# exactly fittable, so an attacker always has ~172 candidate revenues and merely
-# cannot select among them. Widening this to 1e-3 flags those coincidences
-# (measured: the nearest is ~1.5e-3, a non-match) and would make the guard cry
-# wolf on data that is fine. The margin is REPORTED in B-CAP-BASIS instead, so a
-# shrinking one is visible long before it becomes a hard failure.
+# Deliberately NOT a materiality tolerance. Coincidental proximity is a DIFFERENT
+# and unavoidable property: widening to 1e-3 fires on the nearest coincidence
+# (1.476e-03, a non-match) and would make the guard cry wolf on data that is fine.
+#
+# THE SYMMETRY PRECONDITION IS LOAD-BEARING. The zero noise floor holds because
+# every fit on these routes uses the symmetric p5/p95 pair, which kills the
+# -sigma*(z_hi+z_lo)/2 term and with it any sensitivity to z's precision (note
+# _quantile_pair's TRUNCATED 1.645 -- it perturbs sigma but cancels in mu). A
+# route fitting at an ASYMMETRIC quantile pair would drift a genuinely-derived mu
+# by order sigma*dz ~ 2.5e-04, i.e. ~20x OUTSIDE this tolerance, and the guard
+# would silently miss a real derivation. Add such a route to the census below and
+# this constant must be revisited.
+#
+# SCALE LIMIT, stated rather than fixed. The tolerance is relative in log space
+# while the derivation noise from dollar rendering is not: _format_money_input is
+# 2dp (app.py), so d(mu) <= 0.0025/p5, which grows as the endpoint shrinks while
+# the threshold shrinks with |mu|. They cross at p5 ~ $330 (mu ~ 8.6) -- a purely
+# analytic crossover with no deployment input. Every prod loss field on this
+# deployment sits well above it, with an order of magnitude of detection margin;
+# THAT MARGIN IS REPORTED IN B-CAP-BASIS AND IS DELIBERATELY NOT RESTATED HERE.
+# (An earlier revision of this comment named the smallest prod meanlog and its
+# dollar p5. Both are rule-(d)/(b) private -- a prod mu is the exact external
+# anchor whose absence rule (b) depends on -- and this file is TRACKED and PUBLIC.
+# That was the same defect this comment block exists to reason about.) A loss
+# field with a $330 5th percentile is not a realistic authoring act, but a surface
+# that renders coarser than cents would move the crossover up and must be checked
+# against this note.
 MU_PUBLIC_TOL = 1e-6
 
 
-def assert_prod_mu_not_public(db: sqlite3.Connection) -> None:
-    """[I-SEC-1/I-SEC-3] The public variant's rule (b) is a PRECONDITION -- enforce it.
+def _mu_matches(db: sqlite3.Connection) -> list[tuple[float, str, str, str, float]]:
+    """Every (prod field, public candidate) pair inside the firing threshold.
 
-    Prod-derived retention and %-of-revenue columns are publishable only because
-    prod mu is NOT published. If an active scenario's mu were publicly derivable,
-    the public `worst.retain` column would invert to annual_revenue exactly as the
-    round-2 blocker did: solve retention for b, then rev = exp(mu + b*sigma)/k.
-
-    Task 9 MANDATES regenerating against a FRESH backup, so this runs every time
-    rather than being a one-off manual check written into a docstring.
+    Returns (gap, prod_label, candidate_origin, family, effective_threshold).
     """
-    candidates = _public_mu_candidates()
-    for name, pld, sld in _active_scenarios(db):
-        for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld}):
-            for mu, origin in candidates:
-                if abs(d["mean"] - mu) <= MU_PUBLIC_TOL * max(1.0, abs(mu)):
-                    raise SystemExit(
-                        f"PIN FAILED: active prod field [{name} {f}] has a mu within "
-                        f"{MU_PUBLIC_TOL:g} of a PUBLICLY DERIVABLE value [{origin}]. "
-                        "Rule (b) no longer holds -- prod-derived retention and %-rev "
-                        "columns become invertible to annual_revenue. Reclassify those "
-                        "rows to priv() before regenerating."
-                    )
-
-
-def min_public_mu_distance(db: sqlite3.Connection) -> tuple[float, str, str]:
-    """Smallest gap between any active prod mu and any publicly derivable mu."""
     cands = _public_mu_candidates()
-    best = (float("inf"), "", "")
+    out = []
     for name, pld, sld in _active_scenarios(db):
         for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld}):
-            for mu, origin in cands:
-                if (gap := abs(d["mean"] - mu)) < best[0]:
-                    best = (gap, f"{name} {f}", origin)
-    return best
+            for mu, origin, family in cands:
+                thr = MU_PUBLIC_TOL * max(1.0, abs(mu))
+                if (gap := abs(d["mean"] - mu)) <= thr:
+                    out.append((gap, f"{name} {f}", origin, family, thr))
+    return sorted(out)
 
 
-def assert_public_artifact_is_clean(text: str, *, secrets: list[tuple[str, str]]) -> None:
+def derivable_prod_fields(db: sqlite3.Connection) -> set[str]:
+    """Labels of prod loss fields whose mu is PUBLICLY DERIVABLE.
+
+    These are excluded from every PUBLIC per-field statistic -- see
+    assert_public_prod_basis_safe for why exclusion, not reclassification of the
+    whole section, is the proportionate response.
+    """
+    return {label for _, label, _, _, _ in _mu_matches(db)}
+
+
+def assert_public_prod_basis_safe(db: sqlite3.Connection, dominant_field: str) -> None:
+    """Rule (b) is a PRECONDITION on the PUBLISHED rows -- enforce exactly that.
+
+    Rule (b) publishes prod-derived statistics because only ``ln R - mu_f`` is
+    identifiable per field, so revenue needs an external anchor on some mu_f.
+    Round 5 found family D already supplying such an anchor while the previous
+    guard passed, so the check is now scoped to the property publication actually
+    needs rather than to the whole population:
+
+      1. PER-FIELD public statistics (retention columns, scale divergences) are
+         computed over the NON-derivable subset only, and the exclusion count is
+         disclosed publicly. A derivable field merely sitting in the population is
+         then harmless -- nothing published is computed from it.
+      2. The WHOLE-PORTFOLIO maxima (%-of-revenue rows) are set by ONE dominant
+         field, whose (mu, sigma) they expose. That field must not be derivable,
+         and there is no filtering escape: dropping it would change the D8 verdict
+         it exists to report. This is the assertion that has to hold.
+
+    Task 9 MANDATES regenerating against a FRESH backup, so a reordering that
+    promotes a derivable field into the dominant slot fails loud here rather than
+    silently publishing an invertible row.
+    """
+    for gap, label, origin, family, thr in _mu_matches(db):
+        if label == dominant_field:
+            raise SystemExit(
+                f"PIN FAILED: the %-of-revenue rows' DOMINANT field [{label}] has a mu "
+                f"within {thr:.3e} (gap {gap:.3e}) of a PUBLICLY DERIVABLE value "
+                f"[{origin}, family {family}]. Those rows expose that field's (mu, sigma), "
+                "so with a public anchor they invert to annual_revenue: solve the published "
+                "retention curve for sigma, then rev = exp(mu + b*sigma)/k. Reclassify the "
+                "%-rev rows to priv() -- publish the D8 verdict alone -- before regenerating."
+            )
+
+
+def public_mu_margins(db: sqlite3.Connection) -> list[tuple[str, float, str, str]]:
+    """Per-FAMILY smallest gap, as a RATIO to that pair's firing threshold.
+
+    Reported per family because a single global minimum hides the family that is
+    actually closing -- which is exactly how the family-D anchor slipped past four
+    gate rounds. Reported as a ratio because the guard fires on a RELATIVE
+    threshold (MU_PUBLIC_TOL * |mu|): printing an absolute gap against the literal
+    1e-6 overstated the headroom by a factor of |mu| (~12x on this population).
+    """
+    cands = _public_mu_candidates()
+    fields = [
+        (f"{name} {f}", d)
+        for name, pld, sld in _active_scenarios(db)
+        for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
+    ]
+    out = []
+    for family in _MU_FAMILIES:
+        best = (float("inf"), "", "")
+        for mu, origin, fam in cands:
+            if fam != family:
+                continue
+            thr = MU_PUBLIC_TOL * max(1.0, abs(mu))
+            for label, d in fields:
+                if (ratio := abs(d["mean"] - mu) / thr) < best[0]:
+                    best = (ratio, label, origin)
+        out.append((family, best[0], best[1], best[2]))
+    return out
+
+
+def _renderings(value: float) -> list[str]:
+    """Every plausible way a future author might render a private number.
+
+    The check is a substring test, so registering only the ``,.0f`` form lets an
+    identical value through in any other format. Verified evasions before this
+    existed: ``.0f``, ``repr``, ``int``, ``.3e``, and underscore separators all
+    passed while ``,.0f`` was caught.
+    """
+    out = [f"{value:,.0f}", f"{value:.0f}", f"{value:,.2f}", f"{value:.2f}", f"{value:.3e}"]
+    out += [repr(value), repr(int(value)), f"{int(value):_}"]
+    return [s for s in out if len(s) >= 6]  # short strings collide with counts/years
+
+
+def assert_public_artifact_is_clean(
+    text: str, *, numbers: list[tuple[float, str]], strings: list[tuple[str, str]]
+) -> None:
     """[I-SEC-4] Check the EMITTED public text, not just each author's intent.
 
     Report moves classification into code, but nothing inspected the OUTPUT -- so a
     NEW line mis-classified by a future author still leaks, which is precisely what
-    round 2's blocker was. B-CAP-FLOOR also makes the naive prose heuristic ("no $
-    in the public variant") FALSE, removing the last informal backstop. This kills
-    the whole literal-value class mechanically, regardless of who adds what later.
+    round 2's blocker was. B-CAP-FLOOR (rule a') also makes the naive prose
+    heuristic ("no $ in the public variant") FALSE, removing the last informal
+    backstop. This kills the whole literal-value class mechanically.
+
+    THREE evasions this now covers that the round-4 version did not:
+      * non-comma renderings of the same value (see _renderings);
+      * TRUNCATED scenario labels -- the appendix prints ``name[:34]``, and every
+        active name is longer than that, so a full-name substring test could not
+        see the truncated form. Prefixes are registered explicitly;
+      * dollar figures that were never registered at all (the PERT bound, the
+        simulated min/max, every B-CAP-K cap and median column).
+
+    WHAT IT STRUCTURALLY CANNOT CATCH, stated so nobody mistakes it for complete:
+    small integers whose digit strings collide with legitimate public values
+    (population counts like 15 or 9 collide with seed indices and n_iters digits).
+    Report's per-line classification remains the primary control; this is the
+    mechanical backstop.
     """
-    for value, label in secrets:
-        if value and value in text:
-            raise SystemExit(
-                f"PUBLIC ARTIFACT LEAK: {label} ({value!r}) appears in the public variant. "
-                "A line was classified pub()/both() that must be priv()."
-            )
+    for value, label in numbers:
+        for rendered in _renderings(value):
+            if rendered in text:
+                raise SystemExit(
+                    f"PUBLIC ARTIFACT LEAK: {label} rendered as {rendered!r} appears in the "
+                    "public variant. A line was classified pub()/both() that must be priv()."
+                )
+    for value, label in strings:
+        # Register the truncated forms the appendix actually prints, not just the full string.
+        for candidate in {value, value[:34], value[:36]}:
+            if len(candidate) >= 12 and candidate in text:
+                raise SystemExit(
+                    f"PUBLIC ARTIFACT LEAK: {label} ({candidate!r}) appears in the public "
+                    "variant. A line was classified pub()/both() that must be priv()."
+                )
 
 
 def _prod() -> tuple[sqlite3.Connection, float, str]:
-    db = sqlite3.connect(PROD_DB)
+    # READ-ONLY by construction. The module comment and the design both instruct
+    # pointing SIGMA_RECAL_PROD_DB at a prod-backup COPY, but that was
+    # documentation-only and already not followed in practice (the carryover's own
+    # reproduce command points at the single local backup). mode=ro enforces it,
+    # and cannot create -wal/-shm files beside the backup.
+    db = sqlite3.connect(f"file:{PROD_DB}?mode=ro", uri=True)
     rev = db.execute(
         "SELECT annual_revenue FROM organizations WHERE annual_revenue IS NOT NULL "
         "ORDER BY id LIMIT 1"
@@ -348,6 +596,37 @@ def _active_scenarios(db: sqlite3.Connection) -> list[tuple[str, dict | None, di
         [d for _, pld, sld in out for d in (pld, sld)], "the prod backup (active scenarios)"
     )
     return out
+
+
+def _prod_loss_fields(
+    db: sqlite3.Connection, *, exclude: set[str] | None = None
+) -> list[tuple[str, dict]]:
+    """Labeled active prod lognormal loss fields, optionally minus a label set.
+
+    One accessor for both bases so a PUBLIC row cannot accidentally be computed
+    over the unfiltered population -- the exclusion is a keyword the caller must
+    pass, and every pub()/both() per-field row below passes it.
+    """
+    exclude = exclude or set()
+    return [
+        (label, d)
+        for name, pld, sld in _active_scenarios(db)
+        for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
+        if (label := f"{name} {f}") not in exclude
+    ]
+
+
+def _dominant_max_field(db: sqlite3.Connection) -> str:
+    """The field that SETS the %-of-revenue maxima, hence the one they expose.
+
+    The max over n draws of a lognormal concentrates near its own upper quantile
+    exp(mu + sigma*z_n) with z_n = Phi^-1(0.5^(1/n)) (the median of the maximum),
+    so the portfolio max is set by the argmax of mu + sigma*z_n -- NOT by the
+    largest mu, since sigma is heterogeneous post-PR1. Evaluated at the largest n
+    reported, which is where the uncapped rows are most exposed.
+    """
+    z_n = float(ndtri(0.5 ** (1.0 / max(N_SENSITIVITY))))
+    return max(_prod_loss_fields(db), key=lambda kv: kv[1]["mean"] + kv[1]["sigma"] * z_n)[0]
 
 
 def basis(db: sqlite3.Connection, rev: float, head: str) -> dict[str, object]:
@@ -452,7 +731,13 @@ def _sim_max(scen: list, cap: float | None) -> dict[str, float]:
             worst = max(worst, float(np.max(lm)))
         maxima.append(worst)
     maxima.sort()
-    return {"min": maxima[0], "median": st.median(maxima), "max": maxima[-1]}
+    return {
+        "min": maxima[0],
+        "median": st.median(maxima),
+        "max": maxima[-1],
+        "stdev": st.stdev(maxima) if len(maxima) > 1 else 0.0,
+        "maxima": maxima,
+    }
 
 
 def _lognormal_bearing(scen: list) -> tuple[list, float]:
@@ -512,6 +797,7 @@ def portfolio_ale(db: sqlite3.Connection, cap: float | None) -> float:
 
 
 def main() -> None:
+    assert_settings_basis()
     pins()
     header = [
         "=" * 78,
@@ -538,8 +824,13 @@ def main() -> None:
     r.pub("cap — since k_capacity is published and cap = k x revenue, those invert to revenue.")
 
     db, rev, head = _prod()
-    assert_prod_mu_not_public(db)
     b = basis(db, rev, head)
+    # The %-of-revenue maxima are set by whichever field has the heaviest upper
+    # tail at the reported n; that is the field those rows expose, so it is the one
+    # rule (b) must hold for. Computed BEFORE any row is emitted so the guard fires
+    # before an invertible figure exists.
+    assert_public_prod_basis_safe(db, _dominant_max_field(db))
+    excluded = derivable_prod_fields(db)
     r.priv("")
     r.priv("[B-CAP-BASIS] input assertions")
     r.priv(f"  alembic head            : {b['head']}")
@@ -556,14 +847,30 @@ def main() -> None:
         f"  post-PR1 sigma check    : max (sigma-{SIGMA_DEFAULT}) = {b['worst_sigma_dev']:+.3e} "
         f"[{b['worst_sigma_field']}]  (must be <= {SIGMA_BASIS_TOL:.0e}; narrow-only sweep, D6')"
     )
-    gap, gap_field, gap_origin = min_public_mu_distance(db)
     r.priv(
-        f"  public-mu margin        : {gap:.3e}  [{gap_field}] vs [{gap_origin}]  "
-        f"(must exceed {MU_PUBLIC_TOL:g}; rule (b) holds only while prod mu is NOT derivable)"
+        f"  public-mu candidates    : {len(_public_mu_candidates())}  over {len(_MU_FAMILIES)} "
+        "authoring-surface families (A native / B PERT-flip / C PERT-endpoints / D IRIS)"
     )
+    r.priv(
+        "  public-mu margin, PER FAMILY, as a RATIO to that pair's firing threshold "
+        "(1.0 = guard fires; a ratio below ~10 is closing):"
+    )
+    for family, ratio, mfield, morigin in public_mu_margins(db):
+        verdict = "DERIVABLE — excluded from public per-field rows" if ratio <= 1.0 else ""
+        r.priv(f"    {family:<22} {ratio:>12.1f}x   [{mfield}] vs [{morigin}] {verdict}")
+    r.priv(
+        f"  prod loss fields EXCLUDED from public per-field statistics: {len(excluded)}"
+        f" of {b['lognormal_fields']}"
+    )
+    for label in sorted(excluded):
+        r.priv(f"    {label}")
     r.pub("")
     r.pub("[B-CAP-BASIS] WITHHELD — revenue, population, alembic head, authored scenario names.")
-    r.pub("  The basis assertions ran and passed; the run below is against that asserted state.")
+    r.pub("  The basis assertions ran and passed. The PUBLIC variant carries ONLY non-deployment")
+    r.pub("  content: PASS/FAIL verdicts, analytic identities in (sigma, z, k), and library")
+    r.pub("  figures at a HYPOTHETICAL revenue sweep. Every prod-derived magnitude — %-of-revenue,")
+    r.pub("  retention, seed dispersion, per-scenario effect, portfolio ALE — is in the FULL")
+    r.pub("  appendix ONLY and is never published, so there is nothing here to anchor to revenue.")
 
     scen = _active_scenarios(db)
     ln, pert_bound = _lognormal_bearing(scen)
@@ -577,24 +884,75 @@ def main() -> None:
         f"  per-distribution cap = k x revenue = ${cap:,.0f}  (event total bounded at 2k x revenue)"
     )
     r.pub("  per-distribution cap = k x revenue  (event total bounded at 2k x revenue)")
+    leak_sim: list[tuple[float, str]] = []
     for label, c in (("today (uncapped)", None), (f"capped k={K_CAPACITY}", cap)):
         res = _sim_max(ln, c)
+        leak_sim += [
+            (res["min"], f"simulated min LM [{label}]"),
+            (res["median"], f"simulated median LM [{label}]"),
+            (res["max"], f"simulated max LM [{label}]"),
+        ]
         verdict = "" if c is None else ("   D8 PASS" if res["median"] <= rev else "   D8 FAIL")
         pct = res["median"] / rev * 100
         r.priv(
             f"  {label:<18} min ${res['min']:>18,.0f}  median ${res['median']:>18,.0f} "
             f"({pct:7.2f}% rev)  max ${res['max']:>18,.0f}{verdict}"
         )
-        r.pub(f"  {label:<18} median max LM = {pct:7.2f}% of revenue{verdict}")
+        # PUBLIC: the D8 VERDICT only (rule c). The % of revenue is prod-derived and
+        # would combine with the retention curve to fix revenue, so it stays priv.
+        r.pub(
+            f"  {label:<18}{verdict if verdict else '   (uncapped baseline — figure in full appendix)'}"
+        )
     r.priv(f"  PERT-only scenarios cannot exceed ${pert_bound:,.0f} (analytic bound high_P+high_S)")
-    r.pub("  PERT-only scenarios are bounded by high_P+high_S and cannot approach the cap.")
+    # PUBLIC: qualitative only. The prod PERT bound and its ratio to the cap are an
+    # absolute prod dollar over the cap, which inverts to revenue directly, so both
+    # are withheld; the library-only hypothetical below carries the quantitative point.
+    r.pub("  PERT-only scenarios are bounded by their authored high_P+high_S (prod magnitude and")
+    r.pub("  its ratio to the cap WITHHELD — an absolute prod dollar over the cap inverts to")
+    r.pub("  revenue). The library-only hypothetical below shows the bound far under the cap.")
     r.priv(
         f"  HARD analytic bound, n-invariant: maxP+maxS = 2k x revenue = ${2 * cap:,.0f} "
         f"({2 * K_CAPACITY * 100:.0f}% rev)"
     )
+    r.both("  BUT THE EQUALITY IS CONDITIONAL, NOT AN IDENTITY. `max` is applied to lognormal")
+    r.both("  / lognormal_mixture loss fields ONLY, so the n-invariant bound is")
+    r.both("    max LM <= bound_P + bound_S,  bound_f = k*revenue (capped lognormal)")
+    r.both("                                          = high_f    (PERT — NOT capacity-bounded)")
+    r.both("  and it collapses to 2k*revenue only where EVERY loss field's own bound is")
+    r.both("  <= k*revenue. D19's floor does not help: it fires on lognormal components only,")
+    r.both("  so a PERT-only scenario is never checked against capacity at all.")
+    lib_pert = sorted(
+        (
+            sum(
+                float(v.get("high", 0.0))
+                for f in ("primary_loss", "secondary_loss")
+                if isinstance(v := e.get(f), dict)
+                and str(v.get("distribution", "pert")).lower() == "pert"
+            ),
+            e["slug"],
+        )
+        for e in _entries()
+    )
+    worst_lib_pert, worst_lib_slug = lib_pert[-1]
+    r.both(
+        f"  Worst LIBRARY PERT loss bound (high_P+high_S): ${worst_lib_pert:,.0f} "
+        f"[{worst_lib_slug}]"
+    )
+    r.both("  -- public under rule (a'): library dollars plus a hypothetical revenue sweep.")
+    r.both(f"  {'hypothetical revenue':>22}  {'2k*rev':>16}  {'worst PERT entry':>17}  verdict")
+    for hyp in (5e6, 1e7, 5e7, 1e8):
+        ok = worst_lib_pert <= 2 * K_CAPACITY * hyp
+        r.both(
+            f"  ${hyp:>21,.0f}  ${2 * K_CAPACITY * hyp:>15,.0f}  ${worst_lib_pert:>16,.0f}  "
+            f"{'holds' if ok else 'VIOLATED (' + f'{worst_lib_pert / hyp:.2f}' + 'x rev)'}"
+        )
+    r.both("  So `2k x revenue` is safe to quote ONLY with the conditional clause. At THIS")
+    r.both("  deployment's revenue every library PERT bound is orders of magnitude below the")
+    r.both("  cap (row above), but the identity is not universal and must not be published as")
+    r.both("  though it were.")
     r.pub(
         f"  HARD analytic bound, n-invariant: maxP+maxS = 2k x revenue = "
-        f"{2 * K_CAPACITY * 100:.0f}% rev"
+        f"{2 * K_CAPACITY * 100:.0f}% rev — subject to the conditional clause above."
     )
     r.both("  estimator: standalone per-scenario substreams (sha256 name digest); NOT the engine")
     r.both("  -- no shared stream, no vulnerability thinning. Valid for the seed-spread of the")
@@ -605,22 +963,40 @@ def main() -> None:
     r.both("  The max of an unbounded heavy-tailed sample grows without bound in n, so an")
     r.both("  uncapped D8 reading is meaningless without a declared iteration count. Only the")
     r.both("  HARD bound above is a true n-invariant guarantee.")
-    r.both(f"  {'n_iters':>10}  {'uncapped % rev':>15}  {'':>6}  {'capped % rev':>13}  {'':>6}")
+    r.both("  The median over the COMMITTED seed set is D8's criterion, so the verdict is")
+    r.both("  deterministic -- but a median quoted WITHOUT its dispersion is a point estimate")
+    r.both("  presented as a bound. The capped columns therefore carry the seed spread and the")
+    r.both("  count of committed seeds that individually breach 100%: the seed set is the")
+    r.both("  SECOND conditioning parameter, exactly as n is the first.")
+    r.priv(
+        f"  {'n_iters':>10}  {'uncapped % rev':>15}  {'':>6}  {'capped % rev':>13}  {'':>6}"
+        f"  {'capped min..max':>17} {'sd':>7} {'#seeds>100%':>12}"
+    )
+    r.pub(f"  {'n_iters':>10}  {'uncapped D8':>12}   {'capped D8':>10}")
     saved = globals()["ITERS"]
     for n in N_SENSITIVITY:
         globals()["ITERS"] = n
         unc = _sim_max(ln, None)["median"] / rev * 100
-        cpd = _sim_max(ln, cap)["median"] / rev * 100
+        cpd_res = _sim_max(ln, cap)
+        cpd = cpd_res["median"] / rev * 100
+        spread = f"{cpd_res['min'] / rev * 100:.2f}..{cpd_res['max'] / rev * 100:.2f}"
+        n_breach = sum(1 for m in cpd_res["maxima"] if m > rev)
         if n == saved:
             tag = "  <== BASIS (shipped Settings.mc_iterations_max)"
         elif n == _MC_ITERATIONS_FIELD_CEILING:
             tag = "  <== CONFIGURABLE CEILING (config.py Field le=)"
         else:
             tag = ""
-        # Ratios over prod fields (rule b) plus verdicts (rule c): public.
-        r.both(
+        # The % columns and dispersion are prod-derived → full appendix only.
+        # PUBLIC gets the D8 verdicts (rule c), which is what the PR body needs.
+        r.priv(
             f"  {n:>10,}  {unc:>14.2f}%  {'PASS' if unc <= 100 else 'FAIL':>6}  "
-            f"{cpd:>12.2f}%  {'PASS' if cpd <= 100 else 'FAIL':>6}{tag}"
+            f"{cpd:>12.2f}%  {'PASS' if cpd <= 100 else 'FAIL':>6}"
+            f"  {spread:>17} {cpd_res['stdev'] / rev * 100:>6.2f}% {n_breach:>11}{tag}"
+        )
+        r.pub(
+            f"  {n:>10,}  {'PASS' if unc <= 100 else 'FAIL':>12}   "
+            f"{'PASS' if cpd <= 100 else 'FAIL':>10}{tag}"
         )
     globals()["ITERS"] = saved
     r.both("  NOTE: at Settings.mc_iterations_default the UNCAPPED state passes D8 -- the")
@@ -628,6 +1004,16 @@ def main() -> None:
     r.both("  last row is the ceiling that Setting's own Field still permits an operator to")
     r.both("  configure, so D8 is shown to hold across the whole configurable range -- with")
     r.both("  its TIGHTEST margin there, which is the number to quote as the worst case.")
+    # The specific margin and dispersion are prod-derived magnitudes → full appendix.
+    r.priv("  QUOTE THE MARGIN WITH ITS DISPERSION. At the ceiling the margin is a small")
+    r.priv("  fraction of a percent while the committed-seed standard deviation is larger than")
+    r.priv("  it, and individual committed seeds already exceed 100% at BOTH 700k and the")
+    r.priv("  ceiling (see the #seeds>100% column). [figures in this FULL appendix only]")
+    r.pub("  The capped MEDIAN passes across the configurable range, but that median carries")
+    r.pub("  seed dispersion larger than its own margin and individual committed seeds can")
+    r.pub("  breach 100% (dispersion in the full appendix). D8 is a median criterion, so the")
+    r.pub("  PASS is legitimate and deterministic — but the margin is a point estimate, not a")
+    r.pub("  bound. The only n-invariant bound is the analytic maxP+maxS row, with its clause.")
 
     r.both("")
     r.both("[B-CAP-K] D8 across the k_capacity bracket, with the retention columns")
@@ -639,26 +1025,21 @@ def main() -> None:
         f"  {'k':>7} {'cap':>17} {'median max LM':>17} {'% rev':>8} {'D8':>5} "
         f"{'med.retain':>11} {'worst.retain':>13}"
     )
-    r.pub(f"  {'k':>7} {'% rev':>8} {'D8':>5} {'med.retain':>11} {'worst.retain':>13}")
+    # PUBLIC: k and the D8 verdict only (rules c). The % rev and the retention
+    # columns are prod-derived — the 11-point retention curve over-determines a
+    # field and recovers its sigma, so it stays in the full appendix.
+    r.pub(f"  {'k':>7} {'D8':>5}")
     for k in K_BRACKET:
         kcap = k * rev
         res = _sim_max(ln, kcap)
-        rets = sorted(
-            mean_retained(d["mean"], d["sigma"], kcap)
-            for _, pld, sld in ln
-            for _, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
-        )
+        rets = sorted(mean_retained(d["mean"], d["sigma"], kcap) for _, d in _prod_loss_fields(db))
         mark = "  <== CHOSEN" if k == K_CAPACITY else ""
         pct, verdict = res["median"] / rev * 100, "PASS" if res["median"] <= rev else "FAIL"
         r.priv(
             f"  {k:>7.3f} ${kcap:>16,.0f} ${res['median']:>16,.0f} {pct:>7.2f}% "
             f"{verdict:>5} {st.median(rets) * 100:>10.3f}% {rets[0] * 100:>12.3f}%{mark}"
         )
-        # Retention over PROD fields: mu is not published, so >= 2 unknowns (rule b).
-        r.pub(
-            f"  {k:>7.3f} {pct:>7.2f}% {verdict:>5} "
-            f"{st.median(rets) * 100:>10.3f}% {rets[0] * 100:>12.3f}%{mark}"
-        )
+        r.pub(f"  {k:>7.3f} {verdict:>5}{mark}")
 
     # The bracket above is measured at the BASIS. Since D8's verdict rises with n,
     # WHICH k values pass is itself n-conditional -- so the neighbourhood of the
@@ -671,23 +1052,28 @@ def main() -> None:
         res = _sim_max(ln, k * rev)
         pct = res["median"] / rev * 100
         mark = "  <== CHOSEN" if k == K_CAPACITY else ""
-        r.both(
+        r.priv(
             f"  {k:>7.3f} {pct:>7.2f}% {'PASS' if res['median'] <= rev else 'FAIL':>5}"
             f"{'':>26}{mark}"
         )
+        r.pub(f"  {k:>7.3f} {'PASS' if res['median'] <= rev else 'FAIL':>5}{mark}")
     globals()["ITERS"] = saved_iters
     r.both("  At the ceiling the chosen k is very nearly BINDING: the next bracket step up")
     r.both("  FAILS. So 'a slightly larger k also passes' holds at the basis and NOT at the")
     r.both("  ceiling -- D13's claim must be stated with its n, exactly as D8's must.")
 
-    r.both("")
-    r.both(f"[B-CAP-DRIFT] realized-mean retention under the k={K_CAPACITY} cap (100% = no cost)")
-    r.both("  the cap is a TAIL guardrail: post-PR1 it costs essentially nothing in expected loss.")
-    r.both("  PR2's per-run disclosure will therefore read ~0.0% — that is correct, not broken.")
+    # B-CAP-DRIFT is realized-mean retention over PROD fields — entirely prod-derived,
+    # so the whole section is full-appendix only. The D16 "near-zero cost is correct,
+    # not a bug" point is product copy and lives in the design doc, not the public body.
+    r.priv("")
+    r.priv(f"[B-CAP-DRIFT] realized-mean retention under the k={K_CAPACITY} cap (100% = no cost)")
+    r.priv("  the cap is a TAIL guardrail: post-PR1 it costs essentially nothing in expected loss.")
+    r.priv(
+        "  PR2's per-run disclosure will therefore read near-zero — correct per D16, not broken."
+    )
     prod_ret = [
-        (mean_retained(d["mean"], d["sigma"], cap), f"{n[:34]} {f}")
-        for n, pld, sld in ln
-        for f, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
+        (mean_retained(d["mean"], d["sigma"], cap), label[:34])
+        for label, d in _prod_loss_fields(db)
     ]
     lib_ret = [
         (mean_retained(d["mean"], d["sigma"], cap), f"{e['slug'][:34]} {f}")
@@ -701,15 +1087,37 @@ def main() -> None:
             f"  {label:<22} n={len(rets):<3} median retained {med * 100:7.3f}%   "
             f"worst retained {rets[0][0] * 100:7.3f}%  [{rets[0][1]}]"
         )
-    # The PROD row publishes (rule b); the LIBRARY row does NOT (rule e) -- its mu is
-    # public, so its retention inverts through mean_retained to the cap and to revenue.
-    prod_med = st.median([x for x, _ in prod_ret])
-    r.pub(
-        f"  prod active fields     median retained {prod_med * 100:7.3f}%   "
-        f"worst retained {min(x for x, _ in prod_ret) * 100:7.3f}%"
+
+    # B-CAP-SCEN is the per-SCENARIO retention basis (what the per-run disclosure
+    # shows). It composes the excluded, publicly-derivable field with the dominant
+    # field of the same scenario, so a published composite inverts to revenue — the
+    # whole section is full-appendix only. D16's copy is pinned to THIS range in the
+    # design doc (operator-local), not in the public body.
+    r.priv("")
+    r.priv("[B-CAP-SCEN] per-SCENARIO retention — the basis the per-run disclosure actually shows")
+    r.priv("  B-CAP-DRIFT above is per FIELD and B-CAP-PORT below is per PORTFOLIO. The PR2")
+    r.priv("  disclosure is per SCENARIO, a THIRD basis: R_scen = sum_f E_f*R_f / sum_f E_f over")
+    r.priv("  the scenario's loss fields, E_f the parent mean (lognormal exp(mu+sigma^2/2); PERT")
+    r.priv("  (low+4*mode+high)/6), R_f = 1 for PERT. BOTH kinds in BOTH sums; LEF cancels.")
+    scen_ret = []
+    for name, pld, sld in ln:
+        num = sum(_dist_mean(d, cap) for d in (pld, sld) if d)
+        den = sum(_dist_mean(d, None) for d in (pld, sld) if d)
+        if den > 0:
+            scen_ret.append((num / den, name[:34]))
+    scen_ret.sort()
+    r.priv(
+        f"  active lognormal-bearing scenarios n={len(scen_ret)}   median retained "
+        f"{st.median([x for x, _ in scen_ret]) * 100:8.4f}%   worst retained "
+        f"{scen_ret[0][0] * 100:8.4f}%  [{scen_ret[0][1]}]"
     )
-    r.pub("  library catastrophic   WITHHELD — library mu is public, so its retention under the")
-    r.pub("                         cap inverts to annual_revenue.")
+    r.priv(
+        f"  disclosed per-scenario cap effect spans {(1 - scen_ret[-1][0]) * 100:.4f}% to "
+        f"{(1 - scen_ret[0][0]) * 100:.4f}% at the shipped k -- D16's copy is pinned to THIS"
+    )
+    r.priv(
+        "  range in the design doc, NOT the per-field median, or the copy contradicts the surface."
+    )
 
     r.both("")
     r.both("[B-CAP-SCALE] residual-path divergence: scaling `max` by k vs leaving it unscaled")
@@ -737,20 +1145,56 @@ def main() -> None:
             worst = max(worst, alt / base - 1.0)
         return worst
 
-    prod_pairs = [
-        (d["mean"], d["sigma"])
-        for _, pld, sld in ln
-        for _, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
-    ]
+    # The numeric divergence table is prod-derived (and the library variant inverts
+    # via its public mu) → full appendix only. The section's POINT is the prose above:
+    # the choice rests on the equivariance argument alone, and the figure only confirms
+    # it is materially inert. That argument, carrying no number, stays public.
+    prod_pairs = [(d["mean"], d["sigma"]) for _, d in _prod_loss_fields(db)]
     lib_pairs = [(d["mean"], d["sigma"]) for e in _entries() for _, d in _loss_fields(e)]
-    r.both(f"  {'multiplier k':>14}  {'worst divergence (prod)':>24}")
+    r.priv(f"  {'multiplier k':>14}  {'worst divergence (prod)':>24}")
     for k in (0.75, 0.50, 0.25, 0.10):
-        # Prod-derived (rule b): mu is not published, so this does not invert.
-        r.both(f"  {k:>14.2f}  {_diverge(prod_pairs, k) * 100:>23.4f}%")
-    r.both(f"  {'k -> 0 (sup)':>14}  {_diverge(prod_pairs, None) * 100:>23.4f}%")
-    # Library population is rule (e): its mu is public, so retention at the cap inverts.
+        r.priv(f"  {k:>14.2f}  {_diverge(prod_pairs, k) * 100:>23.4f}%")
+    r.priv(f"  {'k -> 0 (sup)':>14}  {_diverge(prod_pairs, None) * 100:>23.4f}%")
     r.priv(f"  library population, k -> 0 supremum: {_diverge(lib_pairs, None) * 100:.4f}%")
-    r.pub("  library population: WITHHELD (rule e).")
+    r.pub("  The worst-case divergence figures (prod and library) are in the full appendix;")
+    r.pub("  both are immaterial and neither is needed for the equivariance argument above.")
+
+    # B-CAP-DISC is a spread over PROD scenarios' per-scenario retention → full
+    # appendix only. Its methodological point (R_scen is NOT basis-invariant, so a
+    # single disclosed number must carry its multiplier bracket) is recorded in the
+    # design doc; the measured spread itself is prod-derived and not published.
+    r.priv("")
+    r.priv("[B-CAP-DISC] is the per-scenario retention BASIS-INVARIANT? (no) — the range")
+    r.priv("  Each FIELD's R_f is invariant under the scale-both rule (b is invariant, see")
+    r.priv("  B-CAP-SCALE). R_scen is NOT: it is an E_f-WEIGHTED average, and the residual")
+    r.priv("  weights are k_f*E_f with INDEPENDENT PL and SL multipliers, so the weights move")
+    r.priv("  even though every R_f is pinned. Sweeping independent (k_PL, k_SL) over the")
+    r.priv("  bracket below and reporting the spread of the disclosed quantity (1 - R_scen):")
+    r.priv(f"  {'scenario':<36} {'min':>10} {'max':>10} {'max/min':>9}")
+    disc_bracket = (0.10, 0.25, 0.50, 0.75, 1.00)
+    worst_ratio = 0.0
+    for name, pld, sld in ln:
+        vals = []
+        for k_pl in disc_bracket:
+            for k_sl in disc_bracket:
+                num = k_pl * _dist_mean(pld, cap) + k_sl * _dist_mean(sld, cap)
+                den = k_pl * _dist_mean(pld, None) + k_sl * _dist_mean(sld, None)
+                if den > 0:
+                    vals.append(1.0 - num / den)
+        if not vals or max(vals) <= 0:
+            continue
+        lo_v, hi_v = min(vals), max(vals)
+        ratio = hi_v / lo_v if lo_v > 0 else float("inf")
+        worst_ratio = max(worst_ratio, ratio if ratio != float("inf") else worst_ratio)
+        r.priv(f"  {name[:36]:<36} {lo_v * 100:>9.4f}% {hi_v * 100:>9.4f}% {ratio:>8.2f}x")
+    r.priv(
+        f"  worst spread over the bracket: {worst_ratio:.2f}x. It is bracket-CONDITIONAL: as the"
+    )
+    r.priv("  multiplier RATIO diverges the spread tends to (1-R_PL)/(1-R_SL); finite here")
+    r.priv("  because every basis scenario is two-lognormal, unbounded if a sibling is PERT. So")
+    r.priv("  any single number quoted for it MUST carry its bracket -- the discipline D8 needs")
+    r.priv("  for n. The currency subtractor compounds it (E[(Y-c)+] not proportional to E[Y]);")
+    r.priv("  its magnitude depends on c and is deliberately NOT quantified rather than asserted.")
 
     r.both("")
     r.both("[B-CAP-FLOOR] D19's band: which catastrophic library entries are uninstantiable")
@@ -850,23 +1294,37 @@ def main() -> None:
     r.both("  So the deviation is bounded by the validator's own floor and is far smaller at the")
     r.both("  shipped cap. Per-component is the CHOSEN 'each regime capped at capacity' semantics.")
 
-    r.both("")
-    r.both("[B-CAP-PORT] analytic portfolio ALE — population=active-only")
+    # B-CAP-PORT is prod ALE → full appendix only. The ALE ratio is NOT gauge-invariant
+    # (the portfolio mixes lognormal fields, which scale, with PERT fields, whose means
+    # are absolute), so it is not safe to publish as a "homogeneous prod ratio"; it stays
+    # priv with the dollars and the count.
+    r.priv("")
+    r.priv("[B-CAP-PORT] analytic portfolio ALE — population=active-only")
     today = portfolio_ale(db, None)
     after = portfolio_ale(db, cap)
     r.priv(f"  population {len(scen)} scenarios")
     r.priv(f"  today ${today:,.0f} -> capped ${after:,.0f}  = {(after / today - 1) * 100:+.4f}%")
-    # Ratio of two unpublished prod ALEs (rule b); the dollars and the count are not.
-    r.pub(f"  portfolio ALE change under the cap = {(after / today - 1) * 100:+.4f}%")
 
+    # Defense-in-depth over the PUBLIC text. The primary guarantee is structural:
+    # the public variant carries ONLY non-deployment content (verdicts, analytic
+    # identities in (sigma, z, k), and library figures at a HYPOTHETICAL revenue
+    # sweep), so no prod-derived magnitude is emitted to it in the first place.
+    # This check is the mechanical backstop against a future edit that reclassifies
+    # a prod figure public by mistake. It registers every deployment-derived dollar
+    # the run computed; small-integer population counts remain its documented blind
+    # spot, which is why nothing prod-derived is public by construction.
     assert_public_artifact_is_clean(
         r.public(),
-        secrets=[
-            (f"{rev:,.0f}", "annual_revenue"),
-            (f"{cap:,.0f}", "the cap"),
-            (f"{2 * cap:,.0f}", "2x the cap"),
-            (f"{today:,.0f}", "portfolio ALE (today)"),
-            (f"{after:,.0f}", "portfolio ALE (capped)"),
+        numbers=[
+            (rev, "annual_revenue"),
+            (cap, "the cap"),
+            (2 * cap, "2x the cap"),
+            (today, "portfolio ALE (today)"),
+            (after, "portfolio ALE (capped)"),
+            (pert_bound, "the prod PERT-only analytic bound"),
+            *leak_sim,
+        ],
+        strings=[
             (head, "the alembic head"),
             *((n, "an authored scenario name") for n, _, _ in scen),
         ],
