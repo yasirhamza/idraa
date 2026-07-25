@@ -418,8 +418,16 @@ def coherence_section() -> list[str]:
     surface the design describes in PROSE outside the `## Threading` section; a
     name that appears in a task body as incidental prose rather than a real
     `**Files:**`/criterion line (it checks presence in the task region, not role
-    within it). Report's line-by-line classification and human review remain the
-    backstop for those.
+    within it); and — asymmetrically with the file dimension — a STORE that is
+    newly named in the design's Stores row. File/glob surfaces are EXTRACTED from
+    the design text, so a new one auto-forces a task; but THREADING_STORES is a
+    HAND-MAINTAINED constant (store names cannot be regex-extracted from the Stores
+    prose, which also carries `sa.JSON`/`state_json`/`JSONB`), so a store added to
+    the design without also being added to that tuple passes silently. The store
+    set is frozen for this epic (D14), so this is a latent gap, not a live one; a
+    future store-adding PR must extend THREADING_STORES, or mechanize it against
+    `Base.metadata.tables`. Report's line-by-line classification and human review
+    remain the backstop for all of the above.
     """
     lines = ["", "[DESIGN<->PLAN COHERENCE] every design surface must be named by a task", ""]
     if not (DESIGN_DOC.exists() and PLAN_DOC.exists()):
