@@ -212,6 +212,11 @@ scoped_files = [
     "src/idraa/services/scenario_library.py",
     "src/idraa/services/aggregate_run_view_model.py",
     "src/idraa/services/run_view_model.py",
+    # PR2 capacity bound (Task 2): fair_cam is first-party code (CLAUDE.md)
+    # and _scale_distribution's LOGNORMAL_MIXTURE branch is a
+    # components-list -> components-list rebuild that now carries `max`
+    # (Task 3) -- the same index-on-list hazard class as the services above.
+    "fair_cam/risk_engine/fair_core.py",
     "src/idraa/services/audit.py",
     "src/idraa/services/seed_library_loader.py",
 ]
