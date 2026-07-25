@@ -14,10 +14,17 @@ output verbatim and contains zero derived numbers.
 Bases:
   B-CAP-BASIS  input assertions: alembic head, revenue, population, post-PR1 sigma
   B-CAP-SIM    simulated max single-event LM over the committed seed set (D8 verdict)
+  B-CAP-N      D8's verdict as a function of the iteration count n
   B-CAP-K      D8 across the k_capacity bracket -- the honesty curve, per D9''(a)
   B-CAP-DRIFT  realized-mean retention under the cap (the "cost" of the guardrail)
   B-CAP-ALT    the REJECTED quantile-anchored fallback, and why D14 has none
+  B-CAP-MIX    per-component vs mixture-conditioned truncation, and its bounds
   B-CAP-PORT   portfolio ALE, today -> capped
+
+TWO artifacts are written (see Report): the FULL appendix, and a SANITIZED PUBLIC
+variant safe to paste into a public PR body. Which rows are public is decided
+line-by-line HERE, in code -- never by a reviewer's memory at PR time. See
+Report's docstring for the classification rule and why it exists.
 
 Usage:
   SIGMA_RECAL_PROD_DB=<path-to-prod-backup-COPY> uv run python scripts/capacity_bound_figures.py
@@ -41,6 +48,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # Deployment-specific, NEVER hardcoded (public repo): point SIGMA_RECAL_PROD_DB at a
 # prod-backup COPY. With no env var the prod-dependent sections are skipped.
 PROD_DB = Path(os.environ["SIGMA_RECAL_PROD_DB"]) if os.environ.get("SIGMA_RECAL_PROD_DB") else None
+
+SPECS = ROOT / "docs" / "superpowers" / "specs"
+FULL_OUT = SPECS / "capacity-bound-figures.generated.txt"
+PUBLIC_OUT = SPECS / "capacity-bound-figures.public.txt"
 
 Z95 = 1.6448536269514722
 SIGMA_DEFAULT = 1.7
@@ -70,6 +81,61 @@ K_BRACKET = (0.001, 0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.10, 1.20, 1.50, 2.00)
 ITERS = 1_000_000
 N_SENSITIVITY = (10_000, 100_000, 700_000, 1_000_000)
 SIM_SEEDS = tuple(range(10))  # committed seed set; never vary silently
+
+
+class Report:
+    """Emits the full appendix and a sanitized PUBLIC variant from one run.
+
+    WHY THIS EXISTS. The appendix is operator-local (denylist-untracked); a PR
+    body on `yasirhamza/idraa` is PUBLIC. An earlier draft whitelisted the
+    "library-only" B-CAP-ALT / B-CAP-MIX rows as safe to publish. They are not:
+    they print z, Phi(z) and P(event>cap) computed as (ln(k*revenue) - mu_lib)/
+    sigma_lib, where mu_lib and sigma_lib live in the TRACKED, PUBLIC seed-library
+    JSON and k_capacity is published in the PR body itself. Inverting the
+    9-significant-figure Phi(z) reconstructs annual_revenue to within a few
+    hundred dollars. Classifying rows from memory at PR time is exactly the
+    failure this generator exists to prevent, so the classification is code.
+
+    A line may go PUBLIC only if it is one of:
+      (a) an analytic identity in (sigma_default, z_q, k_capacity) with NO
+          deployment input -- mu cancels, e.g. the quantile-anchor retentions
+          and the mixture distortion bounds;
+      (b) a ratio or retention statistic over PROD fields, whose mu is not
+          published -- >= 2 unknowns per field, so it does not invert.
+          (Verified 2026-07-25 against the backup: 0 of 9 active prod lognormal
+          loss fields carry a mu matching any seed-library mu, and prod sigma is
+          NOT uniformly the default -- these fields are independently authored,
+          not library copies.);
+      (c) a PASS/FAIL verdict, an iteration count, a k value, or another
+          non-deployment constant.
+
+    A line is PRIVATE if it is any of:
+      (d) dollar-denominated (revenue, cap, LM, ALE);
+      (e) computed from the PUBLIC library (mu, sigma) TOGETHER WITH the cap --
+          these inverts to annual_revenue via cap = k_capacity * revenue;
+      (f) an authored scenario name, a population count, or the alembic head.
+    """
+
+    def __init__(self) -> None:
+        self._lines: list[tuple[str, str]] = []
+
+    def both(self, text: str = "") -> None:
+        """Deployment-independent narrative or figure: appears in both artifacts."""
+        self._lines.append(("both", text))
+
+    def priv(self, text: str = "") -> None:
+        """Rules (d)/(e)/(f): full appendix only, NEVER public."""
+        self._lines.append(("private", text))
+
+    def pub(self, text: str = "") -> None:
+        """Public-only line: the sanitized rewrite of an adjacent priv() row."""
+        self._lines.append(("public", text))
+
+    def full(self) -> str:
+        return "\n".join(t for v, t in self._lines if v != "public") + "\n"
+
+    def public(self) -> str:
+        return "\n".join(t for v, t in self._lines if v != "private") + "\n"
 
 
 def _entries() -> list[dict]:
@@ -160,6 +226,15 @@ def _active_scenarios(db: sqlite3.Connection) -> list[tuple[str, dict | None, di
         out.append(
             (name, pld if isinstance(pld, dict) else None, sld if isinstance(sld, dict) else None)
         )
+    # The prod population needs the SAME guard as the seed library. It is not
+    # hypothetical: the wizard can author a lognormal_mixture, and Task 9 mandates
+    # regenerating these figures against a FRESH backup. A mixture arriving later
+    # would be dropped by _loss_fields, then mis-read as PERT-only by
+    # _lognormal_bearing, silently DEFLATING the D8 reading in the one direction
+    # no pin detects.
+    _assert_no_mixtures(
+        [d for _, pld, sld in out for d in (pld, sld)], "the prod backup (active scenarios)"
+    )
     return out
 
 
@@ -205,7 +280,11 @@ def _pert_ab(low: float, mode: float, high: float) -> tuple[float, float]:
 
 
 def truncated_lognormal(rng, meanlog: float, sigma: float, size: int, max_value: float):
-    """Inverse-CDF truncation on (0, max_value].
+    """Inverse-CDF truncation with support [0, max_value).
+
+    Half-open at BOTH ends, and the design says so too: rng.random() is [0, 1),
+    so u can be exactly 0 -> ndtri(0) = -inf -> x = 0.0 (probability 2**-53), and
+    u < Phi(b) strictly, so max_value is never attained. No point mass at the cap.
 
     Verified 2026-07-25 three ways against fair_cam.quantile_pooling._lognormal
     ._qlnormtrunc (rel err <= 4e-13 across p in [0.01, 0.99999]), against
@@ -275,9 +354,11 @@ def _dist_mean(d: dict | None, cap: float | None) -> float:
     if not d:
         return 0.0
     # run_executor defaults an ABSENT 'distribution' key to PERT (case-insensitive).
-    # 14 of 15 prod vulnerability dicts carry no such key; reading them as "unknown
-    # -> 0.0" silently zeroes those scenarios' LEF and collapses the portfolio ALE
-    # by ~88x. Verified against prod head b3f8a2d94c1e, 2026-07-25.
+    # Real vulnerability dicts routinely carry no such key, so an analytic tool that
+    # does not mirror the default reads those means as "unknown -> 0.0", zeroes the
+    # affected scenarios' LEF, and collapses the portfolio ALE by orders of
+    # magnitude. B-CAP-BASIS prints the population this actually ran against;
+    # deployment counts are deliberately NOT restated in this tracked file.
     kind = str(d.get("distribution", "pert")).lower()
     if kind == "lognormal":
         parent = math.exp(d["mean"] + d["sigma"] ** 2 / 2)
@@ -301,10 +382,7 @@ def portfolio_ale(db: sqlite3.Connection, cap: float | None) -> float:
             v = json.loads(raw) if raw else None
             parsed.append(v if isinstance(v, dict) else None)
         t, v, p, s = parsed
-        # run_executor defaults an ABSENT 'distribution' key to PERT (case-insensitive).
-        # Real vulnerability dicts routinely carry no 'distribution' key -- any analytic
-        # tool that does not mirror this reads vuln means as 0 and silently zeroes the
-        # portfolio ALE by ~2 orders of magnitude.
+        # Same absent-'distribution' default as _dist_mean -- see the comment there.
         lef = _dist_mean(t, None) * (_dist_mean(v, None) if v else 1.0)
         total += lef * (_dist_mean(p, cap) + _dist_mean(s, cap))
     return total
@@ -312,101 +390,139 @@ def portfolio_ale(db: sqlite3.Connection, cap: float | None) -> float:
 
 def main() -> None:
     pins()
-    print("=" * 78)
-    print("CAPACITY-BOUND FIGURES (PR2) — generated; quote these, do not re-derive by hand")
-    print(f"k_capacity={K_CAPACITY}  sigma_default={SIGMA_DEFAULT}  z95={Z95}  n_iters={ITERS}")
-    print("=" * 78)
-
+    header = [
+        "=" * 78,
+        "CAPACITY-BOUND FIGURES (PR2) — generated; quote these, do not re-derive by hand",
+        f"k_capacity={K_CAPACITY}  sigma_default={SIGMA_DEFAULT}  z95={Z95}  n_iters={ITERS}",
+        "=" * 78,
+    ]
     if PROD_DB is None or not PROD_DB.exists():
-        print("\nSIGMA_RECAL_PROD_DB not set or missing — prod sections skipped.")
+        # Do NOT write the artifacts from a prod-less run: it would silently
+        # replace both files with a stub that still looks generated.
+        print("\n".join(header))
+        print("\nSIGMA_RECAL_PROD_DB not set or missing — prod sections skipped, nothing written.")
         return
+
+    r = Report()
+    for line in header:
+        r.both(line)
+    r.priv("FULL appendix (operator-local). Public variant: capacity-bound-figures.public.txt")
+    r.pub("PUBLIC VARIANT — safe to paste into a public PR body or commit message.")
+    r.pub("Generated with the full appendix by scripts/capacity_bound_figures.py; which rows")
+    r.pub("are public is decided line-by-line in that script (see Report), NOT at PR time.")
+    r.pub("WITHHELD here: dollar values, scenario names, population counts, the alembic head,")
+    r.pub("and every figure computed from the PUBLIC seed-library (mu, sigma) TOGETHER WITH the")
+    r.pub("cap — since k_capacity is published and cap = k x revenue, those invert to revenue.")
 
     db, rev, head = _prod()
     b = basis(db, rev, head)
-    print("\n[B-CAP-BASIS] input assertions")
-    print(f"  alembic head            : {b['head']}")
-    print(
+    r.priv("")
+    r.priv("[B-CAP-BASIS] input assertions")
+    r.priv(f"  alembic head            : {b['head']}")
+    r.priv(
         f"  annual_revenue          : ${b['revenue']:,.0f}   (READ FROM the backup, never hardcoded)"
     )
-    print(f"  active scenarios        : {b['scenarios']}")
-    print(f"  lognormal loss fields   : {b['lognormal_fields']}")
-    print(
+    r.priv(f"  active scenarios        : {b['scenarios']}")
+    r.priv(f"  lognormal loss fields   : {b['lognormal_fields']}")
+    r.priv(
         f"  post-PR1 sigma check    : max (sigma-{SIGMA_DEFAULT}) = {b['worst_sigma_dev']:+.3e} "
         f"[{b['worst_sigma_field']}]  (must be <= {SIGMA_BASIS_TOL:.0e}; narrow-only sweep, D6')"
     )
+    r.pub("")
+    r.pub("[B-CAP-BASIS] WITHHELD — revenue, population, alembic head, authored scenario names.")
+    r.pub("  The basis assertions ran and passed; the run below is against that asserted state.")
 
     scen = _active_scenarios(db)
     ln, pert_bound = _lognormal_bearing(scen)
     cap = K_CAPACITY * rev
 
-    print(
-        f"\n[B-CAP-SIM] simulated max single-event LM, seeds={SIM_SEEDS}, active lognormal-bearing"
+    r.both("")
+    r.both(
+        f"[B-CAP-SIM] simulated max single-event LM, seeds={SIM_SEEDS}, active lognormal-bearing"
     )
-    print(
+    r.priv(
         f"  per-distribution cap = k x revenue = ${cap:,.0f}  (event total bounded at 2k x revenue)"
     )
+    r.pub("  per-distribution cap = k x revenue  (event total bounded at 2k x revenue)")
     for label, c in (("today (uncapped)", None), (f"capped k={K_CAPACITY}", cap)):
-        r = _sim_max(ln, c)
-        verdict = "" if c is None else ("   D8 PASS" if r["median"] <= rev else "   D8 FAIL")
-        print(
-            f"  {label:<18} min ${r['min']:>18,.0f}  median ${r['median']:>18,.0f} "
-            f"({r['median'] / rev * 100:7.2f}% rev)  max ${r['max']:>18,.0f}{verdict}"
+        res = _sim_max(ln, c)
+        verdict = "" if c is None else ("   D8 PASS" if res["median"] <= rev else "   D8 FAIL")
+        pct = res["median"] / rev * 100
+        r.priv(
+            f"  {label:<18} min ${res['min']:>18,.0f}  median ${res['median']:>18,.0f} "
+            f"({pct:7.2f}% rev)  max ${res['max']:>18,.0f}{verdict}"
         )
-    print(f"  PERT-only scenarios cannot exceed ${pert_bound:,.0f} (analytic bound high_P+high_S)")
-    print(
+        r.pub(f"  {label:<18} median max LM = {pct:7.2f}% of revenue{verdict}")
+    r.priv(f"  PERT-only scenarios cannot exceed ${pert_bound:,.0f} (analytic bound high_P+high_S)")
+    r.pub("  PERT-only scenarios are bounded by high_P+high_S and cannot approach the cap.")
+    r.priv(
         f"  HARD analytic bound, n-invariant: maxP+maxS = 2k x revenue = ${2 * cap:,.0f} "
         f"({2 * K_CAPACITY * 100:.0f}% rev)"
     )
-    print("  estimator: standalone per-scenario substreams (sha256 name digest); NOT the engine")
-    print("  -- no shared stream, no vulnerability thinning. Valid for the seed-spread of the")
-    print("  max, not for reproducing a run.")
+    r.pub(
+        f"  HARD analytic bound, n-invariant: maxP+maxS = 2k x revenue = "
+        f"{2 * K_CAPACITY * 100:.0f}% rev"
+    )
+    r.both("  estimator: standalone per-scenario substreams (sha256 name digest); NOT the engine")
+    r.both("  -- no shared stream, no vulnerability thinning. Valid for the seed-spread of the")
+    r.both("  max, not for reproducing a run.")
 
-    print("\n[B-CAP-N] D8's verdict is a FUNCTION OF n -- the uncapped reading is n-conditional")
-    print("  The max of an unbounded heavy-tailed sample grows without bound in n, so an")
-    print("  uncapped D8 reading is meaningless without a declared iteration count. Only the")
-    print("  HARD bound above is a true n-invariant guarantee.")
-    print(f"  {'n_iters':>10}  {'uncapped % rev':>15}  {'':>6}  {'capped % rev':>13}  {'':>6}")
+    r.both("")
+    r.both("[B-CAP-N] D8's verdict is a FUNCTION OF n -- the uncapped reading is n-conditional")
+    r.both("  The max of an unbounded heavy-tailed sample grows without bound in n, so an")
+    r.both("  uncapped D8 reading is meaningless without a declared iteration count. Only the")
+    r.both("  HARD bound above is a true n-invariant guarantee.")
+    r.both(f"  {'n_iters':>10}  {'uncapped % rev':>15}  {'':>6}  {'capped % rev':>13}  {'':>6}")
     saved = globals()["ITERS"]
     for n in N_SENSITIVITY:
         globals()["ITERS"] = n
         unc = _sim_max(ln, None)["median"] / rev * 100
         cpd = _sim_max(ln, cap)["median"] / rev * 100
         tag = "  <== BASIS (Settings.mc_iterations_max)" if n == saved else ""
-        print(
+        # Ratios over prod fields (rule b) plus verdicts (rule c): public.
+        r.both(
             f"  {n:>10,}  {unc:>14.2f}%  {'PASS' if unc <= 100 else 'FAIL':>6}  "
             f"{cpd:>12.2f}%  {'PASS' if cpd <= 100 else 'FAIL':>6}{tag}"
         )
     globals()["ITERS"] = saved
-    print("  NOTE: at Settings.mc_iterations_default the UNCAPPED state passes D8 -- the")
-    print("  pathology is invisible there. The basis is pinned to the supported CEILING.")
+    r.both("  NOTE: at Settings.mc_iterations_default the UNCAPPED state passes D8 -- the")
+    r.both("  pathology is invisible there. The basis is pinned to the supported CEILING.")
 
-    print("\n[B-CAP-K] D8 across the k_capacity bracket, with the retention columns")
-    print("  D8: median of the simulated max LM over seeds 0-9 <= 100% of annual_revenue")
-    print("  D8 IS A ONE-SIDED (UPPER) GATE: it passes for every k below the binding value,")
-    print("  including caps aggressive enough to destroy most of the expected loss. The")
-    print("  retention columns are what discriminate the low end -- D8 alone does not.")
-    print(
+    r.both("")
+    r.both("[B-CAP-K] D8 across the k_capacity bracket, with the retention columns")
+    r.both("  D8: median of the simulated max LM over seeds 0-9 <= 100% of annual_revenue")
+    r.both("  D8 IS A ONE-SIDED (UPPER) GATE: it passes for every k below the binding value,")
+    r.both("  including caps aggressive enough to destroy most of the expected loss. The")
+    r.both("  retention columns are what discriminate the low end -- D8 alone does not.")
+    r.priv(
         f"  {'k':>7} {'cap':>17} {'median max LM':>17} {'% rev':>8} {'D8':>5} "
         f"{'med.retain':>11} {'worst.retain':>13}"
     )
+    r.pub(f"  {'k':>7} {'% rev':>8} {'D8':>5} {'med.retain':>11} {'worst.retain':>13}")
     for k in K_BRACKET:
         kcap = k * rev
-        r = _sim_max(ln, kcap)
+        res = _sim_max(ln, kcap)
         rets = sorted(
             mean_retained(d["mean"], d["sigma"], kcap)
             for _, pld, sld in ln
             for _, d in _loss_fields({"primary_loss": pld, "secondary_loss": sld})
         )
         mark = "  <== CHOSEN" if k == K_CAPACITY else ""
-        print(
-            f"  {k:>7.3f} ${kcap:>16,.0f} ${r['median']:>16,.0f} {r['median'] / rev * 100:>7.2f}% "
-            f"{'PASS' if r['median'] <= rev else 'FAIL':>5} "
+        pct, verdict = res["median"] / rev * 100, "PASS" if res["median"] <= rev else "FAIL"
+        r.priv(
+            f"  {k:>7.3f} ${kcap:>16,.0f} ${res['median']:>16,.0f} {pct:>7.2f}% "
+            f"{verdict:>5} {st.median(rets) * 100:>10.3f}% {rets[0] * 100:>12.3f}%{mark}"
+        )
+        # Retention over PROD fields: mu is not published, so >= 2 unknowns (rule b).
+        r.pub(
+            f"  {k:>7.3f} {pct:>7.2f}% {verdict:>5} "
             f"{st.median(rets) * 100:>10.3f}% {rets[0] * 100:>12.3f}%{mark}"
         )
 
-    print(f"\n[B-CAP-DRIFT] realized-mean retention under the k={K_CAPACITY} cap (100% = no cost)")
-    print("  the cap is a TAIL guardrail: post-PR1 it costs essentially nothing in expected loss.")
-    print("  PR2's per-run disclosure will therefore read ~0.0% — that is correct, not broken.")
+    r.both("")
+    r.both(f"[B-CAP-DRIFT] realized-mean retention under the k={K_CAPACITY} cap (100% = no cost)")
+    r.both("  the cap is a TAIL guardrail: post-PR1 it costs essentially nothing in expected loss.")
+    r.both("  PR2's per-run disclosure will therefore read ~0.0% — that is correct, not broken.")
     prod_ret = [
         (mean_retained(d["mean"], d["sigma"], cap), f"{n[:34]} {f}")
         for n, pld, sld in ln
@@ -419,68 +535,109 @@ def main() -> None:
     ]
     for label, rets in (("prod active fields", prod_ret), ("library catastrophic", lib_ret)):
         rets.sort()
-        med = st.median([r for r, _ in rets])
-        print(
+        med = st.median([x for x, _ in rets])
+        r.priv(
             f"  {label:<22} n={len(rets):<3} median retained {med * 100:7.3f}%   "
             f"worst retained {rets[0][0] * 100:7.3f}%  [{rets[0][1]}]"
         )
+    # The PROD row publishes (rule b); the LIBRARY row does NOT (rule e) -- its mu is
+    # public, so its retention inverts through mean_retained to the cap and to revenue.
+    prod_med = st.median([x for x, _ in prod_ret])
+    r.pub(
+        f"  prod active fields     median retained {prod_med * 100:7.3f}%   "
+        f"worst retained {min(x for x, _ in prod_ret) * 100:7.3f}%"
+    )
+    r.pub("  library catastrophic   WITHHELD — library mu is public, so its retention under the")
+    r.pub("                         cap inverts to annual_revenue.")
 
-    print("\n[B-CAP-ALT] the REJECTED quantile-anchored fallback (why D14 has no fallback)")
-    print("  This row is an ANALYTIC IDENTITY, not an N-field measurement. Retention under a")
-    print("  quantile anchor at level q is Phi(z_q - sigma)/Phi(z_q) -- a function of (sigma, q)")
-    print("  ONLY: mu cancels. Every catastrophic library field carries the same sigma, so there")
-    print("  is exactly ONE degree of freedom and the median/worst/count columns below carry no")
-    print("  information beyond a single evaluation. They are printed to show that spread is")
-    print("  zero BY CONSTRUCTION -- which is precisely the point: a quantile anchor removes the")
-    print("  same slice of a tail-fed mean on EVERY field regardless of scenario size, while a")
-    print("  capacity anchor is ABSOLUTE and bites only the large ones.")
-    print("  Basis caveat: the fallback would only ever fire where annual_revenue is NULL, so")
-    print("  this compares 'quantile everywhere' with 'capacity everywhere', not the literal")
-    print("  counterfactual. The supported claim is: wherever it fired, it would cost the")
-    print("  retention shown, uniformly.")
+    r.both("")
+    r.both("[B-CAP-ALT] the REJECTED quantile-anchored fallback (why D14 has no fallback)")
+    r.both("  This row is an ANALYTIC IDENTITY, not an N-field measurement. Retention under a")
+    r.both("  quantile anchor at level q is Phi(z_q - sigma)/Phi(z_q) -- a function of (sigma, q)")
+    r.both("  ONLY: mu cancels. Every catastrophic library field carries the same sigma, so there")
+    r.both("  is exactly ONE degree of freedom and the median/worst/count columns below carry no")
+    r.both("  information beyond a single evaluation. They are printed to show that spread is")
+    r.both("  zero BY CONSTRUCTION -- which is precisely the point: a quantile anchor removes the")
+    r.both("  same slice of a tail-fed mean on EVERY field regardless of scenario size, while a")
+    r.both("  capacity anchor is ABSOLUTE and bites only the large ones.")
+    r.both("  Basis caveat: the fallback would only ever fire where annual_revenue is NULL, so")
+    r.both("  this compares 'quantile everywhere' with 'capacity everywhere', not the literal")
+    r.both("  counterfactual. The supported claim is: wherever it fired, it would cost the")
+    r.both("  retention shown, uniformly.")
     lib = [(e["slug"], f, d) for e in _entries() for f, d in _loss_fields(e)]
-    for label, fn in (
-        ("p99.9 of parent", lambda d: math.exp(d["mean"] + norm.ppf(0.999) * d["sigma"])),
-        ("p99.99 of parent", lambda d: math.exp(d["mean"] + norm.ppf(0.9999) * d["sigma"])),
-        (f"k={K_CAPACITY} x revenue", lambda d: cap),
+    for label, fn, is_public in (
+        ("p99.9 of parent", lambda d: math.exp(d["mean"] + norm.ppf(0.999) * d["sigma"]), True),
+        ("p99.99 of parent", lambda d: math.exp(d["mean"] + norm.ppf(0.9999) * d["sigma"]), True),
+        (f"k={K_CAPACITY} x revenue", lambda d: cap, False),
     ):
         rets = [mean_retained(d["mean"], d["sigma"], fn(d)) for _, _, d in lib]
-        print(
+        # The quantile rows are scale-free -- mu cancels exactly, which is the row's whole
+        # point, so they carry NO deployment input (rule a). The capacity row is the same
+        # library mu evaluated AT THE CAP, which is rule (e): it inverts to revenue.
+        line = (
             f"  {label:<22} median retained {st.median(rets) * 100:7.3f}%   "
-            f"worst {min(rets) * 100:7.3f}%   fields below 99%: {sum(1 for r in rets if r < 0.99)}/{len(rets)}"
+            f"worst {min(rets) * 100:7.3f}%   fields below 99%: "
+            f"{sum(1 for x in rets if x < 0.99)}/{len(rets)}"
         )
+        if is_public:
+            r.both(line)
+        else:
+            r.priv(line)
     zs = [(math.log(cap) - d["mean"]) / d["sigma"] for _, _, d in lib]
-    print(
+    r.priv(
         f"  where the capacity cap sits on those {len(lib)} fields: z = {min(zs):.3f} .. {max(zs):.3f}  "
         f"(P(event>cap) = {1 - ndtr(max(zs)):.2e} .. {1 - ndtr(min(zs)):.2e})"
     )
+    r.pub("  k x revenue row + the z / P(event>cap) range: WITHHELD (rule e — public library mu")
+    r.pub("  evaluated at the cap inverts to annual_revenue). The ARGUMENT does not need them:")
+    r.pub("  a quantile anchor's cost is the same on every field by the identity above, while a")
+    r.pub("  capacity anchor's depends on mu and so never binds on small scenarios.")
 
-    print("\n[B-CAP-MIX] per-component vs mixture-conditioned truncation — the semantic deviation")
-    print("  The sampler truncates EACH component at the shared cap, retaining density")
-    print("  sum(w_i f_i / F_i(M)). Conditioning the MIXTURE on X<=M would retain")
-    print("  sum(w_i f_i) / sum(w_j F_j(M)). Per-component therefore over-weights heavy")
-    print("  components; the effective-weight distortion is F_bar / F_i(M).")
-    print("  Task 4's floor requires M > every component's p95, so F_i(M) > Phi(z95) for all i,")
-    print("  which bounds the worst-case distortion analytically:")
-    floor_bound = 1.0 / ndtr(Z95) - 1.0
-    print(
-        f"    max weight distortion at the floor = 1/Phi(z95) - 1 = {floor_bound * 100:.3f}%  "
-        "(the binding worst case)"
+    r.both("")
+    r.both("[B-CAP-MIX] per-component vs mixture-conditioned truncation — the semantic deviation")
+    r.both("  The sampler truncates EACH component at the shared cap, retaining density")
+    r.both("  sum(w_i f_i / F_i(M)). Conditioning the MIXTURE on X<=M would retain")
+    r.both("  sum(w_i f_i) / sum(w_j F_j(M)). Component i's effective weight is therefore")
+    r.both("  distorted by the factor F_bar / F_i(M), where F_bar = sum(w_j F_j(M)).")
+    r.both("  Task 4's floor requires M > every component's p95, so F_i(M) > Phi(z95) for all i,")
+    r.both("  which bounds the distortion analytically IN BOTH DIRECTIONS:")
+    up_bound = 1.0 / ndtr(Z95) - 1.0
+    down_bound = ndtr(Z95) - 1.0
+    r.both(
+        f"    UP   (F_i at the floor, F_bar -> 1): 1/Phi(z95) - 1 = {up_bound * 100:+.3f}%  "
+        "-- heavy components over-weighted"
     )
+    r.both(
+        f"    DOWN (F_i -> 1, F_bar at the floor): Phi(z95) - 1 = {down_bound * 100:+.3f}%  "
+        "-- light components under-weighted"
+    )
+    r.both("    Both are suprema over admissible configurations, approached but never attained.")
     deep_b = (math.log(cap) - min(d["mean"] for _, _, d in lib)) / SIGMA_DEFAULT
-    print(
+    r.priv(
         f"    at the SHIPPED cap the components sit at z >= {min(zs):.3f}, so F_i > "
         f"{ndtr(min(zs)):.9f} and the distortion is <= {(1 / ndtr(min(zs)) - 1) * 100:.5f}%"
     )
-    print(f"    (deepest library component sits at z = {deep_b:.3f})")
-    print("  So the deviation is bounded by the validator's own floor and is negligible at the")
-    print("  shipped cap. Per-component is the CHOSEN 'each regime capped at capacity' semantics.")
+    r.priv(f"    (deepest library component sits at z = {deep_b:.3f})")
+    r.pub("    at the SHIPPED cap: WITHHELD (rule e — this z, and its 9-significant-figure")
+    r.pub("    Phi(z), reconstruct annual_revenue to within a few hundred dollars).")
+    r.both("  So the deviation is bounded by the validator's own floor and is far smaller at the")
+    r.both("  shipped cap. Per-component is the CHOSEN 'each regime capped at capacity' semantics.")
 
-    print("\n[B-CAP-PORT] analytic portfolio ALE — population=active-only")
+    r.both("")
+    r.both("[B-CAP-PORT] analytic portfolio ALE — population=active-only")
     today = portfolio_ale(db, None)
     after = portfolio_ale(db, cap)
-    print(f"  population {len(scen)} scenarios")
-    print(f"  today ${today:,.0f} -> capped ${after:,.0f}  = {(after / today - 1) * 100:+.4f}%")
+    r.priv(f"  population {len(scen)} scenarios")
+    r.priv(f"  today ${today:,.0f} -> capped ${after:,.0f}  = {(after / today - 1) * 100:+.4f}%")
+    # Ratio of two unpublished prod ALEs (rule b); the dollars and the count are not.
+    r.pub(f"  portfolio ALE change under the cap = {(after / today - 1) * 100:+.4f}%")
+
+    SPECS.mkdir(parents=True, exist_ok=True)
+    FULL_OUT.write_text(r.full(), encoding="utf-8")
+    PUBLIC_OUT.write_text(r.public(), encoding="utf-8")
+    print(f"wrote {FULL_OUT.relative_to(ROOT)}   ({len(r.full().splitlines())} lines, FULL)")
+    print(f"wrote {PUBLIC_OUT.relative_to(ROOT)}   ({len(r.public().splitlines())} lines, PUBLIC)")
+    print("The PUBLIC variant is the ONLY one a public PR body or commit message may quote.")
 
 
 if __name__ == "__main__":
