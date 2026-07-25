@@ -304,7 +304,10 @@ def _validate_rows(
         dist_problem: str | None = None
         col_name: str = ""
         for col, allow_ln in (
-            ("threat_event_frequency", True),
+            # D12: lognormal is strictly a loss distribution — TEF is PERT-only
+            # (was True through the Epic-B native-lognormal era; the last stored
+            # lognormal TEF is collapsed by the D12 migration).
+            ("threat_event_frequency", False),
             ("vulnerability", False),
             ("primary_loss", True),
             ("secondary_loss", True),
