@@ -390,6 +390,29 @@
       {{ pert_input("vuln_high", "Vuln high", fmt="probability") }}
     </div>
 
+    {# PR2 D17: the authorable capacity cap. Lognormal-only (D19 floor / D12
+       govern lognormal loss shapes only — a PERT field is never compared
+       against capacity) — gated by the SAME x-if idiom the mode/low/high
+       fields above use, just inverted (dist === 'lognormal' instead of
+       'pert'). The field is BLANK on fresh create (form_defaults()) and
+       server-mints on save when left blank; on edit it is pre-filled with
+       the scenario's EXISTING max (dist_to_form) so an unchanged resave
+       preserves it byte-for-byte — the loss dict is rebuilt from scratch on
+       every save, so a field that isn't round-tripped here would silently
+       strip an already-authored cap. #}
+    {%- macro capacity_max_input(prefix) -%}
+    <template x-if="dist === 'lognormal'">
+      <div class="max-w-md">
+        {{ pert_input(prefix ~ "_max", "Loss cap (max)", req=False, fmt="money") }}
+        {% if capacity_hint %}
+        <p class="text-micro text-ink-2 mt-1">
+          {{ capacity_hint }}{% if capacity_max is none %} — <a href="/organization" class="link">Organization settings</a>.{% endif %}
+        </p>
+        {% endif %}
+      </div>
+    </template>
+    {%- endmacro -%}
+
     {# Primary loss — dollar magnitude. #}
     <div x-data="{ dist: '{{ form.pl_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("pl", form.pl_dist) }}
@@ -399,6 +422,7 @@
         <template x-if="dist === 'pert'">{{ pert_input("pl_mode", "Primary loss mode", fmt="money") }}</template>
         {{ pert_input("pl_high", "Primary loss high (95th pct)", fmt="money") }}
       </div>
+      {{ capacity_max_input("pl") }}
     </div>
 
     {# Secondary loss — optional. #}
@@ -410,6 +434,7 @@
         <template x-if="dist === 'pert'">{{ pert_input("sl_mode", "Secondary loss mode", req=False, fmt="money") }}</template>
         {{ pert_input("sl_high", "Secondary loss high (95th pct)", req=False, fmt="money") }}
       </div>
+      {{ capacity_max_input("sl") }}
     </div>
     <p class="text-micro text-ink-2">
       Secondary loss is optional — leave its fields blank to omit.

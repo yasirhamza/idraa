@@ -34,6 +34,33 @@ D18_REVENUE_MESSAGE = (
 D19_FLOOR_MARKER = "capacity floor"
 
 
+# D17 (Task 4c, owner-signed 2026-07-25): the expert form's pl_max/sl_max
+# helper text. This is GUIDANCE ONLY — a placeholder hint shown beside a field
+# that always renders BLANK on fresh create (routes/scenarios.py::
+# new_scenario_form via scenario_form_helpers.form_defaults(), never
+# render_scenario_form, which is the 422/error-branch renderer). A pre-filled
+# VALUE cannot track the entry-currency selector (no client-side binding) and
+# would double-convert at POST, so the field mints server-side on save instead
+# (parse_scenario_form's capacity_max kwarg) — the hint's dollar figure is
+# never itself submitted.
+D17_HINT_REVENUE_UNSET = (
+    "Set your organization's annual revenue to use it as the cap, or enter a cap directly"
+)
+
+
+def d17_capacity_hint_revenue_set(capacity_max: float) -> str:
+    """D17 helper text when the org's annual revenue IS set.
+
+    ``capacity_max`` is the org's own minted capacity (``capacity_k *
+    annual_revenue`` via ``loss_capacity.capacity_max_for_org``), resolved by
+    the caller from the TARGET org's revenue — never recomputed here.
+    """
+    return (
+        f"Leave blank to use your organization's capacity "
+        f"(${capacity_max:,.0f}, USD), or enter a cap"
+    )
+
+
 def wrap_d19_floor_message(exc: FAIRCAMValidationError) -> str:
     """D19 operator-facing copy: wrap the validator's FACTUAL p95-vs-cap
     string with the three remedies the design pins (the validator produces

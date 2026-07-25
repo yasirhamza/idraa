@@ -125,8 +125,10 @@ from idraa.services.calibration import (
     calibration_context_from_org,
 )
 from idraa.services.capacity_bound_copy import (
+    D17_HINT_REVENUE_UNSET,
     D18_REVENUE_MESSAGE,
     D19_FLOOR_MARKER,
+    d17_capacity_hint_revenue_set,
     wrap_d19_floor_message,
 )
 from idraa.services.flash import build_flash
@@ -324,6 +326,20 @@ async def new_scenario_form(
     else:
         org_industry = None
         org_revenue_tier = None
+    # PR2 D17 (Task 4c): the mint PREVIEW only — never a submitted value. The
+    # pl_max/sl_max fields render BLANK below (form_defaults()); this is
+    # guidance text shown beside them. db.get(Organization, ...) above is the
+    # TARGET org lookup — never get_sole_org/require_sole_org.
+    capacity_max = (
+        capacity_max_for_org(organization.annual_revenue, get_settings().capacity_k)
+        if organization is not None
+        else None
+    )
+    capacity_hint = (
+        d17_capacity_hint_revenue_set(capacity_max)
+        if capacity_max is not None
+        else D17_HINT_REVENUE_UNSET
+    )
     defaults = form_defaults()
     # Multi-currency P2: build the selectable list (USD always first, then rated codes).
     # Cannot use await inside a generator expression; build via explicit async loop.
@@ -362,6 +378,8 @@ async def new_scenario_form(
             "errors": [],
             "selectable_currencies": selectable_currencies,
             "is_edit": False,
+            "capacity_max": capacity_max,
+            "capacity_hint": capacity_hint,
         },
     )
 
@@ -470,7 +488,18 @@ async def create_scenario(
         # to 422 rather than escaping to 500 (Fix B — non-USD CREATE path).
         if entry_currency != "USD" and entry_rate is not None:
             raw = convert_loss_inputs_to_usd(raw, entry_currency, entry_rate)
-        form = parse_scenario_form(raw)
+        # PR2 D17 (Task 4c): resolve the per-loss-component capacity ceiling
+        # from the TARGET org's OWN revenue (create_org, fetched via db.get
+        # above — never get_sole_org/require_sole_org). A blank pl_max/sl_max
+        # mints this value; a typed value is bound ABOVE by it (D13). None
+        # when the org's revenue is unset/non-positive (D14) — a typed cap is
+        # then accepted with no ceiling (the D18 escape hatch for this org).
+        capacity_max = (
+            capacity_max_for_org(create_org.annual_revenue, get_settings().capacity_k)
+            if create_org is not None
+            else None
+        )
+        form = parse_scenario_form(raw, capacity_max=capacity_max)
     except (PydanticValidationError, KeyError, ValueError) as exc:
         errors = (
             flatten_validation_errors(exc)
@@ -528,6 +557,19 @@ async def create_scenario(
         # Catches ScenarioOverlayTagNotFoundError + any other 422-class
         # service-layer validation failure. Re-render the form with the
         # service's message so the analyst can correct the offending tag.
+        #
+        # PR2 D19 (Task 4c): a minted/typed capacity `max` at or below the
+        # distribution's p95 surfaces here as a FAIRCAMValidationError
+        # carrying the floor marker (Task 3b's _validate_capacity_floor,
+        # raised inside _stamp_new_scenario's validate_fair_distributions
+        # call) — wrap its FACTUAL p95-vs-cap string with the three operator
+        # remedies instead of the raw message (mirrors the wizard finalize
+        # handling at post_wizard_step's sibling finalize_wizard).
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
         return render_scenario_form(
             request,
             user=user,
@@ -537,7 +579,7 @@ async def create_scenario(
             overlay_options=overlay_options,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
-            errors=[str(exc)],
+            errors=[message],
             status_code=422,
         )
     except NotFoundError as exc:
@@ -1112,7 +1154,16 @@ async def update_scenario(
         )
 
     try:
-        form = parse_scenario_form(raw)
+        # PR2 D17 (Task 4c): same ceiling resolution as create — from the
+        # TARGET org's OWN revenue (update_org, db.get above). A blank
+        # pl_max/sl_max mints (e.g. a legacy uncapped row gains a cap on its
+        # next edit); a typed value is bound ABOVE by it (D13).
+        capacity_max = (
+            capacity_max_for_org(update_org.annual_revenue, get_settings().capacity_k)
+            if update_org is not None
+            else None
+        )
+        form = parse_scenario_form(raw, capacity_max=capacity_max)
     except (PydanticValidationError, KeyError, ValueError) as exc:
         errors = (
             flatten_validation_errors(exc)
@@ -1187,6 +1238,16 @@ async def update_scenario(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValidationError as exc:
+        # PR2 D19 (Task 4c): same wrap as create — a minted/typed capacity
+        # `max` at or below the distribution's p95 surfaces here as a
+        # FAIRCAMValidationError carrying the floor marker (ScenarioService
+        # .update calls validate_fair_distributions before applying the
+        # form's fields).
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
         return render_scenario_form(
             request,
             user=user,
@@ -1196,7 +1257,7 @@ async def update_scenario(
             overlay_options=overlay_options,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
-            errors=[str(exc)],
+            errors=[message],
             status_code=422,
         )
 
