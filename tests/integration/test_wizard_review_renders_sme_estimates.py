@@ -15,12 +15,14 @@ PERT-dist fields to SME-row state.
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.organization import Organization
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
 from tests.conftest import csrf_post
@@ -109,6 +111,12 @@ async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
     client, org_id = authed_analyst
     user_id = await _resolve_analyst_user_id(db_session)
     sme_id = await _seed_one_sme(db_session, org_id=org_id, created_by=user_id)
+    # PR2 D18: the step-4 catastrophic toggle now gates on org revenue -- the
+    # re-POST below submits loss_catastrophic=1, so the seeded org needs one.
+    org = await db_session.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal("500000000")
+    await db_session.commit()
     await db_session.close()
 
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
@@ -145,7 +153,9 @@ async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
     assert r4.status_code in (302, 303), r4.text
 
     body = (await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")).text
-    assert "Catastrophic — uncapped lognormal" in body
+    # PR2 D17/Task 8b: catastrophic is bounded above at the capacity cap, not
+    # literally uncapped -- re-worded from "Catastrophic — uncapped lognormal".
+    assert "Catastrophic — heavy-tailed lognormal (capacity-capped)" in body
 
 
 @pytest.mark.asyncio
@@ -163,6 +173,9 @@ async def test_step4_toggle_has_inline_loss_shape_feedback(
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
     body = (await client.get(f"/scenarios/new/wizard/step/4?tx={tx}")).text
     assert "data-loss-shape-hint" in body
-    assert "uncapped heavy-tailed lognormal" in body
+    # PR2 D17/Task 8b: bounded above at the capacity cap, not literally
+    # uncapped -- re-worded from "uncapped heavy-tailed lognormal".
+    assert "heavy-tailed lognormal" in body
+    assert "bounded above at the capacity cap" in body
     assert "bounded PERT" in body
     assert "economic ceiling" in body

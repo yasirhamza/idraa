@@ -3300,7 +3300,185 @@ def test_mixture_quantile_mirror_parity_with_fair_cam_oracle() -> None:
                 f"(rel={rel:.3e} > 1e-8). Reconcile the mirror in "
                 f"services/pdf_report.py to fair_cam — never the reverse."
             )
+
+    # PR2 Task 8b: extend with TRUNCATED fixtures (max_support=M) — a
+    # capacity-capped mixture is exactly the new case this parity pin did
+    # not previously cover. SYNTHETIC caps only (never annual_revenue-
+    # derived, per CLAUDE.md rule (d)): chosen BELOW the heavier
+    # component's own median in each fixture, so truncation is heavily
+    # binding on at least one component and exercises asymmetric
+    # per-component truncation (a shared-factor implementation would fail
+    # here even though it might pass an untruncated-only pin).
+    truncated_fixtures: dict[str, tuple[list[dict[str, float]], float]] = {
+        "worked A/B pair, truncated": (
+            [
+                {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+                {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+            ],
+            1_000_000.0,  # well below exp(15.77) ~= 7.05e6 (component 2's median)
+        ),
+        "single-component, truncated": (
+            [{"mean": 12.0, "sigma": 1.5, "weight": 1.0}],
+            200_000.0,  # below exp(12.0) ~= 162,754.79's neighbourhood
+        ),
+        "3-component divergent, truncated": (
+            [
+                {"mean": 6.5, "sigma": 0.4, "weight": 0.2},
+                {"mean": 11.0, "sigma": 0.9, "weight": 0.5},
+                {"mean": 17.2, "sigma": 1.6, "weight": 0.3},
+            ],
+            3_000_000.0,  # below exp(17.2) ~= 2.96e7 (component 3's median)
+        ),
+    }
+    for name, (comps, max_support) in truncated_fixtures.items():
+        mix_trunc = LognormMixture(
+            components=tuple(
+                LogNormalTruncFit(
+                    meanlog=c["mean"], sdlog=c["sigma"], min_support=0.0, max_support=max_support
+                )
+                for c in comps
+            ),
+            weights=tuple(c["weight"] for c in comps),
+        )
+        for p in grid:
+            oracle = mixture_quantile_lognorm(mix_trunc, p)
+            mirror = _mixture_lognorm_quantile(p, comps, max_support)
+            rel = abs(mirror - oracle) / oracle
+            print(
+                f"{name:24s} p={p:4.2f}  expected(fair_cam)={oracle!r:24s} "
+                f"actual(pdf-mirror)={mirror!r:24s} rel={rel:.3e}"
+            )
+            if rel > worst_rel:
+                worst_rel = rel
+                worst_at = f"{name} p={p}"
+            assert rel <= 1e-8, (
+                f"PDF mixture-quantile mirror drifted from the fair_cam oracle (TRUNCATED) "
+                f"at {name} p={p}: fair_cam={oracle!r} vs pdf_report={mirror!r} "
+                f"(rel={rel:.3e} > 1e-8). Reconcile the mirror in "
+                f"services/pdf_report.py to fair_cam — never the reverse."
+            )
     print(f"worst rel diff: {worst_rel:.3e} at {worst_at}")
+
+
+def test_truncated_mean_mirror_parity_with_fair_cam_oracle() -> None:
+    """DRIFT DETECTOR (PR2 Task 8b) — SIBLING to
+    test_mixture_quantile_mirror_parity_with_fair_cam_oracle above, pinning
+    the pdf_report mirror's truncated-MEAN row (NOT a quantile) separately.
+
+    The quantile tripwire above never evaluates a mean — bisecting the
+    (correct) truncated CDF says nothing about whether
+    _truncated_lognorm_mean_component / _truncated_lognorm_mixture_mean's
+    closed-form math.erf computation agrees with
+    fair_cam.quantile_pooling.truncated_lognormal_mean /
+    truncated_lognormal_mixture_mean. Without this test the mean mirror
+    could drift (a wrong sign on `sigma` in `Phi(b - sigma)`, a swapped
+    numerator/denominator) with the quantile pin staying green — exactly
+    the failure this test exists to prevent.
+
+    IF THIS TEST FAILS: reconcile the pdf_report mirror to fair_cam, NEVER
+    the reverse (CLAUDE.md: fair_cam is the source of truth for FAIR math).
+    """
+    import math
+
+    from fair_cam.quantile_pooling import (
+        truncated_lognormal_mean,
+        truncated_lognormal_mixture_mean,
+    )
+
+    from idraa.services.pdf_report import (
+        _truncated_lognorm_mean_component,
+        _truncated_lognorm_mixture_mean,
+    )
+
+    # (a) single-lognormal fixture — SYNTHETIC (CLAUDE.md rule (d)): the same
+    # triple fair_cam/risk_engine/_truncation.py's own docstring uses.
+    mean_a, sigma_a, cap_a = math.log(1e6), 1.7, 1e9
+    oracle_a = truncated_lognormal_mean(mean_a, sigma_a, cap_a)
+    mirror_a = _truncated_lognorm_mean_component(mean_a, sigma_a, cap_a)
+    rel_a = abs(mirror_a - oracle_a) / oracle_a
+    print(
+        f"single: expected(fair_cam)={oracle_a!r} actual(pdf-mirror)={mirror_a!r} rel={rel_a:.3e}"
+    )
+    assert rel_a <= 1e-8, (
+        f"PDF truncated-mean mirror (single) drifted from the fair_cam oracle: "
+        f"fair_cam={oracle_a!r} vs pdf_report={mirror_a!r} (rel={rel_a:.3e} > 1e-8)."
+    )
+
+    # (b) multi-component fixture — unequal sigma, shared cap (same shape as
+    # fair_cam's own mixture-truncation pin fixtures).
+    components = [
+        (0.4, math.log(1_000.0), 0.5),
+        (0.6, math.log(1_000_000_000.0), 0.8),
+    ]
+    cap_b = 5_000_000_000.0
+    oracle_b = truncated_lognormal_mixture_mean(components, cap_b)
+    mirror_components = [{"weight": w, "mean": m, "sigma": s} for w, m, s in components]
+    mirror_b = _truncated_lognorm_mixture_mean(mirror_components, cap_b)
+    rel_b = abs(mirror_b - oracle_b) / oracle_b
+    print(
+        f"mixture: expected(fair_cam)={oracle_b!r} actual(pdf-mirror)={mirror_b!r} rel={rel_b:.3e}"
+    )
+    assert rel_b <= 1e-8, (
+        f"PDF truncated-mean mirror (mixture) drifted from the fair_cam oracle: "
+        f"fair_cam={oracle_b!r} vs pdf_report={mirror_b!r} (rel={rel_b:.3e} > 1e-8)."
+    )
+
+
+def test_truncated_mean_degenerate_cap_never_500s_case_kk() -> None:
+    """Milestone gate finding (kk): a degenerate cap must degrade
+    `_truncated_lognorm_mean_component` to the UNTRUNCATED mean, never
+    raise. TAMPER-ONLY (D19's floor + the read-adapter guard both block a
+    validated cap this degenerate) -- mirrors
+    `run_view_model._lognormal_retention`'s own fail-soft convention.
+
+    Covers every raise mode the unguarded closed form had:
+      - `_phi_erf(b)` underflowing to exactly 0.0 (ZeroDivisionError) --
+        the reproducible case: a huge mean with a tiny cap drives `b` deep
+        into the erf-saturation tail.
+      - non-positive `sigma` (would divide-by-zero/produce a nonsensical
+        `b` before even reaching `_phi_erf`).
+      - a non-finite (`nan`) or non-positive `max_support` (would raise a
+        `math.log` domain error for `max_support <= 0`).
+    """
+    import math
+
+    from idraa.services.pdf_report import _truncated_lognorm_mean_component
+
+    mean, sigma = 100.0, 1.0
+    untruncated = math.exp(mean + sigma**2 / 2.0)
+
+    # ZeroDivisionError case: reproduced against pre-fix code via a scratch
+    # script (mean=100, sigma=1, max_support=1.0 -> b=-100 -> erf saturates).
+    assert math.isclose(_truncated_lognorm_mean_component(mean, sigma, 1.0), untruncated)
+
+    # Non-positive sigma.
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 0.0, 100.0), math.exp(10.0))
+    assert math.isclose(
+        _truncated_lognorm_mean_component(10.0, -1.0, 100.0), math.exp(10.0 + 1.0 / 2.0)
+    )
+
+    # Non-finite / non-positive max_support.
+    assert math.isclose(
+        _truncated_lognorm_mean_component(10.0, 1.0, float("nan")), math.exp(10.0 + 0.5)
+    )
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 1.0, 0.0), math.exp(10.0 + 0.5))
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 1.0, -5.0), math.exp(10.0 + 0.5))
+
+
+def test_truncated_mixture_mean_degenerate_component_never_500s_case_kk() -> None:
+    """The mixture caller (`_truncated_lognorm_mixture_mean`) sums per-
+    component `_truncated_lognorm_mean_component` calls -- a single
+    degenerate component must not 500 the whole mixture sum; it
+    contributes its own untruncated mean instead."""
+    import math
+
+    from idraa.services.pdf_report import _truncated_lognorm_mixture_mean
+
+    good = {"weight": 0.5, "mean": 10.0, "sigma": 1.0}
+    degenerate = {"weight": 0.5, "mean": 100.0, "sigma": 1.0}  # same shape as the repro above
+    cap = 1.0  # binding/degenerate for BOTH components at this tiny cap
+    result = _truncated_lognorm_mixture_mean([good, degenerate], cap)
+    assert math.isfinite(result)
 
 
 def test_lognormal_mixture_table_label_pooled_mixture() -> None:
@@ -3391,6 +3569,111 @@ def test_lognormal_percentile_hand_check() -> None:
         "(Epic B D7: median-only view understates expected loss)"
     )
     assert mean_val < p95_val, "Mean must be below p95"
+
+
+def test_lognormal_input_percentiles_byte_unchanged_when_max_absent() -> None:
+    """PR2 Task 8b: max_value=None (the default) must reproduce the
+    pre-PR2 rows exactly — an uncapped field's PDF rendering never
+    regresses."""
+    from idraa.services.pdf_report import _lognormal_input_percentiles
+
+    mu, sigma = 12.0, 1.5
+    rows_default = _lognormal_input_percentiles(mu, sigma)
+    rows_explicit_none = _lognormal_input_percentiles(mu, sigma, max_value=None)
+    assert rows_default == rows_explicit_none
+    assert len(rows_default) == 6  # no "Max" row appended
+
+
+def test_lognormal_input_percentiles_truncated_binding_cap_differs_and_shows_max_row() -> None:
+    """PR2 Task 8b: a BINDING fixture cap (at the field's parent median,
+    NOT an aggressive CAPACITY_K — none of the four display functions reads
+    Settings.capacity_k) must truncate EVERY quantile row and the mean, and
+    append a visible "Max (capacity cap)" row. SYNTHETIC values only
+    (mu=ln(1e6), sigma=1.7) — never derived from annual_revenue."""
+    import math
+
+    from idraa.formatting import safe_money_format
+    from idraa.services.pdf_report import _lognormal_input_percentiles
+
+    mu, sigma = math.log(1_000_000.0), 1.7
+    cap = 500_000.0  # at half the parent median (exp(mu)=1,000,000) -- binding
+    untruncated = _lognormal_input_percentiles(mu, sigma)
+    truncated = _lognormal_input_percentiles(mu, sigma, max_value=cap)
+
+    assert len(truncated) == len(untruncated) + 1
+    labels = [r[0] for r in truncated]
+    assert labels[-1] == "Max (capacity cap)"
+    vals_trunc = dict(truncated)
+    assert vals_trunc["Max (capacity cap)"] == safe_money_format(cap, "USD", compact=True)
+
+    vals_untrunc = dict(untruncated)
+    for label in ("p5", "p25", "p50 (median)", "p75", "p95", "Mean (expected loss)"):
+        print(f"{label}: untruncated={vals_untrunc[label]!r} truncated={vals_trunc[label]!r}")
+        assert vals_trunc[label] != vals_untrunc[label], (
+            f"row {label!r} did not change under a BINDING cap — truncation was not applied"
+        )
+
+
+def test_lognormal_input_percentiles_fx_applied_after_exponentiation() -> None:
+    """PR2 Task 8b: the "max" row (and every truncated row) must be
+    fx-converted the SAME way as its siblings — computed in stored
+    log-USD space, THEN * fx_rate post-exponentiation. Scaling mu/max_value
+    by fx_rate BEFORE exponentiating would be the documented "NEVER" order
+    (pdf_report's own module convention)."""
+    import math
+
+    from idraa.formatting import safe_money_format
+    from idraa.services.pdf_report import _lognormal_input_percentiles
+
+    mu, sigma, cap = math.log(1_000_000.0), 1.7, 500_000.0
+    rows_usd = dict(_lognormal_input_percentiles(mu, sigma, "USD", 1.0, cap))
+    rows_eur = dict(_lognormal_input_percentiles(mu, sigma, "EUR", 0.5, cap))
+    assert rows_eur["Max (capacity cap)"] == safe_money_format(cap * 0.5, "EUR", compact=True)
+    assert rows_usd["Max (capacity cap)"] != rows_eur["Max (capacity cap)"]
+
+
+def test_lognormal_mixture_percentiles_byte_unchanged_when_max_absent() -> None:
+    """PR2 Task 8b: mixture rows are byte-unchanged when max_value is
+    absent (mirrors the single-lognormal regression above)."""
+    from idraa.services.pdf_report import _lognormal_mixture_percentiles
+
+    components = [
+        {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+        {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+    ]
+    rows_default = _lognormal_mixture_percentiles(components)
+    rows_explicit_none = _lognormal_mixture_percentiles(components, max_value=None)
+    assert rows_default == rows_explicit_none
+    assert len(rows_default) == 6
+
+
+def test_lognormal_mixture_percentiles_truncated_binding_cap_differs_and_shows_max_row() -> None:
+    """PR2 Task 8b: a BINDING cap (below the pooled mixture's own median)
+    must truncate every mixture quantile row and the mean, and append a
+    visible Max row."""
+    from idraa.formatting import safe_money_format
+    from idraa.services.pdf_report import _lognormal_mixture_percentiles
+
+    components = [
+        {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+        {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+    ]
+    cap = 10_000.0  # well below the mixture's own p50 ($55.03k) -- binding on the pooled mixture
+    untruncated = _lognormal_mixture_percentiles(components)
+    truncated = _lognormal_mixture_percentiles(components, max_value=cap)
+
+    assert len(truncated) == len(untruncated) + 1
+    labels = [r[0] for r in truncated]
+    assert labels[-1] == "Max (capacity cap)"
+    vals_trunc = dict(truncated)
+    assert vals_trunc["Max (capacity cap)"] == safe_money_format(cap, "USD", compact=True)
+
+    vals_untrunc = dict(untruncated)
+    for label in ("p5", "p25", "p50 (median)", "p75", "p95", "Mean (expected loss)"):
+        print(f"{label}: untruncated={vals_untrunc[label]!r} truncated={vals_trunc[label]!r}")
+        assert vals_trunc[label] != vals_untrunc[label], (
+            f"row {label!r} did not change under a BINDING cap — truncation was not applied"
+        )
 
 
 def test_vulnerability_percentiles_formatted_as_percent() -> None:

@@ -50,9 +50,14 @@ def test_chokepoint_accepts_lognormal_loss_and_keyless_vuln() -> None:
 
 
 def test_import_gate_rejects_lognormal_tef() -> None:
-    problem = _structural_dist_problem("threat_event_frequency", _LOGN, allow_lognormal=False)
+    problem = _structural_dist_problem(
+        "threat_event_frequency", _LOGN, allow_lognormal=False, allow_max=True
+    )
     assert problem is not None and "not allowed" in problem
 
 
 def test_import_gate_still_accepts_lognormal_loss() -> None:
-    assert _structural_dist_problem("primary_loss", _LOGN_LOSS, allow_lognormal=True) is None
+    assert (
+        _structural_dist_problem("primary_loss", _LOGN_LOSS, allow_lognormal=True, allow_max=True)
+        is None
+    )

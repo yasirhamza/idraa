@@ -24,7 +24,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pytest
+from fair_cam.risk_engine._truncation import truncated_lognormal, truncated_lognormal_mixture_gather
+from scipy.stats import norm
 
 from idraa.services.verification_workbook_let import _invcdf, scaled_params, scenario_let_formula
 
@@ -662,3 +665,279 @@ def test_scenario_let_mixture_residual_applies_log_shift_via_scaled_params() -> 
     # the UNSHIFTED base means are also present (base draw uses raw params).
     assert f"NORM.INV(_xlpm.u_pl,{mean0},{sigma0})" in f
     assert f"NORM.INV(_xlpm.u_pl,{mean1},{sigma1})" in f
+
+
+# --- Task 7: truncated inverse-CDF parity for capped losses (PR2 capacity bound) -
+
+
+def test_invcdf_lognormal_with_max_emits_truncated_formula_pin() -> None:
+    """Exact string pin (precedent: test_invcdf_lognormal_logspace): with a
+    "max" key present, _invcdf emits EXP(NORM.INV(u * NORM.DIST(LN(max), mean,
+    sigma, TRUE), mean, sigma)) -- NORM.DIST is BARE (xlsxwriter adds
+    _xlfn.), and the cap value is interpolated (visible) via LN(max)."""
+    expr = _invcdf({"distribution": "lognormal", "mean": 1.5, "sigma": 0.4, "max": 100.0}, "u")
+    assert expr.replace(" ", "") == ("EXP(NORM.INV(u*NORM.DIST(LN(100.0),1.5,0.4,TRUE),1.5,0.4))")
+    assert "_xlfn." not in expr  # BARE — xlsxwriter owns the prefix
+
+
+def test_invcdf_lognormal_without_max_stays_byte_identical() -> None:
+    """Regression companion to test_invcdf_lognormal_logspace: a dist_dict
+    with NO "max" key must still emit the pre-Task-7 untruncated form
+    (NORM.DIST must never appear when max is absent)."""
+    expr = _invcdf({"distribution": "lognormal", "mean": 1.5, "sigma": 0.4}, "u")
+    s = expr.replace(" ", "")
+    assert s == "EXP(NORM.INV(u,1.5,0.4))"
+    assert "NORM.DIST" not in s
+
+
+def test_invcdf_lognormal_mixture_with_shared_max_emits_per_component_truncation_factor() -> None:
+    """Load-bearing correctness point: a mixture's shared top-level "max"
+    produces a DISTINCT NORM.DIST(LN(max), mean_i, sigma_i, TRUE) factor per
+    component (b_i differs per component since mean_i/sigma_i differ) — a
+    single shared factor across components would be the natural WRONG
+    reading. Exact string pin, precedent:
+    test_invcdf_lognormal_mixture_two_component_formula_pin."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "max": 5000000.0,
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    expr = _invcdf(dist, "u", u_sel="usel")
+    s = expr.replace(" ", "")
+    assert s == (
+        "IF(usel<0.5,"
+        "EXP(NORM.INV(u*NORM.DIST(LN(5000000.0),8.06,0.7,TRUE),8.06,0.7)),"
+        "EXP(NORM.INV(u*NORM.DIST(LN(5000000.0),15.77,1.19,TRUE),15.77,1.19)))"
+    )
+    # per-component factor: two DISTINCT mean_i's inside NORM.DIST calls, not one shared factor.
+    assert "NORM.DIST(LN(5000000.0),8.06,0.7,TRUE)" in s
+    assert "NORM.DIST(LN(5000000.0),15.77,1.19,TRUE)" in s
+
+
+def test_invcdf_lognormal_mixture_without_max_stays_byte_identical() -> None:
+    """Regression companion: a mixture with NO top-level "max" key must still
+    emit the pre-Task-7 untruncated per-component form."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    expr = _invcdf(dist, "u", u_sel="usel")
+    s = expr.replace(" ", "")
+    assert s == "IF(usel<0.5,EXP(NORM.INV(u,8.06,0.7)),EXP(NORM.INV(u,15.77,1.19)))"
+    assert "NORM.DIST" not in s
+
+
+def test_scaled_params_lognormal_scales_max_by_mult() -> None:
+    """scaled_params mirrors _scale_distribution's scale-equivariance
+    (fair_core.py:420-434): max scales by the SAME multiplier that shifts
+    the log-space mean, keeping b = (ln(max)-mean)/sigma invariant."""
+    out = scaled_params({"distribution": "lognormal", "mean": 1.0, "sigma": 0.5, "max": 100.0}, 0.5)
+    assert out["mean"] == round(1.0 + math.log(0.5), 10)
+    assert out["sigma"] == 0.5
+    assert out["max"] == 50.0  # 100.0 * 0.5
+
+
+def test_scaled_params_lognormal_without_max_key_omits_max() -> None:
+    """A dist_dict with no "max" key must not gain a spurious "max" entry —
+    the mult==0 collapse and the no-cap case must stay exactly as before."""
+    out = scaled_params({"distribution": "lognormal", "mean": 1.0, "sigma": 0.5}, 0.5)
+    assert "max" not in out
+
+
+def test_scaled_params_lognormal_mixture_scales_shared_max_by_mult() -> None:
+    """Same scale-equivariance mirrored for the mixture's ONE shared top-level
+    max (fair_core.py:452-458): it scales by the same multiplier that shifts
+    EVERY component's mean, keeping every component's b_i invariant."""
+    dist = {
+        "distribution": "lognormal_mixture",
+        "max": 500.0,
+        "components": [
+            {"mean": 8.06, "sigma": 0.70, "weight": 0.5},
+            {"mean": 15.77, "sigma": 1.19, "weight": 0.5},
+        ],
+    }
+    out = scaled_params(dist, 2.0)
+    assert out["max"] == 1000.0  # 500.0 * 2.0
+    assert out["components"][0]["mean"] == round(8.06 + math.log(2.0), 10)
+    assert out["components"][1]["mean"] == round(15.77 + math.log(2.0), 10)
+
+
+def test_scaled_params_lognormal_mixture_without_max_key_omits_max() -> None:
+    dist = {
+        "distribution": "lognormal_mixture",
+        "components": [{"mean": 8.06, "sigma": 0.70, "weight": 1.0}],
+    }
+    out = scaled_params(dist, 2.0)
+    assert "max" not in out
+
+
+def test_scenario_let_residual_uses_scaled_max_for_capped_primary_loss() -> None:
+    """End-to-end wiring check (precedent:
+    test_scenario_let_mixture_residual_applies_log_shift_via_scaled_params):
+    the base pl expression uses the RAW max, the residual (with-controls) pl
+    expression uses the mult-SCALED max — proves scaled_params's max-scaling
+    is actually threaded into the residual _invcdf call."""
+    scen = {
+        "threat_event_frequency": {"low": 1.0, "mode": 3.0, "high": 6.0},
+        "vulnerability": {"distribution": "beta", "alpha": 2.0, "beta": 5.0},
+        "primary_loss": {"distribution": "lognormal", "mean": 10.0, "sigma": 1.0, "max": 60000.0},
+        "secondary_loss": {"low": 500.0, "mode": 2000.0, "high": 8000.0},
+    }
+    mults = {
+        "threat_event_frequency": 1.0,
+        "vulnerability": 1.0,
+        "primary_loss": 0.5,
+        "secondary_loss": 1.0,
+        "currency_subtractor_total": 0.0,
+    }
+    f = scenario_let_formula(scen, mults, n=1000).replace(" ", "")
+    # base pl uses the UNSCALED max.
+    assert "NORM.DIST(LN(60000.0),10.0,1.0,TRUE)" in f
+    # residual pl uses the SCALED max (60000.0 * 0.5 == 30000.0) and the shifted mean.
+    shifted_mean = round(10.0 + math.log(0.5), 10)
+    assert f"NORM.DIST(LN(30000.0),{shifted_mean},1.0,TRUE)" in f
+
+
+def _eval_excel_formula(expr: str, **arrays: np.ndarray) -> np.ndarray:
+    """Evaluate an ``_invcdf``-emitted Excel-subset formula NUMERICALLY in
+    Python — this is the anti-tautology test side (rev-1 precedent): it
+    interprets whatever `_invcdf` ACTUALLY returned (not a hand-written
+    closed form built independently of the emitted string), so a mutation
+    that drops or alters a factor in the emitted string changes what this
+    evaluates too.
+
+    Maps the small subset of Excel functions `_invcdf` can emit for
+    (mixtures of) lognormal nodes onto numpy/scipy equivalents:
+    NORM.INV -> scipy.stats.norm.ppf, NORM.DIST(x, mean, sigma, TRUE) ->
+    scipy.stats.norm.cdf(x, mean, sigma), EXP -> np.exp, LN -> np.log, IF ->
+    np.where (elementwise select, not Python's scalar ``if``). Arithmetic
+    (``*``/``+``/``-``/``/``) and comparisons (``<``) are already valid
+    Python/numpy syntax and need no translation.
+    """
+
+    def norm_inv(p: Any, mean: float, sigma: float) -> Any:
+        return norm.ppf(p, loc=mean, scale=sigma)
+
+    def norm_dist(x: Any, mean: float, sigma: float, cumulative: bool) -> Any:
+        assert cumulative is True, "test helper only supports NORM.DIST(...,TRUE)"
+        return norm.cdf(x, loc=mean, scale=sigma)
+
+    def IF(cond: Any, a: Any, b: Any) -> Any:
+        return np.where(cond, a, b)
+
+    py_expr = (
+        expr.replace("NORM.INV(", "norm_inv(")
+        .replace("NORM.DIST(", "norm_dist(")
+        .replace("EXP(", "np.exp(")
+        .replace("LN(", "np.log(")
+    )
+    namespace: dict[str, Any] = {
+        "np": np,
+        "norm_inv": norm_inv,
+        "norm_dist": norm_dist,
+        "IF": IF,
+        "TRUE": True,
+        "FALSE": False,
+        **arrays,
+    }
+    # eval() is safe here: `expr` is never attacker/user input — it is this
+    # test file's own in-process call to `_invcdf` (a pure string-builder
+    # fed only numeric literals + our own array-var names), never network-,
+    # file-, or request-derived. `{"__builtins__": {}}` strips ALL builtins
+    # (no `__import__`, `open`, `exec`, ...) and `namespace` is a closed
+    # allowlist of exactly the numpy/scipy shims this Excel-subset DSL needs
+    # — there is no path from this call to arbitrary code execution. This is
+    # test-only code (never imported by application code) whose whole job is
+    # to numerically interpret a formula string, which is the reason eval is
+    # reached for over ast.literal_eval (that only parses literals, not
+    # expressions) or a hand-rolled parser (unwarranted for a 4-function DSL
+    # already constrained to a single call site).
+    result = eval(py_expr, {"__builtins__": {}}, namespace)  # noqa: S307
+    return np.asarray(result)
+
+
+def test_invcdf_lognormal_truncated_matches_truncated_lognormal_sampler_quantiles() -> None:
+    """Anti-tautology parity (rev-1 precedent — THE criterion that discharges
+    Task 7): the REFERENCE side is the REAL sampler
+    ``fair_cam.risk_engine._truncation.truncated_lognormal`` (empirical
+    quantiles at a fixed seed), NOT a hand-re-derived closed form. The TEST
+    side evaluates the ACTUAL `_invcdf`-emitted formula numerically
+    (`_eval_excel_formula`) over an independently-drawn uniform array, then
+    compares quantiles. A dropped Phi(b) factor in `_invcdf` would let the
+    emitted formula's quantiles exceed `max_value` and drift from the
+    sampler's — this is proven by the mutation-proof run in the task report,
+    not just asserted here.
+    """
+    mean, sigma, max_value = 10.0, 1.0, 60000.0
+    expr = _invcdf(
+        {"distribution": "lognormal", "mean": mean, "sigma": sigma, "max": max_value}, "u"
+    )
+
+    n = 300_000
+    probs = [0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
+
+    reference = truncated_lognormal(np.random.default_rng(20260726), mean, sigma, n, max_value)
+    ref_q = np.quantile(reference, probs)
+
+    u = np.random.default_rng(20260727).random(n)
+    test_vals = _eval_excel_formula(expr, u=u)
+    test_q = np.quantile(test_vals, probs)
+
+    np.testing.assert_allclose(test_q, ref_q, rtol=0.03)
+    # Sanity: neither side's draws ever reach max_value (catches a >= vs > slip).
+    assert np.max(reference) < max_value
+    assert np.max(test_vals) < max_value
+
+
+def test_invcdf_lognormal_mixture_truncated_matches_gathered_sampler_quantiles() -> None:
+    """Anti-tautology parity for the MIXTURE branch, mirroring the scalar test
+    above. The REFERENCE side is the REAL sampler
+    ``truncated_lognormal_mixture_gather`` (mathematically identical to the
+    production LOGNORMAL_MIXTURE engine path per that function's own
+    docstring), driven by a component-index array built from the SAME
+    cumulative-weight rule `_invcdf`'s nested IFs implement (component 0 owns
+    ``u_sel < weight0``). The TEST side evaluates the ACTUAL emitted mixture
+    formula. This discriminates a per-component-factor bug specifically: if
+    one component's own truncation factor were dropped or a single shared
+    factor used instead, that component's quantiles would drift from the
+    reference's (proven by the mutation-proof run in the task report).
+    """
+    mean0, sigma0, weight0 = 8.0, 0.5, 0.5
+    mean1, sigma1 = 11.0, 0.8
+    max_value = 60000.0
+    dist = {
+        "distribution": "lognormal_mixture",
+        "max": max_value,
+        "components": [
+            {"mean": mean0, "sigma": sigma0, "weight": weight0},
+            {"mean": mean1, "sigma": sigma1, "weight": 1 - weight0},
+        ],
+    }
+    expr = _invcdf(dist, "u", u_sel="usel")
+
+    n = 300_000
+    probs = [0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
+
+    usel = np.random.default_rng(20260728).random(n)
+    idx = np.where(usel < weight0, 0, 1)  # mirrors _invcdf's IF(usel < cum0, comp0, comp1)
+    mean_arr = np.array([mean0, mean1])
+    sigma_arr = np.array([sigma0, sigma1])
+
+    reference = truncated_lognormal_mixture_gather(
+        np.random.default_rng(20260726), mean_arr, sigma_arr, idx, n, max_value
+    )
+    ref_q = np.quantile(reference, probs)
+
+    u = np.random.default_rng(20260727).random(n)
+    test_vals = _eval_excel_formula(expr, u=u, usel=usel)
+    test_q = np.quantile(test_vals, probs)
+
+    np.testing.assert_allclose(test_q, ref_q, rtol=0.03)
+    assert np.max(reference) < max_value
+    assert np.max(test_vals) < max_value

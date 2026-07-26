@@ -407,9 +407,10 @@ def process_sme_estimates(state: WizardState) -> dict[str, PerFieldsetResult]:
 
         pipeline = _PIPELINE_BY_FIELDSET[fieldset]
         if fieldset in ("pl", "sl") and state.loss_shape == "catastrophic":
-            # Uncapped native lognormal storage (#loss-pert-overhaul). Fails
-            # closed: ANY other value (including a tampered/unknown loss_shape)
-            # falls through to the bounded capped/PERT default above.
+            # Heavy-tailed native lognormal storage, bounded above at the
+            # capacity cap (PR2 D17/D18, #loss-pert-overhaul). Fails closed:
+            # ANY other value (including a tampered/unknown loss_shape) falls
+            # through to the bounded capped/PERT default above.
             pipeline = _LOGNORMAL_PIPELINE
         # Spec-10/Arch-11 PR1 fix: budget guard INTERLEAVED with each per-fit so
         # a divergent fieldset cannot bust the aggregate by 4x before raising.
@@ -509,10 +510,24 @@ def pooling_component_fields(r: PerFieldsetResult) -> dict[str, list[float]]:
 
 
 def build_scenario_payload(
-    results: dict[str, PerFieldsetResult], state: WizardState
+    results: dict[str, PerFieldsetResult],
+    state: WizardState,
+    *,
+    capacity_max: float | None = None,
 ) -> dict[str, Any]:
     """Convert per-fieldset results into the ScenarioForm FAIR-distribution
     payload + sidecar metadata.
+
+    ``capacity_max`` (PR2 D13/D18, optional, keyword-only): the per-loss-
+    component capacity cap the finalize route mints (or preserves across a
+    re-estimate — see ``routes/scenarios.py::finalize_wizard``) for a
+    catastrophic loss shape. When not ``None``, it is injected as the
+    ``"max"`` key on BOTH the single-SME native-lognormal dict and the
+    multi-SME ``lognormal_mixture`` dict (the two native-storage sites,
+    catastrophic pl/sl only — PERT nodes never carry a cap). Defaults to
+    ``None``, which emits the pre-PR2 max-less dict unchanged — the sole
+    existing call site (``routes/scenarios.py``) and every direct test call
+    keep compiling and byte-identical without threading it.
 
     schema_version 3 (issue #27 Task 5, true mixture pooling): ``r.pooled``
     is now a linear-opinion-pool mixture (``LognormMixture``/``NormMixture``,
@@ -617,46 +632,61 @@ def build_scenario_payload(
             }
         elif isinstance(r.pooled, LognormMixture):
             # CATASTROPHIC pl/sl only (#loss-pert-overhaul): non-binding
-            # [0, inf] truncation => each component's (meanlog, sdlog) IS its
-            # native untruncated {mean, sigma}. Store native, uncapped by
-            # intent; no PERT approximation.
+            # [0, inf] truncation on the POOLING FIT's own support => each
+            # component's (meanlog, sdlog) IS its native untruncated
+            # {mean, sigma}. Store native; no PERT approximation. Bounded
+            # above at the capacity cap via the separate top-level "max" key
+            # (PR2 D17, capacity_max above).
             if len(r.pooled.components) == 1:
                 # Single-SME identity pin (issue #27 Task 5): byte-identical
                 # to the pre-mixture plain-lognormal output — the dominant
                 # production case never regresses to the new mixture shape.
+                # PR2 D13/D18: the identity pin's SCOPE is unaffected by
+                # ``capacity_max`` — the default (None) omits the "max" key
+                # entirely, so the golden dict is untouched; a caller that
+                # threads a cap gets it as an ADDITIONAL key.
                 c = r.pooled.components[0]
-                payload[fieldset] = {
+                node: dict[str, Any] = {
                     "distribution": "lognormal",
                     "mean": c.meanlog,
                     "sigma": c.sdlog,
-                    "distribution_fit_metadata": {
-                        "source": "quantile_lognormal_pool",
-                        # Closed-form untruncated two-quantile fit (Epic B
-                        # native path) — see _fit_lognorm_native; NOT the
-                        # truncated scipy fitter (which diverged for wide
-                        # anchors).
-                        "fitter": "lognorm_native",
-                        **component_fields,
-                        **common_meta,
-                    },
                 }
+                if capacity_max is not None:
+                    node["max"] = capacity_max
+                node["distribution_fit_metadata"] = {
+                    "source": "quantile_lognormal_pool",
+                    # Closed-form untruncated two-quantile fit (Epic B
+                    # native path) — see _fit_lognorm_native; NOT the
+                    # truncated scipy fitter (which diverged for wide
+                    # anchors).
+                    "fitter": "lognorm_native",
+                    **component_fields,
+                    **common_meta,
+                }
+                payload[fieldset] = node
             else:
                 # Genuine #27 fix: divergent multi-SME catastrophic losses
                 # are represented as a mixture, not parameter-averaged into a
                 # distribution covering neither expert's stated range.
-                payload[fieldset] = {
+                # PR2 D13/D18: ONE shared top-level "max" covers every
+                # component (the cap is a per-loss-component ceiling, not a
+                # per-SME-opinion one).
+                mixture_node: dict[str, Any] = {
                     "distribution": "lognormal_mixture",
                     "components": [
                         {"mean": c.meanlog, "sigma": c.sdlog, "weight": w}
                         for c, w in zip(r.pooled.components, r.pooled.weights, strict=True)
                     ],
-                    "distribution_fit_metadata": {
-                        "source": "quantile_lognormal_pool",
-                        "fitter": "lognorm_native",
-                        **component_fields,
-                        **common_meta,
-                    },
                 }
+                if capacity_max is not None:
+                    mixture_node["max"] = capacity_max
+                mixture_node["distribution_fit_metadata"] = {
+                    "source": "quantile_lognormal_pool",
+                    "fitter": "lognorm_native",
+                    **component_fields,
+                    **common_meta,
+                }
+                payload[fieldset] = mixture_node
         else:
             # vuln: bounded probability — unchanged PERT collapse, mixture
             # collapsed via normal_mixture_to_pert_approx.

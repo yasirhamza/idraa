@@ -270,13 +270,25 @@ def test_non_creatable_status_row_errors_at_preview() -> None:
 # structural guard is THE security enforcement point. Meth-B1 / Sec-I1 / Sec-I2.
 
 
+# PR2 D13/D18/D19 (Task 4b): the pre-PR2 contract asserted a catastrophic
+# lognormal row becomes "create" with NO capacity concept at all -- these
+# fixtures now pass a generous synthetic `capacity_max` (comfortably above
+# every fixture's p95 below) so the pre-existing "create" assertion still
+# holds under the new D18/D19 gate (fixture fix, not an assertion change --
+# see CLAUDE.md's fixture-churn rule). Dedicated D18/D19/mint/preserve
+# coverage lives in test_scenario_import_capacity_bound.py.
+_GENEROUS_CAPACITY_MAX = 1e9
+
+
 def _lognormal(mean: object = 6.9, sigma: object = 1.0) -> dict[str, object]:
     return {"distribution": "lognormal", "mean": mean, "sigma": sigma}
 
 
 def test_valid_lognormal_pl_becomes_create() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal()))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal()))],
+        existing_names=set(),
+        capacity_max=_GENEROUS_CAPACITY_MAX,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -290,10 +302,13 @@ def test_lognormal_sl_accepted_but_lognormal_tef_rejected() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(secondary_loss=_lognormal()))],
         existing_names=set(),
+        capacity_max=_GENEROUS_CAPACITY_MAX,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
 
+    # TEF is PERT-only regardless of capacity -- no capacity_max needed here,
+    # the row errors at the §2.5 structural guard before D18/D19 are reached.
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(threat_event_frequency=_lognormal(mean=0.0)))],
         existing_names=set(),
@@ -424,7 +439,9 @@ def test_valid_two_component_mixture_becomes_create() -> None:
         ]
     )
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=mix))], existing_names=set()
+        [(2, _fd(primary_loss=mix))],
+        existing_names=set(),
+        capacity_max=_GENEROUS_CAPACITY_MAX,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -581,7 +598,9 @@ def test_mixture_secondary_loss_is_accepted() -> None:
         ]
     )
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(secondary_loss=mix))], existing_names=set()
+        [(2, _fd(secondary_loss=mix))],
+        existing_names=set(),
+        capacity_max=_GENEROUS_CAPACITY_MAX,
     )
     assert errors == []
     assert preview[0]["action"] == "create"

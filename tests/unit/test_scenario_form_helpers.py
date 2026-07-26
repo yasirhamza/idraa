@@ -19,14 +19,17 @@ These tests pin:
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 
 from idraa.routes.scenario_form_helpers import (
     EFFECT_CHOICES,
+    ScenarioFormValidationError,
     dist_from_raw,
     dist_to_form,
     form_defaults,
+    form_from_scenario,
     parse_scenario_form,
 )
 
@@ -284,3 +287,221 @@ def test_parse_scenario_form_effect_empty_is_none() -> None:
 
 def test_form_defaults_and_from_scenario_effect_blank() -> None:
     assert form_defaults()["effect"] == ""
+
+
+# ── PR2 D17 (Task 4c): authorable capacity cap on the expert form ─────────
+
+
+def test_form_defaults_has_blank_capacity_fields() -> None:
+    """The cap field is BLANK on fresh create — never a pre-filled value
+    (round-6-fixed decision 2)."""
+    d = form_defaults()
+    assert d["pl_max"] == ""
+    assert d["sl_max"] == ""
+
+
+def test_dist_from_raw_pl_blank_max_mints_from_capacity() -> None:
+    """Blank pl_max -> the caller's minted capacity_max."""
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000"}
+    out = dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+    assert out["max"] == pytest.approx(1_000_000.0)
+
+
+def test_dist_from_raw_pl_blank_max_no_capacity_omits_max_key() -> None:
+    """Blank pl_max + unknown revenue (capacity_max=None, D14) -> no "max" key."""
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000"}
+    out = dist_from_raw(raw, "pl", capacity_max=None)
+    assert "max" not in out
+
+
+def test_dist_from_raw_pl_typed_max_within_bound_used_as_is() -> None:
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000", "pl_max": "500000"}
+    out = dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+    assert out["max"] == pytest.approx(500_000.0)
+
+
+def test_dist_from_raw_pl_typed_max_no_capacity_accepted_as_is() -> None:
+    """Typed pl_max with revenue unset (capacity_max=None) has no ceiling to
+    check against — the expert form is the D18 escape hatch."""
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000", "pl_max": "9999999999"}
+    out = dist_from_raw(raw, "pl", capacity_max=None)
+    assert out["max"] == pytest.approx(9_999_999_999.0)
+
+
+def test_dist_from_raw_pl_typed_max_exceeds_capacity_raises() -> None:
+    """D13: an explicit override may TIGHTEN below capacity, never LOOSEN
+    above it."""
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000", "pl_max": "2000000"}
+    with pytest.raises(ScenarioFormValidationError, match="pl_max"):
+        dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+
+
+def test_dist_from_raw_pl_typed_max_equal_to_capacity_accepted() -> None:
+    """Boundary: max == capacity is accepted (only > capacity is rejected)."""
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000", "pl_max": "1000000"}
+    out = dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+    assert out["max"] == pytest.approx(1_000_000.0)
+
+
+@pytest.mark.parametrize("bad_val", ["abc", "0", "-5", "inf", "nan"])
+def test_dist_from_raw_pl_max_malformed_raises(bad_val: str) -> None:
+    raw = {"pl_dist": "lognormal", "pl_low": "100", "pl_high": "10000", "pl_max": bad_val}
+    with pytest.raises(ScenarioFormValidationError, match="pl_max"):
+        dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+
+
+def test_dist_from_raw_tef_never_gets_max_even_if_present_in_raw() -> None:
+    """D12/D19 scope: the capacity ceiling applies to loss fields only —
+    dist_from_raw only resolves it for prefix == "pl"."""
+    raw = {"tef_dist": "lognormal", "tef_low": "0.1", "tef_high": "10", "tef_max": "5"}
+    out = dist_from_raw(raw, "tef", capacity_max=1_000_000.0)
+    assert "max" not in out
+
+
+def test_dist_from_raw_pert_kind_unaffected_by_capacity_max() -> None:
+    """PERT losses are never capped (D12/D19 govern lognormal only)."""
+    raw = {"pl_low": "1", "pl_mode": "2", "pl_high": "3"}
+    out = dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
+    assert out == {"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0}
+
+
+# ── SL max — the INLINE construction site in parse_scenario_form ──────────
+
+
+def test_secondary_loss_blank_max_mints_from_capacity() -> None:
+    raw = _base_raw(sl_dist="lognormal", sl_low="1000", sl_high="100000")
+    form = parse_scenario_form(raw, capacity_max=2_000_000.0)
+    assert form.secondary_loss is not None
+    assert form.secondary_loss["max"] == pytest.approx(2_000_000.0)
+
+
+def test_secondary_loss_typed_max_within_bound_used_as_is() -> None:
+    raw = _base_raw(sl_dist="lognormal", sl_low="1000", sl_high="100000", sl_max="750000")
+    form = parse_scenario_form(raw, capacity_max=2_000_000.0)
+    assert form.secondary_loss is not None
+    assert form.secondary_loss["max"] == pytest.approx(750_000.0)
+
+
+def test_secondary_loss_typed_max_exceeds_capacity_raises() -> None:
+    raw = _base_raw(sl_dist="lognormal", sl_low="1000", sl_high="100000", sl_max="9000000")
+    with pytest.raises(ScenarioFormValidationError, match="sl_max"):
+        parse_scenario_form(raw, capacity_max=2_000_000.0)
+
+
+def test_secondary_loss_pert_kind_never_gets_max() -> None:
+    """PERT secondary loss is never capped, regardless of a stray sl_max."""
+    raw = _base_raw(sl_low="10", sl_mode="20", sl_high="30", sl_max="500")
+    form = parse_scenario_form(raw, capacity_max=1_000_000.0)
+    assert form.secondary_loss == {
+        "distribution": "PERT",
+        "low": 10.0,
+        "mode": 20.0,
+        "high": 30.0,
+    }
+
+
+def test_secondary_loss_none_when_blank_never_mints_max() -> None:
+    """No secondary loss at all (blank low/high) -> None, regardless of
+    capacity_max — there's no dict to attach a cap to."""
+    raw = _base_raw(sl_dist="lognormal", sl_low="", sl_high="")
+    form = parse_scenario_form(raw, capacity_max=2_000_000.0)
+    assert form.secondary_loss is None
+
+
+def test_primary_and_secondary_loss_both_capped_independently() -> None:
+    """Round-trip: BOTH pl_max and sl_max thread through the SAME create call
+    — pl via dist_from_raw, sl via its inline site."""
+    raw = _base_raw(
+        pl_dist="lognormal",
+        pl_low="100",
+        pl_high="10000",
+        sl_dist="lognormal",
+        sl_low="1000",
+        sl_high="100000",
+    )
+    form = parse_scenario_form(raw, capacity_max=5_000_000.0)
+    assert form.primary_loss["max"] == pytest.approx(5_000_000.0)
+    assert form.secondary_loss is not None
+    assert form.secondary_loss["max"] == pytest.approx(5_000_000.0)
+
+
+# ── dist_to_form round-trips the cap (silent-strip guard) ─────────────────
+
+
+def test_dist_to_form_lognormal_round_trips_existing_max() -> None:
+    dist = {"distribution": "lognormal", "mean": 10.0, "sigma": 1.0, "max": 500_000.0}
+    out = dist_to_form(dist, "pl")
+    assert out["pl_max"] == "500000.0"
+
+
+def test_dist_to_form_lognormal_no_max_is_blank() -> None:
+    dist = {"distribution": "lognormal", "mean": 10.0, "sigma": 1.0}
+    out = dist_to_form(dist, "pl")
+    assert out["pl_max"] == ""
+
+
+def test_dist_to_form_mixture_round_trips_shared_top_level_max() -> None:
+    dist = {**_MIXTURE_DIST, "max": 40_000_000.0}
+    out = dist_to_form(dist, "pl")
+    assert out["pl_max"] == "40000000.0"
+
+
+def test_dist_to_form_pert_max_is_always_blank() -> None:
+    out = dist_to_form({"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0}, "pl")
+    assert out["pl_max"] == ""
+
+
+def test_dist_to_form_none_max_is_blank() -> None:
+    out = dist_to_form(None, "sl")
+    assert out["sl_max"] == ""
+
+
+def test_form_from_scenario_sl_absent_emits_blank_max() -> None:
+    """form_from_scenario's explicit no-SL branch also blanks sl_max (not
+    just sl_low/mode/high) — a template macro reads it unconditionally."""
+    scenario = SimpleNamespace(
+        name="S",
+        description="",
+        threat_category="ransomware",
+        threat_actor_type="",
+        attack_vector="",
+        asset_class="",
+        effect="",
+        mitigating_controls=[],
+        threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0},
+        secondary_loss=None,
+    )
+    out = form_from_scenario(scenario)  # type: ignore[arg-type]
+    assert out["sl_max"] == ""
+
+
+def test_form_from_scenario_preserves_pl_max_for_unchanged_resubmit() -> None:
+    """Silent-strip regression (unit level): form_from_scenario emits the
+    EXISTING pl.max, and re-parsing that echoed value (no new capacity_max —
+    mirrors an edit where revenue hasn't changed) reproduces it exactly.
+    Without round-tripping the field here, parse_scenario_form would rebuild
+    primary_loss from scratch with no "max" key at all."""
+    scenario = SimpleNamespace(
+        name="S",
+        description="",
+        threat_category="ransomware",
+        threat_actor_type="",
+        attack_vector="",
+        asset_class="",
+        effect="",
+        mitigating_controls=[],
+        threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0, "max": 500_000.0},
+        secondary_loss=None,
+    )
+    form_dict = form_from_scenario(scenario)  # type: ignore[arg-type]
+    assert form_dict["pl_max"] == "500000.0"
+
+    raw: dict[str, object] = dict(form_dict)
+    raw["name"] = "S"
+    raw["threat_category"] = "ransomware"
+    form = parse_scenario_form(raw, capacity_max=500_000.0)  # unchanged org revenue
+    assert form.primary_loss["max"] == pytest.approx(500_000.0)

@@ -4,13 +4,34 @@ loss values (pl_*, sl_*) are scaled; TEF (frequency) and vulnerability (proporti
 ∈[0,1]) carry no currency dimension and are NEVER converted. The rate is Decimal
 end-to-end (never Decimal(float)). Values are re-emitted as plain fixed-point
 strings the downstream float parser accepts.
+
+PR2 D17 (Task 4c): ``pl_max``/``sl_max`` (the expert form's authorable capacity
+cap, a real-space dollar magnitude exactly like low/mode/high) are in
+``_LOSS_KEYS`` too. Without them, a typed cap would be the ONLY loss-magnitude
+sibling left unconverted inside this currency-scoped block — stored as if USD
+while the paired mean/sigma WERE divided by the rate. Direction/magnitude: an
+unconverted cap typed in a code with rate > 1 (e.g. SAR, 3.75) would be stored
+that many times too large — for a rate near the schema's permitted ceiling,
+effectively uncapped, silently defeating the one surface D17 makes visible and
+overridable. The blank+mint path needs no conversion (minted server-side from
+USD ``annual_revenue`` — see ``routes/scenario_form_helpers.py::
+_resolve_capacity_max``); this only matters for a TYPED cap on the CREATE path.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
-_LOSS_KEYS = ("pl_low", "pl_mode", "pl_high", "sl_low", "sl_mode", "sl_high")
+_LOSS_KEYS = (
+    "pl_low",
+    "pl_mode",
+    "pl_high",
+    "pl_max",
+    "sl_low",
+    "sl_mode",
+    "sl_high",
+    "sl_max",
+)
 
 
 def _dec_str(d: Decimal) -> str:

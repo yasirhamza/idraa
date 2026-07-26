@@ -494,6 +494,92 @@ def test_single_sme_catastrophic_byte_identical_to_pre_mixture_golden() -> None:
     assert actual == _GOLDEN_SINGLE_SME_CATASTROPHIC_PL
 
 
+# PR2 D13/D18 org-bearing golden: the SAME exact scenario as the golden above,
+# with a minted ``capacity_max`` threaded through. Pins that (a) the "max" key
+# is the ONLY diff vs the byte-identical golden (the mean/sigma math is
+# untouched by threading the cap) and (b) the exact-dict assertion style
+# established by the golden above is not weakened when a cap IS present.
+_GOLDEN_SINGLE_SME_CATASTROPHIC_PL_WITH_MAX = {
+    **_GOLDEN_SINGLE_SME_CATASTROPHIC_PL,
+    "max": 5_000_000.0,
+}
+
+
+def test_single_sme_catastrophic_with_capacity_max_exact_dict() -> None:
+    """PR2 D13/D18: threading ``capacity_max`` adds exactly one "max" key to
+    the single-SME native-lognormal dict; every other key is byte-identical
+    to ``_GOLDEN_SINGLE_SME_CATASTROPHIC_PL``. The default (no kwarg, tested
+    above) must keep emitting NO "max" key -- this is the org-bearing sibling
+    that closes the other half of the optional-keyword contract."""
+    state = _state_with(
+        {
+            "tef": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 5, "high": 50}],
+            "vuln": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 0.1, "high": 0.5}],
+            "pl": [
+                {
+                    "sme_id": "00000000-0000-0000-0000-000000000001",
+                    "low": 1000,
+                    "high": 50_000_000,
+                }
+            ],
+        }
+    )
+    state.loss_shape = "catastrophic"
+    payload = build_scenario_payload(process_sme_estimates(state), state, capacity_max=5_000_000.0)
+    actual = {k: v for k, v in payload["pl"].items() if k != "distribution_fit_metadata"}
+
+    print(f"expected (org-bearing golden): {_GOLDEN_SINGLE_SME_CATASTROPHIC_PL_WITH_MAX}")
+    print(f"actual                       : {actual}")
+
+    assert actual == _GOLDEN_SINGLE_SME_CATASTROPHIC_PL_WITH_MAX
+
+
+def test_multi_sme_catastrophic_mixture_carries_one_shared_max() -> None:
+    """PR2 D13/D18: a multi-SME catastrophic mixture carries ONE shared
+    top-level "max" -- not a per-component cap -- and every component
+    survives untouched (the mixture math itself is unaffected by the cap)."""
+    state = _state_with(
+        {
+            "tef": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 1.0, "high": 12.0}],
+            "vuln": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 0.05, "high": 0.5}],
+            "pl": [
+                {"sme_id": "00000000-0000-0000-0000-000000000001", "low": 1_000, "high": 10_000},
+                {
+                    "sme_id": "00000000-0000-0000-0000-000000000002",
+                    "low": 1_000_000,
+                    "high": 50_000_000,
+                },
+            ],
+        }
+    )
+    state.loss_shape = "catastrophic"
+    payload = build_scenario_payload(process_sme_estimates(state), state, capacity_max=25_000_000.0)
+
+    pl = payload["pl"]
+    assert pl["distribution"] == "lognormal_mixture"
+    assert pl["max"] == 25_000_000.0
+    assert len(pl["components"]) == 2  # both components preserved
+
+
+def test_capacity_max_absent_by_default_capped_path() -> None:
+    """PR2 D13/D18: the capped (default) path NEVER gets a "max" key, even
+    when a caller threads ``capacity_max`` -- only the catastrophic native-
+    lognormal / lognormal_mixture sites are eligible (a PERT node's ceiling
+    is its own authored `high`, per D19's scope note)."""
+    state = _state_with(
+        {
+            "tef": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 1.0, "high": 12.0}],
+            "vuln": [{"sme_id": "00000000-0000-0000-0000-000000000001", "low": 0.05, "high": 0.5}],
+            "pl": [
+                {"sme_id": "00000000-0000-0000-0000-000000000001", "low": 1_000, "high": 100_000}
+            ],
+        }
+    )  # loss_shape defaults "capped"
+    payload = build_scenario_payload(process_sme_estimates(state), state, capacity_max=25_000_000.0)
+    assert payload["pl"]["distribution"] == "PERT"
+    assert "max" not in payload["pl"]
+
+
 def test_multi_sme_capped_tef_vuln_pert_matches_direct_mixture_collapse() -> None:
     """Multi-SME capped/tef/vuln PERT triples must equal calling
     combine_lognorm_trunc/combine_norm + lognormal_mixture_to_pert_approx/

@@ -42,6 +42,7 @@ from idraa.models.enums import (
     ScenarioType,
     ThreatCategory,
 )
+from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from tests.conftest import csrf_post
 
@@ -352,6 +353,19 @@ async def test_create_scenario_lognormal_primary_loss_stored_native(
     import math
 
     client, org_id = authed_analyst
+    # D15 (Task 6): the create route now REQUIRES a lognormal loss field to
+    # carry a `max`. The producer (Task 4c) mints one from
+    # `capacity_k * annual_revenue`, which needs annual_revenue set --
+    # otherwise capacity_max_for_org returns None and the field stays
+    # max-less, which now 422s. This test's intent is the native
+    # mean/sigma storage shape, not capacity-max requiredness, so give the
+    # org a revenue figure large enough that the minted cap clears the
+    # p95 floor for this distribution.
+    org = await db_session.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal("500000000")
+    await db_session.commit()
+
     payload = {
         "name": "Lognormal-PL scenario",
         "threat_category": "ransomware",

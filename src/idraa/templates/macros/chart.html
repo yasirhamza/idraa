@@ -76,6 +76,15 @@
               <td>95th pct</td>
               <td class="text-right font-mono">{{ rows.p95 | format_dist_value(fmt) }}</td>
             </tr>
+            {# PR2 D17: the cap is VISIBLE on read-back — an analyst who
+               authored a capacity cap must be able to see it after saving.
+               rows.max is None for an uncapped field (never rendered then). #}
+            {% if rows.max is not none %}
+            <tr>
+              <td>Max (capacity cap)</td>
+              <td class="text-right font-mono">{{ rows.max | format_dist_value(fmt) }}</td>
+            </tr>
+            {% endif %}
           </tbody>
         </table>
         <p class="text-xs text-ink-2 mt-1">Distribution: Lognormal</p>
@@ -105,6 +114,14 @@
               <td>95th pct</td>
               <td class="text-right font-mono">{{ rows.p95 | format_dist_value(fmt) }}</td>
             </tr>
+            {# PR2 D17: same visible-cap idiom as the plain-lognormal branch
+               above — ONE shared cap across every component. #}
+            {% if rows.max is not none %}
+            <tr>
+              <td>Max (capacity cap)</td>
+              <td class="text-right font-mono">{{ rows.max | format_dist_value(fmt) }}</td>
+            </tr>
+            {% endif %}
           </tbody>
         </table>
         <p class="text-xs text-ink-2 mt-1">

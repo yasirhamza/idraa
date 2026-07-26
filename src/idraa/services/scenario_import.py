@@ -46,6 +46,11 @@ from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.audit import AuditWriter
+from idraa.services.capacity_bound_copy import (
+    D18_REVENUE_MESSAGE,
+    D19_FLOOR_MARKER,
+    wrap_d19_floor_message,
+)
 from idraa.services.fair_cam_validation import (
     FAIRCAMValidationError,
     validate_fair_distributions,
@@ -75,7 +80,9 @@ def _enum_ok(value: str | None, enum_cls: type[StrEnum]) -> bool:
     return value in {e.value for e in enum_cls}
 
 
-def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> str | None:
+def _structural_dist_problem(
+    col: str, dist: Any, *, allow_lognormal: bool, allow_max: bool
+) -> str | None:
     """Return an error string if ``dist`` is not a valid PERT (or, when allowed,
     lognormal / lognormal_mixture) structural shape; ``None`` if it is
     structurally sound.
@@ -89,6 +96,20 @@ def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> s
     only; numeric finiteness, the ``0 < sigma <= 10`` bound, weight
     positivity/sum, and the component-count cap are enforced downstream by
     ``validate_fair_distributions`` (Sec-I1/Sec-I2/Sec-N1).
+
+    ``allow_max`` (PR2 D13/D14, Task 4b; REQUIRED keyword-only — milestone
+    gate finding (p): a permissive default is a fail-OPEN on the D14
+    org-isolation boundary, so every caller must decide explicitly, matching
+    ``allow_lognormal``'s own required-kwarg shape): when ``True`` (the
+    scenario-import call site, ~line 364), a lognormal/lognormal_mixture
+    dict MAY additionally carry an OPTIONAL top-level ``max`` key (a sibling
+    of ``mean``/``sigma``, or of ``components`` — never nested
+    per-component; mirrors ``run_executor._dict_to_fair_distribution``'s
+    read-side shape) — the PR2 capacity-bound cap, minted/preserved by
+    ``_validate_rows`` below. When ``False`` (``library_bundle_import``'s
+    call site), ``max`` is REJECTED exactly like any other unknown key:
+    library entries are org-agnostic (D14) and must never carry a foreign
+    org's capacity cap through this shared chokepoint.
     """
     if not isinstance(dist, dict):
         return f"{col} must be a distribution object"
@@ -96,12 +117,20 @@ def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> s
     if kind == "lognormal":
         if not allow_lognormal:
             return f"{col}.distribution lognormal not allowed for {col} (must be PERT)"
-        if set(dist.keys()) != {"distribution", "mean", "sigma"}:
-            return f"{col} lognormal must have exactly keys {{distribution, mean, sigma}}"
+        keys = set(dist.keys())
+        base_keys = {"distribution", "mean", "sigma"}
+        expected_keys = base_keys | ({"max"} if (allow_max and "max" in keys) else set())
+        if keys != expected_keys:
+            suffix = ", optionally with max" if allow_max else ""
+            return f"{col} lognormal must have exactly keys {{distribution, mean, sigma}}{suffix}"
         for k in ("mean", "sigma"):
             v = dist.get(k)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 return f"{col}.{k} must be numeric"
+        if "max" in keys:
+            v = dist.get("max")
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return f"{col}.max must be numeric"
         return None
     if kind == "lognormal_mixture":
         # #27: same allow_lognormal gate as scalar lognormal reuses (mixture
@@ -112,8 +141,15 @@ def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> s
         # numeric-TYPE gating only, mirroring the scalar lognormal branch above.
         if not allow_lognormal:
             return f"{col}.distribution lognormal_mixture not allowed for {col} (must be PERT)"
-        if set(dist.keys()) != {"distribution", "components"}:
-            return f"{col} lognormal_mixture must have exactly keys {{distribution, components}}"
+        keys = set(dist.keys())
+        base_keys = {"distribution", "components"}
+        expected_keys = base_keys | ({"max"} if (allow_max and "max" in keys) else set())
+        if keys != expected_keys:
+            suffix = ", optionally with max" if allow_max else ""
+            return (
+                f"{col} lognormal_mixture must have exactly keys "
+                f"{{distribution, components}}{suffix}"
+            )
         components = dist.get("components")
         if not isinstance(components, list) or len(components) == 0:
             return f"{col}.components must be a non-empty list"
@@ -126,6 +162,10 @@ def _structural_dist_problem(col: str, dist: Any, *, allow_lognormal: bool) -> s
                 v = comp.get(k)
                 if isinstance(v, bool) or not isinstance(v, (int, float)):
                     return f"{col}.components[{i}].{k} must be numeric"
+        if "max" in keys:
+            v = dist.get("max")
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return f"{col}.max must be numeric"
         return None
     # PERT (and legacy uppercase "PERT"); any other kind falls through to error.
     if set(dist.keys()) != {"distribution", "low", "mode", "high"}:
@@ -175,6 +215,7 @@ def _validate_rows(
     pairs: list[tuple[int, dict[str, Any]]],
     *,
     existing_names: set[str],
+    capacity_max: float | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -195,6 +236,14 @@ def _validate_rows(
     Duplicate (active same-name existing, or intra-file repeat) → action "skip",
     form None, NOT added to errors. Validation failure → action "error",
     form None, one or more error dicts appended.
+
+    ``capacity_max`` (PR2 D13/D18/D19, Task 4b) is a PLAIN value the CALLER
+    computed from the TARGET org's own revenue (``services/loss_capacity.py``
+    ``capacity_max_for_org`` — never a first-org/``require_sole_org`` lookup);
+    this function stays pure — no org fetch, no module global. ``None`` means
+    "the importing org's revenue is unset/non-positive" and gates D18 exactly
+    as a missing value would at the wizard. See the §2.6 step below for the
+    mint/preserve/D18 semantics.
     """
     preview: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -315,7 +364,13 @@ def _validate_rows(
             dist = getattr(form, col)
             if dist is None:
                 continue  # only secondary_loss may be None
-            dist_problem = _structural_dist_problem(col, dist, allow_lognormal=allow_ln)
+            # PR2 D13/D14: scenario-import rows MAY carry an optional `max`
+            # (minted/preserved below) -- explicit True (milestone gate
+            # finding (p): allow_max has no permissive default anymore, so
+            # every call site must decide).
+            dist_problem = _structural_dist_problem(
+                col, dist, allow_lognormal=allow_ln, allow_max=True
+            )
             if dist_problem is not None:
                 # Column name always references the distribution so existing
                 # callers/tests keying on ".distribution" keep matching.
@@ -329,21 +384,79 @@ def _validate_rows(
             attack_meta.append(None)
             continue
 
+        # 2.6 PR2 D13/D18/D19 (Task 4b): mint or preserve the capacity `max`
+        # on a catastrophic (lognormal/lognormal_mixture) PL/SL field BEFORE
+        # step 3 runs validate_fair_distributions, so Task 3b's `max > p95`
+        # floor check (which activates only once `max` is present on the
+        # dict) sees it in the SAME call below rather than needing a second
+        # validation pass.
+        #   - D18: annual_revenue is a PRECONDITION for the catastrophic
+        #     import path. Fires whenever ANY loss field is
+        #     lognormal/lognormal_mixture and `capacity_max` is None --
+        #     REGARDLESS of whether the row already carries an explicit
+        #     `max` (JSON only; a CSV row's fixed 4-tuple cells structurally
+        #     cannot carry one). An explicit `max` does NOT bypass D18 here
+        #     -- only the expert form's D17 override (Task 4c) is allowed to
+        #     bypass the revenue precondition with an analyst-authored cap.
+        #   - When `capacity_max` IS available: a field missing `max` is
+        #     MINTED (every CSV catastrophic field lands here, since CSV
+        #     cannot express `max`); a field that already carries an
+        #     explicit `max` (JSON only) is PRESERVED untouched, never
+        #     overwritten by the mint.
+        capacity_block_col: str | None = None
+        for col in ("primary_loss", "secondary_loss"):
+            dist = getattr(form, col)
+            if dist is None:
+                continue
+            kind = str(dist.get("distribution", "")).lower()
+            if kind not in ("lognormal", "lognormal_mixture"):
+                continue
+            if capacity_max is None:
+                capacity_block_col = col
+                break
+            if dist.get("max") is None:
+                dist["max"] = capacity_max
+        if capacity_block_col is not None:
+            errors.append(
+                {
+                    "line": line,
+                    "column": f"{capacity_block_col}.max",
+                    "reason": D18_REVENUE_MESSAGE,
+                }
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate))
+            attack_meta.append(None)
+            continue
+
         # 3. FAIR distribution validation (same call ScenarioService.create makes;
         #    now incl. the v3 vulnerability [0,1] check added to the wrapper in Step 0).
         try:
+            # D15 (Task 6): require_loss_max=True -- the import-apply call
+            # site, per the map's verified caller census.
             validate_fair_distributions(
                 threat_event_frequency=form.threat_event_frequency,
                 vulnerability=form.vulnerability,
                 primary_loss=form.primary_loss,
                 secondary_loss=form.secondary_loss,
+                require_loss_max=True,
             )
         except FAIRCAMValidationError as exc:
             # Name the offending distribution from the first ValidationResult's
             # field_name (e.g. 'primary_loss_loss' → contains 'primary_loss');
             # fall back to the generic 'distributions' when none is carried.
             col_name = exc.errors[0][0] if getattr(exc, "errors", None) else "distributions"
-            errors.append({"line": line, "column": col_name, "reason": str(exc)})
+            # PR2 D19 (Task 4b): the Task-3b floor check
+            # (_validate_capacity_floor) fires INSIDE this same call once a
+            # `max` is present (minted or preserved above) -- its FACTUAL
+            # p95-vs-cap string carries D19_FLOOR_MARKER. Wrap it with the
+            # SAME three pinned remedies the wizard uses (Task 4a), reusing
+            # services/capacity_bound_copy.py so the two surfaces can never
+            # drift, instead of the bare factual string every other
+            # FAIRCAMValidationError gets here.
+            reason = wrap_d19_floor_message(exc) if D19_FLOOR_MARKER in str(exc) else str(exc)
+            errors.append({"line": line, "column": col_name, "reason": reason})
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
             entry_meta.append((meta_currency, meta_rate))
@@ -472,11 +585,19 @@ async def validate_upload(
     data: bytes,
     filename: str | None,
     content_type: str | None,
+    capacity_max: float | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
     """Step 1: sniff + parse + validate + stage. Never mutates scenarios.
 
     Always returns a token (even on a fully-invalid upload) so the route can
     render the preview page with the errors.
+
+    ``capacity_max`` (PR2 D13/D18/D19, Task 4b): a plain value the CALLER
+    (``routes/scenario_import.py``) computed from the TARGET org's own
+    revenue via ``db.get(Organization, user.organization_id)`` --
+    ``require_sole_org``/``get_sole_org``/``ORDER BY id LIMIT 1`` are
+    forbidden on this path. Threaded straight into ``_validate_rows``, which
+    stays pure.
     """
     try:
         fmt = sniff_format(filename=filename, content_type=content_type, data=data)
@@ -490,7 +611,9 @@ async def validate_upload(
         return token, [], hard_stop
 
     existing = await _existing_scenario_names(db, org_id=org_id)
-    preview, errors, _, _meta, _attack_meta = _validate_rows(pairs, existing_names=existing)
+    preview, errors, _, _meta, _attack_meta = _validate_rows(
+        pairs, existing_names=existing, capacity_max=capacity_max
+    )
     token = await _store_preview(db, org_id=org_id, user_id=user_id, data=data, fmt=fmt)
     return token, preview, errors
 
@@ -502,11 +625,18 @@ async def apply_validated_preview(
     org_id: uuid.UUID,
     user: User,
     ip_address: str | None = None,
+    capacity_max: float | None = None,
 ) -> tuple[int, int, list[dict[str, Any]]]:
     """Step 2: re-parse the staged bytes + create the non-dup valid rows.
 
     Raises ``PreviewExpiredError`` uniformly for malformed/missing/expired/
     wrong-org tokens (no existence oracle).
+
+    ``capacity_max`` (PR2 D13/D18/D19, Task 4b): same contract as
+    ``validate_upload`` above -- the caller re-resolves it fresh on every
+    confirm POST (rather than trusting the preview-time value), which is
+    also the TOCTOU backstop: if the org's revenue changed between preview
+    and confirm, the confirm step re-validates against the CURRENT capacity.
     """
     try:
         token_uuid = uuid.UUID(token)
@@ -543,7 +673,9 @@ async def apply_validated_preview(
         return 0, 0, hard_stop
 
     existing = await _existing_scenario_names(db, org_id=org_id)
-    preview, errors, forms, entry_meta, attack_meta = _validate_rows(pairs, existing_names=existing)
+    preview, errors, forms, entry_meta, attack_meta = _validate_rows(
+        pairs, existing_names=existing, capacity_max=capacity_max
+    )
 
     svc = ScenarioService(db)
     imported = 0

@@ -20,15 +20,16 @@
      finalize reads it for the real CAS. #}
 
   {# Milestone B (#loss-pert-overhaul): scenario-level loss-shape toggle.
-     Checked -> pl/sl stored as uncapped native lognormal; unchecked (default)
-     -> bounded PERT (the high IS the economic ceiling). Server-rendered
-     `checked` keeps no-JS parity; x-model drives the revenue hint below. #}
+     Checked -> pl/sl stored as a heavy-tailed native lognormal, bounded
+     above at the capacity cap (PR2 D17); unchecked (default) -> bounded
+     PERT (the high IS the economic ceiling). Server-rendered `checked`
+     keeps no-JS parity; x-model drives the revenue hint below. #}
   <label class="label cursor-pointer justify-start gap-3 mb-4 w-fit"
-         title="Keeps the loss magnitude as an uncapped heavy-tailed lognormal instead of a bounded PERT. Reserve for existential scenarios (safety/loss-of-life, nation-state systemic).">
+         title="Keeps the loss magnitude as a heavy-tailed lognormal bounded above at your organization's capacity cap, instead of a bounded PERT. Reserve for existential scenarios (safety/loss-of-life, nation-state systemic).">
     <input type="checkbox" name="loss_catastrophic" value="1"
            class="toggle toggle-warning" x-model="catastrophic"
            {% if state.loss_shape == 'catastrophic' %}checked{% endif %}>
-    <span class="label-text">Catastrophic — uncapped loss magnitude</span>
+    <span class="label-text">Catastrophic — heavy-tailed, capacity-capped loss</span>
   </label>
 
   {# UAT 2026-07-21 round 2: immediate in-form feedback for the toggle —
@@ -39,8 +40,9 @@
     <span x-show="catastrophic"
           {% if state.loss_shape != 'catastrophic' %}x-cloak{% endif %}
           class="text-status-warning font-medium">
-      Loss magnitude switches to an uncapped heavy-tailed lognormal —
-      High (95%) is the 95th percentile, <em>not</em> a ceiling.
+      Loss magnitude switches to a heavy-tailed lognormal,
+      bounded above at the capacity cap — High (95%) is the 95th
+      percentile, <em>not</em> a ceiling.
     </span>
     <span x-show="!catastrophic"
           {% if state.loss_shape == 'catastrophic' %}x-cloak{% endif %}

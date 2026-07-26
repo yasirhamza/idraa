@@ -71,6 +71,96 @@ def lognormal_mean(mean: float, sigma: float) -> float:
     return float(math.exp(mean + (sigma * sigma) / 2.0))
 
 
+def truncated_lognormal_mean(mean: float, sigma: float, max_value: float) -> float:
+    """Real-space mean of a lognormal(mean, sigma) RIGHT-TRUNCATED to support
+    ``[0, max_value)`` -- the closed-form conditional mean under the SAME
+    truncation ``fair_cam.risk_engine._truncation.truncated_lognormal``
+    applies at draw time (PR2 capacity bound). This is fair_cam's single
+    source of truth for the truncated mean: ``idraa.app.lognormal_display_rows``
+    (web display) and ``idraa.services.run_view_model._lognormal_retention``
+    (per-run disclosure) both import this rather than re-deriving it.
+
+    Formula (frozen -- mirrors ``truncated_lognormal``'s own module
+    docstring verification #3, which checks this same closed form against a
+    5,000,000-draw empirical mean to 3.79e-04 relative agreement):
+
+        b = (ln(max_value) - mean) / sigma
+        E[X | X < max_value] = exp(mean + sigma**2/2) * Phi(b - sigma) / Phi(b)
+
+    Derivation: for ``ln X ~ N(mean, sigma)`` right-truncated at
+    ``max_value``, the conditional mean is the untruncated mean
+    ``exp(mean + sigma**2/2)`` scaled by the ratio of two standard-normal
+    CDFs evaluated at ``b`` shifted by ``sigma`` -- the standard
+    truncated-lognormal conditional-mean identity (Phi/Phi's shift-by-sigma
+    trick applied to ln X's truncated-normal mean).
+
+    A cap comfortably above the distribution's practical support needs no
+    special case: as ``b`` grows, ``Phi(b - sigma) / Phi(b)`` -> 1 and this
+    naturally converges to ``lognormal_mean(mean, sigma)``.
+
+    Raises ``ValueError`` for non-finite/<=0 ``sigma`` or ``max_value`` --
+    mirrors ``truncated_lognormal``'s own guard contract (fair_cam/
+    risk_engine/_truncation.py), which raises on the exact same silent-but-
+    finite failure modes. Also raises ``ValueError`` if ``Phi(b)`` underflows
+    to exactly ``0.0`` (``max_value`` far below the distribution's core --
+    see that module's Underflow note): the true conditional mean is not
+    ``0.0/0.0`` there, but this closed form cannot resolve it, so it fails
+    loud rather than silently return a division artifact. Callers that need
+    a fail-soft "cap is non-binding" default for a possibly-malformed
+    legacy row (e.g. a pre-D19 snapshot) catch this ``ValueError``
+    explicitly -- see ``services.run_view_model._lognormal_retention``.
+    """
+    if not (math.isfinite(sigma) and sigma > 0):
+        raise ValueError(f"truncated_lognormal_mean: sigma must be finite and > 0, got {sigma!r}")
+    if not (math.isfinite(max_value) and max_value > 0):
+        raise ValueError(
+            f"truncated_lognormal_mean: max_value must be finite and > 0, got {max_value!r}"
+        )
+    from scipy.special import ndtr  # local import keeps module import cheap
+
+    b = (math.log(max_value) - mean) / sigma
+    phi_b = float(ndtr(b))
+    if phi_b <= 0.0:
+        raise ValueError(
+            f"truncated_lognormal_mean: ndtr(b) underflowed to 0.0 for b={b!r} "
+            f"(max_value={max_value!r} sits far below the distribution's core -- "
+            "see fair_cam.risk_engine._truncation's Underflow note)"
+        )
+    phi_b_minus_sigma = float(ndtr(b - sigma))
+    return float(math.exp(mean + (sigma * sigma) / 2.0) * phi_b_minus_sigma / phi_b)
+
+
+def truncated_lognormal_mixture_mean(
+    components: Sequence[tuple[float, float, float]], max_value: float
+) -> float:
+    """Absolute truncated mean of a lognormal MIXTURE bounded at a SHARED
+    ``max_value`` -- the per-component-truncation semantics
+    ``fair_cam.risk_engine._truncation`` applies for ``LOGNORMAL_MIXTURE``
+    (design's Bound rule: each regime is capped at its own capacity
+    independently, NOT the whole mixture conditioned on ``X < max_value``).
+
+    ``components`` is a sequence of ``(weight, mean, sigma)`` triples;
+    weights are assumed to already sum to 1 and are NOT re-normalized here
+    (mirrors ``lognormal_mixture_mean``-shaped callers elsewhere in this
+    package, e.g. ``combine_lognorm_trunc``'s own normalized-weight
+    contract). Returns::
+
+        sum(w_i * truncated_lognormal_mean(mean_i, sigma_i, max_value)
+            for w_i, mean_i, sigma_i in components)
+
+    -- identical per-component numerator to ``truncated_lognormal_mean``
+    above, just weight-summed. This is the ABSOLUTE truncated mean (a
+    dollar figure), not a retention ratio: a caller that wants a retained
+    FRACTION divides by the untruncated mixture mean itself (mirrors
+    ``services.run_view_model._field_mean_and_retention``'s mixture kernel,
+    which performs exactly that division).
+
+    A single-component list (weight 1.0) is IDENTICAL to calling
+    ``truncated_lognormal_mean`` directly -- not a separate code path.
+    """
+    return sum(weight * truncated_lognormal_mean(m, s, max_value) for weight, m, s in components)
+
+
 def lognormal_from_median_mean(median: float, mean: float) -> dict[str, float]:
     """Return native log-space {mean, sigma} for a lognormal with the given
     real-space median and mean (TIER-2 vendor-stat derivation, spec §1).

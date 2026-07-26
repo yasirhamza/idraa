@@ -58,6 +58,34 @@ def test_convert_nan_loss_raises_value_error() -> None:
         convert_loss_inputs_to_usd({"pl_low": "NaN"}, "SAR", Decimal("3.75"))
 
 
+# ── PR2 D17 (Task 4c): pl_max / sl_max are loss-magnitude siblings ────────
+
+
+def test_pl_max_and_sl_max_divided_by_rate() -> None:
+    """A TYPED capacity cap is a real-space dollar magnitude exactly like
+    low/mode/high — it must convert identically, or it becomes the ONLY
+    unconverted loss-magnitude sibling inside this currency-scoped block."""
+    raw = {
+        "pl_low": "3750000",
+        "pl_high": "15000000",
+        "pl_max": "37500000",
+        "sl_low": "375000",
+        "sl_high": "1500000",
+        "sl_max": "3750000",
+    }
+    out = convert_loss_inputs_to_usd(raw, "SAR", Decimal("3.75"))
+    assert out["pl_max"] == "10000000"
+    assert out["sl_max"] == "1000000"
+
+
+def test_blank_max_left_blank_by_conversion() -> None:
+    """The blank+mint path needs no conversion (minted from USD
+    annual_revenue server-side) — a blank pl_max/sl_max passes through."""
+    raw = {"pl_low": "3750000", "pl_high": "15000000", "pl_max": "", "sl_max": ""}
+    out = convert_loss_inputs_to_usd(raw, "SAR", Decimal("3.75"))
+    assert out["pl_max"] == "" and out["sl_max"] == ""
+
+
 def test_lognormal_transform_sigma_invariant_mean_shifts() -> None:
     # Methodology pin: authoring (low/rate, high/rate) == sigma unchanged,
     # mean shifted by exactly -ln(rate). rate = code-per-USD.

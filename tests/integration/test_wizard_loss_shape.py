@@ -5,6 +5,7 @@ library entry pre-checks the toggle."""
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
@@ -12,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.models.user import User
@@ -32,6 +34,17 @@ async def _analyst_id(db: AsyncSession, org_id: uuid.UUID) -> uuid.UUID:
         )
     ).scalar_one()
     return row.id
+
+
+async def _set_annual_revenue(db: AsyncSession, org_id: uuid.UUID, revenue: str) -> None:
+    """PR2 D18: the catastrophic step-4 toggle now gates on a set org
+    revenue. The seeded test org (``create_org``) has no revenue by
+    default, so any test that submits ``loss_catastrophic=1`` through a
+    step-4 POST must set one first or the gate blocks the POST at 422."""
+    org = await db.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal(revenue)
+    await db.commit()
 
 
 async def _latest_scenario(db: AsyncSession, org_id: uuid.UUID) -> Scenario:
@@ -86,6 +99,7 @@ async def test_catastrophic_toggle_finalizes_native_lognormal(
 ) -> None:
     """POST step 4 WITH loss_catastrophic=1 -> pl stored as native lognormal."""
     client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "500000000")
     user_id = await _analyst_id(db_session, org_id)
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
     # Step 3 (tef/vuln) via the shared helper's format, step 4 manually so the
@@ -232,6 +246,7 @@ async def test_wizard_flow_iris_seed_finalizes_at_narrow_only_sigma(
     within-scenario default (the seed's re-spread and the finalize fit both
     use the SAME canonical z, so the round-trip is exact to float precision)."""
     client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "500000000")
     user_id = await _analyst_id(db_session, org_id)
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
 
@@ -281,6 +296,7 @@ async def test_finalize_advisory_flags_wide_stored_dispersion(
     import math
 
     client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "500000000")
     user_id = await _analyst_id(db_session, org_id)
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
 
@@ -342,6 +358,7 @@ async def test_view_scenario_loss_wide_query_param_no_stale_flash_when_narrow(
     import math
 
     client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "500000000")
     user_id = await _analyst_id(db_session, org_id)
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
 

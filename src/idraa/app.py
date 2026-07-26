@@ -540,7 +540,7 @@ templates.env.filters["format_date"] = _format_date
 # ---------------------------------------------------------------------------
 
 
-def lognormal_display_rows(dist: dict[str, object] | None) -> dict[str, float] | None:
+def lognormal_display_rows(dist: dict[str, object] | None) -> dict[str, float | None] | None:
     """Compute real-space percentile display rows for a lognormal distribution.
 
     Returns None for non-lognormal dicts (callers use this to branch the
@@ -551,26 +551,67 @@ def lognormal_display_rows(dist: dict[str, object] | None) -> dict[str, float] |
       median — real-space 50th percentile (= exp(mean))
       mean   — real-space expected value  (= exp(mean + sigma²/2)) — MANDATORY
       p95    — real-space 95th percentile (= exp(mean + z*sigma))
+      max    — the stored capacity cap (PR2), or None when the field carries
+               none — a visible row so an analyst who authored a D17 cap can
+               see it on read-back (never rendered when None; see the
+               chart.html table macro).
 
     Derives all values directly from the stored {mean, sigma} log-space params
     — no reflattening through a PERT triple (plan CRITICAL requirement).
 
     The mean exceeds the median for sigma > 0 (skewed right tail); including
     both is mandatory — a median-only view would understate expected loss.
+
+    PR2 Task 8b (capacity bound): when the dict carries no "max", this is
+    BYTE-UNCHANGED from the pre-PR2 untruncated computation. When "max" is
+    present, EVERY row above is recomputed against the TRUNCATED
+    distribution the engine actually samples for a capped field — the
+    p-quantile of the truncated-renormalized lognormal is
+    ``exp(mean + sigma*Phi^-1(p*Phi(b)))``, ``b=(ln(max)-mean)/sigma`` (the
+    SAME ``u*Phi(b)`` rescale ``fair_cam.risk_engine._truncation
+    .truncated_lognormal``'s sampler and the verification workbook use — see
+    those for the formula's derivation/citation). The mean row imports
+    ``fair_cam.quantile_pooling.truncated_lognormal_mean`` rather than
+    re-deriving it (fair_cam is the single source of truth for the closed
+    form; ``services.run_view_model._lognormal_retention`` imports the same
+    kernel for its own per-run disclosure).
     """
     if not dist or str(dist.get("distribution", "")).lower() != "lognormal":
         return None
-    from fair_cam.quantile_pooling import lognormal_mean, lognormal_quantiles
+    from fair_cam.quantile_pooling import (
+        lognormal_mean,
+        lognormal_quantiles,
+        truncated_lognormal_mean,
+    )
 
     # Stored log-space params are floats; dist is typed dict[str, object].
     m = cast(float, dist["mean"])
     s = cast(float, dist["sigma"])
-    p5, p50, p95 = lognormal_quantiles(m, s, (0.05, 0.5, 0.95))
+    max_raw = dist.get("max")
+    if max_raw is None:
+        p5, p50, p95 = lognormal_quantiles(m, s, (0.05, 0.5, 0.95))
+        return {
+            "p5": p5,
+            "median": p50,
+            "mean": lognormal_mean(m, s),
+            "p95": p95,
+            "max": None,
+        }
+
+    cap = cast(float, max_raw)
+    from scipy.special import ndtr, ndtri
+
+    phi_b = float(ndtr((math.log(cap) - m) / s))
+
+    def _truncated_quantile(p: float) -> float:
+        return float(math.exp(m + s * float(ndtri(p * phi_b))))
+
     return {
-        "p5": p5,
-        "median": p50,
-        "mean": lognormal_mean(m, s),
-        "p95": p95,
+        "p5": _truncated_quantile(0.05),
+        "median": _truncated_quantile(0.5),
+        "mean": truncated_lognormal_mean(m, s, cap),
+        "p95": _truncated_quantile(0.95),
+        "max": cap,
     }
 
 
@@ -606,6 +647,20 @@ def lognormal_mixture_display_rows(dist: dict[str, object] | None) -> dict[str, 
     calling the fair_cam quantile math — the SAME support convention as the
     native single-lognormal path above (``lognormal_quantiles``, which is
     also unbounded).
+
+    PR2 Task 8b (capacity bound): a catastrophic mixture may ALSO carry a
+    top-level "max" (ONE shared cap across every component, per
+    wizard_finalize.build_scenario_payload). ``None`` (default) is
+    BYTE-UNCHANGED from the pre-PR2 rows above ("max" key is None). When
+    present, each ``LogNormalTruncFit.max_support`` is set to the shared cap
+    instead of ``math.inf`` — ``mixture_quantile_lognorm`` already implements
+    per-component truncated quantiles via that field (design's Bound rule:
+    each component truncated at the SAME cap independently, not the whole
+    mixture conditioned on X < max), so this reuses the existing fair_cam
+    kernel rather than re-deriving truncated bisection here. The mean row
+    imports ``fair_cam.quantile_pooling.truncated_lognormal_mixture_mean``
+    for the same reason ``lognormal_display_rows`` imports the scalar
+    kernel above.
     """
     if not dist or str(dist.get("distribution", "")).lower() != "lognormal_mixture":
         return None
@@ -613,28 +668,38 @@ def lognormal_mixture_display_rows(dist: dict[str, object] | None) -> dict[str, 
         LogNormalTruncFit,
         LognormMixture,
         mixture_quantile_lognorm,
+        truncated_lognormal_mixture_mean,
     )
 
     components_raw = cast(list[dict[str, object]], dist["components"])
+    max_raw = dist.get("max")
+    cap = cast(float, max_raw) if max_raw is not None else None
+    max_support = cap if cap is not None else math.inf
     fits = tuple(
         LogNormalTruncFit(
             meanlog=cast(float, c["mean"]),
             sdlog=cast(float, c["sigma"]),
             min_support=0.0,
-            max_support=math.inf,
+            max_support=max_support,
         )
         for c in components_raw
     )
     weights = tuple(cast(float, c["weight"]) for c in components_raw)
     mix = LognormMixture(components=fits, weights=weights)
 
-    analytic_mean = sum(
-        w * math.exp(f.meanlog + f.sdlog**2 / 2.0) for f, w in zip(fits, weights, strict=True)
-    )
+    if cap is None:
+        mean_val = sum(
+            w * math.exp(f.meanlog + f.sdlog**2 / 2.0) for f, w in zip(fits, weights, strict=True)
+        )
+    else:
+        mean_val = truncated_lognormal_mixture_mean(
+            [(w, f.meanlog, f.sdlog) for f, w in zip(fits, weights, strict=True)], cap
+        )
+
     return {
         "p5": mixture_quantile_lognorm(mix, 0.05),
         "median": mixture_quantile_lognorm(mix, 0.5),
-        "mean": analytic_mean,
+        "mean": mean_val,
         "p95": mixture_quantile_lognorm(mix, 0.95),
         "n_components": len(fits),
         "components": [
@@ -642,6 +707,7 @@ def lognormal_mixture_display_rows(dist: dict[str, object] | None) -> dict[str, 
             for f, w in zip(fits, weights, strict=True)
         ],
         "weights_display": ", ".join(f"{w * 100:.1f}%" for w in weights),
+        "max": cap,
     }
 
 

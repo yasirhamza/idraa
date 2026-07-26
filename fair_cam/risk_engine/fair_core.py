@@ -76,7 +76,22 @@ class FAIRDistribution:
             # aggregation_engine.py, which takes real-space `mean` and converts via
             # np.log. Both are correct for their respective callers; do not unify
             # without a broader refactor of caller contracts.
-            return rng.lognormal(self.parameters["mean"], self.parameters["sigma"], size)
+            #
+            # PR2 capacity bound: an optional `max` key bounds the draw to
+            # support [0, max) via inverse-CDF truncation (see _truncation.py
+            # for the formula, verification, and footguns). Absent `max`
+            # (the pre-PR2 default) takes the untruncated path unchanged --
+            # byte-identical to the pre-PR2 stream at the same seed, since
+            # nothing about this branch's rng usage changes when `max` is
+            # absent.
+            max_value = self.parameters.get("max")
+            if max_value is None:
+                return rng.lognormal(self.parameters["mean"], self.parameters["sigma"], size)
+            from fair_cam.risk_engine._truncation import truncated_lognormal
+
+            return truncated_lognormal(
+                rng, self.parameters["mean"], self.parameters["sigma"], size, float(max_value)
+            )
 
         elif self.distribution_type == DistributionType.LOGNORMAL_MIXTURE:
             # Linear-opinion-pool mixture of lognormal components (issue #27
@@ -84,11 +99,17 @@ class FAIRDistribution:
             # {"mean" (log-space meanlog), "sigma", "weight"} dicts -- one
             # per pooled SME fit. Mirrors fair_cam.quantile_pooling's
             # LognormMixture one-for-one (no import dependency; the engine
-            # layer does not depend on quantile_pooling).
+            # layer does not depend on quantile_pooling). PR2: an optional
+            # top-level `max` key (a sibling of "components", NOT nested
+            # inside a component) bounds every component's draw to a SHARED
+            # cap -- see _truncation.py's per-component-vs-conditioned note
+            # for why each component is truncated independently rather than
+            # the mixture as a whole being conditioned on X<=max.
             components = self.parameters["components"]
             n_components = len(components)
             if n_components == 0:
                 raise ValueError("lognormal_mixture: parameters['components'] must be non-empty")
+            max_value = self.parameters.get("max")
 
             if n_components == 1:
                 # DEDICATED single-component branch that bypasses rng.choice
@@ -101,20 +122,47 @@ class FAIRDistribution:
                 # branch keeps that stream byte-identical (pinned by
                 # test_single_component_stream_identical_to_plain_lognormal),
                 # which is what makes single-SME pooling an exact identity
-                # end-to-end, not just at the quantile-math layer.
-                c = components[0]
-                return rng.lognormal(c["mean"], c["sigma"], size)
+                # end-to-end, not just at the quantile-math layer. PR2: the
+                # capped path preserves the SAME bypass -- both the capped
+                # and uncapped single-component draws below delegate through
+                # the identical call a plain FAIRDistribution.LOGNORMAL
+                # would make, so a capped 1-component mixture is
+                # byte-identical to a capped plain lognormal at the same
+                # seed (pinned by test_capped_single_component_byte_identical
+                # _to_capped_plain_lognormal).
+                c = components[0]  # adapter-iter: ok — n_components == 1 checked above
+                if max_value is None:
+                    return rng.lognormal(c["mean"], c["sigma"], size)
+                from fair_cam.risk_engine._truncation import truncated_lognormal
+
+                return truncated_lognormal(rng, c["mean"], c["sigma"], size, float(max_value))
 
             # Multi-component: one rng.choice call to pick the component
             # index per draw (weighted by the pool weights), then a single
-            # VECTORIZED rng.lognormal call over the per-draw parameter
-            # arrays gathered via that index -- one draw pass, no python
-            # loop over components or samples.
+            # VECTORIZED draw call over the per-draw parameter arrays
+            # gathered via that index -- one draw pass, no python loop over
+            # components or samples. PR2: this ordering (choice FIRST, then
+            # exactly one vectorized draw call whether capped or not) is the
+            # pinned stream contract -- see fair_cam/tests/risk_engine/
+            # test_mixture_truncation_pin.py Layer B, which replays this
+            # exact sequence and asserts array_equal against it.
             mean_arr = np.array([c["mean"] for c in components], dtype=float)
             sigma_arr = np.array([c["sigma"] for c in components], dtype=float)
             weight_arr = np.array([c["weight"] for c in components], dtype=float)
             idx = rng.choice(n_components, size=size, p=weight_arr)
-            return rng.lognormal(mean_arr[idx], sigma_arr[idx], size=size)
+            if max_value is None:
+                return rng.lognormal(mean_arr[idx], sigma_arr[idx], size=size)
+            # Peak-allocation: `truncated_lognormal_mixture_gather` (NOT the
+            # generic `truncated_lognormal`) -- it stages the per-draw
+            # sigma/mean gathers instead of holding both alive for the
+            # whole truncation formula, landing at ~3x a size-`size` array
+            # instead of ~4x. Mathematically identical output (module
+            # docstring); `idx` is passed through, not recomputed.
+            from fair_cam.risk_engine._truncation import truncated_lognormal_mixture_gather
+
+            return truncated_lognormal_mixture_gather(
+                rng, mean_arr, sigma_arr, idx, size, float(max_value)
+            )
 
         elif self.distribution_type == DistributionType.TRIANGULAR:
             return rng.triangular(
@@ -328,6 +376,17 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
     Helper for FAIRParameters.scaled. Distribution-shape-aware:
     log-space LOGNORMAL parameters get the additive log-shift; everything
     else gets a simple multiplicative scale on the magnitude parameters.
+
+    PR2 capacity bound (Task 3): an optional `max` key present on
+    LOGNORMAL/LOGNORMAL_MIXTURE parameters is scaled by the same
+    `multiplier` — see the LOGNORMAL branch below for the scale-
+    equivariance derivation (why `max * multiplier`, not "leave it fixed").
+    A `multiplier == 0` (uniform-zero, perfect control) never reaches this
+    function: `FAIRParameters.apply_node_multipliers`'s `_node` helper
+    short-circuits a zero multiplier to a `UNIFORM(0, 0)` point mass before
+    calling here (`_scale_distribution` cannot represent a real-space-zero
+    distribution in log-space — `log(0)`), so no `max` handling is needed
+    for that path.
     """
     # dict[str, Any] (not dict[str, float]): the LOGNORMAL_MIXTURE branch
     # below assigns a nested {"components": [...]} value (issue #27 Task 3).
@@ -358,6 +417,21 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
             "mean": dist.parameters["mean"] + math.log(multiplier),
             "sigma": dist.parameters["sigma"],
         }
+        max_value = dist.parameters.get("max")
+        if max_value is not None:
+            # PR2 capacity bound (Task 3) — scale-equivariance: the
+            # truncated sampler's boundary parameter is
+            # b = (ln(max) - meanlog) / sigma (_truncation.py). Substituting
+            # meanlog' = meanlog + ln(k) and max' = k * max:
+            #   ln(max') - meanlog' = ln(k) + ln(max) - meanlog - ln(k)
+            #                       = ln(max) - meanlog
+            # so b' == b exactly — the truncation point in standardized
+            # space never moves, and the truncated residual equals k times
+            # the truncated inherent draw. NOT "otherwise uncapped" (that
+            # phrasing is false): leaving `max` fixed in real-space while
+            # meanlog shifts underneath it would silently change how much
+            # of the tail the cap removes.
+            new_params["max"] = max_value * multiplier
     elif dist.distribution_type == DistributionType.LOGNORMAL_MIXTURE:
         # Same log-space additive shift as plain LOGNORMAL, applied to
         # EVERY component -- each component's meanlog shifts by +ln(k);
@@ -375,6 +449,13 @@ def _scale_distribution(dist: "FAIRDistribution", multiplier: float) -> "FAIRDis
                 for c in dist.parameters["components"]
             ]
         }
+        max_value = dist.parameters.get("max")
+        if max_value is not None:
+            # Same scale-equivariance rationale as the LOGNORMAL branch
+            # above: the one shared cap scales by the same k that shifts
+            # EVERY component's meanlog, keeping every component's b_i
+            # invariant simultaneously.
+            new_params["max"] = max_value * multiplier
     elif dist.distribution_type == DistributionType.BETA:
         raise ValueError(
             "Cannot scale BETA distribution via FAIRParameters.scaled — "

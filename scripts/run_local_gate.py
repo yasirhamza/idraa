@@ -17,7 +17,30 @@ venv that runs the tools):
 4. css staleness — ``python -m idraa.tasks.build_css --check`` (fails if
    the committed ``tailwind.css`` output is stale relative to its inputs)
 5. pytest fast suite (default addopts markers: not e2e / not slow /
-   not ci_only) with coverage disabled for speed
+   not ci_only) with coverage disabled for speed — this collects
+   ``fair_cam/tests`` too (``pyproject.toml``'s ``testpaths`` lists both
+   ``tests`` and ``fair_cam/tests``; see
+   ``tests/contracts/test_fair_cam_tests_collected.py`` for the tracked pin
+   that guards the merge-path collection hole from reopening — PR2 Task 1b).
+   Measured: ``fair_cam/tests`` alone runs in ~3.2-4.5s (605 tests), negligible
+   against the ~3-4 min gate budget.
+6. equivalence harness, LABELED (PR2 Task 9) — the native-engine equivalence
+   goldens (``tests/equivalence/test_engine_equivalence_harness.py``) are
+   ``@pytest.mark.slow``, so step 5's default ``not slow`` addopts deselect
+   them — they would otherwise NEVER run in the merge path even though they
+   are the regression anchor for the native FAIREngine (Epic A #324) that
+   PR2's truncated-lognormal sampler builds directly on top of. Scoped to
+   this ONE file with an explicit ``-m slow`` override (not a bare ``-m
+   slow`` across the whole tree) because other ``@pytest.mark.slow`` tests
+   exist elsewhere (``tests/smoke/test_notebooks.py``,
+   ``fair_cam/tests/risk_engine/test_native_lognormal.py`` /
+   ``test_truncation.py`` / ``test_mixture_sampling.py``) that are NOT part
+   of this budget and would blow it up if swept in by accident. Measured:
+   ~1.6-3.4s (8 passed, 3 skipped by design — the analytic-anchor layer only
+   applies to no-control fixtures), negligible against the ~3-4 min budget —
+   so, per the same hygiene Task 1b used (cite the rule, measure the
+   runtime, land a LABELED step rather than a silent addition): no fallback
+   hedge is needed here either.
 
 Escape hatches:
 - ``IDRAA_GATE_SKIP_TESTS=1`` skips step 5 only (lints + css check still
@@ -67,6 +90,21 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("css staleness", ("-m", "idraa.tasks.build_css", "--check")),
     ("pytest (fast suite)", ("-m", "pytest", "-q", "--no-cov")),
+    # PR2 Task 9: labeled, scoped equivalence-harness step — see module
+    # docstring step 6 for why this is scoped to one file with an explicit
+    # marker override rather than a bare `-m slow`.
+    (
+        "pytest (equivalence harness, slow-marked)",
+        (
+            "-m",
+            "pytest",
+            "-q",
+            "--no-cov",
+            "-m",
+            "slow",
+            "tests/equivalence/test_engine_equivalence_harness.py",
+        ),
+    ),
 )
 
 SKIP_TESTS_ENV = "IDRAA_GATE_SKIP_TESTS"

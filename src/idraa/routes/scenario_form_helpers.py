@@ -39,6 +39,7 @@ PR pi F12 cleanup:
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -366,7 +367,9 @@ def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     }
 
 
-def dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
+def dist_from_raw(
+    raw: dict[str, Any], prefix: str, *, capacity_max: float | None = None
+) -> dict[str, Any]:
     """Build a distribution dict for a NON-vuln node from form fields.
 
     Epic B (#326). Reads ``{prefix}_dist`` (default "pert"). For "lognormal",
@@ -383,12 +386,27 @@ def dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     / high<low; that propagates so the route's existing
     ``except (..., ValueError)`` re-renders the form with a 422 — same contract
     as the bare ``KeyError`` / ``ValueError`` from :func:`pert_dist_from_raw`.
+
+    PR2 D17 (Task 4c): ``capacity_max`` (the caller's ``capacity_k *
+    annual_revenue`` for the TARGET org, or ``None`` when revenue is unset —
+    D14) is only ever threaded through the ``prefix == "pl"`` call site —
+    this is a loss field (D19 floor governs lognormal LOSS shapes only; TEF
+    is never routed through the capacity ceiling even if a stray
+    ``{prefix}_max`` key were present in ``raw``). Secondary loss is built
+    INLINE in :func:`parse_scenario_form`, not through this helper — its
+    ``sl_max`` is resolved at that call site via the same
+    :func:`_resolve_capacity_max` helper.
     """
     kind = (raw.get(f"{prefix}_dist") or "pert").strip().lower()
     if kind == "lognormal":
         low = float(raw[f"{prefix}_low"])
         high = float(raw[f"{prefix}_high"])
-        return {"distribution": "lognormal", **lognormal_from_quantiles(low, high)}
+        dist: dict[str, Any] = {"distribution": "lognormal", **lognormal_from_quantiles(low, high)}
+        if prefix == "pl":
+            resolved_max = _resolve_capacity_max(raw, prefix, capacity_max)
+            if resolved_max is not None:
+                dist["max"] = resolved_max
+        return dist
     return pert_dist_from_raw(raw, prefix)
 
 
@@ -460,19 +478,30 @@ def dist_to_form(dist: dict[str, Any] | None, prefix: str) -> dict[str, str]:
     Used for tef / pl / sl in :func:`form_from_scenario`. Vulnerability keeps
     :func:`pert_dist_to_form` directly (no selector; mixtures are barred from
     vulnerability at both the wizard and import gates).
+
+    PR2 D17 (Task 4c) — silent-strip guard: every branch also emits
+    ``{prefix}_max`` (the stored cap as a string, or ``""`` when absent /
+    not applicable). Without this, an edit that rebuilds the loss dict from
+    scratch via :func:`parse_scenario_form` would submit a BLANK max field
+    for an already-capped scenario, minting a fresh cap from CURRENT
+    revenue and silently discarding the analyst's originally authored
+    value. Emitting it unconditionally (even for tef / PERT, where it is
+    never read back — :func:`dist_from_raw` only resolves it for
+    ``prefix == "pl"``, and vulnerability never calls this function at all)
+    keeps the round-trip contract uniform across every call site.
     """
     kind = str((dist or {}).get("distribution", "")).lower()
     if dist and kind == "lognormal":
         lo, hi = lognormal_quantiles(dist["mean"], dist["sigma"], (0.05, 0.95))
+        existing_max = dist.get("max")
         return {
             f"{prefix}_dist": "lognormal",
             f"{prefix}_low": str(lo),
             f"{prefix}_mode": "",
             f"{prefix}_high": str(hi),
+            f"{prefix}_max": "" if existing_max is None else str(existing_max),
         }
     if dist and kind == "lognormal_mixture":
-        import math
-
         from fair_cam.quantile_pooling import (
             LogNormalTruncFit,
             LognormMixture,
@@ -494,15 +523,22 @@ def dist_to_form(dist: dict[str, Any] | None, prefix: str) -> dict[str, str]:
         )
         lo = mixture_quantile_lognorm(mixture, 0.05)
         hi = mixture_quantile_lognorm(mixture, 0.95)
+        # PR2 D17: a mixture may carry ONE shared top-level "max" (wizard
+        # finalize / migration mint it there — see wizard_finalize.py). Surface
+        # it so editing a capped mixture-originated scenario doesn't silently
+        # drop the cap (same silent-strip hazard as the plain-lognormal branch).
+        existing_max = dist.get("max")
         return {
             f"{prefix}_dist": "lognormal",
             f"{prefix}_low": str(lo),
             f"{prefix}_mode": "",
             f"{prefix}_high": str(hi),
             f"{prefix}_from_mixture": str(len(components)),
+            f"{prefix}_max": "" if existing_max is None else str(existing_max),
         }
     out = pert_dist_to_form(dist or {}, prefix)
     out[f"{prefix}_dist"] = "pert"
+    out[f"{prefix}_max"] = ""  # D17: no cap under PERT (lognormal-only, D12/D19)
     return out
 
 
@@ -534,7 +570,57 @@ class ScenarioFormValidationError(ValueError):
     """
 
 
-def parse_scenario_form(raw: dict[str, Any]) -> ScenarioForm:
+def _resolve_capacity_max(
+    raw: dict[str, Any], prefix: str, capacity_max: float | None
+) -> float | None:
+    """PR2 D13/D17 (Task 4c): resolve ``{prefix}_max`` for a lognormal loss field.
+
+    Blank ``{prefix}_max`` -> the caller's minted ``capacity_max``
+    (``capacity_k * annual_revenue`` for the TARGET org, resolved by the
+    caller via ``loss_capacity.capacity_max_for_org`` — never recomputed
+    here). ``capacity_max`` is ``None`` when the org's revenue is unset or
+    non-positive (D14: never invent a number) — a blank field then stays
+    uncapped (no ``"max"`` key emitted; the caller checks for ``None``).
+
+    Typed ``{prefix}_max`` -> parsed and bound ABOVE by ``capacity_max``
+    when known: D13 ("a single loss component is not modeled to exceed one
+    year of the owning org's revenue") means an explicit override may
+    TIGHTEN the cap below capacity but may not LOOSEN it above — otherwise
+    a finite-but-huge cap (e.g. ``1e30``) would pass the D19 floor check yet
+    never bind in practice, defeating the guarantee while displaying as
+    "bounded". When revenue is unknown, a typed value has no ceiling to
+    check against — the expert form is deliberately the D18 escape hatch
+    for a revenue-less org (see ``capacity_bound_copy.D18_REVENUE_MESSAGE``)
+    — so it is accepted as typed.
+
+    Raises :class:`ScenarioFormValidationError` (a ``ValueError`` subclass,
+    so the route's existing ``except (..., ValueError)`` re-renders 422, not
+    a 500) on a non-numeric / non-finite / non-positive typed value, or one
+    that exceeds a known capacity. Error messages use the
+    ``"{field}: {message}"`` shape the template's error-summary parser keys
+    on (mirrors :func:`_assert_probability_bounds`).
+    """
+    raw_val = str(raw.get(f"{prefix}_max") or "").strip()
+    if not raw_val:
+        return capacity_max
+    try:
+        typed = float(raw_val)
+    except ValueError as exc:
+        raise ScenarioFormValidationError(f"{prefix}_max: not a number (got {raw_val!r})") from exc
+    if not math.isfinite(typed) or typed <= 0:
+        raise ScenarioFormValidationError(
+            f"{prefix}_max: must be a finite positive number (got {raw_val!r})"
+        )
+    if capacity_max is not None and typed > capacity_max:
+        raise ScenarioFormValidationError(
+            f"{prefix}_max: {typed!r} exceeds your organization's capacity "
+            f"({capacity_max!r}, USD); an explicit cap may tighten the loss "
+            "ceiling below capacity but may not loosen it above (D13)"
+        )
+    return typed
+
+
+def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = None) -> ScenarioForm:
     """Coerce raw form-data into a :class:`ScenarioForm` DTO.
 
     Numeric fields are pulled out and run through ``float()`` explicitly
@@ -557,6 +643,14 @@ def parse_scenario_form(raw: dict[str, Any]) -> ScenarioForm:
     ``overlay_tags`` are no longer parsed here. The first two live on
     the run-creation form; ``overlay_tags`` was vestigial after the
     calibration runtime was excised.
+
+    PR2 D17 (Task 4c): ``capacity_max`` (keyword-only, the caller's
+    ``capacity_k * annual_revenue`` for the TARGET org, or ``None`` when
+    revenue is unset — D14) resolves ``pl_max`` (via :func:`dist_from_raw`)
+    AND ``sl_max`` (INLINE, right here — secondary loss does NOT route
+    through :func:`dist_from_raw` at all, so a fix applied only there would
+    silently miss secondary loss). See :func:`_resolve_capacity_max` for the
+    blank-mints / typed-bounded-above semantics.
     """
     description = (raw.get("description") or "").strip() or None
 
@@ -569,9 +663,14 @@ def parse_scenario_form(raw: dict[str, Any]) -> ScenarioForm:
     sl_high = str(raw.get("sl_high") or "").strip()
     if sl_kind == "lognormal":
         if sl_low and sl_high:
+            # PR2 D17 (Task 4c): SL's INLINE max threading — dist_from_raw
+            # never sees secondary_loss, so this cannot be folded into that
+            # helper (the map-verified mistake two prior gate rounds made).
+            resolved_sl_max = _resolve_capacity_max(raw, "sl", capacity_max)
             secondary_loss: dict[str, Any] | None = {
                 "distribution": "lognormal",
                 **lognormal_from_quantiles(float(sl_low), float(sl_high)),
+                **({"max": resolved_sl_max} if resolved_sl_max is not None else {}),
             }
         else:
             secondary_loss = None
@@ -622,7 +721,7 @@ def parse_scenario_form(raw: dict[str, Any]) -> ScenarioForm:
         effect=(raw.get("effect") or "").strip() or None,
         threat_event_frequency=dist_from_raw(raw, "tef"),
         vulnerability=vulnerability_dist,
-        primary_loss=dist_from_raw(raw, "pl"),
+        primary_loss=dist_from_raw(raw, "pl", capacity_max=capacity_max),
         secondary_loss=secondary_loss,
         # industry/revenue_tier are no longer on ScenarioForm (issue #88 Task 9).
         # The service derives them from the live org row.
@@ -668,7 +767,7 @@ def form_from_scenario(s: Scenario) -> dict[str, Any]:
     if sl:
         out.update(dist_to_form(sl, "sl"))
     else:
-        out.update({"sl_dist": "pert", "sl_low": "", "sl_mode": "", "sl_high": ""})
+        out.update({"sl_dist": "pert", "sl_low": "", "sl_mode": "", "sl_high": "", "sl_max": ""})
     return out
 
 
@@ -706,10 +805,17 @@ def form_defaults() -> dict[str, Any]:
         "pl_low": "",
         "pl_mode": "",
         "pl_high": "",
+        # PR2 D17 (Task 4c): the capacity-cap field is BLANK on fresh create,
+        # never pre-filled with a minted/computed value — see
+        # routes/scenarios.py::new_scenario_form and
+        # capacity_bound_copy.d17_capacity_hint_revenue_set. Minting happens
+        # server-side at save time (parse_scenario_form's capacity_max arg).
+        "pl_max": "",
         "sl_dist": "pert",
         "sl_low": "",
         "sl_mode": "",
         "sl_high": "",
+        "sl_max": "",
         "mitigating_control_ids": [],
     }
 

@@ -12,6 +12,7 @@ the bootstrap shape changed (rows go via steps 3+4, not the finalize body).
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import ScenarioSource
+from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
@@ -326,6 +328,13 @@ async def test_finalize_absurd_range_flashes_not_500_and_preserves_token(
     client, org_id = authed_analyst
     user_id = await _resolve_analyst_user_id(db_session)
     sme_id = await _seed_one_sme(db_session, org_id=org_id, created_by=user_id)
+    # PR2 D18: the step-4 catastrophic toggle now gates on org revenue -- this
+    # test's whole point is reaching the FINALIZE-time sigma>10 rejection, so
+    # the step-4 POST below (loss_catastrophic=1) must clear the D18 gate.
+    org = await db_session.get(Organization, org_id)
+    assert org is not None
+    org.annual_revenue = Decimal("500000000")
+    await db_session.commit()
     await db_session.close()
 
     tx, _user_id = await _bootstrap_past_step2(client, db_session)

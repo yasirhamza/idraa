@@ -152,7 +152,13 @@ repos:
         entry: uv run python scripts/lint_adapter_iter.py
         language: system
         pass_filenames: true
-        files: ^src/idraa/services/(run_executor|.*_importer|.*_view_model|audit|scenario_library|seed_library_loader)\.py$
+        # Kept in sync with pyproject.toml's [tool.idraa.contracts.lint]
+        # scoped_files by construction (that list has no separate enforcer
+        # of its own — this regex IS the enforcement). PR2 capacity bound
+        # (Task 2) added fair_cam/risk_engine/fair_core.py to scoped_files;
+        # without adding it here too, that registration would be inert
+        # (fair_cam is first-party, CLAUDE.md).
+        files: ^(src/idraa/services/(run_executor|.*_importer|.*_view_model|audit|scenario_library|seed_library_loader)|fair_cam/risk_engine/fair_core)\.py$
 
       # Seed-UUID format foot-gun (recurred 4×): raw-text seed INSERTs binding
       # str(uuid4()) store hyphenated UUIDs while the ORM Uuid type binds

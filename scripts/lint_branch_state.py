@@ -57,12 +57,21 @@ def find_base_ref() -> str | None:
     return None
 
 
+#: Test directories the regression gate diffs. fair_cam/tests is included
+#: alongside tests/ — fair_cam/tests is in the default (merge-path) pytest
+#: selection (pyproject.toml testpaths) and carries fair_cam's own
+#: regression/pin suite, so deleting tests there is exactly the same
+#: scope-creep failure mode this gate exists to catch.
+TEST_DIRS: tuple[str, ...] = ("tests/", "fair_cam/tests/")
+
+
 def check_test_count_regression(base: str) -> list[str]:
-    """Compare net `def test_*` deltas in tests/ on HEAD vs base. Returns errors."""
-    rc, diff, err = run(["git", "diff", f"{base}..HEAD", "--", "tests/"])
+    """Compare net `def test_*` deltas in TEST_DIRS on HEAD vs base. Returns errors."""
+    rc, diff, err = run(["git", "diff", f"{base}..HEAD", "--", *TEST_DIRS])
     if rc != 0:
         # Diff itself failed (uncommon — bad ref, etc.); surface as a soft error.
-        return [f"Test-count gate: cannot diff tests/ vs {base}: {err.strip()}"]
+        dirs = " and ".join(TEST_DIRS)
+        return [f"Test-count gate: cannot diff {dirs} vs {base}: {err.strip()}"]
 
     added = len(re.findall(r"^\+\s*def test_", diff, re.MULTILINE))
     removed = len(re.findall(r"^-\s*def test_", diff, re.MULTILINE))
