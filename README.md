@@ -95,6 +95,15 @@ Operational tuning (MC iteration caps, retention, memory patterns) is documented
 read this code, but you may not use, copy, modify, or redistribute it. A license
 will be chosen at product launch. Evaluation self-hosting (running your own instance to assess the product) is welcome; any other use needs a license grant.
 
+## Third-party components
+
+Idraa incorporates a small amount of third-party open-source code, which remains
+under its own (permissive) license — the "all rights reserved" above covers
+Idraa's own code, not these incorporated portions. Notices and full license
+texts are in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), most notably a
+Python port of the `collector` (tidyrisk) quantile-fitting and opinion-pooling
+routines, used under the MIT License (© 2018 David F. Severski).
+
 ## Trademarks
 
 FAIR™ and FAIR-CAM™ (Factor Analysis of Information Risk / FAIR Controls
