@@ -80,10 +80,10 @@
   <strong>bounded PERT</strong> distribution for sampling, so under default
   settings your high estimate <em>is</em> the ceiling of the sampled values.
   Loss Magnitude entries you flag as <strong>catastrophic</strong> are the
-  documented exception: they keep the full, untruncated lognormal tail,
-  because that curated shortlist is reserved for physical-safety or
-  nation-state-scale outcomes that a single expert&rsquo;s 95th-percentile
-  judgement should not cap. Vulnerability is always a probability
+  documented exception: they keep the heavy-tailed lognormal shape (rather
+  than collapsing to a bounded PERT), bounded above at your
+  organization&rsquo;s capacity cap rather than at any single expert&rsquo;s
+  95th-percentile judgement. Vulnerability is always a probability
   (0&ndash;100%) and uses the same capped-PERT approach, bounded to
   [0,&nbsp;100%].
 </p>
