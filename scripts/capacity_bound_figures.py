@@ -43,7 +43,26 @@ import statistics as st
 from pathlib import Path
 
 import numpy as np
-from scipy.special import ndtr, ndtri
+
+# PR2 Task 9 (single source of truth): this generator no longer carries its
+# own copies of the truncation formula or the truncated-mean kernel. Both
+# import from fair_cam (editable-installed; `scripts/` runs in-venv) so the
+# generator's B-CAP-DRIFT/B-CAP-SCEN/B-CAP-SIM figures come from the SAME
+# implementation the engine samples with and the web/PDF displays render --
+# a divergence here (a different `u` convention, a `1-u` reflection, a
+# swapped `ndtr` argument) would sit inside the generator's own quoted
+# ceiling margin (0.33%) and could publish a PASS the shipped sampler does
+# not produce. See the (removed) `truncated_lognormal`/`mean_retained`
+# functions' git history for the two formulas this replaces -- verified
+# identical: `truncated_lognormal`'s signature and positional argument order
+# here (`rng, meanlog, sigma, size, max_value`) already matched
+# fair_cam's exactly, so this is a pure import swap, no call-site changes;
+# `mean_retained`'s `Phi(b-sigma)/Phi(b)` is algebraically identical to
+# `truncated_lognormal_mean(mu, sigma, M) / lognormal_mean(mu, sigma)`
+# (the `exp(mu + sigma**2/2)` factor cancels).
+from fair_cam.quantile_pooling import lognormal_mean, truncated_lognormal_mean
+from fair_cam.risk_engine._truncation import truncated_lognormal
+from scipy.special import ndtr
 from scipy.stats import norm
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -455,23 +474,6 @@ def _pert_ab(low: float, mode: float, high: float) -> tuple[float, float]:
     return a, a * (high - mean) / (mean - low)
 
 
-def truncated_lognormal(rng, meanlog: float, sigma: float, size: int, max_value: float):
-    """Inverse-CDF truncation with support [0, max_value).
-
-    Closed at 0, open at max_value: rng.random() is [0, 1),
-    so u can be exactly 0 -> ndtri(0) = -inf -> x = 0.0 (probability 2**-53), and
-    u < Phi(b) strictly, so max_value is never attained. No point mass at the cap.
-
-    Verified 2026-07-25 three ways against fair_cam.quantile_pooling._lognormal
-    ._qlnormtrunc (rel err <= 4e-13 across p in [0.01, 0.99999]), against
-    rejection sampling (mean agrees to 2.4e-03 at 5M draws, within MC noise),
-    and against the closed-form conditional mean (4.4e-04 at 5M draws).
-    """
-    b = (math.log(max_value) - meanlog) / sigma
-    u = rng.random(size) * ndtr(b)
-    return np.exp(meanlog + sigma * ndtri(u))
-
-
 def _draw(d: dict | None, rng, cap: float | None):
     if not d:
         return 0.0
@@ -527,9 +529,17 @@ def _lognormal_bearing(scen: list) -> tuple[list, float]:
 
 
 def mean_retained(mu: float, sigma: float, max_value: float) -> float:
-    """E[X|X<=max]/E[X] = Phi(b-sigma)/Phi(b) -- the closed-form cost of the cap."""
-    b = (math.log(max_value) - mu) / sigma
-    return float(ndtr(b - sigma) / ndtr(b))
+    """E[X|X<=max]/E[X] = Phi(b-sigma)/Phi(b) -- the closed-form cost of the cap.
+
+    PR2 Task 9 (single source of truth): resolves to the SAME shared kernel
+    Task 8's view-model and Task 8b's web display import
+    (`fair_cam.quantile_pooling.truncated_lognormal_mean` /
+    `lognormal_mean`), not a re-derivation. Algebraically identical to the
+    prior direct `Phi(b-sigma)/Phi(b)` here -- the `exp(mu + sigma**2/2)`
+    factor in the numerator and denominator cancels -- so B-CAP-DRIFT/
+    B-CAP-SCEN's figures are unchanged; only the implementation is shared.
+    """
+    return truncated_lognormal_mean(mu, sigma, max_value) / lognormal_mean(mu, sigma)
 
 
 def _dist_mean(d: dict | None, cap: float | None) -> float:
