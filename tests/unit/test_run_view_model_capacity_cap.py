@@ -52,6 +52,7 @@ from idraa.services.run_view_model import (
     _dist_kind,
     _field_mean_and_retention,
     _lognormal_retention,
+    _safe_display_max,
     build_display_results,
 )
 
@@ -437,6 +438,62 @@ def test_currency_conversion_of_cap_values() -> None:
     assert note is not None
     assert note["pl_max"] == pytest.approx(_CAP_A * 0.92)
     assert note["sl_max"] is None  # PERT never carries `max`
+
+
+# ---- Milestone gate finding (jj): degenerate-cap DISPLAY guard -------------
+#
+# `_field_mean_and_retention`'s own retention math already fails soft to
+# R_f=1.0 on a malformed `max` (its `try: float(cap_raw) except (TypeError,
+# ValueError)`). These tests pin the SEPARATE, previously-unguarded final
+# conversion of the disclosed `max` DISPLAY value in
+# `_build_capacity_cap_note`'s return statement -- a tampered snapshot
+# (unreachable via validated writes; D19's floor + the read-adapter guard
+# block a non-numeric/degenerate `max`) must degrade to `None`, never
+# TypeError/ValueError -> 500 on run-detail.
+
+
+def test_safe_display_max_none_passthrough() -> None:
+    assert _safe_display_max(None, _USD) is None
+
+
+def test_safe_display_max_valid_numeric_converts() -> None:
+    assert _safe_display_max(_CAP_A, _USD) == pytest.approx(_CAP_A)
+
+
+@pytest.mark.parametrize("bad", ["not-a-number", [1, 2, 3], {"a": 1}, object()])
+def test_safe_display_max_non_numeric_degrades_to_none_not_500(bad: object) -> None:
+    assert _safe_display_max(bad, _USD) is None
+
+
+def test_tampered_non_numeric_pl_max_does_not_500_case_jj() -> None:
+    """A tampered snapshot with a string `max` must degrade the DISPLAY
+    value to None, never raise out of `_build_capacity_cap_note`. The
+    retention math independently fails soft (R_f=1.0), so the field still
+    contributes -- this pins the display conversion specifically."""
+    snap = _snapshot(
+        pl={"distribution": "lognormal", "mean": _MU_A, "sigma": _SIGMA_A, "max": "not-a-number"},
+        sl=None,
+    )
+    run = SimpleNamespace(scenario_inputs_snapshot=snap)
+    note = _build_capacity_cap_note(run, _USD)
+    assert note is not None
+    assert note["pl_max"] is None
+    assert note["cap_effect_frac"] == 0.0  # fail-soft: cap treated as non-binding
+
+
+def test_tampered_non_scalar_sl_max_does_not_500_case_jj() -> None:
+    """Same coupling on secondary_loss with a non-scalar (list) `max` --
+    covers the TypeError branch of float(), not just ValueError, and
+    confirms an unrelated valid pl_max is unaffected."""
+    snap = _snapshot(
+        pl={"distribution": "lognormal", "mean": _MU_A, "sigma": _SIGMA_A, "max": _CAP_A},
+        sl={"distribution": "lognormal", "mean": _MU_A, "sigma": _SIGMA_A, "max": [1, 2, 3]},
+    )
+    run = SimpleNamespace(scenario_inputs_snapshot=snap)
+    note = _build_capacity_cap_note(run, _USD)
+    assert note is not None
+    assert note["sl_max"] is None
+    assert note["pl_max"] == pytest.approx(_CAP_A)
 
 
 # ---- build_display_results (top-level wiring) ------------------------------

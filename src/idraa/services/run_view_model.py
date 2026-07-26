@@ -70,6 +70,7 @@ __all__ = [
     "_field_mean_and_retention",
     "_has_ci_band",
     "_lognormal_retention",
+    "_safe_display_max",
     "_strip_samples",
     "build_display_results",
 ]
@@ -469,6 +470,27 @@ def _field_mean_and_retention(d: dict[str, Any] | None) -> tuple[float, float]:
     return 0.0, 1.0
 
 
+def _safe_display_max(raw: Any, rc: ReportingCurrency) -> float | None:
+    """Convert a stored ``max`` to its display value, never raising.
+
+    Milestone gate finding (jj): ``_field_mean_and_retention`` above already
+    fails soft to R_f=1.0 on a malformed/non-numeric ``max`` (its own
+    ``try: cap = float(cap_raw) except (TypeError, ValueError)``) -- this is
+    the SEPARATE final DISPLAY conversion of the disclosed cap value itself.
+    A tampered snapshot (unreachable via validated writes -- D19's floor
+    rejects a non-numeric ``max`` at write time) could otherwise reach
+    ``float()`` here and raise TypeError/ValueError, 500-ing run-detail.
+    Degrades to ``None`` (omit the $ display) instead, mirroring the
+    retention-math fail-soft above.
+    """
+    if raw is None:
+        return None
+    try:
+        return rc.convert(float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
 def _build_capacity_cap_note(run: Any, rc: ReportingCurrency) -> dict[str, Any] | None:
     """Per-scenario capacity-cap disclosure for the SINGLE run-detail page.
 
@@ -535,6 +557,6 @@ def _build_capacity_cap_note(run: Any, rc: ReportingCurrency) -> dict[str, Any] 
     sl_max = sl.get("max") if isinstance(sl, dict) else None
     return {
         "cap_effect_frac": cap_effect_frac,
-        "pl_max": rc.convert(float(pl_max)) if pl_max is not None else None,
-        "sl_max": rc.convert(float(sl_max)) if sl_max is not None else None,
+        "pl_max": _safe_display_max(pl_max, rc),
+        "sl_max": _safe_display_max(sl_max, rc),
     }

@@ -335,8 +335,9 @@ class Settings(BaseSettings):
     # component cap is ``capacity_k * Organization.annual_revenue`` — a
     # single loss component is not modeled to exceed one year's revenue.
     # k=1.0 is a CONVENTION (v3 view-model policy knob), NOT a FAIR-grounded
-    # constant, and specifically NOT "the least-interventionist value that
-    # satisfies D8": D8 is a ONE-SIDED (upper) gate with no lower bound at
+    # constant and NOT an enterprise valuation, and specifically NOT
+    # "the least-interventionist value that satisfies D8": D8 is a ONE-SIDED
+    # (upper) gate with no lower bound at
     # all — it passes for every k below the binding value, including caps
     # aggressive enough to destroy most of the expected loss. 1.0 is the
     # largest round value with a statable policy meaning that still clears

@@ -3424,6 +3424,63 @@ def test_truncated_mean_mirror_parity_with_fair_cam_oracle() -> None:
     )
 
 
+def test_truncated_mean_degenerate_cap_never_500s_case_kk() -> None:
+    """Milestone gate finding (kk): a degenerate cap must degrade
+    `_truncated_lognorm_mean_component` to the UNTRUNCATED mean, never
+    raise. TAMPER-ONLY (D19's floor + the read-adapter guard both block a
+    validated cap this degenerate) -- mirrors
+    `run_view_model._lognormal_retention`'s own fail-soft convention.
+
+    Covers every raise mode the unguarded closed form had:
+      - `_phi_erf(b)` underflowing to exactly 0.0 (ZeroDivisionError) --
+        the reproducible case: a huge mean with a tiny cap drives `b` deep
+        into the erf-saturation tail.
+      - non-positive `sigma` (would divide-by-zero/produce a nonsensical
+        `b` before even reaching `_phi_erf`).
+      - a non-finite (`nan`) or non-positive `max_support` (would raise a
+        `math.log` domain error for `max_support <= 0`).
+    """
+    import math
+
+    from idraa.services.pdf_report import _truncated_lognorm_mean_component
+
+    mean, sigma = 100.0, 1.0
+    untruncated = math.exp(mean + sigma**2 / 2.0)
+
+    # ZeroDivisionError case: reproduced against pre-fix code via a scratch
+    # script (mean=100, sigma=1, max_support=1.0 -> b=-100 -> erf saturates).
+    assert math.isclose(_truncated_lognorm_mean_component(mean, sigma, 1.0), untruncated)
+
+    # Non-positive sigma.
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 0.0, 100.0), math.exp(10.0))
+    assert math.isclose(
+        _truncated_lognorm_mean_component(10.0, -1.0, 100.0), math.exp(10.0 + 1.0 / 2.0)
+    )
+
+    # Non-finite / non-positive max_support.
+    assert math.isclose(
+        _truncated_lognorm_mean_component(10.0, 1.0, float("nan")), math.exp(10.0 + 0.5)
+    )
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 1.0, 0.0), math.exp(10.0 + 0.5))
+    assert math.isclose(_truncated_lognorm_mean_component(10.0, 1.0, -5.0), math.exp(10.0 + 0.5))
+
+
+def test_truncated_mixture_mean_degenerate_component_never_500s_case_kk() -> None:
+    """The mixture caller (`_truncated_lognorm_mixture_mean`) sums per-
+    component `_truncated_lognorm_mean_component` calls -- a single
+    degenerate component must not 500 the whole mixture sum; it
+    contributes its own untruncated mean instead."""
+    import math
+
+    from idraa.services.pdf_report import _truncated_lognorm_mixture_mean
+
+    good = {"weight": 0.5, "mean": 10.0, "sigma": 1.0}
+    degenerate = {"weight": 0.5, "mean": 100.0, "sigma": 1.0}  # same shape as the repro above
+    cap = 1.0  # binding/degenerate for BOTH components at this tiny cap
+    result = _truncated_lognorm_mixture_mean([good, degenerate], cap)
+    assert math.isfinite(result)
+
+
 def test_lognormal_mixture_table_label_pooled_mixture() -> None:
     """T6 (#27): lognormal_mixture table label distinguishes itself from the
     plain-lognormal 'parametric' label with 'pooled mixture'."""

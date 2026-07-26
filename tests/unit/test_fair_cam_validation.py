@@ -535,6 +535,72 @@ def test_mixture_component_missing_mean_with_max_present_rejected_not_500():
 
 
 # ---------------------------------------------------------------------------
+# Milestone gate finding (h): pin the non-finite/`max`-present COUPLING.
+#
+# `_validate_capacity_floor` returns [] early on a non-finite mean/sigma
+# (line ~303-307 above), relying on `_validate_finite` running EARLIER in
+# the SAME `validate_fair_distributions` batch to reject the value. That
+# ordering is currently correct, but nothing pins it -- a future reorder of
+# the `_finite_errors +=` calls inside `validate_fair_distributions` could
+# silently regress a non-finite mean/sigma with a `max` present into a
+# false-accept (the floor NO-OPs and, if `_validate_finite` were reordered
+# after it or dropped, nothing else would reject). This test exercises the
+# COUPLING through the whole batch entrypoint -- not `_validate_finite` in
+# isolation -- so a reorder that breaks the interaction is caught here even
+# if `_validate_finite` on its own still passes its OWN tests.
+# ---------------------------------------------------------------------------
+
+
+def test_non_finite_mean_with_max_present_rejected_via_whole_batch():
+    """Non-finite `mean` + a present `max` on a scalar lognormal loss field
+    -> FAIRCAMValidationError from the WHOLE `validate_fair_distributions`
+    batch (via `_validate_finite`), even though `_validate_capacity_floor`
+    itself NO-OPs on the non-finite value."""
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": float("inf"),
+                "sigma": 1.0,
+                "max": 100.0,
+            }
+        )
+    assert "mean" in str(exc_info.value).lower()
+
+
+def test_non_finite_sigma_with_max_present_rejected_via_whole_batch():
+    """Same coupling, non-finite `sigma` instead of `mean`."""
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": float("nan"),
+                "max": 100.0,
+            }
+        )
+    assert "sigma" in str(exc_info.value).lower()
+
+
+def test_mixture_non_finite_component_mean_with_max_present_rejected_via_whole_batch():
+    """Same coupling for lognormal_mixture: a non-finite component `mean`
+    with a top-level `max` present must still raise via the whole batch
+    (`_validate_finite`'s per-component check), even though
+    `_validate_capacity_floor`'s mixture branch also NO-OPs per-component
+    on a non-finite mean/sigma (line ~348-349 above)."""
+    with pytest.raises(FAIRCAMValidationError):
+        _call(
+            primary_loss=_mixture(
+                [
+                    _good_component(mean=float("inf"), sigma=1.0, weight=0.5),
+                    _good_component(mean=10.0, sigma=1.0, weight=0.5),
+                ]
+            )
+            | {"max": 100.0}
+        )
+
+
+# ---------------------------------------------------------------------------
 # Task 6 — D15: `require_loss_max` requiredness at the chokepoint.
 #
 # Presence-only check, additive to (not a replacement of) Task 3b's

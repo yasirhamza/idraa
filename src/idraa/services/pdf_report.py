@@ -2371,9 +2371,31 @@ def _truncated_lognorm_mean_component(mean: float, sigma: float, max_support: fl
     kernel directly. Pinned to that kernel by
     ``test_truncated_mean_mirror_parity_with_fair_cam_oracle`` in
     tests/unit/test_pdf_report.py — the quantile parity test above never
-    evaluates a mean, so this is a SEPARATE tripwire."""
+    evaluates a mean, so this is a SEPARATE tripwire.
+
+    Milestone gate finding (kk): a degenerate cap -- non-positive/non-finite
+    ``max_support``, a non-positive ``sigma``, or a cap far enough below the
+    field's own core to drive ``b`` deep into the erf-saturation tail --
+    would otherwise raise (``math.log`` domain error, division by a
+    zero/negative ``sigma``, or ``ZeroDivisionError`` when ``_phi_erf(b)``
+    underflows to EXACTLY 0.0; ``math.erf`` saturates to -1.0 well before
+    the float64 range is exhausted). All are TAMPER-ONLY: D19's floor +
+    the read-adapter guard both block a validated cap at or below p95, and
+    ``fair_cam_validation`` enforces ``0 < sigma <= 10`` at write time. This
+    mirrors ``run_view_model._lognormal_retention``'s own degenerate-cap
+    guard exactly (``sigma <= 0.0 or not math.isfinite(cap) or cap <=
+    0.0`` -> non-binding) plus its post-hoc underflow catch, and degrades
+    to the UNTRUNCATED mean (a non-binding-cap result) instead of raising
+    -- a disclosure surface must never 500 the PDF render on a tampered cap.
+    """
+    untruncated_mean = math.exp(mean + sigma**2 / 2.0)
+    if sigma <= 0.0 or not math.isfinite(max_support) or max_support <= 0.0:
+        return untruncated_mean
     b = (math.log(max_support) - mean) / sigma
-    return math.exp(mean + sigma**2 / 2.0) * _phi_erf(b - sigma) / _phi_erf(b)
+    phi_b = _phi_erf(b)
+    if phi_b <= 0.0:
+        return untruncated_mean
+    return untruncated_mean * _phi_erf(b - sigma) / phi_b
 
 
 def _truncated_lognorm_mixture_mean(
