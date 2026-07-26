@@ -71,45 +71,57 @@ def _mixture(components: list[dict[str, Any]], **extra: Any) -> dict[str, Any]:
 
 
 def test_structural_lognormal_accepted_without_max() -> None:
-    assert _structural_dist_problem("primary_loss", _lognormal(), allow_lognormal=True) is None
+    assert (
+        _structural_dist_problem("primary_loss", _lognormal(), allow_lognormal=True, allow_max=True)
+        is None
+    )
 
 
 def test_structural_lognormal_accepted_with_max() -> None:
     dist = _lognormal(max=1_000_000.0)
-    assert _structural_dist_problem("primary_loss", dist, allow_lognormal=True) is None
+    assert (
+        _structural_dist_problem("primary_loss", dist, allow_lognormal=True, allow_max=True) is None
+    )
 
 
 def test_structural_lognormal_max_non_numeric_is_error() -> None:
     dist = _lognormal(max="lots")
-    problem = _structural_dist_problem("primary_loss", dist, allow_lognormal=True)
+    problem = _structural_dist_problem("primary_loss", dist, allow_lognormal=True, allow_max=True)
     assert problem is not None and "max" in problem
 
 
 def test_structural_lognormal_other_unknown_key_still_rejected() -> None:
     dist = _lognormal(max=1_000_000.0, junk="x" * 50)
-    problem = _structural_dist_problem("primary_loss", dist, allow_lognormal=True)
+    problem = _structural_dist_problem("primary_loss", dist, allow_lognormal=True, allow_max=True)
     assert problem is not None
 
 
 def test_structural_mixture_accepted_without_max() -> None:
     mix = _mixture([{"mean": 8.0, "sigma": 0.7, "weight": 1.0}])
-    assert _structural_dist_problem("primary_loss", mix, allow_lognormal=True) is None
+    assert (
+        _structural_dist_problem("primary_loss", mix, allow_lognormal=True, allow_max=True) is None
+    )
 
 
 def test_structural_mixture_accepted_with_max() -> None:
     mix = _mixture([{"mean": 8.0, "sigma": 0.7, "weight": 1.0}], max=1_000_000.0)
-    assert _structural_dist_problem("primary_loss", mix, allow_lognormal=True) is None
+    assert (
+        _structural_dist_problem("primary_loss", mix, allow_lognormal=True, allow_max=True) is None
+    )
 
 
 def test_structural_mixture_other_unknown_key_still_rejected() -> None:
     mix = _mixture([{"mean": 8.0, "sigma": 0.7, "weight": 1.0}], max=1_000_000.0, junk="x" * 50)
-    problem = _structural_dist_problem("primary_loss", mix, allow_lognormal=True)
+    problem = _structural_dist_problem("primary_loss", mix, allow_lognormal=True, allow_max=True)
     assert problem is not None
 
 
 # --- Library-entry flag: max REJECTED regardless of scenario-side widening --
 # (allow_max=False call-site tests live in test_library_bundle_validate.py;
-# this pins the flag's OWN default/behavior directly on the shared chokepoint.)
+# this pins the flag's OWN behavior directly on the shared chokepoint.
+# allow_max is a REQUIRED keyword-only arg (milestone gate finding (p): no
+# permissive default -- every caller, including these direct-call tests,
+# must decide explicitly).
 
 
 def test_structural_lognormal_with_max_rejected_when_allow_max_false() -> None:

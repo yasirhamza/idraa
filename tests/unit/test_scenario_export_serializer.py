@@ -530,7 +530,7 @@ def test_json_export_metadata_carrying_mixture_emits_verbatim_but_fails_reimport
 
     # Re-import rejection: the exact-key-set gate sees a 3rd key.
     mixture_problem = _structural_dist_problem(
-        "primary_loss", obj["primary_loss"], allow_lognormal=True
+        "primary_loss", obj["primary_loss"], allow_lognormal=True, allow_max=True
     )
     assert mixture_problem is not None
     assert "components" in mixture_problem or "exactly keys" in mixture_problem
@@ -543,7 +543,7 @@ def test_json_export_metadata_carrying_mixture_emits_verbatim_but_fails_reimport
         "distribution_fit_metadata": {"schema_version": 3, "n_smes": 1},
     }
     scalar_problem = _structural_dist_problem(
-        "primary_loss", scalar_metadata_carrying, allow_lognormal=True
+        "primary_loss", scalar_metadata_carrying, allow_lognormal=True, allow_max=True
     )
     assert scalar_problem is not None
 

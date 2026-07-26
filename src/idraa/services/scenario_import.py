@@ -81,7 +81,7 @@ def _enum_ok(value: str | None, enum_cls: type[StrEnum]) -> bool:
 
 
 def _structural_dist_problem(
-    col: str, dist: Any, *, allow_lognormal: bool, allow_max: bool = True
+    col: str, dist: Any, *, allow_lognormal: bool, allow_max: bool
 ) -> str | None:
     """Return an error string if ``dist`` is not a valid PERT (or, when allowed,
     lognormal / lognormal_mixture) structural shape; ``None`` if it is
@@ -97,16 +97,19 @@ def _structural_dist_problem(
     positivity/sum, and the component-count cap are enforced downstream by
     ``validate_fair_distributions`` (Sec-I1/Sec-I2/Sec-N1).
 
-    ``allow_max`` (PR2 D13/D14, Task 4b): when ``True`` (the scenario-import
-    default), a lognormal/lognormal_mixture dict MAY additionally carry an
-    OPTIONAL top-level ``max`` key (a sibling of ``mean``/``sigma``, or of
-    ``components`` — never nested per-component; mirrors
-    ``run_executor._dict_to_fair_distribution``'s read-side shape) — the PR2
-    capacity-bound cap, minted/preserved by ``_validate_rows`` below. When
-    ``False`` (``library_bundle_import``'s call site), ``max`` is REJECTED
-    exactly like any other unknown key: library entries are org-agnostic
-    (D14) and must never carry a foreign org's capacity cap through this
-    shared chokepoint.
+    ``allow_max`` (PR2 D13/D14, Task 4b; REQUIRED keyword-only — milestone
+    gate finding (p): a permissive default is a fail-OPEN on the D14
+    org-isolation boundary, so every caller must decide explicitly, matching
+    ``allow_lognormal``'s own required-kwarg shape): when ``True`` (the
+    scenario-import call site, ~line 364), a lognormal/lognormal_mixture
+    dict MAY additionally carry an OPTIONAL top-level ``max`` key (a sibling
+    of ``mean``/``sigma``, or of ``components`` — never nested
+    per-component; mirrors ``run_executor._dict_to_fair_distribution``'s
+    read-side shape) — the PR2 capacity-bound cap, minted/preserved by
+    ``_validate_rows`` below. When ``False`` (``library_bundle_import``'s
+    call site), ``max`` is REJECTED exactly like any other unknown key:
+    library entries are org-agnostic (D14) and must never carry a foreign
+    org's capacity cap through this shared chokepoint.
     """
     if not isinstance(dist, dict):
         return f"{col} must be a distribution object"
@@ -361,7 +364,13 @@ def _validate_rows(
             dist = getattr(form, col)
             if dist is None:
                 continue  # only secondary_loss may be None
-            dist_problem = _structural_dist_problem(col, dist, allow_lognormal=allow_ln)
+            # PR2 D13/D14: scenario-import rows MAY carry an optional `max`
+            # (minted/preserved below) -- explicit True (milestone gate
+            # finding (p): allow_max has no permissive default anymore, so
+            # every call site must decide).
+            dist_problem = _structural_dist_problem(
+                col, dist, allow_lognormal=allow_ln, allow_max=True
+            )
             if dist_problem is not None:
                 # Column name always references the distribution so existing
                 # callers/tests keying on ".distribution" keep matching.
