@@ -19,7 +19,11 @@ run_local_gate = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(run_local_gate)
 
 
-def test_gate_includes_all_five_tools() -> None:
+def test_gate_includes_all_six_tools() -> None:
+    # PR2 Task 9: added a labeled equivalence-harness step (see run_local_gate.py
+    # module docstring step 6) — fair_cam/tests collection was already folded
+    # into the "pytest (fast suite)" step by Task 1b (testpaths), so it needed
+    # no new step of its own.
     labels = [label for label, _ in run_local_gate.GATE_STEPS]
     assert labels == [
         "ruff check",
@@ -27,6 +31,7 @@ def test_gate_includes_all_five_tools() -> None:
         "mypy",
         "css staleness",
         "pytest (fast suite)",
+        "pytest (equivalence harness, slow-marked)",
     ]
 
 
@@ -34,9 +39,14 @@ def test_gate_order_is_cheap_to_expensive() -> None:
     """pytest must be LAST so lint failures fire in seconds, not minutes."""
     labels = [label for label, _ in run_local_gate.GATE_STEPS]
     assert labels[-1].startswith("pytest")
+    assert labels[-2].startswith("pytest")
 
 
 def test_skip_tests_env_drops_only_pytest() -> None:
+    # Both pytest-labeled steps start with "pytest" and must both be dropped
+    # by the same escape hatch — a partial skip would silently keep running
+    # the equivalence harness (which needs the fair_cam import graph warm)
+    # while claiming tests were skipped.
     steps = run_local_gate.steps_to_run(env={run_local_gate.SKIP_TESTS_ENV: "1"})
     labels = [label for label, _ in steps]
     assert labels == ["ruff check", "ruff format --check", "mypy", "css staleness"]

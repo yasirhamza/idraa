@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, ClassVar
 
 from idraa.services.scenario_export import (
@@ -260,6 +261,97 @@ def test_csv_lognormal_roundtrip() -> None:
     assert pl["distribution"] == "lognormal"
     assert pl["mean"] == pytest.approx(math.log(1000), abs=1e-6)
     assert pl["sigma"] == pytest.approx(1.0, abs=1e-6)
+
+
+# --- PR2 capacity bound (Task 9): `max` export/import contracts -------------
+#
+# scenario_export.py::_normalize_dist is a permissive `dist.items()`
+# passthrough (its own docstring), so JSON export round-trips `max` with no
+# special-casing today -- but nothing pinned that, and an unpinned
+# passthrough is one "tidy up the export shape" commit away from silently
+# dropping the cap. tests/services/test_scenario_export_import_mixture.py
+# already pins the full-DB-service round trip for a 3-component MIXTURE
+# carrying `max`; the two tests below pin the SCALAR-lognormal case at the
+# serializer/parser level (no DB), and the CSV path's explicit, structural
+# INABILITY to carry `max` at all -- the two paths' contracts must stay
+# explicitly different, not accidentally the same.
+
+_CAPPED_LOGNORMAL: dict[str, Any] = {
+    "distribution": "lognormal",
+    "mean": math.log(1_000_000.0),
+    "sigma": 0.9,
+    "max": 500_000_000.0,
+}
+
+
+def test_json_normalize_dist_passes_max_through_byte_identically() -> None:
+    """`_normalize_dist` only ever collapses the low/mode/high trio (module
+    docstring) -- `max` is not one of those keys, so it must survive
+    UNCHANGED, not merely numerically close."""
+    from idraa.services.scenario_export import _normalize_dist
+
+    out = _normalize_dist(_CAPPED_LOGNORMAL)
+    assert out["max"] == _CAPPED_LOGNORMAL["max"]  # byte-identical, no float drift
+    assert out is not _CAPPED_LOGNORMAL  # a new dict, not aliasing (in case of later mutation)
+
+
+def test_json_export_import_roundtrip_preserves_max_byte_identically() -> None:
+    """Export a capped scalar lognormal -> `scenario_to_json_obj` ->
+    re-parse via the importer's `parse_json_nested` -> `max` survives
+    byte-identically. No DB: this pins the serializer/parser contract
+    directly, complementing the full-service DB round trip already covered
+    for the mixture case."""
+    import json
+
+    from idraa.services.scenario_import_parsers import parse_json_nested
+
+    s = _scenario(primary_loss=_CAPPED_LOGNORMAL)
+    obj = scenario_to_json_obj(s)
+    assert obj["primary_loss"]["max"] == _CAPPED_LOGNORMAL["max"]
+
+    pairs, errs = parse_json_nested(json.dumps([obj]).encode())
+    assert errs == []
+    assert pairs is not None
+    reimported_pl = pairs[0][1]["primary_loss"]
+    assert reimported_pl["max"] == _CAPPED_LOGNORMAL["max"]
+    assert reimported_pl["mean"] == _CAPPED_LOGNORMAL["mean"]
+    assert reimported_pl["sigma"] == _CAPPED_LOGNORMAL["sigma"]
+
+
+def test_csv_export_structurally_cannot_carry_max() -> None:
+    """`_dist_cells` returns a fixed `(dist, low, mode, high)` 4-tuple with
+    no fifth cell for `max` -- a capped lognormal exported to CSV loses the
+    cap structurally (not merely by omission that a future one-line change
+    could restore without touching the row shape). Re-importing the CSV row
+    must come back with NO `max` key at all, pinning the CSV path's contract
+    as explicitly DIFFERENT from JSON's byte-identical passthrough above."""
+    import csv
+    import io
+
+    from idraa.services.scenario_import_parsers import parse_csv_flat
+
+    s = _scenario(primary_loss=_CAPPED_LOGNORMAL)
+    row = scenario_to_flat_row(s)
+    cells = dict(zip(CSV_EXPORT_HEADERS, row, strict=True))
+    assert cells["pl_dist"] == "lognormal"
+    # No cell (low/mode/high) is the max value -- the 4-tuple has no slot
+    # for it at all, not merely an empty one.
+    assert cells["pl_low"] not in (str(_CAPPED_LOGNORMAL["max"]), "500000000")
+    assert cells["pl_high"] not in (str(_CAPPED_LOGNORMAL["max"]), "500000000")
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(CSV_EXPORT_HEADERS)
+    w.writerow(row)
+    pairs, errs = parse_csv_flat(buf.getvalue().encode())
+    assert errs == []
+    assert pairs is not None
+    pl = pairs[0][1]["primary_loss"]
+    assert pl["distribution"] == "lognormal"
+    assert "max" not in pl, (
+        "CSV round trip must not smuggle `max` into the reimported dict -- "
+        "the CSV path structurally cannot carry it (module docstring)."
+    )
 
 
 def test_mixed_distribution_roundtrip_both_nodes() -> None:
