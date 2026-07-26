@@ -110,9 +110,13 @@
   deliberate choice over a runtime clip, which would instead dump the
   lognormal&rsquo;s tail mass into an artificial spike sitting exactly at the
   cap. Loss Magnitude (Primary and Secondary Loss) entries flagged
-  <strong>catastrophic</strong> are the exception: they keep the untruncated
-  lognormal tail, intentionally unbounded, reflecting that rare, severe
-  events can exceed any single expert&rsquo;s 95th-percentile judgement.
+  <strong>catastrophic</strong> are the exception: they keep the heavy-tailed
+  lognormal instead of collapsing to PERT, bounded above only at your
+  organization&rsquo;s capacity cap rather than at any single expert&rsquo;s
+  95th-percentile judgement &mdash; your high estimate is the 95th
+  percentile of that belief distribution, not a ceiling. Because Primary and
+  Secondary Loss are each bounded independently, a single loss event&rsquo;s
+  total is bounded by the sum of both caps, not by either cap alone.
 </p>
 <p class="text-body text-ink-2 mb-6">
   For scenario authoring guidance, see

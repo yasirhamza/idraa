@@ -18,6 +18,8 @@ from ._lognormal_native import (
     lognormal_from_quantiles,
     lognormal_mean,
     lognormal_quantiles,
+    truncated_lognormal_mean,
+    truncated_lognormal_mixture_mean,
 )
 from ._normal import (
     combine_norm,
@@ -64,4 +66,6 @@ __all__ = [
     "mixture_quantile_norm",
     "normal_mixture_to_pert_approx",
     "normal_to_pert_approx",
+    "truncated_lognormal_mean",
+    "truncated_lognormal_mixture_mean",
 ]

@@ -482,3 +482,22 @@ def test_build_display_results_capacity_cap_note_none_on_legacy_run() -> None:
     vm = build_display_results(run)
     assert vm is not None
     assert vm["capacity_cap_note"] is None
+
+
+# ---- PR2 Task 8b: refactor delegates to the shared fair_cam kernel --------
+#
+# NEW test, added alongside the refactor -- does NOT touch any of the 30
+# anchors above (all pre-existing assertions/params are byte-unchanged).
+# Confirms _lognormal_retention now resolves through
+# fair_cam.quantile_pooling.truncated_lognormal_mean / lognormal_mean
+# rather than re-deriving the ndtr arithmetic inline a second time.
+
+
+def test_lognormal_retention_delegates_to_shared_fair_cam_kernel() -> None:
+    from fair_cam.quantile_pooling import lognormal_mean, truncated_lognormal_mean
+
+    expected = truncated_lognormal_mean(_MU_A, _SIGMA_A, _CAP_A) / lognormal_mean(_MU_A, _SIGMA_A)
+    actual = _lognormal_retention(_MU_A, _SIGMA_A, _CAP_A)
+    assert actual == pytest.approx(expected, rel=1e-12)
+    # Cross-check against the same hand-math anchor Case A already pins.
+    assert actual == pytest.approx(0.7339899596212376, rel=1e-9)

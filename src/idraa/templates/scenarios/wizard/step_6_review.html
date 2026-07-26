@@ -40,7 +40,7 @@
     <p class="text-sm mt-1" data-loss-shape>
       Loss magnitude model:
       {% if state.loss_shape == 'catastrophic' %}
-        <span class="font-medium text-status-warning">Catastrophic — uncapped lognormal</span>
+        <span class="font-medium text-status-warning">Catastrophic — heavy-tailed lognormal (capacity-capped)</span>
       {% else %}
         <span class="font-medium">Capped (bounded PERT)</span>
       {% endif %}

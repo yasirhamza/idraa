@@ -407,9 +407,10 @@ def process_sme_estimates(state: WizardState) -> dict[str, PerFieldsetResult]:
 
         pipeline = _PIPELINE_BY_FIELDSET[fieldset]
         if fieldset in ("pl", "sl") and state.loss_shape == "catastrophic":
-            # Uncapped native lognormal storage (#loss-pert-overhaul). Fails
-            # closed: ANY other value (including a tampered/unknown loss_shape)
-            # falls through to the bounded capped/PERT default above.
+            # Heavy-tailed native lognormal storage, bounded above at the
+            # capacity cap (PR2 D17/D18, #loss-pert-overhaul). Fails closed:
+            # ANY other value (including a tampered/unknown loss_shape) falls
+            # through to the bounded capped/PERT default above.
             pipeline = _LOGNORMAL_PIPELINE
         # Spec-10/Arch-11 PR1 fix: budget guard INTERLEAVED with each per-fit so
         # a divergent fieldset cannot bust the aggregate by 4x before raising.
@@ -631,9 +632,11 @@ def build_scenario_payload(
             }
         elif isinstance(r.pooled, LognormMixture):
             # CATASTROPHIC pl/sl only (#loss-pert-overhaul): non-binding
-            # [0, inf] truncation => each component's (meanlog, sdlog) IS its
-            # native untruncated {mean, sigma}. Store native, uncapped by
-            # intent; no PERT approximation.
+            # [0, inf] truncation on the POOLING FIT's own support => each
+            # component's (meanlog, sdlog) IS its native untruncated
+            # {mean, sigma}. Store native; no PERT approximation. Bounded
+            # above at the capacity cap via the separate top-level "max" key
+            # (PR2 D17, capacity_max above).
             if len(r.pooled.components) == 1:
                 # Single-SME identity pin (issue #27 Task 5): byte-identical
                 # to the pre-mixture plain-lognormal output — the dominant

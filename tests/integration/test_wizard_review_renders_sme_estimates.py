@@ -153,7 +153,9 @@ async def test_review_surfaces_loss_shape_and_catastrophic_toggle(
     assert r4.status_code in (302, 303), r4.text
 
     body = (await client.get(f"/scenarios/new/wizard/step/6?tx={tx}")).text
-    assert "Catastrophic — uncapped lognormal" in body
+    # PR2 D17/Task 8b: catastrophic is bounded above at the capacity cap, not
+    # literally uncapped -- re-worded from "Catastrophic — uncapped lognormal".
+    assert "Catastrophic — heavy-tailed lognormal (capacity-capped)" in body
 
 
 @pytest.mark.asyncio
@@ -171,6 +173,9 @@ async def test_step4_toggle_has_inline_loss_shape_feedback(
     tx = await _bootstrap_wizard_through_step_2(client, db_session, user_id)
     body = (await client.get(f"/scenarios/new/wizard/step/4?tx={tx}")).text
     assert "data-loss-shape-hint" in body
-    assert "uncapped heavy-tailed lognormal" in body
+    # PR2 D17/Task 8b: bounded above at the capacity cap, not literally
+    # uncapped -- re-worded from "uncapped heavy-tailed lognormal".
+    assert "heavy-tailed lognormal" in body
+    assert "bounded above at the capacity cap" in body
     assert "bounded PERT" in body
     assert "economic ceiling" in body

@@ -7,7 +7,26 @@ Mirrors services/run_executor.py:_build_results_payload on the read side:
 the executor converts fair-cam DTOs → persisted dict; this module converts
 persisted dict → template view-model.
 
-No DB, no HTTP, no fair_cam imports — pure dict/list manipulation.
+No DB, no HTTP imports at module level — pure dict/list manipulation. ONE
+exception (PR2 Task 8b): ``_lognormal_retention`` performs a
+FUNCTION-LOCAL import of ``fair_cam.quantile_pooling.truncated_lognormal_mean``
+/ ``lognormal_mean`` — the truncated/untruncated mean-ratio identity used
+here is FAIR math (fair_cam is CLAUDE.md's single source of truth for it),
+so importing the shared kernel de-duplicates the formula rather than
+re-deriving it inline a second time (``idraa.app.lognormal_display_rows``
+imports the SAME kernel, the same function-local way, for its own
+web-display rendering). The import is deliberately function-local, NOT
+module-level: ``services/reports.py`` imports this module's
+``_build_control_effectiveness_rows`` at ITS OWN module level, and
+``services/pdf_report.py`` imports ``services/reports.py`` at module
+level — a module-level fair_cam import here would transitively land
+fair_cam in ``sys.modules`` on a bare ``import idraa.services.pdf_report``,
+breaking that module's test-enforced fair_cam-free purity boundary
+(``tests/unit/test_pdf_report.py::test_pdf_report_purity_...``). The
+local-import style is this module's own established idiom already used
+throughout ``fair_cam/quantile_pooling/_lognormal_native.py`` ("local
+import keeps module import cheap") — not a workaround invented for this
+constraint.
 
 Currency: callers pass ``rc`` (a ReportingCurrency from
 ``services/reporting_currency.py``).  The default is ``_USD_IDENTITY``
@@ -23,7 +42,6 @@ from decimal import Decimal
 from typing import Any
 
 from babel.numbers import get_currency_symbol
-from scipy.special import ndtr
 
 # Was: def _strip_samples(...) and def _has_ci_band(...)
 # Now (preserve underscore aliases for PR nu backward compat):
@@ -314,37 +332,60 @@ def _dist_kind(d: dict[str, Any]) -> str:
 def _lognormal_retention(meanlog: float, sigma: float, cap: float) -> float:
     """Truncated/untruncated mean ratio for ONE lognormal shape.
 
-    ``R_f = Phi(b - sigma) / Phi(b)``, ``b = (ln(cap) - meanlog) / sigma``.
-    Uses ``scipy.special.ndtr`` for Phi, matching the sampler
+    ``R_f = truncated_lognormal_mean(meanlog, sigma, cap) /
+    lognormal_mean(meanlog, sigma)`` -- identically ``Phi(b - sigma) /
+    Phi(b)``, ``b = (ln(cap) - meanlog) / sigma``, since both call sites
+    share the same ``exp(meanlog + sigma**2/2)`` factor that cancels
+    algebraically. PR2 Task 8b: delegates to the shared fair_cam kernel
+    (``fair_cam.quantile_pooling.truncated_lognormal_mean`` /
+    ``lognormal_mean``) rather than re-deriving the ``scipy.special.ndtr``
+    arithmetic inline a second time -- ``idraa.app.lognormal_display_rows``
+    imports the SAME kernel for its own web-display rendering, so the
+    truncated-mean math now lives in exactly one place. Matches the sampler
     (fair_cam.risk_engine._truncation) and the store-time validator
     (services.fair_cam_validation._validate_capacity_floor).
 
     D19 guarantees ``cap`` is comfortably above this field's p95 for any row
     written through the validated producers (Task 3b), so ``b`` is
-    comfortably positive and ``ndtr(b)`` is close to 1.0 in practice. This
-    function still guards the degenerate case -- a pre-D19 legacy row or a
-    raw-SQL-written snapshot could carry a cap at or below the field's own
-    shape, driving ``b`` deeply negative until ``ndtr(b)`` underflows to
-    EXACTLY 0.0 (not a small positive float, per the same footgun documented
-    in run_executor._validated_capacity_bound). A disclosure surface must
-    never 500 a run-detail page or divide by zero: a non-positive sigma, a
-    non-finite/non-positive cap, or a non-finite/underflowed denominator are
-    all treated as the cap being NON-BINDING for this field (R_f = 1.0)
-    rather than raised.
+    comfortably positive and the kernel's internal ``Phi(b)`` is close to
+    1.0 in practice. This function still guards the degenerate case -- a
+    pre-D19 legacy row or a raw-SQL-written snapshot could carry a cap at
+    or below the field's own shape, driving ``b`` deeply negative until
+    ``Phi(b)`` underflows to EXACTLY 0.0 (not a small positive float, per
+    the same footgun documented in run_executor._validated_capacity_bound)
+    -- the kernel raises ``ValueError`` in that case rather than returning
+    a division artifact. A disclosure surface must never 500 a run-detail
+    page or divide by zero: a non-positive sigma, a non-finite/non-positive
+    cap, or the kernel's underflow ``ValueError`` are all caught here and
+    treated as the cap being NON-BINDING for this field (R_f = 1.0) rather
+    than raised or propagated.
     """
     if sigma <= 0.0 or not math.isfinite(cap) or cap <= 0.0:
         return 1.0
-    b = (math.log(cap) - meanlog) / sigma
-    denom = float(ndtr(b))
+    # Function-local import (see module docstring): keeps fair_cam out of
+    # this module's own module-level import graph, so services/reports.py's
+    # module-level import of _build_control_effectiveness_rows (below)
+    # cannot transitively land fair_cam in services/pdf_report.py's
+    # test-enforced fair_cam-free sys.modules check.
+    from fair_cam.quantile_pooling import lognormal_mean, truncated_lognormal_mean
+
+    try:
+        truncated_mean = truncated_lognormal_mean(meanlog, sigma, cap)
+    except ValueError:
+        # The kernel raises when Phi(b) underflows to exactly 0.0 (cap far
+        # below this field's own core) -- the same degenerate case the
+        # pre-refactor inline arithmetic caught via `denom <= 0.0`.
+        return 1.0
+    denom = lognormal_mean(meanlog, sigma)
     if not math.isfinite(denom) or denom <= 0.0:
         return 1.0
-    numer = float(ndtr(b - sigma))
-    if not math.isfinite(numer):
+    ratio = truncated_mean / denom
+    if not math.isfinite(ratio):
         return 1.0
     # Both Phi's saturate towards 1.0 for large b; clamp so floating-point
     # noise can never push the ratio a hair above 1.0 (which would make a
     # downstream `1 - R` go negative).
-    return min(1.0, numer / denom)
+    return min(1.0, ratio)
 
 
 def _field_mean_and_retention(d: dict[str, Any] | None) -> tuple[float, float]:

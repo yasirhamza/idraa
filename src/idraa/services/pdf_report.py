@@ -38,7 +38,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from xml.sax.saxutils import (
     escape as rl_escape,  # stdlib; reportlab.lib.utils has no `escape` symbol in 4.x
 )
@@ -2083,6 +2083,7 @@ def _lognormal_input_percentiles(
     sigma: float,
     reporting_code: str = "USD",
     fx_rate: float = 1.0,
+    max_value: float | None = None,
 ) -> list[tuple[str, str]]:
     """Return (label, formatted_value) rows for a lognormal INPUT distribution.
 
@@ -2112,6 +2113,20 @@ def _lognormal_input_percentiles(
     set only when is_vulnerability=False AND is_frequency=False in the dispatch
     at _draw_distribution_table — vuln/freq are currency-invariant and MUST NOT
     be converted (see _lognormal_vuln_percentiles / _lognormal_freq_percentiles).
+
+    PR2 Task 8b (capacity bound): ``max_value`` is the stored "max" key
+    (log-USD space, like ``mu``/``sigma``) for a catastrophic loss field that
+    carries a capacity cap. ``max_value=None`` (default) is BYTE-UNCHANGED
+    from the pre-PR2 untruncated rows above — an uncapped field's rendering
+    never regresses. When ``max_value`` is a finite cap, EVERY quantile row
+    AND the mean are recomputed against the TRUNCATED distribution (the
+    engine no longer samples the untruncated one for a capped field — a
+    p25/p75/mean drawn from the untruncated shape would be a wrong number in
+    shipped copy), and a trailing "Max (capacity cap)" row makes the
+    authored/minted cap visible on read-back (D17's visible-over-hidden
+    rationale). FX is computed the SAME way as every sibling row: in stored
+    log-USD space, THEN ``* fx_rate`` post-exponentiation via ``_fmt`` below
+    — never by scaling ``mu``/``max_value`` first.
     """
 
     def _fmt(usd_val: float) -> str:
@@ -2119,16 +2134,35 @@ def _lognormal_input_percentiles(
         # safe_money_format formats the converted value in the reporting currency.
         return safe_money_format(usd_val * fx_rate, reporting_code, compact=True)
 
-    rows: list[tuple[str, str]] = [
-        ("p5", _fmt(math.exp(mu + _Z_P5 * sigma))),
-        ("p25", _fmt(math.exp(mu + _Z_P25 * sigma))),
-        ("p50 (median)", _fmt(math.exp(mu + _Z_P50 * sigma))),
-        ("p75", _fmt(math.exp(mu + _Z_P75 * sigma))),
-        ("p95", _fmt(math.exp(mu + _Z_P95 * sigma))),
+    truncated = max_value is not None and math.isfinite(max_value)
+    if truncated:
+        cap = cast(float, max_value)
+        p5 = _truncated_lognorm_quantile(0.05, mu, sigma, cap)
+        p25 = _truncated_lognorm_quantile(0.25, mu, sigma, cap)
+        p50 = _truncated_lognorm_quantile(0.50, mu, sigma, cap)
+        p75 = _truncated_lognorm_quantile(0.75, mu, sigma, cap)
+        p95 = _truncated_lognorm_quantile(0.95, mu, sigma, cap)
+        mean_val = _truncated_lognorm_mean_component(mu, sigma, cap)
+    else:
+        p5 = math.exp(mu + _Z_P5 * sigma)
+        p25 = math.exp(mu + _Z_P25 * sigma)
+        p50 = math.exp(mu + _Z_P50 * sigma)
+        p75 = math.exp(mu + _Z_P75 * sigma)
+        p95 = math.exp(mu + _Z_P95 * sigma)
         # Epic B D7 MANDATORY: mean row — median alone understates expected loss
         # for right-skewed lognormal. mean = exp(mu + sigma^2/2).
-        ("Mean (expected loss)", _fmt(math.exp(mu + sigma**2 / 2))),
+        mean_val = math.exp(mu + sigma**2 / 2)
+
+    rows: list[tuple[str, str]] = [
+        ("p5", _fmt(p5)),
+        ("p25", _fmt(p25)),
+        ("p50 (median)", _fmt(p50)),
+        ("p75", _fmt(p75)),
+        ("p95", _fmt(p95)),
+        ("Mean (expected loss)", _fmt(mean_val)),
     ]
+    if truncated:
+        rows.append(("Max (capacity cap)", _fmt(cap)))
     return rows
 
 
@@ -2215,6 +2249,20 @@ def _lognormal_freq_percentiles(mu: float, sigma: float) -> list[tuple[str, str]
 # [0, inf] truncation ... each component's (meanlog, sdlog) IS its native
 # untruncated {mean, sigma}"), so the per-component CDF has a closed form
 # via math.erf — no scipy dependency needed either.
+#
+# PR2 Task 8b (capacity bound): a catastrophic pl/sl dict may ALSO carry a
+# top-level "max" (capacity cap) — see fair_cam/risk_engine/_truncation.py's
+# module docstring for the sampler this mirrors and the design's Bound rule
+# (each mixture component truncated at the SAME shared cap, independently —
+# NOT the whole mixture conditioned on X < max). The optional `max_support`
+# parameter threaded through the functions below extends the untruncated CDF
+# to a per-component truncated CDF, `Phi(z_i(x)) / Phi(b_i)` for `x <
+# max_support`, `b_i = (ln(max_support) - mean_i) / sigma_i` — identical
+# per-component ratio to fair_cam.quantile_pooling.truncated_lognormal_mean's
+# own `Phi(b - sigma) / Phi(b)` numerator/denominator convention, just at an
+# arbitrary z instead of z=b-sigma. `max_support=None` (the default)
+# reproduces the untruncated formula byte-for-byte — a capacity-less dict's
+# rendering is unaffected.
 _SQRT_2: float = math.sqrt(2.0)
 
 # Bisection bracket + tolerance mirror fair_cam's
@@ -2232,42 +2280,121 @@ _MIXTURE_BISECT_MAX_ITER: int = 200
 _MIXTURE_BISECT_LOG_TOL: float = 1e-10
 
 
-def _mixture_lognorm_cdf(x: float, components: Sequence[dict[str, float]]) -> float:
-    """CDF of an untruncated lognormal MIXTURE, Sigma w_i F_i(x), at x.
+def _phi_erf(z: float) -> float:
+    """Standard-normal CDF via math.erf — Phi(z) = 0.5*(1 + erf(z/sqrt2))."""
+    return 0.5 * (1.0 + math.erf(z / _SQRT_2))
 
-    F_i(x) = Phi((ln x - mean_i) / sigma_i), Phi(z) = 0.5*(1 + erf(z/sqrt2))
-    — the closed-form untruncated-lognormal CDF (no scipy needed)."""
+
+def _mixture_lognorm_cdf(
+    x: float,
+    components: Sequence[dict[str, float]],
+    max_support: float | None = None,
+) -> float:
+    """CDF of a lognormal MIXTURE, Sigma w_i F_i(x), at x.
+
+    ``max_support=None`` (default): F_i(x) = Phi((ln x - mean_i) / sigma_i)
+    — the closed-form UNTRUNCATED-lognormal CDF (no scipy needed).
+
+    ``max_support`` finite (PR2 capacity bound): F_i(x) = Phi(z_i(x)) /
+    Phi(b_i), b_i = (ln(max_support) - mean_i) / sigma_i — each component's
+    OWN per-component-truncated CDF at the SHARED cap (design's Bound rule),
+    saturating to 1.0 exactly at x=max_support since z_i(max_support)==b_i.
+    """
     if x <= 0.0:
         return 0.0
-    return sum(
-        c["weight"] * 0.5 * (1.0 + math.erf(((math.log(x) - c["mean"]) / c["sigma"]) / _SQRT_2))
-        for c in components
-    )
+    if max_support is not None and math.isfinite(max_support):
+        if x >= max_support:
+            return 1.0
+        log_max = math.log(max_support)
+        total = 0.0
+        for c in components:
+            b_i = (log_max - c["mean"]) / c["sigma"]
+            phi_b_i = _phi_erf(b_i)
+            z_i = (math.log(x) - c["mean"]) / c["sigma"]
+            total += c["weight"] * (_phi_erf(z_i) / phi_b_i)
+        return total
+    return sum(c["weight"] * _phi_erf((math.log(x) - c["mean"]) / c["sigma"]) for c in components)
 
 
-def _mixture_lognorm_quantile(p: float, components: Sequence[dict[str, float]]) -> float:
+def _mixture_lognorm_quantile(
+    p: float,
+    components: Sequence[dict[str, float]],
+    max_support: float | None = None,
+) -> float:
     """Quantile of the lognormal mixture at probability p — log-space
-    bisection on the pooled CDF (see the module-comment block above for why
-    this mirrors fair_cam.quantile_pooling.mixture_quantile_lognorm's
-    algorithm rather than importing it)."""
+    bisection on the (optionally truncated) pooled CDF (see the
+    module-comment block above for why this mirrors
+    fair_cam.quantile_pooling.mixture_quantile_lognorm's algorithm rather
+    than importing it). ``max_support=None`` (default) is byte-unchanged
+    from the pre-PR2 untruncated behaviour; a finite ``max_support`` clips
+    the upper bracket to ``ln(max_support)`` (the true quantile is strictly
+    below it — support is half-open ``[0, max_support)``) and bisects on
+    the truncated CDF instead."""
     if not 0.0 < p < 1.0:
         raise ValueError(f"p must be in (0, 1), got {p}")
     lo_log, hi_log = _MIXTURE_BISECT_LOG_LO, _MIXTURE_BISECT_LOG_HI
+    if max_support is not None and math.isfinite(max_support):
+        hi_log = min(hi_log, math.log(max_support))
     for _ in range(_MIXTURE_BISECT_MAX_ITER):
         if (hi_log - lo_log) < _MIXTURE_BISECT_LOG_TOL:
             break
         mid_log = (lo_log + hi_log) / 2.0
-        if _mixture_lognorm_cdf(math.exp(mid_log), components) < p:
+        if _mixture_lognorm_cdf(math.exp(mid_log), components, max_support) < p:
             lo_log = mid_log
         else:
             hi_log = mid_log
     return math.exp((lo_log + hi_log) / 2.0)
 
 
+def _truncated_lognorm_quantile(p: float, mean: float, sigma: float, max_support: float) -> float:
+    """Truncated SINGLE-lognormal quantile via bisection on the truncated
+    CDF (math.erf-only mirror; the stdlib ``math`` module has no inverse
+    erf, so bisection is how this module inverts Phi anywhere off the five
+    hardcoded z-constants above — same reason _mixture_lognorm_quantile
+    bisects instead of using a closed form).
+
+    Delegates to the mixture bisection machinery with a single weight-1.0
+    component: a 1-component mixture's CDF is IDENTICAL to the plain
+    truncated CDF, so this is code reuse, not an approximation."""
+    return _mixture_lognorm_quantile(
+        p, [{"mean": mean, "sigma": sigma, "weight": 1.0}], max_support
+    )
+
+
+def _truncated_lognorm_mean_component(mean: float, sigma: float, max_support: float) -> float:
+    """Local math.erf mirror of
+    ``fair_cam.quantile_pooling.truncated_lognormal_mean`` (single
+    component) — closed form, no bisection needed:
+    ``exp(mean+sigma**2/2) * Phi(b-sigma) / Phi(b)``, ``b = (ln(max_support)
+    - mean) / sigma``. See the module-comment block above
+    ``_mixture_lognorm_cdf`` for why this module cannot import the fair_cam
+    kernel directly. Pinned to that kernel by
+    ``test_truncated_mean_mirror_parity_with_fair_cam_oracle`` in
+    tests/unit/test_pdf_report.py — the quantile parity test above never
+    evaluates a mean, so this is a SEPARATE tripwire."""
+    b = (math.log(max_support) - mean) / sigma
+    return math.exp(mean + sigma**2 / 2.0) * _phi_erf(b - sigma) / _phi_erf(b)
+
+
+def _truncated_lognorm_mixture_mean(
+    components: Sequence[dict[str, float]], max_support: float
+) -> float:
+    """Local math.erf mirror of
+    ``fair_cam.quantile_pooling.truncated_lognormal_mixture_mean`` — the
+    weighted sum of each component's OWN truncated mean at the shared cap
+    (design's Bound rule: per-component truncation, not conditioning the
+    whole mixture)."""
+    return sum(
+        c["weight"] * _truncated_lognorm_mean_component(c["mean"], c["sigma"], max_support)
+        for c in components
+    )
+
+
 def _lognormal_mixture_percentiles(
     components: Sequence[dict[str, float]],
     reporting_code: str = "USD",
     fx_rate: float = 1.0,
+    max_value: float | None = None,
 ) -> list[tuple[str, str]]:
     """Return (label, formatted_value) rows for a lognormal_mixture INPUT
     distribution (issue #27 Task 6) — MIXTURE percentiles (the inverse of
@@ -2284,24 +2411,43 @@ def _lognormal_mixture_percentiles(
     bisection needed (same formula lognormal_mixture_display_rows uses in
     app.py, and the same standard lognormal-expectation formula as the
     single-component Mean rows above).
+
+    PR2 Task 8b (capacity bound): ``max_value`` is the shared top-level
+    "max" a catastrophic multi-SME mixture may carry (ONE cap for every
+    component, per wizard_finalize.build_scenario_payload). ``None``
+    (default) is BYTE-UNCHANGED from the pre-PR2 rows above. A finite cap
+    truncates EVERY quantile row (per-component, via
+    ``_mixture_lognorm_quantile``'s ``max_support``) and the mean (via
+    ``_truncated_lognorm_mixture_mean``, the per-component-truncated closed
+    form — NOT the untruncated analytic sum above), and appends a trailing
+    "Max (capacity cap)" row.
     """
 
     def _fmt(usd_val: float) -> str:
         return safe_money_format(usd_val * fx_rate, reporting_code, compact=True)
 
+    truncated = max_value is not None and math.isfinite(max_value)
+    cap = cast(float, max_value) if truncated else None
+
     rows: list[tuple[str, str]] = [
-        ("p5", _fmt(_mixture_lognorm_quantile(0.05, components))),
-        ("p25", _fmt(_mixture_lognorm_quantile(0.25, components))),
-        ("p50 (median)", _fmt(_mixture_lognorm_quantile(0.50, components))),
-        ("p75", _fmt(_mixture_lognorm_quantile(0.75, components))),
-        ("p95", _fmt(_mixture_lognorm_quantile(0.95, components))),
+        ("p5", _fmt(_mixture_lognorm_quantile(0.05, components, cap))),
+        ("p25", _fmt(_mixture_lognorm_quantile(0.25, components, cap))),
+        ("p50 (median)", _fmt(_mixture_lognorm_quantile(0.50, components, cap))),
+        ("p75", _fmt(_mixture_lognorm_quantile(0.75, components, cap))),
+        ("p95", _fmt(_mixture_lognorm_quantile(0.95, components, cap))),
         (
             "Mean (expected loss)",
             _fmt(
-                sum(c["weight"] * math.exp(c["mean"] + c["sigma"] ** 2 / 2.0) for c in components)
+                _truncated_lognorm_mixture_mean(components, cap)
+                if cap is not None
+                else sum(
+                    c["weight"] * math.exp(c["mean"] + c["sigma"] ** 2 / 2.0) for c in components
+                )
             ),
         ),
     ]
+    if cap is not None:
+        rows.append(("Max (capacity cap)", _fmt(cap)))
     return rows
 
 
@@ -2362,7 +2508,14 @@ def _draw_distribution_table(
         else:
             # LOSS-MAGNITUDE: dollar amounts — convert POST-exponentiation (B1).
             # fx_rate=1.0 for USD (identity); non-1 for non-USD reporting currencies.
-            rows = _lognormal_input_percentiles(mu_val, sigma_val, reporting_code, fx_rate)
+            # PR2 D12: "max" (capacity cap) is only ever present on a loss
+            # field (pl/sl) — never threaded for is_vulnerability/is_frequency
+            # above, since PR2 does not bound frequency/vulnerability nodes.
+            max_raw = dist_dict.get("max")
+            max_value = float(max_raw) if max_raw is not None else None
+            rows = _lognormal_input_percentiles(
+                mu_val, sigma_val, reporting_code, fx_rate, max_value
+            )
         table_data = [["Percentile", "Value"]] + [[label, val] for label, val in rows]
         flowables_out.append(Table(table_data, colWidths=[130, 120], style=dist_table_style))
     elif dist_type == "LOGNORMAL_MIXTURE":
@@ -2390,7 +2543,11 @@ def _draw_distribution_table(
         # lognormal_mixture is confined to catastrophic pl/sl (always
         # loss-magnitude), so this always converts via fx_rate, mirroring
         # the LOGNORMAL branch's "else" (loss-magnitude) arm above.
-        rows = _lognormal_mixture_percentiles(components, reporting_code, fx_rate)
+        mixture_max_raw = dist_dict.get("max")
+        mixture_max_value = float(mixture_max_raw) if mixture_max_raw is not None else None
+        rows = _lognormal_mixture_percentiles(
+            components, reporting_code, fx_rate, mixture_max_value
+        )
         table_data = [["Percentile", "Value"]] + [[label, val] for label, val in rows]
         flowables_out.append(Table(table_data, colWidths=[130, 120], style=dist_table_style))
     elif dist_type == "PERT":
