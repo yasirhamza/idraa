@@ -305,6 +305,15 @@
                              class="input input-bordered input-sm w-full"
                              x-model="display"
                              @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             {# F1/N3 (PR3 T2.a gate fix): live update WHILE
+                                TYPING, before blur commits row.low. Dispatches
+                                the CURRENT input value (strip(display)), not
+                                the stale last-committed row.low -- the readout's
+                                own recompute() already debounces 150ms
+                                internally (loss_preview.js), this debounce
+                                just keeps the event itself from firing on
+                                every keystroke. #}
+                             @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: strip(display), high: row.high})"
                              @blur="row.low = strip(display); display = fmt(row.low); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_low_' + idx">
                     </div>
@@ -337,6 +346,8 @@
                              class="input input-bordered input-sm w-full"
                              x-model="display"
                              @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             {# F1/N3: mirrors the Low input's live-typing dispatch above. #}
+                             @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: strip(display)})"
                              @blur="row.high = strip(display); display = fmt(row.high); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_high_' + idx">
                       {% if org_annual_revenue %}

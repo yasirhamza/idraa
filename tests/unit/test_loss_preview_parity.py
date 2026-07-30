@@ -67,6 +67,11 @@ TOL = {
     #   that exact figure across several nearby cap values -- see the T1.a
     #   report -- so this comment quotes only the figure re-executed here.)
     "p99Capped": 2e-5,  # worst exec'd 6.27e-6 -> 3.19x headroom (N-1)
+    "medianCapped": 2e-5,  # M1 (PR3 T2.a gate fix): same q*Phi(b) closed
+    #   form as p99Capped (same mechanism: fixed A&S 7.1.26 abs error
+    #   propagated through normInv(q*Phi(b))) -- worst exec'd 2.71e-6 at
+    #   sigma=3.47, cap=exp(mu-2.5*sigma) -> 7.38x headroom.
+    "p95Capped": 2e-5,  # M1: worst exec'd 2.90e-6, same case -> 6.90x headroom.
     "capBindProb": 1e-2,  # T1.a NTH: worst exec'd 6.893e-3 at sigma=1.3567,
     #   cap=4e9 (non-binding cap -> capBindProb = 1 - Phi(b) ~ 4.86e-13
     #   (re-gate B3: it is the COMPLEMENT that is tiny; Phi(b) ~ 1), same
@@ -615,6 +620,13 @@ def test_golden_vector_parity(tmp_path: Path) -> None:
                 # capped p99) were verified by the methodology gate review
                 # that produced this task, not by this test.
                 exp["p99Capped"] = math.exp(mu + sigma * float(norm.ppf(0.99 * phi_b)))
+                # M1 (PR3 T2.a gate fix): medianCapped/p95Capped via the SAME
+                # q*Phi(b) closed form as p99Capped above -- same structural
+                # self-referential-parity caveat applies (JS formula vs. an
+                # independent scipy re-implementation of the identical
+                # formula; SEMANTICS were verified by the methodology gate).
+                exp["medianCapped"] = math.exp(mu + sigma * float(norm.ppf(0.5 * phi_b)))
+                exp["p95Capped"] = math.exp(mu + sigma * float(norm.ppf(0.95 * phi_b)))
                 if include_mean_capped:
                     exp["meanCapped"] = truncated_lognormal_mean(mu, sigma, cap)
             # Golden through the LIVE collapser on a one-component mixture

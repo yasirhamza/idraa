@@ -226,6 +226,8 @@
         p95: null,
         p99: null,
         meanCapped: null,
+        medianCapped: null,
+        p95Capped: null,
         p99Capped: null,
         capBindProb: null,
         capClamped: null,
@@ -242,6 +244,8 @@
     var p99 = Math.exp(mu + sigma * Z99);
 
     var meanCapped = null;
+    var medianCapped = null;
+    var p95Capped = null;
     var p99Capped = null;
     var capBindProb = null;
     var capClamped = null;
@@ -280,6 +284,19 @@
           // this module as if it were a real number.
           meanCapped = Number.isFinite(meanCappedRaw) ? meanCappedRaw : null;
         }
+        // M1 (PR3 T2.a gate fix): medianCapped/p95Capped via the SAME
+        // q*Phi(b) closed form as p99Capped -- the quantile of X | X<=cap
+        // at probability q is the UNCAPPED quantile at q*Phi(b) (the
+        // capped CDF is Phi(z)/Phi(b) for z<=b, so inverting F_capped(x)=q
+        // is exactly F_uncapped(x) = q*Phi(b)). Pre-fix, the numbers row
+        // read UNTRUNCATED median/p95 beside a TRUNCATED mean/p99 --
+        // basis-mixing across the same panel (executed repro: P95 $5.0M
+        // rendered beside P99 $2.84M and cap $3.0M at sigma=1.189,
+        // mu=ln(sqrt(100_000*5_000_000))).
+        var medianCappedRaw = Math.exp(mu + sigma * normInv(0.5 * phiB));
+        medianCapped = Number.isFinite(medianCappedRaw) ? medianCappedRaw : null;
+        var p95CappedRaw = Math.exp(mu + sigma * normInv(0.95 * phiB));
+        p95Capped = Number.isFinite(p95CappedRaw) ? p95CappedRaw : null;
         var p99CappedRaw = Math.exp(mu + sigma * normInv(0.99 * phiB));
         p99Capped = Number.isFinite(p99CappedRaw) ? p99CappedRaw : null;
       }
@@ -291,6 +308,8 @@
       p95: p95,
       p99: p99,
       meanCapped: meanCapped,
+      medianCapped: medianCapped,
+      p95Capped: p95Capped,
       p99Capped: p99Capped,
       capBindProb: capBindProb,
       capClamped: capClamped,
@@ -638,6 +657,13 @@
   var _WATERLINE_P_MIN = 0.001;
   var _WATERLINE_P_MAX = 0.999;
 
+  // N7 (PR3 T2.a gate fix): the pl/sl floor
+  // fair_cam.quantile_pooling.clean_quantile_pair applies at finalize time
+  // (floor = 1000.0 -- see that module's `elif fieldset in ("pl", "sl"):`
+  // branch). Mirrored here as an ADVISORY CONDITION ONLY, never a
+  // transform of the analyst's entered values.
+  var PL_SL_FLOOR = 1000.0;
+
   // Fixed chart geometry (viewBox units, not CSS pixels — the <svg> scales
   // via preserveAspectRatio="none" + a CSS width/height, matching the
   // house macros/chart.html convention of a server/JS-fixed viewBox).
@@ -665,29 +691,36 @@
     return Math.exp(-0.5 * z * z) / (x * sigma * Math.sqrt(2 * Math.PI));
   }
 
-  // Generalizes medianPosFromGrid's bracket-search to an arbitrary
-  // probability `p`, returning a DOLLAR VALUE (not a normalized position).
-  // Kept private (not added to lossPreviewMath's export surface) — only the
+  // M7 (PR3 T2.a gate fix): dollar VALUE -> probability, the INVERSE
+  // direction of the pre-fix `_gridValueAt` this replaces. The waterline
+  // now maps pointer-x to a dollar value via the axis's own log scale
+  // FIRST (the handle-stays-under-the-cursor fix), then looks up that
+  // value's probability here for the readout text — never the reverse
+  // (treating raw pixel-fraction as if it WERE a probability, the pre-fix
+  // bug: a log-dollar axis is not linear in probability, so pixel-fraction
+  // and probability only coincide by coincidence). Kept private — only the
   // chart's waterline needs it, unlike medianPosFromGrid which Task 1's
   // parity harness also exercises directly.
-  function _gridValueAt(grid, pert, p) {
-    if (!grid || !pert) return null;
+  function _gridProbAt(grid, pert, value) {
+    if (!grid || !pert || !Number.isFinite(value)) return null;
     var x = grid.x,
       cdf = grid.cdf;
     var low = pert.low,
       high = pert.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || !(high > low)) return null;
+    if (value <= low) return 0;
+    if (value >= high) return 1;
     var i = 1;
-    while (i < cdf.length && cdf[i] < p) i++;
-    if (i >= cdf.length) i = cdf.length - 1;
+    while (i < x.length && x[i] < value) i++;
+    if (i >= x.length) i = x.length - 1;
     if (i < 1) i = 1;
-    var c0 = cdf[i - 1],
-      c1 = cdf[i];
     var x0 = x[i - 1],
       x1 = x[i];
-    if (c1 === c0) return x0;
-    var t = (p - c0) / (c1 - c0);
-    return x0 + t * (x1 - x0);
+    var c0 = cdf[i - 1],
+      c1 = cdf[i];
+    if (x1 === x0) return c0;
+    var t = (value - x0) / (x1 - x0);
+    return c0 + t * (c1 - c0);
   }
 
   // Lognormal-mode chart data: density path over a fixed [-3z, Z99] window
@@ -695,7 +728,19 @@
   // median/mean marker pixel positions, and — when a cap is within the
   // drawn axis range — a cap boundary line + a shaded "clipped tail" area
   // (the mass beyond the cap, per the mode-honest chart contract).
-  function _lognormalChartData(mu, sigma, cap) {
+  //
+  // `medianVal`/`meanVal` (M1, PR3 T2.a gate fix): the CALLER passes
+  // whichever basis the numbers row is displaying -- medianCapped/
+  // meanCapped when a cap is present, the raw median/mean otherwise -- so
+  // the chart markers never disagree with the panel's own numbers (pre-fix:
+  // the marker always used the untruncated Math.exp(mu)/Math.exp(mu+sigma^2/2)
+  // even when the numbers row showed the truncated basis, so e.g. the mean
+  // marker could land visibly inside the clipped tail while the Mean cell
+  // read a small in-range dollar figure). Both fall back to the untruncated
+  // value when the truncated one is non-finite (deep-tail A&S underflow —
+  // see lognormalStats' own B-I2/B-I1 guards) so the chart still draws
+  // SOMETHING rather than a NaN-positioned line.
+  function _lognormalChartData(mu, sigma, cap, medianVal, meanVal) {
     var lo = Math.exp(mu - sigma * 3);
     var hi = Math.exp(mu + sigma * Z99);
     if (cap !== null && cap > hi) hi = cap * 1.05;
@@ -738,13 +783,15 @@
       tail += "L " + toPx(hi).toFixed(2) + " " + (_CHART_H - _CHART_Y_PAD).toFixed(2) + " Z";
       clippedTailPath = tail;
     }
+    var medianForChart = Number.isFinite(medianVal) ? medianVal : Math.exp(mu);
+    var meanForChart = Number.isFinite(meanVal) ? meanVal : Math.exp(mu + (sigma * sigma) / 2);
     return {
       axisLow: lo,
       axisHigh: hi,
       densityPath: path.trim(),
       clippedTailPath: clippedTailPath,
-      medianPx: toPx(Math.exp(mu)),
-      meanPx: toPx(Math.exp(mu + (sigma * sigma) / 2)),
+      medianPx: toPx(medianForChart),
+      meanPx: toPx(meanForChart),
       capPx: capPx,
     };
   }
@@ -825,6 +872,12 @@
       qLo: null,
       qHi: null,
       focusedRow: null,
+      // M2 (PR3 T2.a gate fix): true only while `focusedRow` was set by
+      // init()'s SEED read (the field's last-persisted row), never by a
+      // real loss-row-input event. Drives the disclosure line's wording
+      // ("previewing last saved row N" vs "previewing SME row N") so the
+      // first-paint seed is attributed instead of silently unlabeled.
+      seededFromInit: false,
       stats: { valid: false },
       waterlineProb: 0.5,
       waterlineValue: null,
@@ -841,6 +894,15 @@
         ) {
           this.qLo = _num(c.initialLow);
           this.qHi = _num(c.initialHigh);
+          // M2: attribute the seed to its row index (server-computed —
+          // routes/scenarios.py:_build_readout_cfg's initialRowIndex, the
+          // same last-row index initialLow/initialHigh were read from) so
+          // the disclosure line renders from FIRST PAINT instead of staying
+          // hidden until a focus/blur event fires.
+          if (c.initialRowIndex !== null && c.initialRowIndex !== undefined) {
+            this.focusedRow = c.initialRowIndex;
+            this.seededFromInit = true;
+          }
         }
         this._recomputeNow();
       },
@@ -855,6 +917,7 @@
       // "previewing SME row N" label (idx is 0-based; the label adds 1).
       bindRow: function (idx, lo, hi) {
         this.focusedRow = idx;
+        this.seededFromInit = false; // a real row event supersedes the seed.
         this.qLo = _num(lo);
         this.qHi = _num(hi);
         this.recompute();
@@ -890,6 +953,12 @@
         out.mu = fit.mu;
         out.sigma = fit.sigma;
         out.warn = fit.sigma > cfg.warnThreshold;
+        // N7 (PR3 T2.a gate fix): mirrors the CONDITION of
+        // fair_cam.quantile_pooling.clean_quantile_pair's pl/sl branch
+        // (floor = 1000.0; a low/high below it is FLOORED to $1,000 at
+        // finalize time) — advisory text only, never a client-side
+        // transform of the analyst's entered values.
+        out.floorAdvisory = qLo < PL_SL_FLOOR || qHi < PL_SL_FLOOR;
 
         if (cfg.mode === "lognormal") {
           var cap =
@@ -903,6 +972,8 @@
           out.p95 = ln.p95;
           out.p99 = ln.p99;
           out.meanCapped = ln.meanCapped;
+          out.medianCapped = ln.medianCapped;
+          out.p95Capped = ln.p95Capped;
           out.p99Capped = ln.p99Capped;
           out.capBindProb = ln.capBindProb;
           out.capClamped = ln.capClamped;
@@ -917,7 +988,13 @@
             out.sigmaCeiling = null;
             out.ceilingExceeded = false;
           }
-          out.chart = _lognormalChartData(fit.mu, fit.sigma, cap);
+          // M1 (PR3 T2.a gate fix): the chart markers use the SAME basis as
+          // the numbers row -- the truncated median/mean when a cap is
+          // present, falling back to the untruncated value only when the
+          // truncated one is unrepresentable (deep-tail underflow).
+          var chartMedian = cap !== null ? ln.medianCapped : ln.median;
+          var chartMean = cap !== null ? ln.meanCapped : ln.mean;
+          out.chart = _lognormalChartData(fit.mu, fit.sigma, cap, chartMedian, chartMean);
           this.stats = out;
           // Scenario-ALE publish: capped lognormal -> the truncated mean
           // (the engine truncates draws at max); uncapped -> the raw mean.
@@ -965,9 +1042,20 @@
         store.claims[key] = value !== null ? claim : null;
       },
 
-      // Waterline drag: pointer fraction along the plotted axis IS the
-      // probability (clamped [0.001, 0.999] before normInv/grid-inversion —
-      // both are IEEE-conventional and blow up at the p=0/p=1 limits).
+      // M7 (PR3 T2.a gate fix): pointer x -> DOLLAR VALUE via the axis's own
+      // log-linear scale (the exact inverse of the chart's toPx/waterlinePx
+      // mapping), THEN dollar -> probability via normCdf (lognormal, with
+      // the M1 Phi(b) adjustment when a cap is present) or the CDF grid
+      // (capped_pert). Pre-fix, pixel-fraction was treated AS the
+      // probability directly and fed straight into normInv/grid-inversion
+      // to derive a dollar value -- correct only on an axis linear in
+      // probability, which this log-dollar axis never is, so the rendered
+      // handle drifted away from the actual cursor position. Routing
+      // through the SAME log scale waterlinePx already uses for the
+      // opposite direction keeps the handle glued under the cursor.
+      // Clamp stays [0.001, 0.999] (same constants as before), now applied
+      // to the axis FRACTION (keeps the handle inside the viewBox) rather
+      // than to a probability.
       onWaterlineDrag: function (event) {
         var stats = this.stats;
         if (!stats || !stats.valid || !stats.chart) return;
@@ -980,15 +1068,35 @@
         if (typeof clientX !== "number") return;
         var frac = (clientX - rect.left) / rect.width;
         frac = Math.max(_WATERLINE_P_MIN, Math.min(_WATERLINE_P_MAX, frac));
-        this.waterlineProb = frac;
-        if (stats.mode === "lognormal") {
-          var v = Math.exp(stats.mu + stats.sigma * normInv(frac));
-          this.waterlineValue = Number.isFinite(v) ? v : null;
-        } else if (stats.grid && stats.pert) {
-          this.waterlineValue = _gridValueAt(stats.grid, stats.pert, frac);
-        } else {
+        var chart = stats.chart;
+        var logLo = Math.log(chart.axisLow);
+        var logHi = Math.log(chart.axisHigh);
+        var value = Math.exp(logLo + frac * (logHi - logLo));
+        if (!Number.isFinite(value)) {
           this.waterlineValue = null;
+          this.waterlineProb = null;
+          return;
         }
+        this.waterlineValue = value;
+        var prob = null;
+        if (stats.mode === "lognormal") {
+          var z = (Math.log(value) - stats.mu) / stats.sigma;
+          var p = normCdf(z);
+          if (stats.cap !== null && stats.cap !== undefined && Number.isFinite(stats.cap)) {
+            // M1: the capped distribution's CDF at value<=cap is
+            // Phi(z)/Phi(b) (the SAME Phi(b) normalization the numbers-row
+            // fix applies) -- values beyond the cap never occur, so a
+            // pointer dragged past the cap line stays pinned at p=1.
+            var b = (Math.log(stats.cap) - stats.mu) / stats.sigma;
+            var phiB = normCdf(b);
+            prob = phiB > 0 ? Math.min(1, p / phiB) : p;
+          } else {
+            prob = p;
+          }
+        } else if (stats.grid && stats.pert) {
+          prob = _gridProbAt(stats.grid, stats.pert, value);
+        }
+        this.waterlineProb = prob !== null && Number.isFinite(prob) ? prob : null;
       },
 
       get waterlinePx() {
@@ -1005,6 +1113,13 @@
       // to the WEAKEST contributing claim — uncapped lognormal (no bound at
       // all on the tail) is weaker than PERT-bounded, which is weaker than
       // every contributor being a capacity-truncated mean.
+      //
+      // M5 (PR3 T2.a gate fix): PL is a REQUIRED fieldset (the wizard never
+      // finalizes without it), so an absent PL mean means the preview is
+      // INCOMPLETE, not zero -- publishing a partial ALE that silently
+      // drops PL would understate the loss, not degrade honestly. SL is
+      // OPTIONAL: an absent SL mean correctly contributes 0 to the sum
+      // (unchanged from before).
       get aleLine() {
         var cfg = this.cfg;
         if (
@@ -1019,7 +1134,7 @@
         if (!store) return null;
         var plOk = typeof store.pl === "number" && Number.isFinite(store.pl);
         var slOk = typeof store.sl === "number" && Number.isFinite(store.sl);
-        if (!plOk && !slOk) return null;
+        if (!plOk) return null;
         var claims = [];
         if (plOk) claims.push(store.claims.pl);
         if (slOk) claims.push(store.claims.sl);

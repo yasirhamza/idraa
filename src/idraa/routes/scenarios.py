@@ -50,6 +50,7 @@ import re
 import uuid
 from typing import Any
 
+from fair_cam.quantile_pooling import lognormal_from_quantiles, lognormal_quantiles
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -3209,7 +3210,8 @@ async def _build_readout_cfg(
     ``fieldKey`` — the shape ``lossDispersionReadout(cfg)`` expects. Both
     dicts share the same policy values (sigma default/warn threshold/cap/
     currency/tef+vuln preview means); only ``fieldKey``/``label``/
-    ``initialLow``/``initialHigh`` differ.
+    ``initialLow``/``initialHigh``/``initialRowIndex``/``fieldCeilingExceeded``
+    differ.
     """
     preview_means: dict[str, float | None] = {"tef": None, "vuln": None}
     try:
@@ -3222,7 +3224,15 @@ async def _build_readout_cfg(
             results = await run_in_threadpool(process_sme_estimates, state)
         for fs in ("tef", "vuln"):
             r = results.get(fs)
-            if r is not None and r.pert is not None:
+            # N1 (PR3 T2.a gate fix): guard on r.collapsed AND
+            # pert.high > 0. process_sme_estimates stores a
+            # PertTriple(0,0,0) SENTINEL when a fieldset's pipeline has no
+            # collapser (wizard_finalize.py:439-440 — today only catastrophic
+            # pl/sl, never tef/vuln, but this loop must not assume that stays
+            # true forever). An unguarded read would silently compute a
+            # confident $0 preview mean and feed it straight into the ALE
+            # line as if it were real.
+            if r is not None and r.collapsed and r.pert is not None and r.pert.high > 0:
                 p = r.pert
                 preview_means[fs] = (p.low + 4 * p.mode + p.high) / 6.0
     except Exception:  # broad on purpose — preview only; finalize re-validates
@@ -3231,8 +3241,61 @@ async def _build_readout_cfg(
         # line requires both tefMean/vulnMean non-null).
         logger.info("step-4 readout preview means unavailable", exc_info=True)
 
-    cap = await _capacity_max_for_org(db, user.organization_id)
+    # M4 (PR3 T2.a gate fix): mirror finalize's cap precedence EXACTLY
+    # (the capacity_max block in post_wizard_finalize, ~routes/scenarios.py
+    # :2881-2896) — preserve-existing (D13 "snapshot-frozen at author time")
+    # FIRST when this draft targets an existing scenario (a wizard
+    # re-estimate), minted k*CURRENT-revenue only as fallback. Unguarded,
+    # the readout would show k*current-revenue while finalize silently
+    # keeps the authored/original cap -- a preview that lies about which cap
+    # actually gates the save. `lock=False` (the default): this is a
+    # read-only preview, not the locked read finalize itself takes before
+    # writing.
+    cap: float | None = None
+    if state.target_scenario_id is not None:
+        target = await ScenarioRepo(db).get_for_org(
+            organization_id=user.organization_id,
+            scenario_id=uuid.UUID(state.target_scenario_id),
+        )
+        if target is not None:
+            cap = _existing_capacity_max(target)
+    if cap is None:
+        cap = await _capacity_max_for_org(db, user.organization_id)
+
+    mode = "lognormal" if state.loss_shape == "catastrophic" else "capped_pert"
+
+    # M3(b) (PR3 T2.a gate fix): the ceiling verdict must be FIELD-scoped,
+    # not row-scoped -- D19 finalize rejects a catastrophic submission when
+    # ANY persisted row's fitted p95 meets/exceeds the cap, regardless of
+    # which row happens to be focused in the live preview (pre-fix: a green
+    # panel on a tight first row could still 422 at finalize because a
+    # wider second row alone breached the cap). Fit each row via the SAME
+    # p5/p95 basis the wizard rows already use
+    # (fair_cam.lognormal_from_quantiles, q_low=0.05/q_high=0.95) and read
+    # its OWN fitted p95 back out rather than assuming `high` already
+    # equals it -- true for a WELL-FORMED row by construction, but a
+    # malformed one (inverted/non-positive, e.g. mid-edit) must be skipped,
+    # not misread as a breach. Only meaningful in catastrophic (lognormal)
+    # mode -- capped_pert rows collapse to a bounded PERT and finalize never
+    # mints/applies a capacity cap to them (state.loss_shape != "catastrophic"
+    # short-circuits the capacity_max block entirely).
+    field_ceiling_exceeded: dict[str, bool] = {"pl": False, "sl": False}
+    if mode == "lognormal" and cap is not None and cap > 0:
+        for fk in ("pl", "sl"):
+            for row in state.sme_estimates.get(fk) or []:
+                try:
+                    low, high = float(row["low"]), float(row["high"])
+                    fit = lognormal_from_quantiles(low, high, q_low=0.05, q_high=0.95)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                row_p95 = float(lognormal_quantiles(fit["mean"], fit["sigma"], (0.95,))[0])
+                if row_p95 >= cap:
+                    field_ceiling_exceeded[fk] = True
+
     base: dict[str, Any] = {
+        # N6: Task 3 (analyst pin/unpin) also consumes sigmaDefault/
+        # warnThreshold for the expert-form pin panel's own readout mount —
+        # keep this dict's shape stable for that reuse.
         "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
         "warnThreshold": SIGMA_WARN_THRESHOLD,
         "cap": cap,
@@ -3244,9 +3307,12 @@ async def _build_readout_cfg(
         "tefMean": preview_means["tef"],
         "vulnMean": preview_means["vuln"],
     }
-    mode = "lognormal" if state.loss_shape == "catastrophic" else "capped_pert"
     out: dict[str, dict[str, Any]] = {}
-    for field_key, label in (("pl", "Primary loss"), ("sl", "Secondary loss")):
+    # N8 (PR3 T2.a gate fix): field key/label sourced from IMPACT_FIELDSETS
+    # (the single source of truth, services/wizard_questions.py) rather than
+    # a hand-typed tuple -- picks up "Secondary loss (optional)" instead of
+    # a bare "Secondary loss".
+    for field_key, label in IMPACT_FIELDSETS:
         rows = state.sme_estimates.get(field_key) or []
         last = rows[-1] if rows else None
         cfg = dict(base)
@@ -3258,6 +3324,11 @@ async def _build_readout_cfg(
         # matching the "readout tracks the last-focused SME row" default.
         cfg["initialLow"] = last.get("low") if last else None
         cfg["initialHigh"] = last.get("high") if last else None
+        # M2 (PR3 T2.a gate fix): the row index the seed above came from, so
+        # the client can attribute the first-paint seed ("previewing last
+        # saved row N") instead of leaving it unlabeled until a focus event.
+        cfg["initialRowIndex"] = (len(rows) - 1) if rows else None
+        cfg["fieldCeilingExceeded"] = field_ceiling_exceeded[field_key]
         out[field_key] = cfg
     return out
 

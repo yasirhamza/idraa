@@ -31,17 +31,36 @@
   <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
     <span class="text-meta text-ink-3 uppercase tracking-wide"
           x-text="cfg.label + ' — live preview'"></span>
+    {# M2 (PR3 T2.a gate fix): renders from FIRST PAINT via init()'s seeded
+       focusedRow (routes/scenarios.py:_build_readout_cfg's initialRowIndex)
+       — `seededFromInit` distinguishes that seed from a real row focus/blur
+       event so the wording stays honest about which happened. #}
     <template x-if="focusedRow !== null">
       <span class="text-meta text-ink-3"
-            x-text="'previewing SME row ' + (focusedRow + 1)"></span>
+            x-text="(seededFromInit ? 'previewing last saved row ' : 'previewing SME row ') + (focusedRow + 1)"></span>
     </template>
   </div>
+
+  {# M3(b) (PR3 T2.a gate fix): FIELD-scoped ceiling warning, server-computed
+     over ALL persisted rows of this field (cfg.fieldCeilingExceeded —
+     routes/scenarios.py:_build_readout_cfg), independent of which row is
+     currently previewed. Distinct from the row-scoped badge below, which
+     only reflects the row in the live preview right now — a tight first row
+     must never mask a wide second row that alone breaches the cap. #}
+  <template x-if="cfg.mode === 'lognormal' && cfg.fieldCeilingExceeded">
+    <div class="alert alert-error mb-2" role="alert" data-testid="field-ceiling-exceeded">
+      <span>One or more saved rows in this field exceed the capacity floor — saving will be rejected until resolved.</span>
+    </div>
+  </template>
 
   <div class="flex flex-wrap gap-2 mb-2">
     <span class="badge badge-warning badge-sm" x-show="stats.warn" x-cloak
           x-text="'σ ' + fmtSigma(stats.sigma) + ' exceeds the ' + cfg.warnThreshold + ' advisory ceiling'"></span>
+    {# M3(a): row-scoped copy — this badge reflects ONLY the row currently
+       previewed, never the whole field (see the fieldset-level warning
+       above for the field-wide verdict). #}
     <span class="badge badge-error badge-sm" x-show="stats.mode === 'lognormal' && stats.ceilingExceeded" x-cloak
-          x-text="'σ ' + fmtSigma(stats.sigma) + ' exceeds the capacity floor — this pin/save will be rejected'"></span>
+          x-text="'σ ' + fmtSigma(stats.sigma) + ' — this row\'s dispersion exceeds the capacity floor — saving will be rejected'"></span>
     <span class="badge badge-ghost badge-sm" x-show="stats.mode === 'lognormal' && stats.capClamped" x-cloak>
       cap fully clamps this distribution
     </span>
@@ -50,16 +69,27 @@
   {# Numbers row — lognormal mode. Cells render "—" (fmtMoney/fmtSigma's own
      null-safe fallback) rather than disappearing when the fit is invalid/
      inverted/non-finite (SC-7 inert-dash state) — the skeleton stays put so
-     the layout doesn't jump as the analyst types. #}
+     the layout doesn't jump as the analyst types.
+
+     M1 (PR3 T2.a gate fix): when a cap is present, ALL FOUR cells (not just
+     Mean/P99) switch to the TRUNCATED basis (medianCapped/meanCapped/
+     p95Capped/p99Capped, all via the same q*Phi(b) closed form) and the
+     label discloses it — pre-fix, Median/P95 stayed on the UNTRUNCATED
+     basis beside a truncated Mean/P99, a basis-mixing bug within the same
+     panel. #}
   <template x-if="cfg.mode === 'lognormal'">
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
-      <div><dt class="text-meta text-ink-3">Median (preview)</dt>
-        <dd x-text="fmtMoney(stats.median)"></dd></div>
-      <div><dt class="text-meta text-ink-3">Mean (preview)</dt>
+      <div><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'Median (preview, after capacity bound)' : 'Median (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.medianCapped : stats.median)"></dd></div>
+      <div><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'Mean (preview, after capacity bound)' : 'Mean (preview)'"></dt>
         <dd x-text="fmtMoney(stats.cap ? stats.meanCapped : stats.mean)"></dd></div>
-      <div><dt class="text-meta text-ink-3">P95 (preview)</dt>
-        <dd x-text="fmtMoney(stats.p95)"></dd></div>
-      <div><dt class="text-meta text-ink-3">P99 (preview)</dt>
+      <div><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'P95 (preview, after capacity bound)' : 'P95 (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.p95Capped : stats.p95)"></dd></div>
+      <div><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'P99 (preview, after capacity bound)' : 'P99 (preview)'"></dt>
         <dd x-text="fmtMoney(stats.cap ? stats.p99Capped : stats.p99)"></dd></div>
       <div><dt class="text-meta text-ink-3">σ (preview)</dt>
         <dd x-text="fmtSigma(stats.sigma)"></dd></div>
@@ -69,6 +99,14 @@
       </template>
     </dl>
   </template>
+
+  {# N7 (PR3 T2.a gate fix): mirrors the CONDITION of
+     fair_cam.quantile_pooling.clean_quantile_pair's pl/sl floor (values
+     below $1,000 are floored to $1,000 at finalize) — advisory only, never
+     a client-side transform of what the analyst typed. #}
+  <p class="text-meta text-ink-3 mt-1" x-show="stats.floorAdvisory" x-cloak>
+    Values below $1,000 will be floored to $1,000 when this estimate is saved.
+  </p>
 
   {# Numbers row — capped_pert mode. #}
   <template x-if="cfg.mode === 'capped_pert'">
@@ -139,16 +177,32 @@
               stroke="var(--color-status-info)" stroke-width="1"></line>
       </template>
     </svg>
-    <p class="text-meta text-ink-3 mt-1" x-show="waterlineValue !== null" x-cloak
+    {# N4 (PR3 T2.a gate fix): capBindProb printed BESIDE the clipped-tail
+       shading it describes, so the shaded area on the chart has a number
+       attached to it instead of relying on the reader to eyeball a slice
+       of a density curve. #}
+    <p class="text-meta text-ink-3 mt-1"
+       x-show="stats.mode === 'lognormal' && stats.chart && stats.chart.clippedTailPath && stats.capBindProb !== null"
+       x-cloak
+       x-text="'~' + (stats.capBindProb * 100).toFixed(1) + '% of draws clipped at the cap'"></p>
+    <p class="text-meta text-ink-3 mt-1" x-show="waterlineValue !== null && waterlineProb !== null" x-cloak
        x-text="'p' + (waterlineProb * 100).toFixed(1) + ' ≈ ' + fmtMoney(waterlineValue)"></p>
   </div>
 
   {# Scenario-ALE composition line (Task 2 Interfaces): renders only when
      tefMean/vulnMean are non-null AND at least one contributing field has
-     published a mean into the shared $store.lossPreview. #}
-  <template x-if="aleLine">
+     published a mean into the shared $store.lossPreview.
+     N5 (PR3 T2.a gate fix): the ALE line is SCENARIO-level (tefMean x
+     vulnMean x (pl + sl)), not per-field — mounting it on BOTH the pl and
+     sl readouts double-rendered the identical line. Render it only on the
+     PL mount (PL is the required fieldset; see the M5 fix on aleLine
+     itself for why PL is required there too).
+     M6: "inherent (before controls)" — the wizard elicits INHERENT
+     (control-naive) vulnerability; controls are applied at step 5, so this
+     preview is never the final controlled ALE. #}
+  <template x-if="cfg.fieldKey === 'pl' && aleLine">
     <p class="text-sm mt-2 pt-2 border-t border-border-subtle">
-      <span class="text-ink-2">Preview ALE ≈</span>
+      <span class="text-ink-2">Preview ALE (inherent, before controls) ≈</span>
       <strong x-text="fmtMoney(aleLine.value)"></strong>
       <span class="text-meta text-ink-3" x-text="'(' + aleLine.label + ')'"></span>
     </p>
