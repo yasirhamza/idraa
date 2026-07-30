@@ -603,4 +603,452 @@
     cdfGrid: cdfGrid,
     medianPosFromGrid: medianPosFromGrid,
   };
+
+  // ===========================================================================
+  // lossDispersionReadout — Alpine factory + SVG chart (sigma-recal PR3 Task 2,
+  // D22). Everything below this line is CHART/UI GLUE, not math-core parity
+  // surface: it composes the pinned functions above but is not itself
+  // parity-pinned by tests/unit/test_loss_preview_parity.py (there is no
+  // fair_cam analog of "an SVG path string" to pin against). The underlying
+  // statistics it reads (lognormalStats/capPertFromFit/pertStats/cdfGrid/
+  // medianPosFromGrid) ARE pinned above.
+  // ===========================================================================
+
+  // Scenario-ALE composition store (Task 2 Interfaces): each mounted readout
+  // publishes its OWN field's engine-realized mean (+ the epistemic "claim"
+  // that mean carries, used for the ALE line's state-dependent label) here,
+  // keyed by fieldKey ("pl"/"sl"). Registered via alpine:init so it exists
+  // before any x-data walks the DOM (guarded — this file also runs inside a
+  // bare `node` parity-test subprocess with no `document`/`Alpine`).
+  if (typeof document !== "undefined") {
+    document.addEventListener("alpine:init", function () {
+      if (typeof Alpine === "undefined") return;
+      Alpine.store("lossPreview", {
+        pl: null,
+        sl: null,
+        claims: { pl: null, sl: null },
+      });
+    });
+  }
+
+  // Waterline drag clamp (T1-gate NTH-1 precedent applied here too): normInv
+  // and the grid inversion below are IEEE-conventional and return +/-Infinity
+  // / NaN at the p=0/p=1 limits, so any probability derived from a pointer
+  // position is clamped into this band before use.
+  var _WATERLINE_P_MIN = 0.001;
+  var _WATERLINE_P_MAX = 0.999;
+
+  // Fixed chart geometry (viewBox units, not CSS pixels — the <svg> scales
+  // via preserveAspectRatio="none" + a CSS width/height, matching the
+  // house macros/chart.html convention of a server/JS-fixed viewBox).
+  var _CHART_W = 600;
+  var _CHART_H = 160;
+  var _CHART_PAD_L = 8;
+  var _CHART_PAD_R = 8;
+  var _CHART_Y_PAD = 4;
+
+  function _num(v) {
+    if (typeof v === "number") return v;
+    if (v === null || v === undefined) return NaN;
+    return parseFloat(String(v).replace(/,/g, ""));
+  }
+
+  // Standard lognormal PDF. Chart-rendering-only (not part of the pinned
+  // math core above): used to draw the lognormal-mode density curve. The
+  // formula itself is the textbook lognormal density, not a fair_cam mirror
+  // needing a parity test.
+  function _lognormalPdf(x, mu, sigma) {
+    if (!(x > 0) || !Number.isFinite(mu) || !Number.isFinite(sigma) || !(sigma > 0)) {
+      return 0;
+    }
+    var z = (Math.log(x) - mu) / sigma;
+    return Math.exp(-0.5 * z * z) / (x * sigma * Math.sqrt(2 * Math.PI));
+  }
+
+  // Generalizes medianPosFromGrid's bracket-search to an arbitrary
+  // probability `p`, returning a DOLLAR VALUE (not a normalized position).
+  // Kept private (not added to lossPreviewMath's export surface) — only the
+  // chart's waterline needs it, unlike medianPosFromGrid which Task 1's
+  // parity harness also exercises directly.
+  function _gridValueAt(grid, pert, p) {
+    if (!grid || !pert) return null;
+    var x = grid.x,
+      cdf = grid.cdf;
+    var low = pert.low,
+      high = pert.high;
+    if (!Number.isFinite(low) || !Number.isFinite(high) || !(high > low)) return null;
+    var i = 1;
+    while (i < cdf.length && cdf[i] < p) i++;
+    if (i >= cdf.length) i = cdf.length - 1;
+    if (i < 1) i = 1;
+    var c0 = cdf[i - 1],
+      c1 = cdf[i];
+    var x0 = x[i - 1],
+      x1 = x[i];
+    if (c1 === c0) return x0;
+    var t = (p - c0) / (c1 - c0);
+    return x0 + t * (x1 - x0);
+  }
+
+  // Lognormal-mode chart data: density path over a fixed [-3z, Z99] window
+  // (widened to include the cap when the cap sits beyond that window),
+  // median/mean marker pixel positions, and — when a cap is within the
+  // drawn axis range — a cap boundary line + a shaded "clipped tail" area
+  // (the mass beyond the cap, per the mode-honest chart contract).
+  function _lognormalChartData(mu, sigma, cap) {
+    var lo = Math.exp(mu - sigma * 3);
+    var hi = Math.exp(mu + sigma * Z99);
+    if (cap !== null && cap > hi) hi = cap * 1.05;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || !(hi > lo) || !(lo > 0)) return null;
+    var n = 128;
+    var logLo = Math.log(lo),
+      logHi = Math.log(hi);
+    var xs = new Array(n);
+    var density = new Array(n);
+    var maxD = 0;
+    var i, x, d;
+    for (i = 0; i < n; i++) {
+      x = Math.exp(logLo + (i / (n - 1)) * (logHi - logLo));
+      d = _lognormalPdf(x, mu, sigma);
+      xs[i] = x;
+      density[i] = d;
+      if (Number.isFinite(d) && d > maxD) maxD = d;
+    }
+    function toPx(xv) {
+      var t = (Math.log(xv) - logLo) / (logHi - logLo);
+      return _CHART_PAD_L + t * (_CHART_W - _CHART_PAD_L - _CHART_PAD_R);
+    }
+    function toPy(dv) {
+      var t = maxD > 0 && Number.isFinite(dv) ? dv / maxD : 0;
+      return _CHART_H - _CHART_Y_PAD - t * (_CHART_H - 2 * _CHART_Y_PAD);
+    }
+    var path = "";
+    for (i = 0; i < n; i++) {
+      path += (i === 0 ? "M " : "L ") + toPx(xs[i]).toFixed(2) + " " + toPy(density[i]).toFixed(2) + " ";
+    }
+    var capPx = null;
+    var clippedTailPath = null;
+    if (cap !== null && cap >= lo && cap <= hi) {
+      capPx = toPx(cap);
+      var tail = "M " + capPx.toFixed(2) + " " + (_CHART_H - _CHART_Y_PAD).toFixed(2) + " ";
+      for (i = 0; i < n; i++) {
+        if (xs[i] < cap) continue;
+        tail += "L " + toPx(xs[i]).toFixed(2) + " " + toPy(density[i]).toFixed(2) + " ";
+      }
+      tail += "L " + toPx(hi).toFixed(2) + " " + (_CHART_H - _CHART_Y_PAD).toFixed(2) + " Z";
+      clippedTailPath = tail;
+    }
+    return {
+      axisLow: lo,
+      axisHigh: hi,
+      densityPath: path.trim(),
+      clippedTailPath: clippedTailPath,
+      medianPx: toPx(Math.exp(mu)),
+      meanPx: toPx(Math.exp(mu + (sigma * sigma) / 2)),
+      capPx: capPx,
+    };
+  }
+
+  // Capped-PERT-mode chart data: reuses pertDensityPath/medianPosFromGrid
+  // directly (the SAME grid the wizard stores through) — realized-median +
+  // sampled-mean marker positions, NEVER a cap line (the engine never caps
+  // PERT; the PERT `high` IS the bound).
+  function _pertChartData(pert, grid) {
+    var dp = pertDensityPath(pert);
+    if (!dp) return null;
+    var xs = dp.x,
+      density = dp.density;
+    var n = xs.length;
+    var logLo = Math.log(pert.low),
+      logHi = Math.log(pert.high);
+    var maxD = 0;
+    var i;
+    for (i = 0; i < n; i++) {
+      if (Number.isFinite(density[i]) && density[i] > maxD) maxD = density[i];
+    }
+    function toPx(xv) {
+      var t = (Math.log(xv) - logLo) / (logHi - logLo);
+      return _CHART_PAD_L + t * (_CHART_W - _CHART_PAD_L - _CHART_PAD_R);
+    }
+    function toPy(dv) {
+      // +Infinity endpoint (alpha<1/beta<1 singularity) caps at the chart's
+      // own y-max, per pertDensityPath's own documented endpoint contract.
+      var v = Number.isFinite(dv) ? dv : maxD;
+      var t = maxD > 0 ? Math.min(1, v / maxD) : 0;
+      return _CHART_H - _CHART_Y_PAD - t * (_CHART_H - 2 * _CHART_Y_PAD);
+    }
+    var path = "";
+    for (i = 0; i < n; i++) {
+      path += (i === 0 ? "M " : "L ") + toPx(xs[i]).toFixed(2) + " " + toPy(density[i]).toFixed(2) + " ";
+    }
+    var medPos = medianPosFromGrid(grid, pert);
+    var realizedMedianX = medPos !== null ? pert.low + medPos * (pert.high - pert.low) : null;
+    var ps = pertStats(pert);
+    return {
+      axisLow: pert.low,
+      axisHigh: pert.high,
+      densityPath: path.trim(),
+      clippedTailPath: null,
+      capPx: null,
+      realizedMedianPx: realizedMedianX !== null ? toPx(realizedMedianX) : null,
+      meanPx: ps.mean !== null ? toPx(ps.mean) : null,
+    };
+  }
+
+  // root.lossDispersionReadout(cfg) — Alpine factory. Follows the
+  // window.subFunctionCombobox single-file factory precedent
+  // (sub_function_combobox.js:29): registered as a global so
+  // x-data="lossDispersionReadout(cfg)" resolves directly, loaded non-defer
+  // (Task 1 Step 5) so it is registered before the deferred Alpine bundle
+  // walks x-data.
+  //
+  // cfg keys (server-rendered, `| tojson`'d into the template — see
+  // templates/scenarios/_loss_readout.html): mode ("lognormal"|
+  // "capped_pert"), quantileBasis ("p5p95"|"p50p95"), sigmaDefault,
+  // warnThreshold, cap, currency, tefMean, vulnMean, fieldKey ("pl"|"sl"),
+  // label, and the two seed-only extras initialLow/initialHigh (server
+  // reads the field's last-persisted SME row so the readout is not blank on
+  // first paint, before any row focus/blur has fired a loss-row-input
+  // event — see routes/scenarios.py:_build_readout_cfg).
+  //
+  // Cross-component wiring: the SME-row grid (a SIBLING Alpine component in
+  // _fair_params_form_inner.html, not an ancestor/descendant of this one)
+  // dispatches a bubbling+window CustomEvent named "loss-row-input" with
+  // {fieldset, idx, low, high} on each pl/sl row's focus/blur. This mount
+  // listens via `@loss-row-input.window` (wired in the partial) and filters
+  // on `detail.fieldset === cfg.fieldKey` — window-scoped because a DOM
+  // ancestor-bubble path does not exist between siblings, and because two
+  // mounts (pl + sl) share the page and must not cross-wire.
+  root.lossDispersionReadout = function (cfg) {
+    return {
+      cfg: cfg,
+      qLo: null,
+      qHi: null,
+      focusedRow: null,
+      stats: { valid: false },
+      waterlineProb: 0.5,
+      waterlineValue: null,
+      isDragging: false,
+      _debounceHandle: null,
+
+      init: function () {
+        var c = this.cfg;
+        if (
+          c.initialLow !== null &&
+          c.initialLow !== undefined &&
+          c.initialHigh !== null &&
+          c.initialHigh !== undefined
+        ) {
+          this.qLo = _num(c.initialLow);
+          this.qHi = _num(c.initialHigh);
+        }
+        this._recomputeNow();
+      },
+
+      // Called by the readout's own @loss-row-input.window listener.
+      onRowEvent: function (detail) {
+        if (!detail || detail.fieldset !== this.cfg.fieldKey) return;
+        this.bindRow(detail.idx, detail.low, detail.high);
+      },
+
+      // Public per Task 2 Interfaces: wizard multi-SME row binding. Sets the
+      // "previewing SME row N" label (idx is 0-based; the label adds 1).
+      bindRow: function (idx, lo, hi) {
+        this.focusedRow = idx;
+        this.qLo = _num(lo);
+        this.qHi = _num(hi);
+        this.recompute();
+      },
+
+      // Debounced 150ms per Task 2 Interfaces (avoids re-fitting on every
+      // keystroke of a fast typist).
+      recompute: function () {
+        var self = this;
+        if (this._debounceHandle) clearTimeout(this._debounceHandle);
+        this._debounceHandle = setTimeout(function () {
+          self._recomputeNow();
+        }, 150);
+      },
+
+      _recomputeNow: function () {
+        var cfg = this.cfg;
+        var out = { valid: false, mode: cfg.mode, warn: false };
+        var qLo = this.qLo,
+          qHi = this.qHi;
+        if (qLo === null || qHi === null || !Number.isFinite(qLo) || !Number.isFinite(qHi)) {
+          this.stats = out;
+          this._publish(null, null);
+          return;
+        }
+        var fit = cfg.quantileBasis === "p50p95" ? fitP50P95(qLo, qHi) : fitP5P95(qLo, qHi);
+        if (fit.mu === null || fit.sigma === null || !(fit.sigma > 0)) {
+          this.stats = out;
+          this._publish(null, null);
+          return;
+        }
+        out.valid = true;
+        out.mu = fit.mu;
+        out.sigma = fit.sigma;
+        out.warn = fit.sigma > cfg.warnThreshold;
+
+        if (cfg.mode === "lognormal") {
+          var cap =
+            cfg.cap !== null && cfg.cap !== undefined && Number.isFinite(cfg.cap) && cfg.cap > 0
+              ? cfg.cap
+              : null;
+          var ln = lognormalStats({ mu: fit.mu, sigma: fit.sigma, cap: cap });
+          out.cap = cap;
+          out.median = ln.median;
+          out.mean = ln.mean;
+          out.p95 = ln.p95;
+          out.p99 = ln.p99;
+          out.meanCapped = ln.meanCapped;
+          out.p99Capped = ln.p99Capped;
+          out.capBindProb = ln.capBindProb;
+          out.capClamped = ln.capClamped;
+          // Capacity-ceiling state (Task 2 Interfaces I-M5): the derived
+          // sigma at which the cap would sit AT the median (sigma above
+          // this means the chokepoint rejects outright — distinct from,
+          // and can sit below, the advisory 2.2 warn badge).
+          if (cap !== null && ln.median !== null && ln.median > 0) {
+            out.sigmaCeiling = Math.log(cap / ln.median) / Z95;
+            out.ceilingExceeded = fit.sigma >= out.sigmaCeiling;
+          } else {
+            out.sigmaCeiling = null;
+            out.ceilingExceeded = false;
+          }
+          out.chart = _lognormalChartData(fit.mu, fit.sigma, cap);
+          this.stats = out;
+          // Scenario-ALE publish: capped lognormal -> the truncated mean
+          // (the engine truncates draws at max); uncapped -> the raw mean.
+          var meanToPublish = cap !== null ? out.meanCapped : out.mean;
+          var claim =
+            cap !== null ? (out.meanCapped !== null ? "capped_lognormal" : null) : "uncapped_lognormal";
+          this._publish(meanToPublish, claim);
+          return;
+        }
+
+        // capped_pert mode.
+        var pert = capPertFromFit(fit.mu, fit.sigma);
+        if (pert.low === null || !(pert.low > 0) || !(pert.high > pert.low)) {
+          out.valid = false;
+          this.stats = out;
+          this._publish(null, null);
+          return;
+        }
+        var ps = pertStats(pert);
+        var grid = cdfGrid(pert);
+        var medPos = grid ? medianPosFromGrid(grid, pert) : null;
+        out.pertLow = pert.low;
+        out.pertMode = pert.mode;
+        out.pertHigh = pert.high;
+        out.pertMean = ps.mean;
+        out.impliedSigma = ps.impliedSigma;
+        // Realized median: the STORED BetaPERT's own median, from the same
+        // numeric CDF grid the wizard persists through — NEVER the
+        // analyst's entered median (they diverge up to 1.9x at sigma=1.7,
+        // T1-gate B-N7). Labeled as such in the template, not just here.
+        out.realizedMedian = medPos !== null ? pert.low + medPos * (pert.high - pert.low) : null;
+        out.grid = grid;
+        out.pert = pert;
+        out.chart = grid ? _pertChartData(pert, grid) : null;
+        this.stats = out;
+        this._publish(ps.mean, ps.mean !== null ? "pert_bounded" : null);
+      },
+
+      _publish: function (mean, claim) {
+        var store = this.$store && this.$store.lossPreview;
+        if (!store) return;
+        var key = this.cfg.fieldKey;
+        var value = typeof mean === "number" && Number.isFinite(mean) ? mean : null;
+        store[key] = value;
+        store.claims[key] = value !== null ? claim : null;
+      },
+
+      // Waterline drag: pointer fraction along the plotted axis IS the
+      // probability (clamped [0.001, 0.999] before normInv/grid-inversion —
+      // both are IEEE-conventional and blow up at the p=0/p=1 limits).
+      onWaterlineDrag: function (event) {
+        var stats = this.stats;
+        if (!stats || !stats.valid || !stats.chart) return;
+        var svg = this.$refs.svg;
+        if (!svg || typeof svg.getBoundingClientRect !== "function") return;
+        var rect = svg.getBoundingClientRect();
+        if (!(rect.width > 0)) return;
+        var clientX =
+          event.touches && event.touches.length ? event.touches[0].clientX : event.clientX;
+        if (typeof clientX !== "number") return;
+        var frac = (clientX - rect.left) / rect.width;
+        frac = Math.max(_WATERLINE_P_MIN, Math.min(_WATERLINE_P_MAX, frac));
+        this.waterlineProb = frac;
+        if (stats.mode === "lognormal") {
+          var v = Math.exp(stats.mu + stats.sigma * normInv(frac));
+          this.waterlineValue = Number.isFinite(v) ? v : null;
+        } else if (stats.grid && stats.pert) {
+          this.waterlineValue = _gridValueAt(stats.grid, stats.pert, frac);
+        } else {
+          this.waterlineValue = null;
+        }
+      },
+
+      get waterlinePx() {
+        if (this.waterlineValue === null || !this.stats || !this.stats.chart) return null;
+        var chart = this.stats.chart;
+        var t =
+          (Math.log(this.waterlineValue) - Math.log(chart.axisLow)) /
+          (Math.log(chart.axisHigh) - Math.log(chart.axisLow));
+        return _CHART_PAD_L + t * (_CHART_W - _CHART_PAD_L - _CHART_PAD_R);
+      },
+
+      // Scenario-ALE composition (Task 2 Interfaces): tefMean x vulnMean x
+      // (store.pl + store.sl), with ONE state-dependent label that degrades
+      // to the WEAKEST contributing claim — uncapped lognormal (no bound at
+      // all on the tail) is weaker than PERT-bounded, which is weaker than
+      // every contributor being a capacity-truncated mean.
+      get aleLine() {
+        var cfg = this.cfg;
+        if (
+          cfg.tefMean === null ||
+          cfg.tefMean === undefined ||
+          cfg.vulnMean === null ||
+          cfg.vulnMean === undefined
+        ) {
+          return null;
+        }
+        var store = this.$store && this.$store.lossPreview;
+        if (!store) return null;
+        var plOk = typeof store.pl === "number" && Number.isFinite(store.pl);
+        var slOk = typeof store.sl === "number" && Number.isFinite(store.sl);
+        if (!plOk && !slOk) return null;
+        var claims = [];
+        if (plOk) claims.push(store.claims.pl);
+        if (slOk) claims.push(store.claims.sl);
+        var sumLm = (plOk ? store.pl : 0) + (slOk ? store.sl : 0);
+        var value = cfg.tefMean * cfg.vulnMean * sumLm;
+        var label;
+        if (claims.indexOf("uncapped_lognormal") !== -1) {
+          label = "mean basis (uncapped)";
+        } else if (claims.indexOf("pert_bounded") !== -1) {
+          label = "mean basis (PERT-bounded)";
+        } else {
+          label = "capacity-bounded mean basis";
+        }
+        return { value: value, label: label };
+      },
+
+      fmtMoney: function (v) {
+        if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+        var sym = this.cfg.currency === "USD" ? "$" : this.cfg.currency + " ";
+        var abs = Math.abs(v);
+        if (abs >= 1e9) return sym + (v / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+        if (abs >= 1e6) return sym + (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+        if (abs >= 1e3) return sym + (v / 1e3).toFixed(0) + "K";
+        return sym + Math.round(v).toLocaleString("en-US");
+      },
+
+      fmtSigma: function (v) {
+        return v === null || v === undefined || !Number.isFinite(v) ? "—" : v.toFixed(2);
+      },
+    };
+  };
 })();

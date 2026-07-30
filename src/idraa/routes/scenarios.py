@@ -44,6 +44,7 @@ never call ``await db.commit()`` directly — same pattern as
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
 import re
 import uuid
@@ -121,6 +122,7 @@ from idraa.services.attack_mappings import (
 )
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.calibration import (
+    SIGMA_WARN_THRESHOLD,
     WITHIN_SCENARIO_SIGMA_DEFAULT,
     calibration_context_from_org,
 )
@@ -173,6 +175,8 @@ from idraa.services.wizard_state import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # The wizard step-1 library picker renders the FULL curated corpus on one
 # page — no pager (a pager "next" would collide with the wizard's own
@@ -2116,7 +2120,7 @@ async def get_wizard_step(
         # overlays, gates the calibration banner to Impact (PL/SL), and supplies
         # the (i) tooltips + rendered questions + rounded initial rows.
         extra_ctx.update(
-            _fair_page_context(
+            await _fair_page_context(
                 request=request,
                 user=user,
                 state=state,
@@ -2125,6 +2129,7 @@ async def get_wizard_step(
                 org_revenue_tier=org_revenue_tier,
                 available_overlays=available_overlays,
                 sme_directory_for_dropdown=sme_dir,
+                db=db,
             )
         )
         # Milestone B (#loss-pert-overhaul): %-of-revenue display hint on the
@@ -2586,7 +2591,7 @@ async def _render_fair_page_with_flash(
         db,
         user.organization_id,
     )
-    ctx_dict = _fair_page_context(
+    ctx_dict = await _fair_page_context(
         request=request,
         user=user,
         state=state,
@@ -2595,6 +2600,7 @@ async def _render_fair_page_with_flash(
         org_revenue_tier=org_revenue_tier,
         available_overlays=available_overlays,
         sme_directory_for_dropdown=sme_dir,
+        db=db,
     )
     ctx_dict["flash"] = build_flash(message, "error", href=href, href_text=href_text)
     template = (
@@ -3189,7 +3195,74 @@ async def cancel_wizard(
     return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 
 
-def _fair_page_context(
+async def _build_readout_cfg(
+    db: AsyncSession, user: User, state: WizardState
+) -> dict[str, dict[str, Any]]:
+    """PR3 T2 (D22): server-computed props for the wizard step-4 live
+    loss-dispersion readout (``lossDispersionReadout``, static/js/loss_preview.js).
+
+    Called ONLY when the page is Impact (Arch NTH-R2-1 — the fieldset loop is
+    page-scoped and pl/sl never render on Likelihood; a Likelihood render must
+    not pay a semaphore-serialized scipy fit for cfg nobody uses).
+
+    Returns one cfg dict per loss field (``"pl"``/``"sl"``), keyed by
+    ``fieldKey`` — the shape ``lossDispersionReadout(cfg)`` expects. Both
+    dicts share the same policy values (sigma default/warn threshold/cap/
+    currency/tef+vuln preview means); only ``fieldKey``/``label``/
+    ``initialLow``/``initialHigh`` differ.
+    """
+    preview_means: dict[str, float | None] = {"tef": None, "vuln": None}
+    try:
+        # Threadpool AND the finalize semaphore, BOTH REQUIRED (Sec-I1/Arch-I3):
+        # finalize's control is run_in_threadpool + _FINALIZE_SEMAPHORE
+        # (wizard_finalize.py:54, acquired routes/scenarios.py:2774) — Sec-21
+        # exists precisely so concurrent scipy.optimize loops cannot saturate
+        # the shared-cpu worker, and a step-4 GET is a HOTTER path than finalize.
+        async with _FINALIZE_SEMAPHORE:
+            results = await run_in_threadpool(process_sme_estimates, state)
+        for fs in ("tef", "vuln"):
+            r = results.get(fs)
+            if r is not None and r.pert is not None:
+                p = r.pert
+                preview_means[fs] = (p.low + 4 * p.mode + p.high) / 6.0
+    except Exception:  # broad on purpose — preview only; finalize re-validates
+        # step-4 GET must never 500 because pooling would reject rows finalize
+        # will flash about later — the readout just degrades to hidden (ALE
+        # line requires both tefMean/vulnMean non-null).
+        logger.info("step-4 readout preview means unavailable", exc_info=True)
+
+    cap = await _capacity_max_for_org(db, user.organization_id)
+    base: dict[str, Any] = {
+        "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+        "warnThreshold": SIGMA_WARN_THRESHOLD,
+        "cap": cap,
+        # Global Constraints ("wizard elicits USD"): the wizard has no
+        # currency selector (entry_currency is an expert-form-only field,
+        # Multi-currency P2) — USD here is correct, not a placeholder.
+        "currency": "USD",
+        "quantileBasis": "p5p95",  # wizard SME rows are p5/p95
+        "tefMean": preview_means["tef"],
+        "vulnMean": preview_means["vuln"],
+    }
+    mode = "lognormal" if state.loss_shape == "catastrophic" else "capped_pert"
+    out: dict[str, dict[str, Any]] = {}
+    for field_key, label in (("pl", "Primary loss"), ("sl", "Secondary loss")):
+        rows = state.sme_estimates.get(field_key) or []
+        last = rows[-1] if rows else None
+        cfg = dict(base)
+        cfg["mode"] = mode
+        cfg["fieldKey"] = field_key
+        cfg["label"] = label
+        # Seeds the readout so it isn't blank on first paint (before any row
+        # focus/blur fires the loss-row-input event) — the last row wins,
+        # matching the "readout tracks the last-focused SME row" default.
+        cfg["initialLow"] = last.get("low") if last else None
+        cfg["initialHigh"] = last.get("high") if last else None
+        out[field_key] = cfg
+    return out
+
+
+async def _fair_page_context(
     request: Request,
     user: User,
     state: WizardState,
@@ -3198,6 +3271,7 @@ def _fair_page_context(
     org_revenue_tier: str | None,
     available_overlays: list[Any],
     sme_directory_for_dropdown: list[dict[str, Any]],
+    db: AsyncSession,
 ) -> dict[str, Any]:
     """Context for a split FAIR-param page (step 3 Likelihood / step 4 Impact)
     and its HTMX swap fragment (``_fair_params_form_inner.html``).
@@ -3208,6 +3282,12 @@ def _fair_page_context(
     ALL build context here so the partial renders identically regardless of
     swap source (Sec-25 PR2 single-source guard — omitting e.g. ``csrf_token``
     after an outerHTML swap would break the next POST).
+
+    PR3 T2 (D22): also the single-source builder for ``readout_cfg`` (the live
+    loss-dispersion readout's props) — built ONLY on the Impact page, so all
+    four render paths that funnel through here (GET step 4, the 422 flash
+    re-render, and the two HTMX prefill/overlay partial-swap POSTs) carry
+    identical props (SC-6's swap-boundary contract).
 
     Note: ``request`` is NOT returned in the dict. The caller passes ``request``
     as the first positional arg to ``templates.TemplateResponse`` so the
@@ -3232,6 +3312,11 @@ def _fair_page_context(
     initial_rows = _round_initial_rows_for_display(
         {fs: state.sme_estimates.get(fs, []) for fs in fieldset_keys}
     )
+    # PR3 T2 (D22): readout_cfg is built ONLY on the Impact page (Arch
+    # NTH-R2-1) — the fieldset loop in _fair_params_form_inner.html only
+    # mounts the pl/sl readouts there, and a Likelihood render must not pay
+    # the semaphore-serialized scipy fit for cfg nobody uses.
+    readout_cfg = await _build_readout_cfg(db, user, state) if page == "impact" else None
     return {
         "current_user": user,
         "flash": None,
@@ -3253,6 +3338,7 @@ def _fair_page_context(
         # library_entry_id present.
         "show_calibration_banner": page == "impact" and state.library_entry_id is not None,
         "override_active": state.override_id is not None,
+        "readout_cfg": readout_cfg,
     }
 
 
@@ -3339,7 +3425,7 @@ async def wizard_prefill_from_industry(
     return templates.TemplateResponse(
         request,
         "scenarios/wizard/_fair_params_form_inner.html",
-        _fair_page_context(
+        await _fair_page_context(
             request=request,
             user=user,
             state=state,
@@ -3348,6 +3434,7 @@ async def wizard_prefill_from_industry(
             org_revenue_tier=org_revenue_tier,
             available_overlays=available_overlays,
             sme_directory_for_dropdown=sme_dir,
+            db=db,
         ),
     )
 
@@ -3432,7 +3519,7 @@ async def wizard_apply_overlay(
     return templates.TemplateResponse(
         request,
         "scenarios/wizard/_fair_params_form_inner.html",
-        _fair_page_context(
+        await _fair_page_context(
             request=request,
             user=user,
             state=state,
@@ -3441,5 +3528,6 @@ async def wizard_apply_overlay(
             org_revenue_tier=org_revenue_tier,
             available_overlays=available_overlays,
             sme_directory_for_dropdown=sme_dir,
+            db=db,
         ),
     )

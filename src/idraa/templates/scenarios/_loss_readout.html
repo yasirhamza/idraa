@@ -1,0 +1,156 @@
+{# src/idraa/templates/scenarios/_loss_readout.html
+
+   Shared live loss-dispersion preview mount (sigma-recal PR3 Task 2, D22).
+   Params — set by the including template via {% with %} immediately before
+   {% include %} (this partial reads no other context):
+     - cfg_json  the field's readout config, ALREADY `| tojson`'d by the
+       caller (routes/scenarios.py:_build_readout_cfg via _fair_page_context).
+     - dom_id    stable element id for this mount (unique per fieldKey per page).
+
+   Client-side-only preview: all math runs in static/js/loss_preview.js
+   (fair_cam parity-pinned, tests/unit/test_loss_preview_parity.py). This is
+   a NON-COMMITTAL live estimate while the analyst types — never a second
+   source of truth for STORED values (CLAUDE.md "Never re-derive FAIR
+   calculations in the app layer"). All text via x-text, never x-html (house
+   precedent: _fair_params_form_inner.html:236, charts.js). Inline x-data
+   props (cfg_json rendered server-side) per the PR #205 swap-race rule — no
+   trailing <script>.
+
+   `@loss-row-input.window`: the SME-row grid is a SIBLING Alpine component
+   (not an ancestor/descendant of this mount), so cross-component "which row
+   is focused" wiring uses a window-scoped CustomEvent instead of $refs/
+   scope-chaining — see loss_preview.js's lossDispersionReadout header
+   comment for the full rationale. #}
+{# Single-quoted x-data (house precedent: _fair_params_form_inner.html's own
+   row-grid mount) — Jinja's `tojson` filter escapes `'` but NOT `"`, so a
+   double-quoted attribute would break on the JSON's own key/string quotes. #}
+<div x-data='lossDispersionReadout({{ cfg_json }})'
+     x-on:loss-row-input.window="onRowEvent($event.detail)"
+     id="{{ dom_id }}"
+     class="mb-4 rounded-lg border border-border-subtle bg-surface-1 p-3">
+  <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+    <span class="text-meta text-ink-3 uppercase tracking-wide"
+          x-text="cfg.label + ' — live preview'"></span>
+    <template x-if="focusedRow !== null">
+      <span class="text-meta text-ink-3"
+            x-text="'previewing SME row ' + (focusedRow + 1)"></span>
+    </template>
+  </div>
+
+  <div class="flex flex-wrap gap-2 mb-2">
+    <span class="badge badge-warning badge-sm" x-show="stats.warn" x-cloak
+          x-text="'σ ' + fmtSigma(stats.sigma) + ' exceeds the ' + cfg.warnThreshold + ' advisory ceiling'"></span>
+    <span class="badge badge-error badge-sm" x-show="stats.mode === 'lognormal' && stats.ceilingExceeded" x-cloak
+          x-text="'σ ' + fmtSigma(stats.sigma) + ' exceeds the capacity floor — this pin/save will be rejected'"></span>
+    <span class="badge badge-ghost badge-sm" x-show="stats.mode === 'lognormal' && stats.capClamped" x-cloak>
+      cap fully clamps this distribution
+    </span>
+  </div>
+
+  {# Numbers row — lognormal mode. Cells render "—" (fmtMoney/fmtSigma's own
+     null-safe fallback) rather than disappearing when the fit is invalid/
+     inverted/non-finite (SC-7 inert-dash state) — the skeleton stays put so
+     the layout doesn't jump as the analyst types. #}
+  <template x-if="cfg.mode === 'lognormal'">
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+      <div><dt class="text-meta text-ink-3">Median (preview)</dt>
+        <dd x-text="fmtMoney(stats.median)"></dd></div>
+      <div><dt class="text-meta text-ink-3">Mean (preview)</dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.meanCapped : stats.mean)"></dd></div>
+      <div><dt class="text-meta text-ink-3">P95 (preview)</dt>
+        <dd x-text="fmtMoney(stats.p95)"></dd></div>
+      <div><dt class="text-meta text-ink-3">P99 (preview)</dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.p99Capped : stats.p99)"></dd></div>
+      <div><dt class="text-meta text-ink-3">σ (preview)</dt>
+        <dd x-text="fmtSigma(stats.sigma)"></dd></div>
+      <template x-if="stats.cap">
+        <div><dt class="text-meta text-ink-3">Capacity cap</dt>
+          <dd x-text="fmtMoney(stats.cap)"></dd></div>
+      </template>
+    </dl>
+  </template>
+
+  {# Numbers row — capped_pert mode. #}
+  <template x-if="cfg.mode === 'capped_pert'">
+    <div>
+      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+        <div><dt class="text-meta text-ink-3">Low (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertLow)"></dd></div>
+        <div><dt class="text-meta text-ink-3">Realized median (preview)</dt>
+          <dd x-text="fmtMoney(stats.realizedMedian)"></dd></div>
+        <div><dt class="text-meta text-ink-3">Sampled mean (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertMean)"></dd></div>
+        <div><dt class="text-meta text-ink-3">High (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertHigh)"></dd></div>
+        <div class="col-span-2 sm:col-span-4">
+          <dt class="text-meta text-ink-3">σ (preview, parent-lognormal basis)</dt>
+          <dd x-text="fmtSigma(stats.impliedSigma)"></dd>
+        </div>
+      </dl>
+      {# I-M7 / T1-gate B-N7: the realized median is the STORED BetaPERT's
+         own median (from the numeric CDF grid) — NEVER the analyst's
+         entered median. They diverge up to 1.9x at sigma=1.7. #}
+      <p class="text-meta text-ink-3 mt-1">
+        Realized median is the stored distribution's own median — not the entered value above.
+      </p>
+    </div>
+  </template>
+
+  {# SVG density/CDF chart with a draggable waterline. Always rendered (even
+     when the fit is invalid) so the analyst sees a stable, greyed-out
+     placeholder instead of the block jumping around (SC-7 "greyed chart"). #}
+  <div class="relative mt-2">
+    <svg x-ref="svg" viewBox="0 0 600 160" preserveAspectRatio="none"
+         class="w-full h-32"
+         :class="stats.valid ? 'cursor-ew-resize' : 'opacity-30 grayscale cursor-not-allowed'"
+         @mousedown="isDragging = true; onWaterlineDrag($event)"
+         @mousemove.window="isDragging && onWaterlineDrag($event)"
+         @mouseup.window="isDragging = false"
+         @touchstart="onWaterlineDrag($event)"
+         @touchmove.prevent="onWaterlineDrag($event)">
+      <path :d="stats.chart ? stats.chart.densityPath : ''" fill="none"
+            stroke="var(--color-brand)" stroke-width="2"></path>
+      <template x-if="stats.chart && stats.chart.clippedTailPath">
+        <path :d="stats.chart.clippedTailPath" fill="var(--color-status-warning)"
+              opacity="0.25" stroke="none"></path>
+      </template>
+      <template x-if="stats.chart && stats.chart.capPx !== null">
+        <line :x1="stats.chart.capPx" :x2="stats.chart.capPx" y1="0" y2="160"
+              stroke="var(--color-status-critical)" stroke-dasharray="4 3" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'lognormal' && stats.chart">
+        <line :x1="stats.chart.medianPx" :x2="stats.chart.medianPx" y1="0" y2="160"
+              stroke="var(--color-ink-2)" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'lognormal' && stats.chart">
+        <line :x1="stats.chart.meanPx" :x2="stats.chart.meanPx" y1="0" y2="160"
+              stroke="var(--color-brand)" stroke-dasharray="2 2" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'capped_pert' && stats.chart && stats.chart.realizedMedianPx !== null">
+        <line :x1="stats.chart.realizedMedianPx" :x2="stats.chart.realizedMedianPx" y1="0" y2="160"
+              stroke="var(--color-ink-2)" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'capped_pert' && stats.chart && stats.chart.meanPx !== null">
+        <line :x1="stats.chart.meanPx" :x2="stats.chart.meanPx" y1="0" y2="160"
+              stroke="var(--color-brand)" stroke-dasharray="2 2" stroke-width="1.5"></line>
+      </template>
+      <template x-if="waterlineValue !== null && waterlinePx !== null">
+        <line :x1="waterlinePx" :x2="waterlinePx" y1="0" y2="160"
+              stroke="var(--color-status-info)" stroke-width="1"></line>
+      </template>
+    </svg>
+    <p class="text-meta text-ink-3 mt-1" x-show="waterlineValue !== null" x-cloak
+       x-text="'p' + (waterlineProb * 100).toFixed(1) + ' ≈ ' + fmtMoney(waterlineValue)"></p>
+  </div>
+
+  {# Scenario-ALE composition line (Task 2 Interfaces): renders only when
+     tefMean/vulnMean are non-null AND at least one contributing field has
+     published a mean into the shared $store.lossPreview. #}
+  <template x-if="aleLine">
+    <p class="text-sm mt-2 pt-2 border-t border-border-subtle">
+      <span class="text-ink-2">Preview ALE ≈</span>
+      <strong x-text="fmtMoney(aleLine.value)"></strong>
+      <span class="text-meta text-ink-3" x-text="'(' + aleLine.label + ')'"></span>
+    </p>
+  </template>
+</div>
