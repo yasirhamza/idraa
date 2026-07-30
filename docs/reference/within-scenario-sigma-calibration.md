@@ -128,8 +128,32 @@ band). What stands instead:
   at 1.9687, −67.62% at 2.394 — **large across the entire defensible
   bracket**, so the drop is not an artifact of choosing 1.7.
 - **IC3 mean-preservation** (appendix `[external check]`): the one external,
-  citation-traced pass/fail check available — passes at 7.1e-16.
-- The owner-signed σ decision itself, methodology-gated.
+  citation-traced pass/fail check available — passes at 7.1e-16. **Scope
+  precision (PR3 D25):** this check validates the vendor mean-anchoring
+  (μ = ln(mean) − σ²/2) and is **σ-INDEPENDENT** — it passes identically at
+  any σ and is therefore not evidence for σ_default = 1.7.
+- **NetDiligence 2025 consistency reads (PR3 D24)** — the nearest published
+  per-incident dataset (claims-visible incident cost, 9,171 claims ≥ $1K;
+  full conditioning register + verbatim generated figures:
+  `calibration-sources/netdiligence_2025.md`, generator
+  `scripts/netdiligence_sigma_check.py`). Conditioning level: cross-firm ×
+  cross-type WITHIN a revenue band — §2's within-revenue-tier UPPER-BOUND
+  row, NOT the within-scenario quantity. Per-band, evidential-direction
+  reads (observed quantile-plug-in σ vs its own truth-1.7 sampling band,
+  each with no-root rate and z_n ceiling): nano 1.60 at ~p20 of
+  [1.47, 2.52]; micro 1.77 at ~p46 of [1.42, 2.53]; small 2.30 at ~p89 of
+  [1.37, 2.48] (near-edge, stated as such); mid/large have no plug-in root
+  (no-root rates 43.5%/82.2% at truth 1.7 — plug-in artifact, not
+  tail-heaviness) with exact-E[max] point reads 2.09/1.85 (no sampling
+  band computed for that estimator). Relation to IRIS's 1.97–2.92 at the
+  same conditioning level is MIXED per row (nano/micro below; small
+  plug-in and mid exact-E[max] inside; no read above), and read literally
+  as an upper-bound row the below-band rows push the within-scenario
+  quantity below 1.7 while others do not — with the bands this wide and
+  ceiling-truncated, neither reading is decisive. NO blanket directional
+  conclusion is drawn: the reads are **consistent with the 1.7 convention
+  at the bands where the estimator has power, and uninformative where it
+  does not**; they cannot refute higher (or lower) true dispersion.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is
