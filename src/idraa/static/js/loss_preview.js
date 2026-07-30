@@ -744,11 +744,17 @@
     var lo = Math.exp(mu - sigma * 3);
     var hi = Math.exp(mu + sigma * Z99);
     if (cap !== null && cap > hi) hi = cap * 1.05;
-    // Re-gate N-b: a cap BELOW the default axis window (cap < exp(mu-3s))
-    // would otherwise vanish along with the (truncated) markers, leaving a
-    // density with no cap while every cell shows the truncated basis —
-    // widen the window downward so the cap line and markers stay visible.
-    if (cap !== null && Number.isFinite(cap) && cap < lo) lo = cap * 0.95;
+    // Re-gate N-b (T2.c form): a cap OR truncated marker below the default
+    // axis window would otherwise render off-canvas while every cell shows
+    // the truncated basis — widen the window downward far enough that the
+    // cap line AND both truncated markers stay visible (the T2.b micro-gate
+    // executed the cap-only widening leaving medianPx/meanPx at -0.26/-4.77
+    // in the p5=$5M/p95=$50M/cap=$1M case; marker-aware widening puts them
+    // at 25.6/21.3).
+    if (cap !== null && cap < lo) lo = cap * 0.95;
+    if (medianVal !== null && Number.isFinite(medianVal) && medianVal * 0.9 < lo)
+      lo = medianVal * 0.9;
+    if (meanVal !== null && Number.isFinite(meanVal) && meanVal * 0.9 < lo) lo = meanVal * 0.9;
     if (!Number.isFinite(lo) || !Number.isFinite(hi) || !(hi > lo) || !(lo > 0)) return null;
     var n = 128;
     var logLo = Math.log(lo),
@@ -1074,8 +1080,12 @@
         var frac = (clientX - rect.left) / rect.width;
         // Re-gate N-a: the cursor fraction spans the FULL svg width, but the
         // axis occupies [PAD_L, W - PAD_R] -- undo the padding before the log
-        // interpolation so the handle sits exactly under the cursor (the
-        // uncorrected form drifted +/-8.58 viewBox px at the extremes).
+        // interpolation so the handle sits under the cursor (T2.b micro-gate
+        // executed: worst in-axis drift 7.79px -> 0.58px; the residual is the
+        // [0.001, 0.999] probability clamp, not the pad). DELIBERATE
+        // exception: right of the cap the I1 clamp pins the handle at capPx,
+        // detaching it from the cursor -- the truncated supremum outranks
+        // cursor-glue there.
         frac =
           (frac * _CHART_W - _CHART_PAD_L) / (_CHART_W - _CHART_PAD_L - _CHART_PAD_R);
         frac = Math.max(_WATERLINE_P_MIN, Math.min(_WATERLINE_P_MAX, frac));
