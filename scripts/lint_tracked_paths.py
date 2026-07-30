@@ -47,7 +47,7 @@ DENY_GLOBS: tuple[str, ...] = (
     # .gitignore licensed-material section pins known offenders individually,
     # but the class keeps growing (NetDiligence 2025 arrived unprotected).
     # Zero PDFs are legitimately tracked today; a future first-party PDF goes
-    # through ALLOWED_MATCHES deliberately. Character-class pattern because
+    # through the ALLOW allowlist deliberately. Character-class pattern because
     # fnmatch is case-sensitive on posix and a re-downloaded ".PDF" would
     # slip a plain "*.pdf" (Sec round-2 N-R2-1).
     "*.[pP][dD][fF]",
