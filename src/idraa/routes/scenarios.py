@@ -50,7 +50,14 @@ import re
 import uuid
 from typing import Any, Literal
 
-from fair_cam.quantile_pooling import lognormal_from_quantiles, lognormal_quantiles
+from fair_cam.quantile_pooling import (
+    LogNormalTruncFit,
+    LognormMixture,
+    QuantilePoolingError,
+    lognormal_from_quantiles,
+    lognormal_quantiles,
+    mixture_quantile_lognorm,
+)
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -138,7 +145,12 @@ from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService, is_selectable_currency
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
-from idraa.services.loss_pinning import pin_loss, unpin_loss
+from idraa.services.loss_pinning import (
+    pin_loss,
+    preview_loss_refresh,
+    refresh_loss_from_library,
+    unpin_loss,
+)
 from idraa.services.run_executor import _dict_to_fair_distribution
 from idraa.services.scenario_control_recommendations import recommended_controls_for
 from idraa.services.scenario_currency import convert_loss_inputs_to_usd
@@ -994,9 +1006,26 @@ def _stored_loss_sigma(dist: Any) -> float | None:
     the migration's ``_recalibrate_dist`` shape handling:
 
       - ``lognormal`` -> the distribution's own ``sigma``.
-      - ``lognormal_mixture`` -> ``max(component sigma)`` (worst-case read;
-        a catastrophic multi-SME scenario stores no top-level ``sigma``
-        key, so a naive ``dist["sigma"]`` would 500 the scenario view).
+      - ``lognormal_mixture`` -> the TRUE mixture implied sigma (PR3 T4,
+        B-M3b/D21 amendment) -- ``ln(Q(0.95) / Q(0.5)) / Z_0_95`` where
+        ``Q`` is fair_cam's deterministic ``mixture_quantile_lognorm`` on
+        the pooled CDF. Components are reconstructed as
+        ``min_support=0.0, max_support=inf`` (the SAME untruncated-support
+        convention ``app.lognormal_mixture_display_rows`` already uses --
+        catastrophic pl/sl mixture components are stored as native,
+        untruncated ``{mean, sigma}`` pairs; the shared top-level ``max``
+        capacity cap, when present, is a separate storage-only field, not
+        applied per-component here). This REPLACES the pre-T4
+        max-component read: that was a within-component LOWER bound -- a
+        divergent 2-component mixture with both components at sigma=1.7 but
+        medians 200x apart implied sigma~=2.94 in reality yet read exactly
+        1.70 under max-component, silently defeating the stale-copy
+        tripwire. A single-component mixture is numerically unchanged
+        (``mixture_quantile_lognorm`` delegates a 1-component mix straight
+        to the same closed-form quantile the old branch effectively used;
+        float association leaves ~1e-16 relative drift, not a behavior
+        change). DISCLOSED: this also changes the PR1-shipped view-time
+        sigma advisory displays that already called this function.
       - ``PERT`` -> implied sigma ``ln(high/low) / (2 * Z_0_95)`` (D4'
         provenance: capped ranges are mechanically
         ``exp(mu -+ Z_0_95 * sigma)`` of the underlying lognormal fit).
@@ -1015,12 +1044,40 @@ def _stored_loss_sigma(dist: Any) -> float | None:
         comps = dist.get("components")
         if not isinstance(comps, list) or not comps:
             return None
-        sigmas = [
-            float(c["sigma"])
-            for c in comps
-            if isinstance(c, dict) and isinstance(c.get("sigma"), int | float)
-        ]
-        return max(sigmas) if sigmas else None
+        fits: list[LogNormalTruncFit] = []
+        weights: list[float] = []
+        for c in comps:
+            if not isinstance(c, dict):
+                continue
+            mean_, sigma_, weight_ = c.get("mean"), c.get("sigma"), c.get("weight")
+            if not (
+                isinstance(mean_, int | float)
+                and isinstance(sigma_, int | float)
+                and sigma_ > 0
+                and isinstance(weight_, int | float)
+                and weight_ > 0
+            ):
+                continue
+            fits.append(
+                LogNormalTruncFit(
+                    meanlog=float(mean_),
+                    sdlog=float(sigma_),
+                    min_support=0.0,
+                    max_support=math.inf,
+                )
+            )
+            weights.append(float(weight_))
+        if not fits:
+            return None
+        try:
+            mix = LognormMixture(components=tuple(fits), weights=tuple(weights))
+            q50 = mixture_quantile_lognorm(mix, 0.5)
+            q95 = mixture_quantile_lognorm(mix, 0.95)
+        except (ValueError, ArithmeticError, QuantilePoolingError):
+            return None
+        if not (q50 > 0 and q95 > 0):
+            return None
+        return math.log(q95 / q50) / _Z_0_95
     if kind == "pert":
         low, high = dist.get("low"), dist.get("high")
         if not (isinstance(low, int | float) and isinstance(high, int | float)):
@@ -1048,52 +1105,66 @@ def _max_stored_loss_sigma(scenario: Scenario) -> float | None:
     return max(sigmas) if sigmas else None
 
 
-@router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
-async def view_scenario(
-    request: Request,
-    scenario_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
-    loss_wide: int = Query(
-        default=0,
-        ge=0,
-        le=1,
-        description=(
-            "Finalize-advisory flash flag (Task 5, plan "
-            "2026-07-25-sigma-recal-pr1): set to 1 by the wizard finalize "
-            "POST's redirect when a stored PL/SL sigma exceeds the "
-            "within-scenario default. Mirrors the ?deleted=1 mechanics "
-            "(routes/scenarios.py:220-226) -- the value itself is NOT "
-            "smuggled through the URL; this handler re-derives it from the "
-            "scenario's own stored dicts."
-        ),
-    ),
-    pinned: int = Query(
-        default=0,
-        ge=0,
-        le=1,
-        description=(
-            "PR3 T3 (D20/D21): analyst-pin POST redirect flash flag. "
-            "Mirrors the ?deleted=1 mechanics (routes/scenarios.py:220-226) "
-            "-- generic confirmation text only, no field name or sigma "
-            "value smuggled through the URL (the pin route intentionally "
-            "does not know which field a caller will read this as)."
-        ),
-    ),
-    unpinned: int = Query(
-        default=0,
-        ge=0,
-        le=1,
-        description="PR3 T3: analyst-unpin POST redirect flash flag. See ``pinned`` above.",
-    ),
-) -> HTMLResponse:
-    """Render the scenario detail page.
+_SIGMA_TOL = 1e-5  # prod stores 1.7 +/- ~1.5e-7 via dollar round-trips
 
-    Org-scoped lookup. Cross-org IDs return None → 404 (NOT 403) so we
-    don't leak existence of scenarios owned by other orgs (B9/B10
-    paranoid-review precedent). Eager-loads mitigating_controls for the
-    detail card (#68 UAT — view page must show configured controls
-    without forcing operator into edit mode).
+
+def _field_has_provenance(dist: Any) -> bool:
+    """True when THIS field carries ``analyst_pin`` or
+    ``migration_recalibration`` provenance -- the single-field counterpart
+    of ``_loss_was_recalibrated`` (which ORs across both fields for the
+    separate recalibration banner above). Same defensive walk: ``dist`` may
+    be non-dict (``None``, or the literal JSON text ``"null"`` parsed to
+    Python ``None``), ``distribution_fit_metadata`` may be absent/non-dict,
+    ``sigma_recalibration`` may likewise be absent/non-dict.
+    """
+    if not isinstance(dist, dict):
+        return False
+    meta = dist.get("distribution_fit_metadata")
+    if not isinstance(meta, dict):
+        return False
+    stamp = meta.get("sigma_recalibration")
+    if not isinstance(stamp, dict):
+        return False
+    return stamp.get("source") in ("analyst_pin", "migration_recalibration")
+
+
+def _loss_stale_wide(scenario: Scenario) -> float | None:
+    """Widest stored loss sigma among fields that INDIVIDUALLY lack
+    provenance, when it exceeds the default beyond tolerance.
+
+    PER-FIELD suppression (plan-gate SC-1/B-M3a): a pin or migration stamp
+    on one field must never mute a wide, unstamped sibling -- scenario-level
+    suppression would silence exactly the mixed case prod already has
+    (PL-only migration stamps beside literal-``"null"`` SLs that may later
+    be hand-widened). Library linkage is NOT checked here (D23): the banner
+    fires on wild imports and hand-authored wide sigma too -- linkage only
+    gates whether the Refresh affordance renders (view.html), a template-
+    level check against ``scenario.library_pin``.
+    """
+    widest: float | None = None
+    for dist in (scenario.primary_loss, scenario.secondary_loss):
+        if not isinstance(dist, dict) or _field_has_provenance(dist):
+            continue
+        s = _stored_loss_sigma(dist)
+        if s is not None and s > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
+            widest = s if widest is None else max(widest, s)
+    return widest
+
+
+async def _view_scenario_context(
+    db: AsyncSession, user: User, scenario_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """Shared context builder for ``scenarios/view.html`` -- everything
+    EXCEPT ``flash`` (the one field that legitimately differs between a
+    plain GET, which derives it from query flags, and
+    ``_render_view_action_failure`` below, which sets it to a failure
+    message). Mirrors the ``_edit_form_context``/``_load_scenario_for_edit``
+    split (T3.a, SPEC B-1) one level up: a pin/refresh failure re-renders
+    the SAME page instead of surfacing a raw ``HTTPException`` JSON body.
+
+    Org-scoped lookup. Returns ``None`` on a missing/wrong-org scenario id
+    (NOT 403 — no existence oracle, B9/B10 paranoid-review precedent) so
+    callers can raise 404 themselves.
     """
     stmt = (
         select(Scenario)
@@ -1108,7 +1179,7 @@ async def view_scenario(
     )
     scenario = (await db.execute(stmt)).scalar_one_or_none()
     if scenario is None:
-        raise HTTPException(status_code=404)
+        return None
 
     # P2c §6.3: nudge un-adopted recommended controls from the source library entry.
     # Custom scenarios (no library_pin) get an empty list → the panel renders nothing.
@@ -1153,6 +1224,111 @@ async def view_scenario(
                 "updated_at": draft_row.updated_at,
             }
 
+    return {
+        "current_user": user,
+        "scenario": scenario,
+        "recommendations": recommendations,
+        "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
+        "reestimate_draft": reestimate_draft,
+        "loss_recalibrated": _loss_was_recalibrated(scenario),
+        # PR3 T4 (D23): standing stale-copy tripwire -- unconditional on
+        # EVERY GET (unlike ?loss_wide=1's one-shot redirect flash below),
+        # since a wide, unstamped field should keep surfacing until the
+        # analyst pins/refreshes/re-authors it, not just on the render right
+        # after finalize.
+        "loss_stale_wide": _loss_stale_wide(scenario),
+        # PR3 T3: pin-state chip + unpin button per field. capacity_max
+        # is None here — the view page shows no readout mount, only the
+        # chip/unpin affordance, so _pin_panel_context's readout_cfg
+        # field goes unused (reusing the edit-form helper rather than
+        # hand-duplicating the pin-detection walk).
+        "pin_panels": _pin_panel_context(scenario, None),
+    }
+
+
+async def _render_view_action_failure(
+    request: Request,
+    db: AsyncSession,
+    user: User,
+    scenario_id: uuid.UUID,
+    *,
+    message: str,
+    status_code: int,
+) -> HTMLResponse:
+    """PR3 T4: render the scenario VIEW page with an alert flash on a
+    refresh failure, instead of letting a raw ``HTTPException`` propagate as
+    a JSON ``{"detail": ...}`` body -- the SAME idiom as T3.a's
+    ``_render_loss_action_failure``, retargeted at ``view.html`` because
+    refresh is triggered from the view page's tripwire banner, not the edit
+    form (pin/unpin's failure target). A missing/wrong-org scenario still
+    raises a plain 404 (no page to re-render for a scenario that doesn't
+    exist for this org).
+    """
+    ctx = await _view_scenario_context(db, user, scenario_id)
+    if ctx is None:
+        raise HTTPException(status_code=404)
+    ctx["flash"] = build_flash(message, "error")
+    return templates.TemplateResponse(request, "scenarios/view.html", ctx, status_code=status_code)
+
+
+@router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
+async def view_scenario(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+    loss_wide: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "Finalize-advisory flash flag (Task 5, plan "
+            "2026-07-25-sigma-recal-pr1): set to 1 by the wizard finalize "
+            "POST's redirect when a stored PL/SL sigma exceeds the "
+            "within-scenario default. Mirrors the ?deleted=1 mechanics "
+            "(routes/scenarios.py:220-226) -- the value itself is NOT "
+            "smuggled through the URL; this handler re-derives it from the "
+            "scenario's own stored dicts."
+        ),
+    ),
+    pinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "PR3 T3 (D20/D21): analyst-pin POST redirect flash flag. "
+            "Mirrors the ?deleted=1 mechanics (routes/scenarios.py:220-226) "
+            "-- generic confirmation text only, no field name or sigma "
+            "value smuggled through the URL (the pin route intentionally "
+            "does not know which field a caller will read this as)."
+        ),
+    ),
+    unpinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description="PR3 T3: analyst-unpin POST redirect flash flag. See ``pinned`` above.",
+    ),
+    loss_refreshed: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description="PR3 T4 (D23): library-refresh POST redirect flash flag. See ``pinned`` above.",
+    ),
+) -> HTMLResponse:
+    """Render the scenario detail page.
+
+    Org-scoped lookup. Cross-org IDs return None → 404 (NOT 403) so we
+    don't leak existence of scenarios owned by other orgs (B9/B10
+    paranoid-review precedent). Eager-loads mitigating_controls for the
+    detail card (#68 UAT — view page must show configured controls
+    without forcing operator into edit mode).
+    """
+    ctx = await _view_scenario_context(db, user, scenario_id)
+    if ctx is None:
+        raise HTTPException(status_code=404)
+    scenario = ctx["scenario"]
+
     # Task 5 finalize advisory (plan 2026-07-25-sigma-recal-pr1): re-derive
     # the sigma reading from the scenario's own live dicts -- the
     # ?loss_wide=1 flag carries no value, only a "check" instruction, so a
@@ -1172,34 +1348,20 @@ async def view_scenario(
                 "reference.",
                 "warning",
             )
-    # PR3 T3: pin/unpin success flashes. Generic confirmation text only —
-    # no field name or sigma value is smuggled through the query string
-    # (same "flag, not a value" idiom as ?deleted=1 above; there is nothing
-    # per-field to re-derive here since the text names no field or number).
+    # PR3 T3/T4: pin/unpin/refresh success flashes. Generic confirmation
+    # text only — no field name or sigma value is smuggled through the query
+    # string (same "flag, not a value" idiom as ?deleted=1 above; there is
+    # nothing per-field to re-derive here since the text names no field or
+    # number).
     if flash is None and pinned == 1:
         flash = build_flash("Loss dispersion pinned for this field.", "success")
     elif flash is None and unpinned == 1:
         flash = build_flash("Loss dispersion unpinned for this field.", "success")
+    elif flash is None and loss_refreshed == 1:
+        flash = build_flash("Loss dispersion refreshed from the library entry.", "success")
 
-    return templates.TemplateResponse(
-        request,
-        "scenarios/view.html",
-        {
-            "current_user": user,
-            "flash": flash,
-            "scenario": scenario,
-            "recommendations": recommendations,
-            "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
-            "reestimate_draft": reestimate_draft,
-            "loss_recalibrated": _loss_was_recalibrated(scenario),
-            # PR3 T3: pin-state chip + unpin button per field. capacity_max
-            # is None here — the view page shows no readout mount, only the
-            # chip/unpin affordance, so _pin_panel_context's readout_cfg
-            # field goes unused (reusing the edit-form helper rather than
-            # hand-duplicating the pin-detection walk).
-            "pin_panels": _pin_panel_context(scenario, None),
-        },
-    )
+    ctx["flash"] = flash
+    return templates.TemplateResponse(request, "scenarios/view.html", ctx)
 
 
 async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -> dict[str, Any]:
@@ -1931,6 +2093,133 @@ async def unpin_scenario_loss(
             status_code=422,
         )
     return RedirectResponse(url=f"/scenarios/{scenario_id}?unpinned=1", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/loss/refresh")
+async def refresh_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T4 (D23): refresh a scenario's PL/SL from its pinned library
+    entry's current published version.
+
+    Two-step confirm, mirroring ``delete_scenario``'s cascade-confirmation
+    shape (:1338 + confirm_delete.html) rather than the mixture-flatten
+    "informed replacement" advisory-text-only shape (that shape is for a
+    save the analyst is already committing to; this is a distinct,
+    reversible-only-by-re-refreshing action that deserves its own
+    look-before-you-leap step). The first POST (no ``confirm_refresh``)
+    renders ``confirm_loss_refresh.html`` with a current-vs-entry
+    comparison built READ-ONLY by ``loss_pinning.preview_loss_refresh`` --
+    no mutation, no row lock, so a scenario that can't actually be
+    refreshed (no linkage, a pinned field, an unresolvable entry) surfaces
+    its error on this first POST via ``_render_view_action_failure``
+    (T3.a's rendered-failure idiom, retargeted at view.html — never a raw
+    JSON 4xx body) rather than rendering a confirm page for an action that
+    can only fail on confirm. The second POST (``confirm_refresh=1``)
+    performs the write via ``loss_pinning.refresh_loss_from_library``,
+    which independently RE-validates under a row lock — no TOCTOU trust in
+    the preview step; another edit/pin/refresh can land between the two
+    requests.
+
+    Analyst+ only, same RBAC/CSRF posture as pin/unpin (Sec-I4: never a
+    hand-rolled inline role check). NO step-up (Arch-N4, decided): parity
+    with ``update_scenario``, which can equally overwrite PL/SL without
+    ``StepUpCategory.DESTRUCTIVE`` — delete remains the only destructive
+    step-up action on this router.
+    """
+    form_data = await request.form()
+    row_version = parse_expected_row_version(form_data.get("expected_row_version"))
+    if row_version is None:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="expected_row_version: missing or invalid hidden form field",
+            status_code=422,
+        )
+    confirm_refresh = form_data.get("confirm_refresh") == "1"
+
+    if not confirm_refresh:
+        try:
+            plan = await preview_loss_refresh(
+                db,
+                organization_id=user.organization_id,
+                scenario_id=scenario_id,
+                expected_row_version=row_version,
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ConflictError as exc:
+            return await _render_view_action_failure(
+                request,
+                db,
+                user,
+                scenario_id,
+                message=(
+                    "Another user updated this scenario — please reload and "
+                    "retry your edit. " + str(exc)
+                ),
+                status_code=409,
+            )
+        except ValidationError as exc:
+            return await _render_view_action_failure(
+                request, db, user, scenario_id, message=str(exc), status_code=422
+            )
+        return templates.TemplateResponse(
+            request,
+            "scenarios/confirm_loss_refresh.html",
+            {
+                "current_user": user,
+                "scenario": plan.scenario,
+                "entry": plan.resolved.entry,
+                "current_primary_loss": plan.scenario.primary_loss,
+                "current_secondary_loss": plan.scenario.secondary_loss,
+                "entry_primary_loss": plan.new_primary_loss,
+                "entry_secondary_loss": plan.new_secondary_loss,
+                "current_primary_loss_sigma": _stored_loss_sigma(plan.scenario.primary_loss),
+                "current_secondary_loss_sigma": _stored_loss_sigma(plan.scenario.secondary_loss),
+                "entry_primary_loss_sigma": _stored_loss_sigma(plan.new_primary_loss),
+                "entry_secondary_loss_sigma": _stored_loss_sigma(plan.new_secondary_loss),
+            },
+        )
+
+    try:
+        await refresh_loss_from_library(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+        )
+    except ValidationError as exc:
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
+        return await _render_view_action_failure(
+            request, db, user, scenario_id, message=message, status_code=422
+        )
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?loss_refreshed=1", status_code=303)
 
 
 @router.post("/scenarios/{scenario_id}/promote")
@@ -3782,7 +4071,27 @@ async def _build_readout_cfg(
             # the latest per sme identity), and warning on a row finalize
             # discards makes "saving will be rejected" an absolute claim
             # about a save that would succeed.
-            for row in _dedup_latest_per_sme(state.sme_estimates.get(fk) or []):
+            #
+            # PR3 T4 carryover (deferred T2 NTH): _dedup_latest_per_sme
+            # itself can raise -- ``row_identity_uuid`` does ``UUID(str(...))``
+            # on an unparseable sme_id (ValueError) or ``row["sme_name"]``/
+            # ``.casefold()`` on a missing or non-string sme_name
+            # (KeyError/AttributeError) -- reachable only via draft
+            # corruption (the HTTP form path always normalizes a blank
+            # sme_id to None, see the step-4 POST handler), but this call
+            # previously sat OUTSIDE the per-row try below, so one
+            # corrupted row 500'd the WHOLE step-4 GET instead of being
+            # skipped like every other malformed-row case in this preview
+            # builder. Wrapped here, falling back to "no ceiling verdict for
+            # this fieldset" (leaves field_ceiling_exceeded[fk] at its False
+            # default) -- same "a step-4 GET must never 500 because pooling
+            # would reject rows finalize will flash about later" philosophy
+            # already documented on the preview_means block above.
+            try:
+                dedup_rows = _dedup_latest_per_sme(state.sme_estimates.get(fk) or [])
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+            for row in dedup_rows:
                 try:
                     low, high = float(row["low"]), float(row["high"])
                     fit = lognormal_from_quantiles(low, high, q_low=0.05, q_high=0.95)

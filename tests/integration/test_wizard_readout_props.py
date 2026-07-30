@@ -440,6 +440,74 @@ async def test_field_ceiling_exceeded_true_when_any_row_p95_meets_cap(
 
 
 @pytest.mark.asyncio
+async def test_step4_get_survives_malformed_sme_row_identity(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """PR3 T4 carryover (deferred T2 NTH): the field_ceiling_exceeded walk's
+    ``_dedup_latest_per_sme(...)`` call can itself raise -- its
+    ``row_identity_uuid`` helper does ``UUID(str(sme_id))`` on an
+    unparseable ``sme_id`` (ValueError) or ``row["sme_name"]``/
+    ``.casefold()`` on a missing/non-string ``sme_name``
+    (KeyError/AttributeError). That call previously sat OUTSIDE the
+    per-row try in ``_build_readout_cfg``, so one corrupted row 500'd the
+    WHOLE step-4 GET instead of being skipped like every other
+    malformed-row case in this preview builder.
+
+    Not reachable via the normal HTTP form path (the step-4 POST handler
+    normalizes a blank ``sme_id`` to ``None`` before it ever reaches
+    ``state.sme_estimates``, routes/scenarios.py:2919) -- this simulates
+    draft corruption by mutating the persisted ``WizardDraft.state_json``
+    directly, the same class of malformed-row defense the surrounding
+    ``preview_means`` try/except already documents ("a step-4 GET must
+    never 500 because pooling would reject rows finalize will flash about
+    later")."""
+    client, org_id = authed_analyst
+    await _set_org_revenue(db_session, org_id, "1000000")
+    user_id = await _resolve_analyst_id(db_session, org_id)
+
+    tx = await _bootstrap_to_step_3(client, db_session, user_id)
+    r3 = await _post_step_3(client, tx, tef=[("Alice", 1.0, 12.0)], vuln=[("Bob", 0.05, 0.5)])
+    assert r3.status_code in (302, 303), r3.text
+
+    r4 = await csrf_post(
+        client,
+        f"/scenarios/new/wizard/step/4?tx={tx}",
+        data={
+            "pl_sme_id_0": "",
+            "pl_sme_name_0": "Analyst A",
+            "pl_low_0": "10000.0",
+            "pl_high_0": "50000.0",
+            "loss_catastrophic": "1",
+        },
+    )
+    assert r4.status_code in (302, 303), r4.text
+
+    # Corrupt the persisted draft's pl[0] row identity directly -- delete
+    # sme_name so row_identity_uuid's `row["sme_name"]` raises KeyError.
+    # Reassign (not mutate-in-place) the JSON column so SQLAlchemy's
+    # change-tracking picks it up.
+    draft = (
+        await db_session.execute(select(WizardDraft).where(WizardDraft.tx_id == tx))
+    ).scalar_one()
+    state_json = dict(draft.state_json)
+    sme_estimates = dict(state_json["sme_estimates"])
+    pl_rows = [dict(r) for r in sme_estimates["pl"]]
+    del pl_rows[0]["sme_name"]
+    sme_estimates["pl"] = pl_rows
+    state_json["sme_estimates"] = sme_estimates
+    draft.state_json = state_json
+    await db_session.commit()
+
+    resp = await client.get(f"/scenarios/new/wizard/step/4?tx={tx}")
+    assert resp.status_code == 200, resp.text
+    cfgs = _extract_cfgs(resp.text)
+    by_field = {c["fieldKey"]: c for c in cfgs}
+    # No crash; the ceiling verdict degrades to False rather than raising.
+    assert by_field["pl"]["fieldCeilingExceeded"] is False
+
+
+@pytest.mark.asyncio
 async def test_cap_precedence_prefers_existing_authored_cap_over_current_revenue(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -30,14 +31,21 @@ from fair_cam.quantile_pooling import lognormal_from_quantiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.config import get_settings
-from idraa.errors import NotFoundError, ValidationError
+from idraa.errors import (
+    LibraryEntryNotFoundError,
+    LibraryEntryStatusError,
+    NotFoundError,
+    ValidationError,
+)
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.services.audit import AuditWriter
 from idraa.services.fair_cam_validation import validate_fair_distributions
+from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
+from idraa.services.scenario_library import ResolvedLibraryEntry, ScenarioLibraryService
 from idraa.services.scenarios import ScenarioVersionConflictError
 
 # Copied VERBATIM from alembic/versions/b3f8a2d94c1e_d12_tef_pert_collapse.py's
@@ -308,6 +316,227 @@ async def unpin_loss(
             "field": [None, field],
             "expected_row_version": [None, expected_row_version],
             field_col: [prior_dist, new_dist],
+            "row_version": [prev_row_version, scenario.row_version],
+        },
+        user_id=actor.id,
+        ip_address=ip_address,
+    )
+    await db.flush()
+    return scenario
+
+
+# ---------------------------------------------------------------------------
+# Refresh (PR3 Task 4, D23) -- replaces PL/SL wholesale from the scenario's
+# pinned library entry's CURRENT published dicts. Routed through the exact
+# same pair fresh adoption already uses (``resolve_for_clone`` +
+# ``library_calibrated_pre_fill``, Arch-N2) so a refreshed scenario cannot
+# drift from what a brand-new clone of the same entry would produce.
+# ---------------------------------------------------------------------------
+
+
+def _stamp_source(dist: Any) -> str | None:
+    """The ``sigma_recalibration.source`` string stamped on ONE field's
+    dist dict, or ``None`` when absent/malformed at any layer. Same
+    defensive walk as ``routes.scenarios._field_has_provenance`` -- kept as
+    a separate, smaller helper here (only the ``analyst_pin`` value matters
+    to the refuse-on-pinned check below; the routes-layer helper additionally
+    treats ``migration_recalibration`` as provenance for the tripwire, which
+    is out of scope for refresh's own pin-refusal rule).
+    """
+    if not isinstance(dist, dict):
+        return None
+    meta = dist.get("distribution_fit_metadata")
+    if not isinstance(meta, dict):
+        return None
+    stamp = meta.get("sigma_recalibration")
+    if not isinstance(stamp, dict):
+        return None
+    source = stamp.get("source")
+    return source if isinstance(source, str) else None
+
+
+@dataclass(frozen=True)
+class RefreshPlan:
+    """Read-only result of resolving a scenario against its pinned library
+    entry -- everything needed to EITHER render the two-step confirm page
+    (``routes.scenarios.refresh_scenario_loss``, no mutation) OR perform the
+    write (:func:`refresh_loss_from_library`). Built by
+    :func:`_resolve_refresh` exactly once per call so preview and write can
+    never see two different resolutions of "the entry's current dicts".
+    """
+
+    scenario: Scenario
+    resolved: ResolvedLibraryEntry
+    new_primary_loss: dict[str, Any]
+    new_secondary_loss: dict[str, Any] | None
+
+
+async def _resolve_refresh(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    scenario_id: uuid.UUID,
+    expected_row_version: int,
+    lock: bool,
+) -> RefreshPlan:
+    """Shared validation + resolution for both the read-only preview
+    (``lock=False``) and the real write (``lock=True``). Raises
+    :class:`idraa.errors.NotFoundError` (missing/wrong-org scenario),
+    :class:`idraa.services.scenarios.ScenarioVersionConflictError`
+    (optimistic-lock mismatch), or :class:`LossPinError` (no library
+    linkage, an analyst-pinned field, or the linked entry no longer being
+    resolvable -- draft/deprecated/deleted, D23 "never 500").
+
+    Never mutates ``scenario`` or the session -- callers apply the plan.
+    """
+    repo = ScenarioRepo(db)
+    scenario = await repo.get_for_org(
+        organization_id=organization_id, scenario_id=scenario_id, lock=lock
+    )
+    if scenario is None:
+        raise NotFoundError(f"scenario_id={scenario_id} not found")
+    _check_lock(scenario, expected_row_version)
+
+    library_pin = scenario.library_pin
+    if not isinstance(library_pin, dict) or not library_pin.get("entry_id"):
+        raise LossPinError("This scenario has no library entry to refresh from.")
+
+    # D23: refresh refuses outright on ANY analyst-pinned loss field (the
+    # scenario-level rule -- distinct from pin/unpin's per-field scope).
+    # An analyst who deliberately pinned a field's dispersion must unpin it
+    # first, same "unpin before you can move on" discipline the D20 skip-
+    # guard already enforces against blind migration sweeps.
+    for dist in (scenario.primary_loss, scenario.secondary_loss):
+        if _stamp_source(dist) == "analyst_pin":
+            raise LossPinError(
+                "This scenario has an analyst-pinned loss field — unpin it "
+                "before refreshing from the library."
+            )
+
+    try:
+        resolved = await ScenarioLibraryService(db).resolve_for_clone(
+            uuid.UUID(str(library_pin["entry_id"])), organization_id
+        )
+    except (LibraryEntryNotFoundError, LibraryEntryStatusError) as exc:
+        raise LossPinError(f"This scenario's library entry is no longer available: {exc}") from exc
+
+    form_dict, _meta = library_calibrated_pre_fill(resolved.entry, resolved.override)
+    organization = await db.get(Organization, organization_id)
+    minted = capacity_max_for_org(
+        organization.annual_revenue if organization is not None else None,
+        get_settings().capacity_k,
+    )
+    # D14: entries carry no ``max`` of their own -- capacity is minted fresh
+    # at instantiation, same as any other new adoption of this entry. A
+    # shallow copy is required (not just alias) -- form_dict's leaves are the
+    # entry/override's OWN persisted dicts; mutating them in place would
+    # corrupt the library row through the ORM's shared object reference.
+    new_pl: dict[str, Any] = dict(form_dict["pl"]) if form_dict["pl"] is not None else {}
+    new_sl: dict[str, Any] | None = dict(form_dict["sl"]) if form_dict["sl"] is not None else None
+    for new_dist in (new_pl, new_sl):
+        if isinstance(new_dist, dict) and str(new_dist.get("distribution", "")).lower() in (
+            "lognormal",
+            "lognormal_mixture",
+        ):
+            new_dist["max"] = minted
+
+    return RefreshPlan(
+        scenario=scenario, resolved=resolved, new_primary_loss=new_pl, new_secondary_loss=new_sl
+    )
+
+
+async def preview_loss_refresh(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    scenario_id: uuid.UUID,
+    expected_row_version: int,
+) -> RefreshPlan:
+    """Read-only variant for the two-step confirm page
+    (``routes.scenarios.refresh_scenario_loss``'s first, unconfirmed POST).
+
+    Runs the SAME validation ``refresh_loss_from_library`` will re-run under
+    a row lock at confirm time (deliberately not trusted across the two
+    requests -- another edit/pin/refresh can land in between) but takes no
+    lock and performs no write, so a scenario that would fail to refresh
+    (no linkage, a pinned field, an unresolvable entry) surfaces its error
+    on the FIRST POST rather than rendering a confirm page for an action
+    that can only 422 on confirm.
+    """
+    return await _resolve_refresh(
+        db,
+        organization_id=organization_id,
+        scenario_id=scenario_id,
+        expected_row_version=expected_row_version,
+        lock=False,
+    )
+
+
+async def refresh_loss_from_library(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    scenario_id: uuid.UUID,
+    expected_row_version: int,
+    actor: User,
+    ip_address: str | None = None,
+) -> Scenario:
+    """Replace ``scenario``'s primary/secondary loss wholesale with its
+    pinned library entry's CURRENT published dicts (D23).
+
+    Raises the same exception set as :func:`preview_loss_refresh`, plus
+    fair_cam's :class:`idraa.errors.FAIRCAMValidationError` (D19 capacity
+    floor / other FAIR-CAM validation) when the entry's own distributions
+    fail to validate against this org's capacity. Flushes on success --
+    commit is the caller's responsibility, same as :func:`pin_loss`/
+    :func:`unpin_loss`.
+
+    No step-up (Arch-N4, decided): parity with ``ScenarioService.update``,
+    which can equally overwrite PL/SL without ``StepUpCategory.DESTRUCTIVE``
+    -- delete remains the only destructive step-up action on this router.
+    """
+    plan = await _resolve_refresh(
+        db,
+        organization_id=organization_id,
+        scenario_id=scenario_id,
+        expected_row_version=expected_row_version,
+        lock=True,
+    )
+    scenario = plan.scenario
+
+    # validate_fair_distributions raises FAIRCAMValidationError (a
+    # ValidationError subclass) directly on D19-floor / other FAIR-CAM
+    # failures -- deliberately NOT wrapped into LossPinError here, mirroring
+    # pin_loss's own docstring rationale.
+    validate_fair_distributions(
+        threat_event_frequency=scenario.threat_event_frequency,
+        vulnerability=scenario.vulnerability,
+        primary_loss=plan.new_primary_loss,
+        secondary_loss=plan.new_secondary_loss,
+        require_loss_max=True,
+    )
+
+    prior_pl = dict(scenario.primary_loss) if isinstance(scenario.primary_loss, dict) else None
+    prior_sl = dict(scenario.secondary_loss) if isinstance(scenario.secondary_loss, dict) else None
+    prior_pin = dict(scenario.library_pin) if isinstance(scenario.library_pin, dict) else None
+
+    scenario.primary_loss = plan.new_primary_loss
+    scenario.secondary_loss = plan.new_secondary_loss
+    scenario.library_pin = plan.resolved.pin
+
+    prev_row_version = scenario.row_version
+    scenario.row_version = prev_row_version + 1
+
+    await AuditWriter(db).log(
+        organization_id=organization_id,
+        entity_type="scenario",
+        entity_id=scenario.id,
+        action="scenario.loss_refreshed_from_library",
+        changes={
+            "expected_row_version": [None, expected_row_version],
+            "primary_loss": [prior_pl, plan.new_primary_loss],
+            "secondary_loss": [prior_sl, plan.new_secondary_loss],
+            "library_pin": [prior_pin, plan.resolved.pin],
             "row_version": [prev_row_version, scenario.row_version],
         },
         user_id=actor.id,

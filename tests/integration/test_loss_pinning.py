@@ -314,14 +314,17 @@ async def test_pinned_dist_is_untouched_by_both_migration_helpers(
 # ---------------------------------------------------------------------------
 
 
-# T3.a gate fix (meth N-4): as of Task 3, `_loss_stale_wide` / the
-# `data-testid="loss-stale-wide"` banner do not exist ANYWHERE in the
-# codebase (Task 4 adds them) -- so the assertion below currently passes
-# VACUOUSLY: it would pass identically whether pin-suppression works or not,
-# since the banner never renders regardless of provenance. Left AS-IS
-# (Task 4 owns wiring the banner + the per-field suppression it will need to
-# honor); this test becomes genuinely discriminating once Task 4 lands the
-# producer this asserts the absence of.
+# T4 (spec-review N-4): as of Task 4, `_loss_stale_wide` and the
+# `data-testid="loss-stale-wide"` banner exist (routes/scenarios.py,
+# templates/scenarios/view.html) -- this assertion is now genuinely
+# discriminating, not vacuous. Traced: this scenario has no secondary_loss
+# (never set), so `_loss_stale_wide` only has the pinned PL to consider;
+# `_field_has_provenance(scenario.primary_loss)` reads the analyst_pin
+# stamp this test just wrote and excludes PL from the walk, so
+# `_loss_stale_wide` returns None even though the stored sigma (2.5) is
+# well over the 1.7 + 1e-5 tolerance -- if per-field suppression were
+# removed (or broken to ignore analyst_pin), `_loss_stale_wide` would
+# return 2.5 and the banner WOULD render, flipping this assertion red.
 @pytest.mark.asyncio
 async def test_view_page_suppresses_stale_banner_for_pinned_wide_field(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
@@ -913,11 +916,6 @@ async def test_unpin_on_unpinned_field_rejected_422(
     _assert_rendered_html_error(r, "This field is not currently pinned")
 
 
-@pytest.mark.xfail(
-    reason="banner re-fire on unpin is Task 4's tripwire (_loss_stale_wide); "
-    "not implemented until Task 4 lands",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_unpin_on_wide_field_refires_tripwire_banner_on_next_get(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
