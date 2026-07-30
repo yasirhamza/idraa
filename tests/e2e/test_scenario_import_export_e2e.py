@@ -52,7 +52,8 @@ def migrated_server_url() -> Iterator[str]:
     real migration chain on an ephemeral DB, launches uvicorn against it, yields
     the base URL, and tears down the process + file.
     """
-    db_path = tempfile.mktemp(suffix=".db", prefix="rf_e2e_")  # noqa: S306 — test-local ephemeral DB
+    db_fd, db_path = tempfile.mkstemp(suffix=".db", prefix="rf_e2e_")
+    os.close(db_fd)
     db_url = f"sqlite+aiosqlite:///{db_path}"
     env = {**os.environ, "DATABASE_URL": db_url, "AUTH_MFA_POLICY": "optional"}
 

@@ -65,7 +65,8 @@ def migrated_server_url() -> Iterator[str]:
     Copied verbatim from ``tests/e2e/test_run_detail_redesign_e2e.py`` — each
     e2e module owns its server.
     """
-    db_path = tempfile.mktemp(suffix=".db", prefix="rf_e2e_chart_")  # noqa: S306 — test-local ephemeral DB
+    db_fd, db_path = tempfile.mkstemp(suffix=".db", prefix="rf_e2e_chart_")
+    os.close(db_fd)
     db_url = f"sqlite+aiosqlite:///{db_path}"
     env = {**os.environ, "DATABASE_URL": db_url, "AUTH_MFA_POLICY": "optional"}
 
