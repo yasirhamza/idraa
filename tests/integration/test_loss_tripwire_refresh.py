@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fair_cam.quantile_pooling import Z_0_95
@@ -32,7 +33,7 @@ from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
-from idraa.routes.scenarios import _field_has_provenance, _stored_loss_sigma
+from idraa.routes.scenarios import _field_has_provenance, _loss_stale_wide, _stored_loss_sigma
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
 from tests.conftest import csrf_post
@@ -207,15 +208,41 @@ async def test_banner_fires_with_refresh_button_when_library_linked(
     # "null" (10 real prod rows have this shape per the migration test
     # suite), not SQL NULL -- must read back as None and never crash the
     # per-field walk.
-    await db_session.execute(
+    #
+    # T4.a gate fix (METH B-2, FIFTH recurrence of the raw-text-seed UUID
+    # foot-gun -- repo memory: "raw INSERT str(uuid) stores hyphenated, ORM
+    # Uuid binds no-hyphen -> silent 404/no-op"). ``str(scenario.id)`` is
+    # 36-char hyphenated; the ``Uuid(as_uuid=True)`` column stores the
+    # 32-char hex-no-hyphen form on SQLite, so the WHERE clause matched
+    # ZERO rows and this fixture's core claim (SL genuinely stores the
+    # literal text "null") was never actually true -- the test still
+    # passed because the banner fires off primary_loss's sigma=2.5
+    # regardless. ``.hex`` matches the stored form; the rowcount assertion
+    # makes a sixth recurrence loud instead of silently green.
+    result = await db_session.execute(
         text("UPDATE scenarios SET secondary_loss = 'null' WHERE id = :id"),
-        {"id": str(scenario.id)},
+        {"id": scenario.id.hex},
+    )
+    # `Result.rowcount` IS populated for UPDATE on PG + SQLite via
+    # SQLAlchemy 2.x's CursorResult -- the mypy `attr-defined` from the
+    # generic `Result[Any]` stub is a stub-precision miss, not a runtime
+    # bug (same precedent as services/sme_directory.py:391).
+    assert result.rowcount == 1, (  # type: ignore[attr-defined]
+        "UPDATE matched 0 rows -- the raw-text UUID foot-gun is back; "
+        "this fixture's SL is not actually the literal text 'null'"
     )
     await db_session.commit()
+    await db_session.refresh(scenario)
+    assert scenario.secondary_loss is None, (
+        "the literal JSON text 'null' must read back as Python None, same "
+        "as SQL NULL -- proves the UPDATE landed on the real row, not just "
+        "that rowcount was nonzero"
+    )
 
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
+    assert "Primary loss" in resp.text
     assert "2.50" in resp.text
     assert 'data-testid="loss-refresh-button"' in resp.text
 
@@ -312,6 +339,9 @@ async def test_banner_fires_mixed_provenance_migration_pl_beside_wide_unstamped_
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
+    # T4.a gate fix (METH I-3): the banner now names the FIRING field --
+    # must be "Secondary loss" here, not the narrow migration-stamped PL.
+    assert "Secondary loss" in resp.text
 
 
 @pytest.mark.asyncio
@@ -352,6 +382,9 @@ async def test_banner_fires_mixed_provenance_pinned_pl_beside_wide_unstamped_sl(
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
+    # T4.a gate fix (METH I-3): named field must be "Secondary loss" -- the
+    # newly-pinned PL is suppressed, the wide unstamped SL is the firer.
+    assert "Secondary loss" in resp.text
 
 
 @pytest.mark.asyncio
@@ -377,6 +410,12 @@ async def test_banner_present_without_refresh_button_when_no_library_pin(
     assert 'data-testid="loss-stale-wide"' in resp.text
     assert 'data-testid="loss-refresh-button"' not in resp.text
     assert "no linked library entry" in resp.text.lower()
+    # T4.a gate fix (METH I-5.4): the no-linkage fallback must keep the
+    # lognormal-only pin scoping -- "pin (lognormal fields) or re-author",
+    # never a bare "pin or re-author" that would mislead a PERT-wide field
+    # (see test_banner_fires_for_wide_pert_field_no_pin_affordance below)
+    # into thinking Edit offers it a pin.
+    assert "pin (lognormal fields)" in resp.text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -438,24 +477,170 @@ def test_stored_loss_sigma_single_component_mixture_regression() -> None:
     assert read == pytest.approx(1.9, rel=1e-9)
 
 
+# ---------------------------------------------------------------------------
+# T4.a gate fix (METH B-1, re-scoped D21, owner 2026-07-30): the TRIPWIRE
+# FIRING decision for a lognormal_mixture field uses the MAX COMPONENT
+# sigma, NOT the pooled implied sigma -- the pooled-vs-constant comparison
+# fired PERMANENTLY on a correctly-calibrated divergent mixture (both
+# components exactly at the platform default) with no acknowledgment path,
+# since D21 gives mixtures no pin affordance. The pooled read stays the
+# DISPLAY value everywhere (test_stored_loss_sigma_mixture_reads_true_
+# implied_sigma_not_max_component above still pins it, unchanged -- that
+# test exercises _stored_loss_sigma directly, never the tripwire predicate).
+# ---------------------------------------------------------------------------
+
+
+def test_loss_stale_wide_absent_for_divergent_mixture_with_matched_default_components() -> None:
+    """(a) the B-1 case: both components exactly at the platform default
+    (medians 200x apart, pooled read ~2.94 -- wide by the OLD pooled-vs-
+    constant predicate) must NOT fire the tripwire under the component-
+    threshold predicate."""
+    # cast: _loss_stale_wide only reads .primary_loss/.secondary_loss --
+    # a full Scenario ORM instance is unnecessary ceremony for a pure-
+    # function test; the cast tells mypy what the runtime duck-type promise
+    # already is.
+    scenario = cast(
+        Scenario, SimpleNamespace(primary_loss=_divergent_mixture(), secondary_loss=None)
+    )
+    assert _loss_stale_wide(scenario) is None
+
+
+# Hand math / executed side-by-side (issue #90 discipline) for the
+# WIDE-COMPONENT fixture below (one component left at a stale pre-sweep
+# sigma=2.9, the other at the default) --
+#   python3 -c "
+#     import math
+#     from fair_cam.quantile_pooling import mixture_quantile_lognorm, Z_0_95
+#     from fair_cam.quantile_pooling._types import LognormMixture, LogNormalTruncFit
+#     mu1 = math.log(1_000_000.0); mu2 = mu1 + math.log(200.0)
+#     c1 = LogNormalTruncFit(mu1, 1.7, 0.0, math.inf)
+#     c2 = LogNormalTruncFit(mu2, 2.9, 0.0, math.inf)
+#     mix = LognormMixture((c1, c2), (0.5, 0.5))
+#     q50, q95 = mixture_quantile_lognorm(mix, 0.5), mixture_quantile_lognorm(mix, 0.95)
+#     print(repr(math.log(q95/q50)/Z_0_95))
+#   "
+# -> 4.29019574977717 (pooled display sigma); max component sigma = 2.9.
+_WIDE_COMPONENT_MIXTURE_POOLED_SIGMA = 4.29019574977717
+
+
+def _wide_component_mixture() -> dict[str, Any]:
+    mu1 = math.log(1_000_000.0)
+    mu2 = mu1 + math.log(200.0)
+    return {
+        "distribution": "lognormal_mixture",
+        "components": [
+            {"mean": mu1, "sigma": 1.7, "weight": 0.5},
+            {"mean": mu2, "sigma": 2.9, "weight": 0.5},
+        ],
+    }
+
+
+def test_loss_stale_wide_fires_for_mixture_with_wide_component() -> None:
+    """(b) the blind spot stays closed where it is real: a genuinely stale
+    component (sigma=2.9) fires even though its sibling sits exactly at
+    the default. Returned dict carries the POOLED sigma for display
+    (honest, includes between-expert divergence) alongside the
+    max_component_sigma the firing decision itself used (B-1 label
+    payload for the "components <= Y.YY" banner text)."""
+    scenario = cast(
+        Scenario, SimpleNamespace(primary_loss=_wide_component_mixture(), secondary_loss=None)
+    )
+    result = _loss_stale_wide(scenario)
+    assert result is not None
+    assert result["field_label"] == "Primary loss"
+    assert result["kind"] == "lognormal_mixture"
+    assert result["sigma"] == pytest.approx(_WIDE_COMPONENT_MIXTURE_POOLED_SIGMA, rel=1e-9)
+    assert result["max_component_sigma"] == pytest.approx(2.9, rel=1e-9)
+
+
 @pytest.mark.asyncio
-async def test_banner_fires_for_divergent_mixture_via_http(
+async def test_banner_absent_for_divergent_mixture_with_matched_default_components(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     seed_scenario_factory: Any,
     db_session: AsyncSession,
 ) -> None:
+    """(a) HTTP-level companion to the pure test above -- this is the SAME
+    fixture the pre-fix tripwire (pooled-vs-constant) fired on
+    permanently; D21 offers a mixture no pin acknowledgment path, so a
+    correctly-calibrated divergent mixture must read as quiet."""
     client, org_id = authed_analyst
     scenario = await _seed_scenario_with_pl(
         seed_scenario_factory,
         db_session,
-        name="Divergent-mixture-banner",
+        name="Divergent-mixture-matched-components",
         organization_id=org_id,
         primary_loss=_divergent_mixture(),
     )
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
+    assert 'data-testid="loss-stale-wide"' not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_banner_fires_for_mixture_with_wide_component(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    """(c) existing divergent-fires test updated to a wide-COMPONENT
+    fixture (replaces the pre-fix test_banner_fires_for_divergent_mixture_
+    via_http, which asserted on the now-quiet matched-components case)."""
+    client, org_id = authed_analyst
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Wide-component-mixture-banner",
+        organization_id=org_id,
+        primary_loss=_wide_component_mixture(),
+    )
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
-    assert "2.94" in resp.text  # 2dp of the executed implied sigma
+    assert "Primary loss" in resp.text
+    assert "4.29" in resp.text  # pooled display sigma, 2dp
+    assert "2.90" in resp.text  # component ceiling in the honest mixture label
+
+
+# ---------------------------------------------------------------------------
+# SPEC I-1: the plan-named wide-PERT tripwire test -- D21's accepted
+# residual (spec D23 "Accepted residual"): a deliberately wide hand-
+# authored PERT field with no library linkage has no pin affordance (pins
+# apply to lognormal loss fields only, D21) and keeps its informational
+# banner -- rare, non-blocking (I-5.4's PERT accepted-residual population).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_banner_fires_for_wide_pert_field_no_pin_affordance(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_analyst
+    low = 100_000.0
+    # implied sigma = ln(high/low) / (2*Z_0_95) -- same read
+    # _stored_loss_sigma's PERT branch uses. high/low = exp(2*Z*2.49),
+    # executed: high = 360966793.45914084, implied sigma round-trips to
+    # exactly 2.49 (python3 -c "import math; Z=1.6448536269514722; "
+    # "low=100_000.0; high=low*math.exp(2*Z*2.49); "
+    # "print(repr(high), repr(math.log(high/low)/(2*Z)))").
+    high = low * math.exp(2 * Z_0_95 * 2.49)
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Wide-pert-no-linkage",
+        organization_id=org_id,
+        primary_loss={"distribution": "PERT", "low": low, "mode": (low + high) / 2, "high": high},
+        # library_pin omitted -> None: D23's accepted residual, no refresh
+        # affordance AND no pin affordance either (D21 -- pins are
+        # lognormal-only, so the copy must not offer this field a pin).
+    )
+    resp = await client.get(f"/scenarios/{scenario.id}")
+    assert resp.status_code == 200
+    assert 'data-testid="loss-stale-wide"' in resp.text
+    assert 'data-testid="loss-refresh-button"' not in resp.text
+    assert "2.49" in resp.text
+    assert "pin (lognormal fields)" in resp.text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -529,6 +714,18 @@ async def test_refresh_two_step_confirm_then_write_replaces_pl_sl_and_audits(
     assert r1.status_code == 200, r1.text
     assert 'data-testid="loss-refresh-confirm"' in r1.text
     assert entry_v2.name in r1.text
+    # SPEC N-5: strengthen the confirm-page content assertion beyond "the
+    # page rendered" -- assert the sigma cells (current PL sigma=2.8,
+    # entry v2 PL sigma=0.6, both basis-labeled per METH I-4) AND a
+    # median/mean value actually appear. Current PL is
+    # _lognormal(500_000.0, 2.8) -> median == exp(mean) == 500000.0
+    # exactly (mean=log(500000)); format_money_input renders it
+    # "500000.00" (no $, no thousands separator -- see app.py's
+    # _format_money_input docstring).
+    assert "2.80" in r1.text  # current PL implied sigma
+    assert "0.60" in r1.text  # entry v2 PL sigma
+    assert "parent-lognormal basis" in r1.text
+    assert "500000.00" in r1.text  # current PL's median cell
 
     await db_session.refresh(scenario)
     assert scenario.primary_loss == prior_pl, "preview step must not mutate"
@@ -575,6 +772,44 @@ async def test_refresh_two_step_confirm_then_write_replaces_pl_sl_and_audits(
     assert audit_row.changes["primary_loss"] == [prior_pl, expected_pl]
     assert audit_row.changes["secondary_loss"] == [prior_sl, expected_sl]
     assert audit_row.changes["library_pin"][1]["version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_refresh_confirm_page_discloses_cap_remint(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    """T4.a gate fix (NTH, meth N-2): the confirm page must disclose when
+    the refresh's freshly-minted capacity cap differs from the field's
+    PRIOR stored max. Fixture mirrors the finding's "executed example
+    silently loosened 200x" shape: a narrow bespoke $500,000 cap on the
+    CURRENT field vs an $4,000,000,000 org-revenue mint (8000x looser)."""
+    client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "4000000000")
+    entry = await _seed_published_entry(
+        db_session,
+        slug="refresh-cap-remint-entry",
+        primary_loss={"distribution": "lognormal", "mean": math.log(2_000_000.0), "sigma": 0.9},
+    )
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Refresh-cap-remint",
+        organization_id=org_id,
+        primary_loss=_lognormal(1_000_000.0, 1.9, cap=500_000.0),
+        library_pin=_pin_for(entry),
+    )
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/refresh",
+        {"expected_row_version": str(scenario.row_version)},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200, r.text
+    assert 'data-testid="cap-remint-pl"' in r.text
+    assert "500,000" in r.text  # old cap, format_money (whole-dollar, comma-grouped)
+    assert "4,000,000,000" in r.text  # new mint
 
 
 # ---------------------------------------------------------------------------
@@ -657,6 +892,49 @@ async def test_refresh_refuses_on_pinned_scenario(
     )
     assert r.status_code == 422, r.text
     _assert_rendered_html_error(r, "unpin")
+
+
+@pytest.mark.asyncio
+async def test_refresh_no_revenue_names_actual_remedy(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    """T4.a gate fix (meth N-4): an org with no annual_revenue refreshing
+    into a lognormal entry (which needs a freshly-minted D14 capacity cap)
+    must see the D18 remedy copy naming the ACTUAL fix ("annual revenue"),
+    not fall through to validate_fair_distributions's generic D15 "max is
+    required" message. ``authed_analyst``'s org has ``annual_revenue =
+    None`` by default (tests.factories.create_org never sets it) --
+    no ``_set_annual_revenue`` call here is deliberate."""
+    client, org_id = authed_analyst
+    entry = await _seed_published_entry(
+        db_session,
+        slug="refresh-no-revenue-entry",
+        primary_loss={"distribution": "lognormal", "mean": math.log(2_000_000.0), "sigma": 0.9},
+    )
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Refresh-no-revenue",
+        organization_id=org_id,
+        # Current PL is PERT (no cap concept) so this scenario isn't
+        # refused for an unrelated reason (an analyst_pin) before reaching
+        # the mint check.
+        primary_loss={"distribution": "PERT", "low": 10_000.0, "mode": 20_000.0, "high": 50_000.0},
+        library_pin=_pin_for(entry),
+    )
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/refresh",
+        {"expected_row_version": str(scenario.row_version)},
+        follow_redirects=False,
+    )
+    assert r.status_code == 422, r.text
+    # D18's own message has an apostrophe Jinja autoescapes to "&#39;" in
+    # prose (test_scenario_form_capacity_bound.py precedent) -- assert a
+    # substring that avoids it.
+    _assert_rendered_html_error(r, "annual revenue")
 
 
 # ---------------------------------------------------------------------------
@@ -809,6 +1087,44 @@ async def test_refresh_stale_row_version_conflict(
         client,
         f"/scenarios/{scenario.id}/loss/refresh",
         {"expected_row_version": str(scenario.row_version + 1)},
+        follow_redirects=False,
+    )
+    assert r.status_code == 409, r.text
+    _assert_rendered_html_error(r, "reload and")
+
+
+@pytest.mark.asyncio
+async def test_refresh_confirmed_path_stale_row_version_conflict(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    """SPEC N-6: the test above only exercises the PREVIEW branch's
+    ``_check_lock`` call (``preview_loss_refresh`` -> ``_resolve_refresh``,
+    ``lock=False``). The CONFIRMED write branch
+    (``refresh_loss_from_library`` -> ``_resolve_refresh``, ``lock=True``)
+    shares the same ``_check_lock`` helper but is reached through a
+    DIFFERENT call site (``confirm_refresh=1``, no preceding preview POST
+    required) -- this proves that branch's own ``expected_row_version``
+    wiring actually rejects a stale value too, not just the preview one."""
+    client, org_id = authed_analyst
+    entry = await _seed_published_entry(
+        db_session,
+        slug="refresh-confirmed-stale-row-version-entry",
+        primary_loss={"distribution": "lognormal", "mean": math.log(2_000_000.0), "sigma": 0.9},
+    )
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Refresh-confirmed-stale-row-version",
+        organization_id=org_id,
+        primary_loss=_lognormal(1_000_000.0, 2.5),
+        library_pin=_pin_for(entry),
+    )
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/refresh",
+        {"confirm_refresh": "1", "expected_row_version": str(scenario.row_version + 1)},
         follow_redirects=False,
     )
     assert r.status_code == 409, r.text

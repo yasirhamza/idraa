@@ -13,6 +13,34 @@
      {{ pert_distribution_chart("tef-chart", entry.threat_event_frequency, "Threat event frequency") }}
 #}
 
+{% macro sigma_basis_line(display) -%}
+  {#- T4.a gate fix (METH I-4): honest basis label for a stored loss
+     field's implied sigma, shared by the stale-wide tripwire banner
+     (view.html) and the refresh confirm page (confirm_loss_refresh.html)
+     so both surfaces render the SAME wording instead of hand-typed
+     near-duplicates.
+
+     display = None, or {"kind": "lognormal"|"pert"|"lognormal_mixture",
+     "sigma": N, "max_component_sigma": N|None} -- the shape
+     routes.scenarios._loss_sigma_display returns.
+
+     Plain lognormal and PERT share ONE basis label ("parent-lognormal
+     basis"): a stored PERT's implied sigma is mechanically the same
+     exp(mu +/- Z*sigma) read of an underlying lognormal fit that
+     _stored_loss_sigma's own PERT-branch docstring documents (D4'
+     provenance) -- the identical basis word D22's capped_pert chart
+     label already uses. A lognormal_mixture instead gets the POOLED
+     label (includes between-expert divergence, B-1) plus the per-
+     component ceiling the tripwire itself fires on. -#}
+  {%- if display is none -%}
+    &mdash;
+  {%- elif display.kind == "lognormal_mixture" -%}
+    pooled &sigma;={{ "%.2f" | format(display.sigma) }} (includes between-expert divergence; components &le; {{ "%.2f" | format(display.max_component_sigma) }})
+  {%- else -%}
+    &sigma;={{ "%.2f" | format(display.sigma) }} (parent-lognormal basis)
+  {%- endif -%}
+{%- endmacro %}
+
 {% macro pert_distribution_chart(chart_id, distribution, label="", fmt="money") -%}
   {# Tabular summary for a PERT or lognormal distribution dict.
 

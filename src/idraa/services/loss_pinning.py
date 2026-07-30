@@ -21,6 +21,7 @@ rollback-on-conflict).
 
 from __future__ import annotations
 
+import copy
 import math
 import uuid
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.services.audit import AuditWriter
+from idraa.services.capacity_bound_copy import D18_REVENUE_MESSAGE
 from idraa.services.fair_cam_validation import validate_fair_distributions
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
@@ -427,12 +429,34 @@ async def _resolve_refresh(
         get_settings().capacity_k,
     )
     # D14: entries carry no ``max`` of their own -- capacity is minted fresh
-    # at instantiation, same as any other new adoption of this entry. A
-    # shallow copy is required (not just alias) -- form_dict's leaves are the
-    # entry/override's OWN persisted dicts; mutating them in place would
-    # corrupt the library row through the ORM's shared object reference.
-    new_pl: dict[str, Any] = dict(form_dict["pl"]) if form_dict["pl"] is not None else {}
-    new_sl: dict[str, Any] | None = dict(form_dict["sl"]) if form_dict["sl"] is not None else None
+    # at instantiation, same as any other new adoption of this entry. A DEEP
+    # copy (T4.a gate fix, NTH: simplest-true-fix over a shallow copy +
+    # aliasing-disclosure comment) is required -- form_dict's leaves are the
+    # entry/override's OWN persisted dicts, and some are themselves nested
+    # (mixture ``components`` lists of dicts, ``distribution_fit_metadata``).
+    # A shallow ``dict(...)`` only copies the TOP level, leaving nested
+    # structures ALIASED to the library row's own objects; mutating a nested
+    # dict in place would corrupt the library row through that shared
+    # reference. This function's own ``new_dist["max"] = minted`` below only
+    # mutates the top level today, so there is no LIVE aliasing bug in
+    # practice yet -- this is a precaution against the next writer that
+    # reaches one level deeper (e.g. a future per-component cap).
+    new_pl: dict[str, Any] = copy.deepcopy(form_dict["pl"]) if form_dict["pl"] is not None else {}
+    new_sl: dict[str, Any] | None = (
+        copy.deepcopy(form_dict["sl"]) if form_dict["sl"] is not None else None
+    )
+    # T4.a gate fix (meth N-4): name the ACTUAL remedy instead of letting a
+    # revenue-less org fall through to validate_fair_distributions's generic
+    # D15 "max is required" message -- same D18 precondition the wizard/
+    # importer catastrophic-authoring paths already surface via this exact,
+    # reused string.
+    needs_cap = any(
+        isinstance(d, dict)
+        and str(d.get("distribution", "")).lower() in ("lognormal", "lognormal_mixture")
+        for d in (new_pl, new_sl)
+    )
+    if minted is None and needs_cap:
+        raise LossPinError(D18_REVENUE_MESSAGE)
     for new_dist in (new_pl, new_sl):
         if isinstance(new_dist, dict) and str(new_dist.get("distribution", "")).lower() in (
             "lognormal",

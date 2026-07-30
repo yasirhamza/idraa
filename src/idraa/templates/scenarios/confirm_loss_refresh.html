@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/chart.html" import pert_distribution_chart %}
+{% from "macros/chart.html" import pert_distribution_chart, sigma_basis_line %}
 {% block title %}Refresh loss dispersion — {{ scenario.name }}{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto" data-testid="loss-refresh-confirm">
@@ -25,6 +25,22 @@
         to reflect the refreshed dispersion. This cannot be undone except
         by refreshing again or re-authoring by hand.
       </p>
+      {# T4.a gate fix (NTH, meth N-2): disclose when the freshly-minted
+         capacity cap differs from the field's PRIOR stored max -- the
+         executed example silently loosened an existing cap ~200x with no
+         confirm-page disclosure before this fix. #}
+      {% if primary_cap_remint %}
+      <p class="text-sm mt-1" data-testid="cap-remint-pl">
+        Primary loss capacity cap will be re-minted from current revenue:
+        ${{ primary_cap_remint[0] | format_money }} &rarr; ${{ primary_cap_remint[1] | format_money }}.
+      </p>
+      {% endif %}
+      {% if secondary_cap_remint %}
+      <p class="text-sm mt-1" data-testid="cap-remint-sl">
+        Secondary loss capacity cap will be re-minted from current revenue:
+        ${{ secondary_cap_remint[0] | format_money }} &rarr; ${{ secondary_cap_remint[1] | format_money }}.
+      </p>
+      {% endif %}
     </div>
   </div>
 
@@ -32,13 +48,17 @@
     <div>
       <h3 class="text-h3 text-ink-1 mb-2">Primary loss</h3>
       <p class="text-meta text-ink-2 mb-1">Current</p>
+      {# T4.a gate fix (METH I-4): basis-labeled via the SAME shared macro
+         the stale-wide banner uses (macros/chart.html::sigma_basis_line) --
+         "parent-lognormal basis" for lognormal/PERT, the pooled+component
+         label for a mixture, instead of a bare sigma figure. #}
       <p class="text-meta text-ink-2 mb-2">
-        &sigma;={{ "%.2f" | format(current_primary_loss_sigma) if current_primary_loss_sigma is not none else "—" }}
+        {{ sigma_basis_line(current_primary_loss_sigma) }}
       </p>
       {{ pert_distribution_chart("refresh-pl-current", current_primary_loss, fmt="money") }}
       <p class="text-meta text-ink-2 mb-1 mt-4">From library entry</p>
       <p class="text-meta text-ink-2 mb-2">
-        &sigma;={{ "%.2f" | format(entry_primary_loss_sigma) if entry_primary_loss_sigma is not none else "—" }}
+        {{ sigma_basis_line(entry_primary_loss_sigma) }}
       </p>
       {{ pert_distribution_chart("refresh-pl-entry", entry_primary_loss, fmt="money") }}
     </div>
@@ -47,7 +67,7 @@
       {% if current_secondary_loss or entry_secondary_loss %}
         <p class="text-meta text-ink-2 mb-1">Current</p>
         <p class="text-meta text-ink-2 mb-2">
-          &sigma;={{ "%.2f" | format(current_secondary_loss_sigma) if current_secondary_loss_sigma is not none else "—" }}
+          {{ sigma_basis_line(current_secondary_loss_sigma) }}
         </p>
         {% if current_secondary_loss %}
           {{ pert_distribution_chart("refresh-sl-current", current_secondary_loss, fmt="money") }}
@@ -56,7 +76,7 @@
         {% endif %}
         <p class="text-meta text-ink-2 mb-1 mt-4">From library entry</p>
         <p class="text-meta text-ink-2 mb-2">
-          &sigma;={{ "%.2f" | format(entry_secondary_loss_sigma) if entry_secondary_loss_sigma is not none else "—" }}
+          {{ sigma_basis_line(entry_secondary_loss_sigma) }}
         </p>
         {% if entry_secondary_loss %}
           {{ pert_distribution_chart("refresh-sl-entry", entry_secondary_loss, fmt="money") }}

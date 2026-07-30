@@ -1026,6 +1026,17 @@ def _stored_loss_sigma(dist: Any) -> float | None:
         float association leaves ~1e-16 relative drift, not a behavior
         change). DISCLOSED: this also changes the PR1-shipped view-time
         sigma advisory displays that already called this function.
+
+        Silent-None note (T4.a gate fix, METH N-3): malformed or
+        non-positive-weight components are SKIPPED during reconstruction
+        (the ``isinstance``/``> 0`` guards below); if that leaves ZERO
+        usable components, this branch returns ``None`` -- the SAME
+        silent-degrade convention the rest of this function already uses
+        for absent/malformed shapes. A mixture whose real components are
+        merely malformed (not narrow) therefore reads as "no sigma
+        reading" here rather than as wide -- callers (``_loss_stale_wide``
+        included) cannot distinguish "narrow" from "unreadable" from this
+        return value alone.
       - ``PERT`` -> implied sigma ``ln(high/low) / (2 * Z_0_95)`` (D4'
         provenance: capped ranges are mechanically
         ``exp(mu -+ Z_0_95 * sigma)`` of the underlying lognormal fit).
@@ -1128,9 +1139,77 @@ def _field_has_provenance(dist: Any) -> bool:
     return stamp.get("source") in ("analyst_pin", "migration_recalibration")
 
 
-def _loss_stale_wide(scenario: Scenario) -> float | None:
-    """Widest stored loss sigma among fields that INDIVIDUALLY lack
-    provenance, when it exceeds the default beyond tolerance.
+def _tripwire_component_sigma(dist: dict[str, Any]) -> float | None:
+    """Sigma used for the TRIPWIRE FIRING DECISION (T4.a gate fix, METH B-1
+    -- re-scoped D21, owner 2026-07-30). For ``lognormal``/``PERT`` this is
+    numerically identical to ``_stored_loss_sigma``'s own read. For
+    ``lognormal_mixture`` it is the MAX COMPONENT sigma, deliberately NOT
+    the pooled implied sigma ``_stored_loss_sigma`` returns for display:
+    calibration staleness lives in COMPONENTS (the PR1 sweep narrowed each
+    component to the within-scenario default; it never touched pooled
+    spread), and comparing the POOLED read against the per-component
+    constant fires on correctly-calibrated divergent mixtures once their
+    medians differ by as little as ~1.2%, is NON-MONOTONIC in component
+    sigma (a T4-gate executed minimum of 1.92 -- never clearable by
+    narrowing components further), and D21 gives mixtures no pin
+    acknowledgment path at all. A wide-COMPONENT mixture (a real stale
+    copy -- e.g. one component left at a pre-sweep sigma=2.9) still fires:
+    the original blind spot (max-component read silently defeating the
+    tripwire on a truly divergent-but-narrow-component mixture) stays
+    closed where it was real.
+
+    Returns ``None`` under the same malformed/empty-components conditions
+    ``_stored_loss_sigma``'s own docstring documents (silent-None note,
+    METH N-3).
+    """
+    kind = str(dist.get("distribution", "pert")).lower()
+    if kind != "lognormal_mixture":
+        return _stored_loss_sigma(dist)
+    comps = dist.get("components")
+    if not isinstance(comps, list) or not comps:
+        return None
+    sigmas = [
+        float(c["sigma"])
+        for c in comps
+        if isinstance(c, dict) and isinstance(c.get("sigma"), int | float) and c["sigma"] > 0
+    ]
+    return max(sigmas) if sigmas else None
+
+
+def _loss_sigma_display(dist: Any) -> dict[str, Any] | None:
+    """Basis-labeled sigma reading for ONE stored PL/SL dict -- the shared
+    payload both the stale-wide banner (per firing field) and the refresh
+    confirm page (current-vs-entry comparison) render through the SAME
+    honest-basis template branch (T4.a gate fix, METH I-4).
+
+    ``sigma`` is always the POOLED/display read (``_stored_loss_sigma`` --
+    for a mixture this INCLUDES between-expert divergence, unlike the
+    tripwire's own component-threshold decision above).
+    ``max_component_sigma`` is populated only for ``lognormal_mixture``
+    (the per-component ceiling the tripwire itself fires on, surfaced so
+    the honest mixture label can say "components <= Y.YY", per B-1);
+    ``None`` for every other kind. Plain ``lognormal`` and ``PERT`` share
+    ONE basis label ("parent-lognormal basis") -- a stored PERT's implied
+    sigma is mechanically the same ``exp(mu +/- Z*sigma)`` read of an
+    underlying lognormal fit that ``_stored_loss_sigma``'s own PERT-branch
+    docstring documents (D4' provenance), the identical basis word D22's
+    capped_pert chart label already uses.
+
+    Returns ``None`` when the field carries no sigma reading at all
+    (``_stored_loss_sigma`` returns ``None``).
+    """
+    sigma = _stored_loss_sigma(dist)
+    if sigma is None:
+        return None
+    kind = str(dist.get("distribution", "pert")).lower() if isinstance(dist, dict) else "pert"
+    max_component_sigma = _tripwire_component_sigma(dist) if kind == "lognormal_mixture" else None
+    return {"kind": kind, "sigma": sigma, "max_component_sigma": max_component_sigma}
+
+
+def _loss_stale_wide(scenario: Scenario) -> dict[str, Any] | None:
+    """Basis-labeled reading for the WIDEST stored loss field that
+    INDIVIDUALLY lacks provenance and trips the tripwire, or ``None`` when
+    nothing fires.
 
     PER-FIELD suppression (plan-gate SC-1/B-M3a): a pin or migration stamp
     on one field must never mute a wide, unstamped sibling -- scenario-level
@@ -1140,15 +1219,59 @@ def _loss_stale_wide(scenario: Scenario) -> float | None:
     fires on wild imports and hand-authored wide sigma too -- linkage only
     gates whether the Refresh affordance renders (view.html), a template-
     level check against ``scenario.library_pin``.
+
+    FIRING decision (T4.a gate fix, METH B-1) uses
+    ``_tripwire_component_sigma`` -- max-component for a mixture, the plain
+    read otherwise -- while the returned ``sigma`` stays the POOLED/display
+    read (``_loss_sigma_display``), so the banner shows the honest,
+    between-expert-inclusive number even when a narrower per-component
+    reading is what triggered it.
+
+    Return shape: ``{"field_label": "Primary loss"|"Secondary loss",
+    "kind": ..., "sigma": ..., "max_component_sigma": ... | None}``, or
+    ``None`` when nothing fires.
     """
-    widest: float | None = None
-    for dist in (scenario.primary_loss, scenario.secondary_loss):
+    widest: dict[str, Any] | None = None
+    for dist, label in (
+        (scenario.primary_loss, "Primary loss"),
+        (scenario.secondary_loss, "Secondary loss"),
+    ):
         if not isinstance(dist, dict) or _field_has_provenance(dist):
             continue
-        s = _stored_loss_sigma(dist)
-        if s is not None and s > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
-            widest = s if widest is None else max(widest, s)
+        trip_sigma = _tripwire_component_sigma(dist)
+        if trip_sigma is None or trip_sigma <= WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
+            continue
+        display = _loss_sigma_display(dist)
+        if display is None:
+            continue
+        if widest is None or display["sigma"] > widest["sigma"]:
+            widest = {**display, "field_label": label}
     return widest
+
+
+def _cap_remint_disclosure(old_dist: Any, new_dist: Any) -> tuple[float, float] | None:
+    """``(old_max, new_max)`` when a library refresh's freshly-minted
+    capacity cap DIFFERS from the field's PRIOR stored ``max`` -- ``None``
+    when either side carries no usable numeric ``max`` (nothing to
+    disclose) or the two agree within float noise.
+
+    T4.a gate fix (NTH, meth N-2): ``_resolve_refresh`` unconditionally
+    overwrites a lognormal/lognormal_mixture field's ``max`` with the
+    org's current ``capacity_max_for_org`` mint (D14 — entries carry no
+    ``max`` of their own). When the field's PRIOR cap was narrower than
+    that mint (a bespoke, previously-authored cap, or simply an org whose
+    revenue grew since the field was last capped), refresh silently
+    LOOSENS it -- the executed example loosened an existing cap ~200x with
+    no confirm-page disclosure before this fix.
+    """
+    if not isinstance(old_dist, dict) or not isinstance(new_dist, dict):
+        return None
+    old_max, new_max = old_dist.get("max"), new_dist.get("max")
+    if not (isinstance(old_max, int | float) and isinstance(new_max, int | float)):
+        return None
+    if math.isclose(float(old_max), float(new_max), rel_tol=1e-9):
+        return None
+    return float(old_max), float(new_max)
 
 
 async def _view_scenario_context(
@@ -1237,6 +1360,13 @@ async def _view_scenario_context(
         # analyst pins/refreshes/re-authors it, not just on the render right
         # after finalize.
         "loss_stale_wide": _loss_stale_wide(scenario),
+        # T4.a gate fix (METH I-2): a top-level context key so the
+        # stale-wide banner never reads `pin_panels.pl.sigma_default` --
+        # that key is ABSENT on `pin_panels["pl"]` whenever primary_loss is
+        # non-dict (None, or the literal JSON text "null"), which raised a
+        # Jinja UndefinedError (500) on a wide, non-dict-PL scenario
+        # (executed). This key is present unconditionally.
+        "sigma_default": WITHIN_SCENARIO_SIGMA_DEFAULT,
         # PR3 T3: pin-state chip + unpin button per field. capacity_max
         # is None here — the view page shows no readout mount, only the
         # chip/unpin affordance, so _pin_panel_context's readout_cfg
@@ -1340,7 +1470,12 @@ async def view_scenario(
     flash = None
     if loss_wide == 1:
         wide_sigma = _max_stored_loss_sigma(scenario)
-        if wide_sigma is not None and wide_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT:
+        # T4.a gate fix (METH I-1): toleranced like every other sigma-vs-
+        # default comparison in this module (_SIGMA_TOL = 1e-5) -- a stored
+        # component sigma of exactly 1.7 that drifts to
+        # 1.7000000000000004 via dollar round-trips must NOT flash "wider
+        # than the default" here, mirroring _loss_stale_wide's own guard.
+        if wide_sigma is not None and wide_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
             flash = build_flash(
                 f"This scenario's loss dispersion (sigma={wide_sigma:.2f}) is "
                 f"wider than the within-scenario default "
@@ -2180,10 +2315,27 @@ async def refresh_scenario_loss(
                 "current_secondary_loss": plan.scenario.secondary_loss,
                 "entry_primary_loss": plan.new_primary_loss,
                 "entry_secondary_loss": plan.new_secondary_loss,
-                "current_primary_loss_sigma": _stored_loss_sigma(plan.scenario.primary_loss),
-                "current_secondary_loss_sigma": _stored_loss_sigma(plan.scenario.secondary_loss),
-                "entry_primary_loss_sigma": _stored_loss_sigma(plan.new_primary_loss),
-                "entry_secondary_loss_sigma": _stored_loss_sigma(plan.new_secondary_loss),
+                # T4.a gate fix (METH I-4): basis-labeled dicts (kind +
+                # pooled/display sigma + mixture max_component_sigma), not a
+                # bare float -- the confirm page's sigma lines now render an
+                # honest basis ("parent-lognormal basis" for lognormal/PERT,
+                # the pooled+component label for a mixture) via the SAME
+                # macros/chart.html::sigma_basis_line macro the stale-wide
+                # banner uses.
+                "current_primary_loss_sigma": _loss_sigma_display(plan.scenario.primary_loss),
+                "current_secondary_loss_sigma": _loss_sigma_display(plan.scenario.secondary_loss),
+                "entry_primary_loss_sigma": _loss_sigma_display(plan.new_primary_loss),
+                "entry_secondary_loss_sigma": _loss_sigma_display(plan.new_secondary_loss),
+                # T4.a gate fix (NTH, meth N-2): disclose when the refresh's
+                # freshly-minted capacity cap differs from the field's PRIOR
+                # stored max -- the executed example silently loosened an
+                # existing cap ~200x with no confirm-page disclosure.
+                "primary_cap_remint": _cap_remint_disclosure(
+                    plan.scenario.primary_loss, plan.new_primary_loss
+                ),
+                "secondary_cap_remint": _cap_remint_disclosure(
+                    plan.scenario.secondary_loss, plan.new_secondary_loss
+                ),
             },
         )
 
@@ -3942,9 +4094,15 @@ async def finalize_wizard(
         # view_scenario re-derives the sigma from the scenario's own stored
         # dicts when it sees ?loss_wide=1 (no value smuggled through the URL).
         max_sigma = _max_stored_loss_sigma(scenario)
+        # T4.a gate fix (METH I-1): toleranced (see the matching comment on
+        # view_scenario's ?loss_wide=1 re-derivation above) -- a redirect to
+        # ?loss_wide=1 for a stored sigma that only drifted a few ULPs above
+        # the default would immediately be re-derived AWAY by that same
+        # toleranced check, so gating the redirect itself the same way
+        # avoids a pointless redirect+re-derive round trip.
         wide_suffix = (
             "?loss_wide=1"
-            if max_sigma is not None and max_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT
+            if max_sigma is not None and max_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL
             else ""
         )
         return RedirectResponse(
