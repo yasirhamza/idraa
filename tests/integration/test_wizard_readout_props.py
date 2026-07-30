@@ -408,14 +408,19 @@ async def test_field_ceiling_exceeded_true_when_any_row_p95_meets_cap(
         client,
         f"/scenarios/new/wizard/step/4?tx={tx}",
         data={
+            # Re-gate I3: the BREACHING row must be FIRST (index 0) and the
+            # tight row LAST — the last row is also the first-paint seed, so
+            # a rows[-1]-only implementation would previously have passed
+            # this test while still carrying the exact false-negative M3(b)
+            # exists to prevent (the adapter [0]/[-1] discrimination rule).
             "pl_sme_id_0": "",
             "pl_sme_name_0": "Analyst A",
-            "pl_low_0": "10000.0",
-            "pl_high_0": "50000.0",  # p95 == $50k, well under the $1M cap
+            "pl_low_0": "100000.0",
+            "pl_high_0": "5000000.0",  # p95 == $5M >= the $1M cap (breach FIRST)
             "pl_sme_id_1": "",
             "pl_sme_name_1": "Analyst B",
-            "pl_low_1": "100000.0",
-            "pl_high_1": "5000000.0",  # p95 == $5M >= the $1M cap
+            "pl_low_1": "10000.0",
+            "pl_high_1": "50000.0",  # p95 == $50k, under the cap (seeded row)
             "loss_catastrophic": "1",
         },
     )

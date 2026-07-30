@@ -184,7 +184,7 @@
     <p class="text-meta text-ink-3 mt-1"
        x-show="stats.mode === 'lognormal' && stats.chart && stats.chart.clippedTailPath && stats.capBindProb !== null"
        x-cloak
-       x-text="'~' + (stats.capBindProb * 100).toFixed(1) + '% of draws clipped at the cap'"></p>
+       x-text="'~' + (stats.capBindProb * 100).toFixed(1) + '% of the uncapped distribution\'s mass sits above the cap and is redistributed below it'"></p>
     <p class="text-meta text-ink-3 mt-1" x-show="waterlineValue !== null && waterlineProb !== null" x-cloak
        x-text="'p' + (waterlineProb * 100).toFixed(1) + ' ≈ ' + fmtMoney(waterlineValue)"></p>
   </div>

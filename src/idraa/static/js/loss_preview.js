@@ -744,6 +744,11 @@
     var lo = Math.exp(mu - sigma * 3);
     var hi = Math.exp(mu + sigma * Z99);
     if (cap !== null && cap > hi) hi = cap * 1.05;
+    // Re-gate N-b: a cap BELOW the default axis window (cap < exp(mu-3s))
+    // would otherwise vanish along with the (truncated) markers, leaving a
+    // density with no cap while every cell shows the truncated basis —
+    // widen the window downward so the cap line and markers stay visible.
+    if (cap !== null && Number.isFinite(cap) && cap < lo) lo = cap * 0.95;
     if (!Number.isFinite(lo) || !Number.isFinite(hi) || !(hi > lo) || !(lo > 0)) return null;
     var n = 128;
     var logLo = Math.log(lo),
@@ -1067,6 +1072,12 @@
           event.touches && event.touches.length ? event.touches[0].clientX : event.clientX;
         if (typeof clientX !== "number") return;
         var frac = (clientX - rect.left) / rect.width;
+        // Re-gate N-a: the cursor fraction spans the FULL svg width, but the
+        // axis occupies [PAD_L, W - PAD_R] -- undo the padding before the log
+        // interpolation so the handle sits exactly under the cursor (the
+        // uncorrected form drifted +/-8.58 viewBox px at the extremes).
+        frac =
+          (frac * _CHART_W - _CHART_PAD_L) / (_CHART_W - _CHART_PAD_L - _CHART_PAD_R);
         frac = Math.max(_WATERLINE_P_MIN, Math.min(_WATERLINE_P_MAX, frac));
         var chart = stats.chart;
         var logLo = Math.log(chart.axisLow);
@@ -1076,6 +1087,19 @@
           this.waterlineValue = null;
           this.waterlineProb = null;
           return;
+        }
+        // Re-gate I1: under the engine's truncation the distribution's
+        // supremum IS the cap -- a dollar value above it is a quantile
+        // statement that cannot be true (the numbers-row contract M1 just
+        // established, applied to the waterline). Clamp before display.
+        if (
+          stats.mode === "lognormal" &&
+          stats.cap !== null &&
+          stats.cap !== undefined &&
+          Number.isFinite(stats.cap) &&
+          value > stats.cap
+        ) {
+          value = stats.cap;
         }
         this.waterlineValue = value;
         var prob = null;

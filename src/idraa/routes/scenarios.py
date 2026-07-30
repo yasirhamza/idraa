@@ -150,6 +150,7 @@ from idraa.services.wizard_finalize import (
     _FINALIZE_SEMAPHORE,
     FinalizationError,
     FinalizeBudgetExceededError,
+    _dedup_latest_per_sme,
     build_scenario_payload,
     persist_estimates,
     pooling_component_fields,
@@ -3271,18 +3272,23 @@ async def _build_readout_cfg(
     # panel on a tight first row could still 422 at finalize because a
     # wider second row alone breached the cap). Fit each row via the SAME
     # p5/p95 basis the wizard rows already use
-    # (fair_cam.lognormal_from_quantiles, q_low=0.05/q_high=0.95) and read
-    # its OWN fitted p95 back out rather than assuming `high` already
-    # equals it -- true for a WELL-FORMED row by construction, but a
-    # malformed one (inverted/non-positive, e.g. mid-edit) must be skipped,
-    # not misread as a breach. Only meaningful in catastrophic (lognormal)
+    # (fair_cam.lognormal_from_quantiles, q_low=0.05/q_high=0.95). NOTE
+    # (re-gate N-c): for this symmetric fit the fitted p95 IS `high`
+    # identically — the fit exists here only so malformed rows
+    # (inverted/non-positive, e.g. mid-edit) raise inside the try and get
+    # skipped rather than misread as a breach. Only meaningful in catastrophic (lognormal)
     # mode -- capped_pert rows collapse to a bounded PERT and finalize never
     # mints/applies a capacity cap to them (state.loss_shape != "catastrophic"
     # short-circuits the capacity_max block entirely).
     field_ceiling_exceeded: dict[str, bool] = {"pl": False, "sl": False}
     if mode == "lognormal" and cap is not None and cap > 0:
         for fk in ("pl", "sl"):
-            for row in state.sme_estimates.get(fk) or []:
+            # Re-gate I4: walk the SAME rows finalize will fit — the raw list
+            # can contain superseded duplicates (_dedup_latest_per_sme keeps
+            # the latest per sme identity), and warning on a row finalize
+            # discards makes "saving will be rejected" an absolute claim
+            # about a save that would succeed.
+            for row in _dedup_latest_per_sme(state.sme_estimates.get(fk) or []):
                 try:
                     low, high = float(row["low"]), float(row["high"])
                     fit = lognormal_from_quantiles(low, high, q_low=0.05, q_high=0.95)
