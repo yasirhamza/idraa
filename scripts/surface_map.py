@@ -51,7 +51,7 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     # Banner/readout render helpers (D23 tripwire sits beside them).
     ("src/idraa/routes/scenarios.py", "_loss_was_recalibrated"),
     ("src/idraa/routes/scenarios.py", "_stored_loss_sigma"),
-    ("src/idraa/routes/scenarios.py", "_max_stored_loss_sigma"),
+    ("src/idraa/routes/scenarios.py", "_max_tripwire_sigma"),
     ("src/idraa/routes/scenarios.py", "_capacity_max_for_org"),
     ("src/idraa/routes/scenarios.py", "delete_scenario"),
     ("src/idraa/routes/scenarios.py", "view_scenario"),

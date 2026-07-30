@@ -646,6 +646,11 @@
         pl: null,
         sl: null,
         claims: { pl: null, sl: null },
+        // PR-gate M-2: true when the published mean is one previewed SME
+        // row's mean out of a multi-row fieldset — the composed ALE label
+        // must disclose the row scope (client-side pooling is out of
+        // scope per D22; the engine-realized field mean pools at finalize).
+        rowScoped: { pl: null, sl: null },
       });
     });
   }
@@ -1072,6 +1077,9 @@
         var value = typeof mean === "number" && Number.isFinite(mean) ? mean : null;
         store[key] = value;
         store.claims[key] = value !== null ? claim : null;
+        // initialRowIndex = rows.length - 1, so > 0 iff the fieldset has
+        // more than one SME row (null/undefined compare false).
+        store.rowScoped[key] = value !== null && this.cfg.initialRowIndex > 0;
       },
 
       // M7 (PR3 T2.a gate fix): pointer x -> DOLLAR VALUE via the axis's own
@@ -1202,6 +1210,16 @@
           label = "mean basis (PERT-bounded)";
         } else {
           label = "capacity-bounded mean basis";
+        }
+        // PR-gate M-2: each mount publishes its PREVIEWED row's mean, not
+        // the pooled field mean — on a multi-row fieldset the composed ALE
+        // is row-scoped and the label must say so (same field-vs-row
+        // scoping principle as the T2 M3(b) ceiling-warning re-scope).
+        var rowScoped =
+          store.rowScoped &&
+          ((plOk && store.rowScoped.pl) || (slOk && store.rowScoped.sl));
+        if (rowScoped) {
+          label += ", previewed row only";
         }
         return { value: value, label: label };
       },

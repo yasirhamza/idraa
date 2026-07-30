@@ -24,14 +24,15 @@
      "sigma": N, "max_component_sigma": N|None} -- the shape
      routes.scenarios._loss_sigma_display returns.
 
-     Plain lognormal and PERT share ONE basis label ("parent-lognormal
-     basis"): a stored PERT's implied sigma is mechanically the same
-     exp(mu +/- Z*sigma) read of an underlying lognormal fit that
-     _stored_loss_sigma's own PERT-branch docstring documents (D4'
-     provenance) -- the identical basis word D22's capped_pert chart
-     label already uses. A lognormal_mixture instead gets the POOLED
-     label (includes between-expert divergence, B-1) plus the per-
-     component ceiling the tripwire itself fires on. -#}
+     Three-way basis split (PR-gate M-3 rewrote this header — the T4.b
+     branches below superseded the earlier shared-label policy it
+     described): plain lognormal gets "parent-lognormal basis"; a
+     hand-authored PERT has NO parent lognormal (T4.b I-3 reversed the
+     T3 framing), so it gets its own "PERT range basis: ln(high/low)/2z"
+     — the direct range read _stored_loss_sigma's PERT branch performs;
+     a lognormal_mixture leads with the FIRING basis (the per-component
+     ceiling the tripwire fires on) and shows the POOLED read only as
+     labeled context (between-expert divergence, B-1). -#}
   {%- if display is none -%}
     &mdash;
   {%- elif display.kind == "lognormal_mixture" -%}

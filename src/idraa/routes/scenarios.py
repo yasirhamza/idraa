@@ -1099,23 +1099,6 @@ def _stored_loss_sigma(dist: Any) -> float | None:
     return None
 
 
-def _max_stored_loss_sigma(scenario: Scenario) -> float | None:
-    """Max of the PL/SL implied sigmas currently stored on ``scenario``, or
-    ``None`` when neither field yields a reading. Shared by the finalize
-    advisory redirect and ``view_scenario``'s ``?loss_wide=1`` re-derivation
-    so both read the SAME live dicts -- no value smuggling through the URL.
-    """
-    sigmas = [
-        s
-        for s in (
-            _stored_loss_sigma(scenario.primary_loss),
-            _stored_loss_sigma(scenario.secondary_loss),
-        )
-        if s is not None
-    ]
-    return max(sigmas) if sigmas else None
-
-
 _SIGMA_TOL = 1e-5  # prod stores 1.7 +/- ~1.5e-7 via dollar round-trips
 
 
@@ -1126,7 +1109,10 @@ def _max_tripwire_sigma(scenario: Scenario) -> float | None:
     flash, the finalize redirect -- must use the same basis: max COMPONENT
     sigma for a mixture (re-scoped D21; the pooled read includes
     between-expert divergence and is display-only), the plain read
-    otherwise. ``_max_stored_loss_sigma`` remains the DISPLAY max.
+    otherwise. There is deliberately NO display-max sibling (the dead
+    ``_max_stored_loss_sigma`` was removed at the PR-gate, M-3): display
+    surfaces read per-field via ``_loss_sigma_display``, and any new
+    THRESHOLD consumer must use this function, never a display read.
     """
     sigmas = [
         s

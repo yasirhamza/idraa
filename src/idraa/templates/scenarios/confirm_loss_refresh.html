@@ -50,8 +50,8 @@
       <p class="text-meta text-ink-2 mb-1">Current</p>
       {# T4.a gate fix (METH I-4): basis-labeled via the SAME shared macro
          the stale-wide banner uses (macros/chart.html::sigma_basis_line) --
-         "parent-lognormal basis" for lognormal/PERT, the pooled+component
-         label for a mixture, instead of a bare sigma figure. #}
+         per-kind labels (lognormal parent-basis / PERT range basis /
+         mixture firing+pooled, T4.b split) instead of a bare sigma figure. #}
       <p class="text-meta text-ink-2 mb-2">
         {{ sigma_basis_line(current_primary_loss_sigma) }}
       </p>

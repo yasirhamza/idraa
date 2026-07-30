@@ -186,8 +186,17 @@ band). What stands instead:
   near-edge HIGH; **theft p0 materially LOW** — so "consistent" holds for
   two of four powered rows, with both exceptions stated (T0-re-gate A1;
   the earlier blanket "consistent where the plug-in has power" contradicted
-  the theft finding four lines above it). With opposing unquantified
-  register biases the data refutes neither direction.
+  the theft finding four lines above it). On σ the register's two live
+  bias mechanisms do NOT oppose (PR-gate M-1: the register states its
+  opposition on cost LEVEL — NetD below FAIR loss magnitude vs observed
+  population above the full population — and that opposition must not be
+  re-used to adjudicate dispersion): the ≥$1K reporting filter is a left
+  truncation that NARROWS the observed σ (quantified — the executed
+  read-shifts raise every read, ≤ +0.058 on cause rows, ≤ +0.011 on
+  revenue bands), and loss-form blindness omits loss components in the
+  same narrowing direction (unquantified). Aligned-narrowing biases make
+  the sub-1.7 reads weaker still as upper-bound evidence; the data
+  refutes neither direction on the true within-scenario σ.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is

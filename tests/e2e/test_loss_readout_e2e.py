@@ -123,7 +123,8 @@ def _free_port() -> int:
 @pytest.fixture(scope="module")
 def migrated_server_url() -> Iterator[str]:
     """Ephemeral SQLite migrated to head + uvicorn bound to it via DATABASE_URL."""
-    db_path = tempfile.mktemp(suffix=".db", prefix="rf_e2e_loss_readout_")  # noqa: S306 — test-local ephemeral DB
+    db_fd, db_path = tempfile.mkstemp(suffix=".db", prefix="rf_e2e_loss_readout_")
+    os.close(db_fd)  # SQLite reopens by path; a zero-length file is a valid fresh DB
     db_url = f"sqlite+aiosqlite:///{db_path}"
     env = {**os.environ, "DATABASE_URL": db_url, "AUTH_MFA_POLICY": "optional"}
 

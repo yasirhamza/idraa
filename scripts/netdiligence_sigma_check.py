@@ -49,7 +49,9 @@ THREE estimators per row, all printed:
    operative correction is the COND-MEAN INFLATION (1-s)/(1-p), governed
    by the mass below $1K, and the output prints the executed per-row
    READ-SHIFT it induces (never the mean share, which understates the
-   effect ~77x on theft — T0-gate A-I2/A3).
+   effect ~64x on theft at the converged fixed point — mass p=0.111 vs
+   mean share s=0.0017; ~71x one-step. T0-gate A-I2/A3, figures
+   re-executed at the PR-gate, M-N1).
 
 Output at 2-3 significant figures — four-decimal sigma from a max statistic
 is false precision; the per-band width is the message.
@@ -245,7 +247,9 @@ def filter_read_shift(n: int, mean: float, max_: float, sigma: float = SIGMA_TRU
     The published mean is CONDITIONAL on >= $1K; the MC band draws
     untruncated. The estimator feels the COND-MEAN INFLATION
     (1 - s)/(1 - p) — governed by the MASS below $1K (p), not the mean
-    share (s), which understates the effect ~77x on theft (T0-gate A-I2).
+    share (s), which understates the effect ~64x on theft at the
+    converged fixed point (~71x one-step; T0-gate A-I2, re-executed at
+    the PR-gate, M-N1).
     Correcting the published mean to its untruncated equivalent RAISES the
     implied read; the shift is what gets printed, never the mean share.
 
