@@ -84,6 +84,19 @@
         {% endif %}
       </p>
 
+      {# sigma-recal PR3 T2 (D22): live loss-dispersion readout, PL/SL only.
+         Positioned BEFORE the row-grid's own x-data block below (not
+         literally "under" it in the DOM) so this mount's x-init runs first
+         and its window-scoped loss-row-input listener is registered before
+         any row's @focus/@blur can dispatch one — Alpine initializes
+         elements top-to-bottom in document order, and the two components
+         are SIBLINGS (no ancestor/descendant scope-chaining available). #}
+      {% if readout_cfg and fieldset_key in readout_cfg %}
+        {% with cfg_json = readout_cfg[fieldset_key] | tojson, dom_id = "loss-readout-" + fieldset_key %}
+          {% include "scenarios/_loss_readout.html" %}
+        {% endwith %}
+      {% endif %}
+
       {# Plan-gate B-Arch-1: smeDirectory hoisted to Alpine.store (registered
          in the page shells step_3_likelihood.html / step_4_impact.html via
          alpine:init) — per-fieldset x-data no longer carries its own clone.
@@ -291,8 +304,17 @@
                              pattern="[0-9,]+(\.[0-9]+)?" required
                              class="input input-bordered input-sm w-full"
                              x-model="display"
-                             @focus="display = strip(display)"
-                             @blur="row.low = strip(display); display = fmt(row.low)"
+                             @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             {# F1/N3 (PR3 T2.a gate fix): live update WHILE
+                                TYPING, before blur commits row.low. Dispatches
+                                the CURRENT input value (strip(display)), not
+                                the stale last-committed row.low -- the readout's
+                                own recompute() already debounces 150ms
+                                internally (loss_preview.js), this debounce
+                                just keeps the event itself from firing on
+                                every keystroke. #}
+                             @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: strip(display), high: row.high})"
+                             @blur="row.low = strip(display); display = fmt(row.low); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_low_' + idx">
                     </div>
                   </template>
@@ -323,8 +345,10 @@
                              pattern="[0-9,]+(\.[0-9]+)?" required
                              class="input input-bordered input-sm w-full"
                              x-model="display"
-                             @focus="display = strip(display)"
-                             @blur="row.high = strip(display); display = fmt(row.high)"
+                             @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             {# F1/N3: mirrors the Low input's live-typing dispatch above. #}
+                             @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: strip(display)})"
+                             @blur="row.high = strip(display); display = fmt(row.high); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_high_' + idx">
                       {% if org_annual_revenue %}
                       {# Milestone B (#loss-pert-overhaul): display-only

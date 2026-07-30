@@ -253,7 +253,12 @@
   </fieldset>
 
   {# ── Entry currency (multi-currency P2) ─────────────────────── #}
-  <fieldset class="space-y-2">
+  {# T3.b (confirmation-gate BLOCKER): bare `x-data` makes this fieldset an
+     Alpine root so the select's `@change` dispatch BINDS ON HARD LOADS —
+     without it the directive is inert on direct URL / F5 / first load and
+     only worked via the hx-boost swap's MutationObserver side effect
+     (executed browser repro; precedent: #attack-mappings' bare x-data). #}
+  <fieldset class="space-y-2" x-data>
     <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Entry currency</legend>
     {% if is_edit %}
       <p class="text-meta text-ink-1">Loss amounts entered in
@@ -263,7 +268,18 @@
     {% else %}
       <div class="max-w-xs">
         <label for="entry_currency" class="text-meta text-ink-2">Currency for loss-magnitude entry</label>
+        {# T3.a gate fix (METH I-3): the live loss-dispersion readout's
+           dollar-denominated cells/cap-line/ceiling-verdict are hardcoded
+           to a "$" USD reading regardless of what the analyst actually
+           selects here — a SAR (or any non-USD) entry renders as if it
+           were USD, understating the capacity-floor ceiling by ~0.80σ and
+           showing a false "will be rejected" state. Dispatch a window
+           CustomEvent on every change so lossDispersionReadout's mounts
+           (create-form only — the edit form has no selector, see
+           _loss_readout.html's entryCurrencyIsUsd wiring) can suppress the
+           misleading money-denominated pieces while this stays non-USD. #}
         <select id="entry_currency" name="entry_currency"
+                @change="window.dispatchEvent(new CustomEvent('entry-currency-changed', {detail: {value: $event.target.value}}))"
                 class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
           {% for code in selectable_currencies %}
           <option value="{{ code }}" {% if (form.entry_currency if form else 'USD') == code %}selected{% endif %}>{{ code }}</option>
@@ -299,7 +315,15 @@
        for None — fixes the PR #247 UAT bug where raw floats like
        1.5e-06 / 69999999.98617376 rendered as truncated sci notation /
        absurd precision in the edit form. #}
-    {%- macro pert_input(name, label, req=True, fmt="money") -%}
+    {# ``dispatch_fieldset`` (PR3 T3, D22 reuse): when set to "pl"/"sl", the
+       input ALSO dispatches the wizard's own window-scoped "loss-row-input"
+       CustomEvent on every keystroke — the SAME event
+       _loss_readout.html's mount already listens for via
+       `@loss-row-input.window` (no changes to that shared partial or to
+       loss_preview.js needed). idx is always 0 — the expert form has
+       exactly one (low, high) pair per field, unlike the wizard's
+       multi-SME-row grid. #}
+    {%- macro pert_input(name, label, req=True, fmt="money", dispatch_fieldset=none) -%}
     {%- set raw = form[name] if form[name] is defined else none -%}
     {%- if fmt == "rate" -%}
       {%- set display_value = raw | format_rate_input -%}
@@ -317,6 +341,9 @@
              type="number" step="any"
              value="{{ display_value }}"
              {% if req %}required aria-required="true"{% endif %}
+             {% if dispatch_fieldset %}
+             @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ dispatch_fieldset }}', idx: 0, low: document.getElementById('{{ dispatch_fieldset }}_low').value, high: document.getElementById('{{ dispatch_fieldset }}_high').value}}))"
+             {% endif %}
              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get(name) %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
       {% if errors_dict.get(name) %}
         <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_dict[name] }}</p>
@@ -361,6 +388,22 @@
         range &mdash; the individual expert opinions are discarded. To
         re-elicit from experts instead, use <strong>Re-estimate</strong> on
         the scenario page.
+      </span>
+    </div>
+    {%- endmacro -%}
+
+    {# PR3 T3 (round-2 B-1, owner-decided "edit clears pin, disclosed"):
+       same mixture_replace_warning-style disclosure for a PINNED field —
+       saving THIS form re-authors the field from its p5/p95 inputs and
+       clears the analyst_pin stamp (the established save-is-full-re-author
+       semantic, same class as the mixture-replace warning above). #}
+    {%- macro pinned_field_advisory(node_label) -%}
+    <div class="alert alert-warning" role="alert" data-testid="pinned-field-advisory">
+      <span class="text-sm">
+        <strong>Pinned:</strong> this {{ node_label }} is analyst-pinned.
+        Saving this form re-authors it from the values below and
+        <strong>clears the pin</strong> &mdash; re-pin below after saving if
+        the dispersion is still deliberate.
       </span>
     </div>
     {%- endmacro -%}
@@ -417,10 +460,29 @@
     <div x-data="{ dist: '{{ form.pl_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("pl", form.pl_dist) }}
       {% if form.pl_from_mixture %}{{ mixture_replace_warning(form.pl_from_mixture, "primary loss estimate") }}{% endif %}
+      {% if pin_panels and pin_panels.pl.pinned %}{{ pinned_field_advisory("primary loss estimate") }}{% endif %}
+      {# PR3 T2/T3 (D22): live loss-dispersion readout, LOGNORMAL selector
+         state only (methodology note on _expert_loss_readout_cfgs: PERT's
+         low/mode/high are NOT p5/p95 quantiles, so no capped_pert mount is
+         fed them here — hidden under PERT, where the raw triple already IS
+         the full, correct picture). x-show reads `dist` from the ANCESTOR
+         x-data above (same scope-chaining _loss_readout.html itself never
+         needs to know about — the wrapper div carries no x-data of its
+         own). Positioned BEFORE the low/high inputs below so its
+         window-scoped loss-row-input listener registers before either
+         input's first @input dispatch (mirrors _fair_params_form_inner.html's
+         own mount-before-row-grid ordering rationale). #}
+      {% if readout_cfg and readout_cfg.pl %}
+        <div x-show="dist === 'lognormal'" x-cloak>
+          {% with cfg_json = readout_cfg.pl | tojson, dom_id = "loss-readout-pl" %}
+            {% include "scenarios/_loss_readout.html" %}
+          {% endwith %}
+        </div>
+      {% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {{ pert_input("pl_low", "Primary loss low (5th pct)", fmt="money") }}
+        {{ pert_input("pl_low", "Primary loss low (5th pct)", fmt="money", dispatch_fieldset="pl") }}
         <template x-if="dist === 'pert'">{{ pert_input("pl_mode", "Primary loss mode", fmt="money") }}</template>
-        {{ pert_input("pl_high", "Primary loss high (95th pct)", fmt="money") }}
+        {{ pert_input("pl_high", "Primary loss high (95th pct)", fmt="money", dispatch_fieldset="pl") }}
       </div>
       {{ capacity_max_input("pl") }}
     </div>
@@ -429,10 +491,18 @@
     <div x-data="{ dist: '{{ form.sl_dist or "pert" }}' }" class="space-y-3">
       {{ dist_select("sl", form.sl_dist) }}
       {% if form.sl_from_mixture %}{{ mixture_replace_warning(form.sl_from_mixture, "secondary loss estimate") }}{% endif %}
+      {% if pin_panels and pin_panels.sl.pinned %}{{ pinned_field_advisory("secondary loss estimate") }}{% endif %}
+      {% if readout_cfg and readout_cfg.sl %}
+        <div x-show="dist === 'lognormal'" x-cloak>
+          {% with cfg_json = readout_cfg.sl | tojson, dom_id = "loss-readout-sl" %}
+            {% include "scenarios/_loss_readout.html" %}
+          {% endwith %}
+        </div>
+      {% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {{ pert_input("sl_low", "Secondary loss low (5th pct)", req=False, fmt="money") }}
+        {{ pert_input("sl_low", "Secondary loss low (5th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
         <template x-if="dist === 'pert'">{{ pert_input("sl_mode", "Secondary loss mode", req=False, fmt="money") }}</template>
-        {{ pert_input("sl_high", "Secondary loss high (95th pct)", req=False, fmt="money") }}
+        {{ pert_input("sl_high", "Secondary loss high (95th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
       </div>
       {{ capacity_max_input("sl") }}
     </div>
@@ -535,5 +605,103 @@
     </button>
   </div>
 </form>
+
+{# ── Analyst pin (loss dispersion) ──────────
+   PR3 T3 (D20/D21). EDIT MODE ONLY, rendered AFTER the main </form> above
+   as a SIBLING — never nested (its own <form>s POST to /loss/pin and
+   /loss/unpin, distinct routes from the scenario-edit POST above; a nested
+   <form> inside <form> is invalid HTML and would submit the wrong one). #}
+{% if scenario and pin_panels %}
+<div class="max-w-3xl mx-auto mt-6 space-y-4" data-testid="loss-pin-panels">
+  <h2 class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-1">Analyst pin (loss dispersion)</h2>
+  <p class="text-micro text-ink-2">
+    Pinning fixes a lognormal loss field's dispersion to an explicit
+    p50/p95 pair, exempting it from future platform-wide recalibration
+    sweeps until unpinned.
+  </p>
+  {% for field_key, api_field, dist_label in (("pl", "primary", "Primary loss"), ("sl", "secondary", "Secondary loss")) %}
+    {% set panel = pin_panels[field_key] %}
+    {% if panel.kind is not none %}
+      <div class="bg-surface-1 border border-border-subtle rounded-card p-4" data-testid="loss-pin-panel-{{ field_key }}">
+        <h3 class="text-body font-semibold text-ink-1 mb-2">{{ dist_label }}</h3>
+        {% if panel.kind == "lognormal" %}
+          {% if panel.readout_cfg %}
+            {% with cfg_json = panel.readout_cfg | tojson, dom_id = "loss-readout-" + field_key + "-pin" %}
+              {% include "scenarios/_loss_readout.html" %}
+            {% endwith %}
+          {% endif %}
+          {% if panel.pinned %}
+            {# T3.a NTH N-1/N-2: basis-labeled against the platform default
+               so the analyst can see at a glance how far the pinned spread
+               diverges from it. #}
+            <p class="text-meta text-ink-2 mb-2" data-testid="loss-pinned-chip-{{ field_key }}-form">
+              Pinned spread &sigma;={{ "%.2f" | format(panel.pinned_sigma) if panel.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(panel.sigma_default) }}){% if panel.pinned_at %} &mdash; {{ panel.pinned_at | format_datetime }}{% endif %}
+            </p>
+            <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin" class="inline-block">
+              {{ csrf_field() }}
+              <input type="hidden" name="field" value="{{ api_field }}">
+              <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+              <button type="submit" class="btn btn-outline btn-sm">Unpin</button>
+            </form>
+          {% else %}
+            {# T3.b (confirmation-gate IMPORTANT, same root cause as the
+               entry-currency BLOCKER): the pin inputs' @input dispatchers
+               had no Alpine root ancestor (the readout mount is a SIBLING),
+               so the panel's live readout was dead on hard loads. #}
+            <form method="post" action="/scenarios/{{ scenario.id }}/loss/pin" class="space-y-3" x-data>
+              {{ csrf_field() }}
+              <input type="hidden" name="field" value="{{ api_field }}">
+              <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+              {# idx is always 0 -- the pin panel has exactly one (p50, p95)
+                 pair, unlike the wizard's multi-SME-row grid. fieldset is
+                 "{{ field_key }}_pin" (NOT "{{ field_key }}") so this
+                 mount's own window-scoped listener (cfg.fieldKey ==
+                 "{{ field_key }}_pin") never cross-talks with the main
+                 form's PL/SL readout above it. #}
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+                <div>
+                  <div class="flex items-center justify-between">
+                    <label for="{{ field_key }}_pin_p50" class="text-meta text-ink-2">p50 (median)</label>
+                    <span class="text-micro text-ink-3">REQUIRED</span>
+                  </div>
+                  <input id="{{ field_key }}_pin_p50" name="pin_p50" type="number" step="any"
+                         value="{{ panel.prefill_p50 }}" required aria-required="true"
+                         @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                         class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+                </div>
+                <div>
+                  <div class="flex items-center justify-between">
+                    <label for="{{ field_key }}_pin_p95" class="text-meta text-ink-2">p95</label>
+                    <span class="text-micro text-ink-3">REQUIRED</span>
+                  </div>
+                  <input id="{{ field_key }}_pin_p95" name="pin_p95" type="number" step="any"
+                         value="{{ panel.prefill_p95 }}" required aria-required="true"
+                         @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                         class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Pin dispersion</button>
+            </form>
+          {% endif %}
+        {% elif panel.kind == "lognormal_mixture" %}
+          <p class="text-meta text-ink-2">
+            This field is a pooled multi-expert mixture &mdash; pins apply to
+            single-lognormal fields only. Use <strong>Re-estimate</strong> on
+            the scenario page to re-elicit from experts, or save this form
+            (which collapses the mixture to a single lognormal) and pin
+            afterward.
+          </p>
+        {% else %}
+          <p class="text-meta text-ink-2">
+            Pins apply to lognormal loss fields only &mdash; this field is
+            currently PERT-authored. Switch its distribution to Lognormal
+            above and save to enable pinning.
+          </p>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
 
 {% endblock %}

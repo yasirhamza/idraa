@@ -1,0 +1,246 @@
+{# src/idraa/templates/scenarios/_loss_readout.html
+
+   Shared live loss-dispersion preview mount (sigma-recal PR3 Task 2, D22).
+   Params — set by the including template via {% with %} immediately before
+   {% include %} (this partial reads no other context):
+     - cfg_json  the field's readout config, ALREADY `| tojson`'d by the
+       caller (routes/scenarios.py:_build_readout_cfg via _fair_page_context).
+     - dom_id    stable element id for this mount (unique per fieldKey per page).
+
+   Client-side-only preview: all math runs in static/js/loss_preview.js
+   (fair_cam parity-pinned, tests/unit/test_loss_preview_parity.py). This is
+   a NON-COMMITTAL live estimate while the analyst types — never a second
+   source of truth for STORED values (CLAUDE.md "Never re-derive FAIR
+   calculations in the app layer"). All text via x-text, never x-html (house
+   precedent: _fair_params_form_inner.html:236, charts.js). Inline x-data
+   props (cfg_json rendered server-side) per the PR #205 swap-race rule — no
+   trailing <script>.
+
+   `@loss-row-input.window`: the SME-row grid is a SIBLING Alpine component
+   (not an ancestor/descendant of this mount), so cross-component "which row
+   is focused" wiring uses a window-scoped CustomEvent instead of $refs/
+   scope-chaining — see loss_preview.js's lossDispersionReadout header
+   comment for the full rationale. #}
+{# Single-quoted x-data (house precedent: _fair_params_form_inner.html's own
+   row-grid mount) — Jinja's `tojson` filter escapes `'` but NOT `"`, so a
+   double-quoted attribute would break on the JSON's own key/string quotes. #}
+{# T3.a gate fix (METH I-3): `x-on:entry-currency-changed.window` mirrors
+   the existing `loss-row-input` window-CustomEvent idiom above — the
+   create form's `#entry_currency` selector (form.html) dispatches it on
+   every change; `onEntryCurrencyChanged` (loss_preview.js) updates
+   `entryCurrencyIsUsd`, seeded at init() from that selector's live value
+   when present (create form) and defaulting `true` when absent (edit
+   form / pin panel — genuinely USD, no selector to read). #}
+<div x-data='lossDispersionReadout({{ cfg_json }})'
+     x-on:loss-row-input.window="onRowEvent($event.detail)"
+     x-on:entry-currency-changed.window="onEntryCurrencyChanged($event.detail)"
+     id="{{ dom_id }}"
+     class="mb-4 rounded-lg border border-border-subtle bg-surface-1 p-3">
+  <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+    <span class="text-meta text-ink-3 uppercase tracking-wide"
+          x-text="cfg.label + ' — live preview'"></span>
+    {# M2 (PR3 T2.a gate fix): renders from FIRST PAINT via init()'s seeded
+       focusedRow (routes/scenarios.py:_build_readout_cfg's initialRowIndex)
+       — `seededFromInit` distinguishes that seed from a real row focus/blur
+       event so the wording stays honest about which happened. #}
+    <template x-if="focusedRow !== null">
+      <span class="text-meta text-ink-3"
+            x-text="(seededFromInit ? 'previewing last saved row ' : 'previewing SME row ') + (focusedRow + 1)"></span>
+    </template>
+  </div>
+
+  {# M3(b) (PR3 T2.a gate fix): FIELD-scoped ceiling warning, server-computed
+     over ALL persisted rows of this field (cfg.fieldCeilingExceeded —
+     routes/scenarios.py:_build_readout_cfg), independent of which row is
+     currently previewed. Distinct from the row-scoped badge below, which
+     only reflects the row in the live preview right now — a tight first row
+     must never mask a wide second row that alone breaches the cap. #}
+  <template x-if="cfg.mode === 'lognormal' && cfg.fieldCeilingExceeded">
+    <div class="alert alert-error mb-2" role="alert" data-testid="field-ceiling-exceeded">
+      <span>One or more saved rows in this field exceed the capacity floor — saving will be rejected until resolved.</span>
+    </div>
+  </template>
+
+  <div class="flex flex-wrap gap-2 mb-2">
+    <span class="badge badge-warning badge-sm" x-show="stats.warn" x-cloak
+          x-text="'σ ' + fmtSigma(stats.sigma) + ' exceeds the ' + cfg.warnThreshold + ' advisory ceiling'"></span>
+    {# M3(a): row-scoped copy — this badge reflects ONLY the row currently
+       previewed, never the whole field (see the fieldset-level warning
+       above for the field-wide verdict). T3.a gate fix (METH I-3): this
+       verdict compares a dollar quantile against a USD capacity cap, so it
+       is gated on `entryCurrencyIsUsd` — a non-USD entry (create form
+       only) makes the comparison meaningless (see the select's dispatch
+       comment above). #}
+    <span class="badge badge-error badge-sm" x-show="entryCurrencyIsUsd && stats.mode === 'lognormal' && stats.ceilingExceeded" x-cloak
+          x-text="'σ ' + fmtSigma(stats.sigma) + ' — this row\'s dispersion exceeds the capacity floor — saving will be rejected'"></span>
+    <span class="badge badge-ghost badge-sm" x-show="entryCurrencyIsUsd && stats.mode === 'lognormal' && stats.capClamped" x-cloak>
+      cap fully clamps this distribution
+    </span>
+  </div>
+
+  {# Numbers row — lognormal mode. Cells render "—" (fmtMoney/fmtSigma's own
+     null-safe fallback) rather than disappearing when the fit is invalid/
+     inverted/non-finite (SC-7 inert-dash state) — the skeleton stays put so
+     the layout doesn't jump as the analyst types.
+
+     M1 (PR3 T2.a gate fix): when a cap is present, ALL FOUR cells (not just
+     Mean/P99) switch to the TRUNCATED basis (medianCapped/meanCapped/
+     p95Capped/p99Capped, all via the same q*Phi(b) closed form) and the
+     label discloses it — pre-fix, Median/P95 stayed on the UNTRUNCATED
+     basis beside a truncated Mean/P99, a basis-mixing bug within the same
+     panel. #}
+  <template x-if="cfg.mode === 'lognormal'">
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+      {# T3.a gate fix (METH I-3): these four money cells + the capacity-cap
+         cell below are gated on `entryCurrencyIsUsd` — they are dollar
+         figures formatted (fmtMoney) and, when capped, compared against a
+         USD capacity cap; both readings are wrong on a non-USD create-form
+         entry (see the entry_currency select's dispatch comment). σ stays
+         visible unconditionally: it is a pure log-ratio of the two typed
+         quantiles, currency-free by construction. #}
+      <div x-show="entryCurrencyIsUsd"><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'Median (preview, after capacity bound)' : 'Median (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.medianCapped : stats.median)"></dd></div>
+      <div x-show="entryCurrencyIsUsd"><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'Mean (preview, after capacity bound)' : 'Mean (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.meanCapped : stats.mean)"></dd></div>
+      <div x-show="entryCurrencyIsUsd"><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'P95 (preview, after capacity bound)' : 'P95 (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.p95Capped : stats.p95)"></dd></div>
+      <div x-show="entryCurrencyIsUsd"><dt class="text-meta text-ink-3"
+               x-text="stats.cap ? 'P99 (preview, after capacity bound)' : 'P99 (preview)'"></dt>
+        <dd x-text="fmtMoney(stats.cap ? stats.p99Capped : stats.p99)"></dd></div>
+      {# T3.a NTH N-1/N-2: basis-labeled against the platform default so the
+         analyst can read the derived spread against it at a glance, not
+         just against the (currency-blind) 2.2 warn badge. #}
+      <div><dt class="text-meta text-ink-3">σ (preview)</dt>
+        <dd x-text="fmtSigma(stats.sigma) + ' (platform default ' + cfg.sigmaDefault.toFixed(2) + ')'"></dd></div>
+      <template x-if="stats.cap">
+        <div x-show="entryCurrencyIsUsd"><dt class="text-meta text-ink-3">Capacity cap</dt>
+          <dd x-text="fmtMoney(stats.cap)"></dd></div>
+      </template>
+    </dl>
+  </template>
+  <p class="text-meta text-ink-3 mt-1" x-show="cfg.mode === 'lognormal' && !entryCurrencyIsUsd" x-cloak>
+    Dollar-denominated preview (median/mean/P95/P99, capacity cap, ceiling verdict, $1,000-floor advisory) hidden while the entry currency above isn&rsquo;t USD — σ above is currency-free and stays accurate.
+  </p>
+
+  {# N7 (PR3 T2.a gate fix): mirrors the CONDITION of
+     fair_cam.quantile_pooling.clean_quantile_pair's pl/sl floor (values
+     below $1,000 are floored to $1,000 at finalize) — advisory only, never
+     a client-side transform of what the analyst typed. #}
+  {# T3.b (confirmation-gate ruling on the disclosed residual): gated on
+     entryCurrencyIsUsd like every other dollar-basis element — on a non-USD
+     create entry the $1,000 threshold compares against the wrong unit
+     (900 SAR would fire; 3,000 SAR would wrongly stay silent). #}
+  <p class="text-meta text-ink-3 mt-1" x-show="entryCurrencyIsUsd && stats.floorAdvisory" x-cloak>
+    Values below $1,000 will be floored to $1,000 when this estimate is saved.
+  </p>
+
+  {# Numbers row — capped_pert mode. #}
+  <template x-if="cfg.mode === 'capped_pert'">
+    <div>
+      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+        <div><dt class="text-meta text-ink-3">Low (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertLow)"></dd></div>
+        <div><dt class="text-meta text-ink-3">Realized median (preview)</dt>
+          <dd x-text="fmtMoney(stats.realizedMedian)"></dd></div>
+        <div><dt class="text-meta text-ink-3">Sampled mean (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertMean)"></dd></div>
+        <div><dt class="text-meta text-ink-3">High (preview)</dt>
+          <dd x-text="fmtMoney(stats.pertHigh)"></dd></div>
+        <div class="col-span-2 sm:col-span-4">
+          <dt class="text-meta text-ink-3">σ (preview, parent-lognormal basis)</dt>
+          <dd x-text="fmtSigma(stats.impliedSigma)"></dd>
+        </div>
+      </dl>
+      {# I-M7 / T1-gate B-N7: the realized median is the STORED BetaPERT's
+         own median (from the numeric CDF grid) — NEVER the analyst's
+         entered median. They diverge up to 1.9x at sigma=1.7. #}
+      <p class="text-meta text-ink-3 mt-1">
+        Realized median is the stored distribution's own median — not the entered value above.
+      </p>
+    </div>
+  </template>
+
+  {# SVG density/CDF chart with a draggable waterline. Always rendered (even
+     when the fit is invalid) so the analyst sees a stable, greyed-out
+     placeholder instead of the block jumping around (SC-7 "greyed chart"). #}
+  <div class="relative mt-2">
+    <svg x-ref="svg" viewBox="0 0 600 160" preserveAspectRatio="none"
+         class="w-full h-32"
+         :class="stats.valid ? 'cursor-ew-resize' : 'opacity-30 grayscale cursor-not-allowed'"
+         @mousedown="isDragging = true; onWaterlineDrag($event)"
+         @mousemove.window="isDragging && onWaterlineDrag($event)"
+         @mouseup.window="isDragging = false"
+         @touchstart="onWaterlineDrag($event)"
+         @touchmove.prevent="onWaterlineDrag($event)">
+      <path :d="stats.chart ? stats.chart.densityPath : ''" fill="none"
+            stroke="var(--color-brand)" stroke-width="2"></path>
+      {# T3.a gate fix (METH I-3): both the clipped-tail shading and the cap
+         dashed line visualize a USD capacity cap against the typed
+         quantiles — gated the same as the money cells / ceiling verdict
+         above (only PERT-mode charts ever null these out already; this
+         additionally suppresses them on a non-USD create-form entry). #}
+      <template x-if="entryCurrencyIsUsd && stats.chart && stats.chart.clippedTailPath">
+        <path :d="stats.chart.clippedTailPath" fill="var(--color-status-warning)"
+              opacity="0.25" stroke="none"></path>
+      </template>
+      <template x-if="entryCurrencyIsUsd && stats.chart && stats.chart.capPx !== null">
+        <line :x1="stats.chart.capPx" :x2="stats.chart.capPx" y1="0" y2="160"
+              stroke="var(--color-status-critical)" stroke-dasharray="4 3" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'lognormal' && stats.chart">
+        <line :x1="stats.chart.medianPx" :x2="stats.chart.medianPx" y1="0" y2="160"
+              stroke="var(--color-ink-2)" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'lognormal' && stats.chart">
+        <line :x1="stats.chart.meanPx" :x2="stats.chart.meanPx" y1="0" y2="160"
+              stroke="var(--color-brand)" stroke-dasharray="2 2" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'capped_pert' && stats.chart && stats.chart.realizedMedianPx !== null">
+        <line :x1="stats.chart.realizedMedianPx" :x2="stats.chart.realizedMedianPx" y1="0" y2="160"
+              stroke="var(--color-ink-2)" stroke-width="1.5"></line>
+      </template>
+      <template x-if="cfg.mode === 'capped_pert' && stats.chart && stats.chart.meanPx !== null">
+        <line :x1="stats.chart.meanPx" :x2="stats.chart.meanPx" y1="0" y2="160"
+              stroke="var(--color-brand)" stroke-dasharray="2 2" stroke-width="1.5"></line>
+      </template>
+      <template x-if="waterlineValue !== null && waterlinePx !== null">
+        <line :x1="waterlinePx" :x2="waterlinePx" y1="0" y2="160"
+              stroke="var(--color-status-info)" stroke-width="1"></line>
+      </template>
+    </svg>
+    {# N4 (PR3 T2.a gate fix): capBindProb printed BESIDE the clipped-tail
+       shading it describes, so the shaded area on the chart has a number
+       attached to it instead of relying on the reader to eyeball a slice
+       of a density curve. #}
+    <p class="text-meta text-ink-3 mt-1"
+       x-show="entryCurrencyIsUsd && stats.mode === 'lognormal' && stats.chart && stats.chart.clippedTailPath && stats.capBindProb !== null"
+       x-cloak
+       x-text="'~' + (stats.capBindProb * 100).toFixed(1) + '% of the uncapped distribution\'s mass sits above the cap and is redistributed below it'"></p>
+    {# T3.a gate fix (METH I-3): the waterline's dollar readout is fmtMoney-
+       formatted just like the numbers-row cells above — same suppression. #}
+    <p class="text-meta text-ink-3 mt-1" x-show="entryCurrencyIsUsd && waterlineValue !== null && waterlineProb !== null" x-cloak
+       x-text="'p' + (waterlineProb * 100).toFixed(1) + ' ≈ ' + fmtMoney(waterlineValue)"></p>
+  </div>
+
+  {# Scenario-ALE composition line (Task 2 Interfaces): renders only when
+     tefMean/vulnMean are non-null AND at least one contributing field has
+     published a mean into the shared $store.lossPreview.
+     N5 (PR3 T2.a gate fix): the ALE line is SCENARIO-level (tefMean x
+     vulnMean x (pl + sl)), not per-field — mounting it on BOTH the pl and
+     sl readouts double-rendered the identical line. Render it only on the
+     PL mount (PL is the required fieldset; see the M5 fix on aleLine
+     itself for why PL is required there too).
+     M6: "inherent (before controls)" — the wizard elicits INHERENT
+     (control-naive) vulnerability; controls are applied at step 5, so this
+     preview is never the final controlled ALE. #}
+  <template x-if="cfg.fieldKey === 'pl' && aleLine">
+    <p class="text-sm mt-2 pt-2 border-t border-border-subtle">
+      <span class="text-ink-2">Preview ALE (inherent, before controls) ≈</span>
+      <strong x-text="fmtMoney(aleLine.value)"></strong>
+      <span class="text-meta text-ink-3" x-text="'(' + aleLine.label + ')'"></span>
+    </p>
+  </template>
+</div>

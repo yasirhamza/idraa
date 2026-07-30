@@ -43,6 +43,14 @@ DENY_GLOBS: tuple[str, ...] = (
     "*.keystore",
     "*.pem",
     "*.p12",
+    # Licensed / copyrighted reports (PR3 plan-gate Sec-B1, 2026-07-30): the
+    # .gitignore licensed-material section pins known offenders individually,
+    # but the class keeps growing (NetDiligence 2025 arrived unprotected).
+    # Zero PDFs are legitimately tracked today; a future first-party PDF goes
+    # through the ALLOW allowlist deliberately. Character-class pattern because
+    # fnmatch is case-sensitive on posix and a re-downloaded ".PDF" would
+    # slip a plain "*.pdf" (Sec round-2 N-R2-1).
+    "*.[pP][dD][fF]",
     "local.properties",
     # Deployment configuration (owner decision 2026-07-23): platform, VM
     # sizing, and DB-path details are operational disclosures — deploy config

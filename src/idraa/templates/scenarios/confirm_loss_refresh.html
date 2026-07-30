@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "macros/chart.html" import pert_distribution_chart, sigma_basis_line %}
+{% block title %}Refresh loss dispersion — {{ scenario.name }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto" data-testid="loss-refresh-confirm">
+  {# pl-16 below md clears the fixed ☰ (see macros/page_header.html) #}
+  <p class="text-sm text-ink-2 mb-1 pl-16 md:pl-0">
+    <a class="link" href="/scenarios">Scenarios</a> /
+    <a class="link" href="/scenarios/{{ scenario.id }}">{{ scenario.name }}</a> /
+    Refresh loss dispersion
+  </p>
+  <h1 class="text-2xl font-bold mb-4 pl-16 md:pl-0">
+    Refresh &laquo;{{ scenario.name }}&raquo; from &laquo;{{ entry.name }}&raquo;?
+  </h1>
+
+  <div class="alert alert-warning mb-6" role="alert">
+    <div>
+      <h2 class="font-semibold">This replaces primary (and secondary, if set) loss wholesale.</h2>
+      <p class="text-sm mt-1">
+        Both fields are overwritten with the library entry's CURRENT
+        published values (v{{ entry.version }}) — an informed replacement,
+        same class as a mixture-flatten resave. The prior values are
+        recorded in the audit log. Any analysis results computed before
+        this change used the previous values &mdash; re-run the simulation
+        to reflect the refreshed dispersion. This cannot be undone except
+        by refreshing again or re-authoring by hand.
+      </p>
+      {# T4.a gate fix (NTH, meth N-2): disclose when the freshly-minted
+         capacity cap differs from the field's PRIOR stored max -- the
+         executed example silently loosened an existing cap ~200x with no
+         confirm-page disclosure before this fix. #}
+      {% if primary_cap_remint %}
+      <p class="text-sm mt-1" data-testid="cap-remint-pl">
+        Primary loss capacity cap will be re-minted from current revenue:
+        ${{ primary_cap_remint[0] | format_money }} &rarr; ${{ primary_cap_remint[1] | format_money }}.
+      </p>
+      {% endif %}
+      {% if secondary_cap_remint %}
+      <p class="text-sm mt-1" data-testid="cap-remint-sl">
+        Secondary loss capacity cap will be re-minted from current revenue:
+        ${{ secondary_cap_remint[0] | format_money }} &rarr; ${{ secondary_cap_remint[1] | format_money }}.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+    <div>
+      <h3 class="text-h3 text-ink-1 mb-2">Primary loss</h3>
+      <p class="text-meta text-ink-2 mb-1">Current</p>
+      {# T4.a gate fix (METH I-4): basis-labeled via the SAME shared macro
+         the stale-wide banner uses (macros/chart.html::sigma_basis_line) --
+         per-kind labels (lognormal parent-basis / PERT range basis /
+         mixture firing+pooled, T4.b split) instead of a bare sigma figure. #}
+      <p class="text-meta text-ink-2 mb-2">
+        {{ sigma_basis_line(current_primary_loss_sigma) }}
+      </p>
+      {{ pert_distribution_chart("refresh-pl-current", current_primary_loss, fmt="money") }}
+      <p class="text-meta text-ink-2 mb-1 mt-4">From library entry</p>
+      <p class="text-meta text-ink-2 mb-2">
+        {{ sigma_basis_line(entry_primary_loss_sigma) }}
+      </p>
+      {{ pert_distribution_chart("refresh-pl-entry", entry_primary_loss, fmt="money") }}
+    </div>
+    <div>
+      <h3 class="text-h3 text-ink-1 mb-2">Secondary loss</h3>
+      {% if current_secondary_loss or entry_secondary_loss %}
+        <p class="text-meta text-ink-2 mb-1">Current</p>
+        <p class="text-meta text-ink-2 mb-2">
+          {{ sigma_basis_line(current_secondary_loss_sigma) }}
+        </p>
+        {% if current_secondary_loss %}
+          {{ pert_distribution_chart("refresh-sl-current", current_secondary_loss, fmt="money") }}
+        {% else %}
+          <p class="text-meta text-ink-2">Not set</p>
+        {% endif %}
+        <p class="text-meta text-ink-2 mb-1 mt-4">From library entry</p>
+        <p class="text-meta text-ink-2 mb-2">
+          {{ sigma_basis_line(entry_secondary_loss_sigma) }}
+        </p>
+        {% if entry_secondary_loss %}
+          {{ pert_distribution_chart("refresh-sl-entry", entry_secondary_loss, fmt="money") }}
+        {% else %}
+          <p class="text-meta text-ink-2">Not set — will be cleared</p>
+        {% endif %}
+      {% else %}
+        <p class="text-body text-ink-2">Not set on either side.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <form method="post" action="/scenarios/{{ scenario.id }}/loss/refresh">
+      {{ csrf_field() }}
+      <input type="hidden" name="confirm_refresh" value="1">
+      <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+      <button type="submit" class="btn btn-primary" data-testid="loss-refresh-confirm-button">
+        Refresh from library
+      </button>
+    </form>
+    <a href="/scenarios/{{ scenario.id }}" class="btn btn-ghost">Cancel</a>
+  </div>
+</div>
+{% endblock %}

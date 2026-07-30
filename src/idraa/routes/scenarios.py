@@ -44,11 +44,20 @@ never call ``await db.commit()`` directly — same pattern as
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
 import re
 import uuid
-from typing import Any
+from typing import Any, Literal
 
+from fair_cam.quantile_pooling import (
+    LogNormalTruncFit,
+    LognormMixture,
+    QuantilePoolingError,
+    lognormal_from_quantiles,
+    lognormal_quantiles,
+    mixture_quantile_lognorm,
+)
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -57,7 +66,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from idraa.app import _csrf_token_from_request, templates
+from idraa.app import _csrf_token_from_request, _format_money_input, templates
 from idraa.config import get_settings
 from idraa.errors import (
     ConflictError,
@@ -121,6 +130,7 @@ from idraa.services.attack_mappings import (
 )
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.calibration import (
+    SIGMA_WARN_THRESHOLD,
     WITHIN_SCENARIO_SIGMA_DEFAULT,
     calibration_context_from_org,
 )
@@ -135,6 +145,12 @@ from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService, is_selectable_currency
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
+from idraa.services.loss_pinning import (
+    pin_loss,
+    preview_loss_refresh,
+    refresh_loss_from_library,
+    unpin_loss,
+)
 from idraa.services.run_executor import _dict_to_fair_distribution
 from idraa.services.scenario_control_recommendations import recommended_controls_for
 from idraa.services.scenario_currency import convert_loss_inputs_to_usd
@@ -147,6 +163,7 @@ from idraa.services.wizard_finalize import (
     _FINALIZE_SEMAPHORE,
     FinalizationError,
     FinalizeBudgetExceededError,
+    _dedup_latest_per_sme,
     build_scenario_payload,
     persist_estimates,
     pooling_component_fields,
@@ -173,6 +190,8 @@ from idraa.services.wizard_state import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # The wizard step-1 library picker renders the FULL curated corpus on one
 # page — no pager (a pager "next" would collide with the wizard's own
@@ -302,6 +321,176 @@ async def list_scenarios(
 # ---- new + create -----------------------------------------------------
 
 
+def _expert_loss_readout_cfgs(
+    form: dict[str, Any], capacity_max: float | None
+) -> dict[str, dict[str, Any]]:
+    """PR3 T3: live-preview cfg for the expert form's PL/SL readout mounts
+    (form.html, mounted under each field's dist-selector block per plan
+    Step 5(a)). Shares the cfg dict SHAPE ``lossDispersionReadout`` expects
+    -- Task 2's ``_build_readout_cfg`` N6 comment: "keep this dict's shape
+    stable for that reuse."
+
+    ``mode`` is ALWAYS ``"lognormal"`` here -- deliberately NOT threading
+    the live dist-selector's PERT state into a ``"capped_pert"`` mount.
+    Under PERT the operator types the distribution's own low/mode/high
+    triple directly (``dist_from_raw``'s PERT fallthrough) -- those are NOT
+    p5/p95 quantiles, and feeding them through ``fitP5P95`` ->
+    ``capPertFromFit`` (the ONLY thing loss_preview.js's ``"capped_pert"``
+    mode does) would silently mis-describe the exact PERT already being
+    typed. The mount is x-show-gated to the lognormal selector state in
+    form.html and simply hidden under PERT, where the raw low/mode/high
+    triple already IS the full, correct picture with nothing left to
+    preview (a deliberate, disclosed scope narrowing vs the wizard mount).
+
+    ``tefMean``/``vulnMean`` are left ``None`` (the ALE composition line
+    renders ONLY when both are non-null, per Task 2's Interfaces): the
+    expert form's TEF/vuln are typed PERT triples with no scipy fit
+    involved, and wiring their own live mean into ``$store.lossPreview``
+    is out of this task's scope.
+
+    T3.a gate fix (METH B-1): ``cap`` is the FIELD's OWN ``{field_key}_max``
+    form value when present, falling back to the org-wide ``capacity_max``
+    only when it is blank/unparseable -- mirroring ``loss_pinning.pin_loss``'s
+    own ``existing_max if existing_max is not None else minted`` ternary.
+    Passing the bare org cap unconditionally (the pre-fix behavior) is
+    WRONG whenever a field carries a bespoke ``max`` narrower than
+    ``k * revenue``: the live preview would advertise a looser ceiling than
+    the chokepoint (``validate_fair_distributions``) actually enforces
+    against that field's stored ``max``, producing a false "will be
+    accepted" read that then 422s on save.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for field_key, label in IMPACT_FIELDSETS:
+        initial_low: float | None = None
+        initial_high: float | None = None
+        if form.get(f"{field_key}_dist") == "lognormal":
+            try:
+                initial_low = float(form.get(f"{field_key}_low") or "")
+                initial_high = float(form.get(f"{field_key}_high") or "")
+            except (TypeError, ValueError):
+                initial_low = None
+                initial_high = None
+        raw_field_max = form.get(f"{field_key}_max")
+        field_cap: float | None = None
+        if raw_field_max is not None and raw_field_max != "":
+            try:
+                field_cap = float(raw_field_max)
+            except (TypeError, ValueError):
+                field_cap = None
+        out[field_key] = {
+            "mode": "lognormal",
+            "quantileBasis": "p5p95",
+            "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+            "warnThreshold": SIGMA_WARN_THRESHOLD,
+            "cap": field_cap if field_cap is not None else capacity_max,
+            "currency": "USD",
+            "tefMean": None,
+            "vulnMean": None,
+            "fieldKey": field_key,
+            "label": label,
+            "initialLow": initial_low,
+            "initialHigh": initial_high,
+        }
+    return out
+
+
+def _pin_panel_context(scenario: Scenario, capacity_max: float | None) -> dict[str, dict[str, Any]]:
+    """PR3 T3 (D20/D21): per-field pin-panel context for the EDIT form
+    (form.html, rendered AFTER ``</form>`` per plan Step 5(b) -- the panel
+    POSTs to its own ``/loss/pin`` route, never nested inside the main
+    scenario-edit ``<form>``).
+
+    One entry per ``("pl", "sl")`` ALWAYS (even when ``secondary_loss`` is
+    unset), so the template's loop is unconditional; an absent/non-lognormal
+    field renders its one-line explanation instead of the pin controls
+    (``kind`` drives that branch — ``None`` for absent, ``"pert"`` /
+    ``"lognormal_mixture"`` / ``"lognormal"`` otherwise).
+
+    ``prefill_p50``/``prefill_p95`` seed the pin panel's own p50/p95 inputs
+    from the field's CURRENTLY stored lognormal fit (re-expressed from its
+    native p5/p95 basis) so the analyst edits forward from the live
+    dispersion rather than a blank pair. T3.a gate fix (METH I-4): routed
+    through ``_format_money_input`` (2dp, no sci notation) -- the same PR
+    #247 precision-class bug the expert form's own ``pert_input`` macro
+    already guards against; a raw ``str(float)`` here rendered
+    ``353667.92334052623`` into the input's ``value`` attribute.
+    """
+    from datetime import datetime as _datetime
+
+    out: dict[str, dict[str, Any]] = {}
+    for field_key, field_col, label in (
+        ("pl", "primary_loss", "Primary loss"),
+        ("sl", "secondary_loss", "Secondary loss"),
+    ):
+        dist = getattr(scenario, field_col)
+        if not isinstance(dist, dict):
+            out[field_key] = {"kind": None, "label": label, "pinned": False}
+            continue
+        kind = str(dist.get("distribution", "")).lower()
+        meta = dist.get("distribution_fit_metadata")
+        stamp = (meta or {}).get("sigma_recalibration") if isinstance(meta, dict) else None
+        pinned = isinstance(stamp, dict) and stamp.get("source") == "analyst_pin"
+        entry: dict[str, Any] = {
+            "kind": kind,
+            "label": label,
+            "pinned": pinned,
+            "pinned_at": None,
+            "pinned_sigma": None,
+            # T3.a NTH N-1/N-2: threaded so the pinned-chip copy can read
+            # "(platform default X.XX)" beside the pinned sigma -- set
+            # unconditionally (cheap, and used only when ``pinned``).
+            "sigma_default": WITHIN_SCENARIO_SIGMA_DEFAULT,
+            "readout_cfg": None,
+            "prefill_p50": "",
+            "prefill_p95": "",
+        }
+        if kind == "lognormal":
+            mu, sigma = dist.get("mean"), dist.get("sigma")
+            if (
+                isinstance(mu, int | float)
+                and isinstance(sigma, int | float)
+                and sigma > 0
+                and math.isfinite(float(mu))
+                and math.isfinite(float(sigma))
+            ):
+                p50, p95 = lognormal_quantiles(float(mu), float(sigma), (0.5, 0.95))
+                entry["prefill_p50"] = _format_money_input(p50)
+                entry["prefill_p95"] = _format_money_input(p95)
+                # T3.a gate fix (METH B-1): the FIELD's own stored ``max``
+                # wins over the org-wide capacity_max fallback -- mirrors
+                # loss_pinning.pin_loss's own
+                # ``existing_max if existing_max is not None else minted``
+                # ternary exactly. Passing the bare org cap here (pre-fix)
+                # advertised a looser ceiling than the D19 chokepoint
+                # actually enforces against THIS field's stored max.
+                field_max = dist.get("max")
+                field_cap = float(field_max) if isinstance(field_max, int | float) else capacity_max
+                entry["readout_cfg"] = {
+                    "mode": "lognormal",
+                    "quantileBasis": "p50p95",
+                    "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+                    "warnThreshold": SIGMA_WARN_THRESHOLD,
+                    "cap": field_cap,
+                    "currency": "USD",
+                    "tefMean": None,
+                    "vulnMean": None,
+                    "fieldKey": f"{field_key}_pin",
+                    "label": label,
+                    "initialLow": p50,
+                    "initialHigh": p95,
+                }
+            if pinned:
+                pinned_at_raw = stamp.get("pinned_at") if isinstance(stamp, dict) else None
+                if isinstance(pinned_at_raw, str):
+                    try:
+                        entry["pinned_at"] = _datetime.fromisoformat(pinned_at_raw)
+                    except ValueError:
+                        entry["pinned_at"] = None
+                entry["pinned_sigma"] = float(sigma) if isinstance(sigma, int | float) else None
+        out[field_key] = entry
+    return out
+
+
 @router.get("/scenarios/new", response_class=HTMLResponse)
 async def new_scenario_form(
     request: Request,
@@ -380,6 +569,7 @@ async def new_scenario_form(
             "is_edit": False,
             "capacity_max": capacity_max,
             "capacity_hint": capacity_hint,
+            "readout_cfg": _expert_loss_readout_cfgs(defaults, capacity_max),
         },
     )
 
@@ -816,9 +1006,37 @@ def _stored_loss_sigma(dist: Any) -> float | None:
     the migration's ``_recalibrate_dist`` shape handling:
 
       - ``lognormal`` -> the distribution's own ``sigma``.
-      - ``lognormal_mixture`` -> ``max(component sigma)`` (worst-case read;
-        a catastrophic multi-SME scenario stores no top-level ``sigma``
-        key, so a naive ``dist["sigma"]`` would 500 the scenario view).
+      - ``lognormal_mixture`` -> the TRUE mixture implied sigma (PR3 T4,
+        B-M3b/D21 amendment) -- ``ln(Q(0.95) / Q(0.5)) / Z_0_95`` where
+        ``Q`` is fair_cam's deterministic ``mixture_quantile_lognorm`` on
+        the pooled CDF. Components are reconstructed as
+        ``min_support=0.0, max_support=inf`` (the SAME untruncated-support
+        convention ``app.lognormal_mixture_display_rows`` already uses --
+        catastrophic pl/sl mixture components are stored as native,
+        untruncated ``{mean, sigma}`` pairs; the shared top-level ``max``
+        capacity cap, when present, is a separate storage-only field, not
+        applied per-component here). This REPLACES the pre-T4
+        max-component read: that was a within-component LOWER bound -- a
+        divergent 2-component mixture with both components at sigma=1.7 but
+        medians 200x apart implied sigma~=2.94 in reality yet read exactly
+        1.70 under max-component, silently defeating the stale-copy
+        tripwire. A single-component mixture is numerically unchanged
+        (``mixture_quantile_lognorm`` delegates a 1-component mix straight
+        to the same closed-form quantile the old branch effectively used;
+        float association leaves ~1e-16 relative drift, not a behavior
+        change). DISCLOSED: this also changes the PR1-shipped view-time
+        sigma advisory displays that already called this function.
+
+        Silent-None note (T4.a gate fix, METH N-3): malformed or
+        non-positive-weight components are SKIPPED during reconstruction
+        (the ``isinstance``/``> 0`` guards below); if that leaves ZERO
+        usable components, this branch returns ``None`` -- the SAME
+        silent-degrade convention the rest of this function already uses
+        for absent/malformed shapes. A mixture whose real components are
+        merely malformed (not narrow) therefore reads as "no sigma
+        reading" here rather than as wide -- callers (``_loss_stale_wide``
+        included) cannot distinguish "narrow" from "unreadable" from this
+        return value alone.
       - ``PERT`` -> implied sigma ``ln(high/low) / (2 * Z_0_95)`` (D4'
         provenance: capped ranges are mechanically
         ``exp(mu -+ Z_0_95 * sigma)`` of the underlying lognormal fit).
@@ -837,12 +1055,40 @@ def _stored_loss_sigma(dist: Any) -> float | None:
         comps = dist.get("components")
         if not isinstance(comps, list) or not comps:
             return None
-        sigmas = [
-            float(c["sigma"])
-            for c in comps
-            if isinstance(c, dict) and isinstance(c.get("sigma"), int | float)
-        ]
-        return max(sigmas) if sigmas else None
+        fits: list[LogNormalTruncFit] = []
+        weights: list[float] = []
+        for c in comps:
+            if not isinstance(c, dict):
+                continue
+            mean_, sigma_, weight_ = c.get("mean"), c.get("sigma"), c.get("weight")
+            if not (
+                isinstance(mean_, int | float)
+                and isinstance(sigma_, int | float)
+                and sigma_ > 0
+                and isinstance(weight_, int | float)
+                and weight_ > 0
+            ):
+                continue
+            fits.append(
+                LogNormalTruncFit(
+                    meanlog=float(mean_),
+                    sdlog=float(sigma_),
+                    min_support=0.0,
+                    max_support=math.inf,
+                )
+            )
+            weights.append(float(weight_))
+        if not fits:
+            return None
+        try:
+            mix = LognormMixture(components=tuple(fits), weights=tuple(weights))
+            q50 = mixture_quantile_lognorm(mix, 0.5)
+            q95 = mixture_quantile_lognorm(mix, 0.95)
+        except (ValueError, ArithmeticError, QuantilePoolingError):
+            return None
+        if not (q50 > 0 and q95 > 0):
+            return None
+        return math.log(q95 / q50) / _Z_0_95
     if kind == "pert":
         low, high = dist.get("low"), dist.get("high")
         if not (isinstance(low, int | float) and isinstance(high, int | float)):
@@ -853,51 +1099,202 @@ def _stored_loss_sigma(dist: Any) -> float | None:
     return None
 
 
-def _max_stored_loss_sigma(scenario: Scenario) -> float | None:
-    """Max of the PL/SL implied sigmas currently stored on ``scenario``, or
-    ``None`` when neither field yields a reading. Shared by the finalize
-    advisory redirect and ``view_scenario``'s ``?loss_wide=1`` re-derivation
-    so both read the SAME live dicts -- no value smuggling through the URL.
+_SIGMA_TOL = 1e-5  # prod stores 1.7 +/- ~1.5e-7 via dollar round-trips
+
+
+def _max_tripwire_sigma(scenario: Scenario) -> float | None:
+    """Max FIRING-BASIS implied sigma across PL/SL (T4.b, confirmation-gate
+    I-2): every threshold consumer comparing against
+    ``WITHIN_SCENARIO_SIGMA_DEFAULT`` -- the tripwire, the ``?loss_wide=1``
+    flash, the finalize redirect -- must use the same basis: max COMPONENT
+    sigma for a mixture (re-scoped D21; the pooled read includes
+    between-expert divergence and is display-only), the plain read
+    otherwise. There is deliberately NO display-max sibling (the dead
+    ``_max_stored_loss_sigma`` was removed at the PR-gate, M-3): display
+    surfaces read per-field via ``_loss_sigma_display``, and any new
+    THRESHOLD consumer must use this function, never a display read.
     """
     sigmas = [
         s
-        for s in (
-            _stored_loss_sigma(scenario.primary_loss),
-            _stored_loss_sigma(scenario.secondary_loss),
-        )
+        for dist in (scenario.primary_loss, scenario.secondary_loss)
+        if isinstance(dist, dict)
+        for s in (_tripwire_component_sigma(dist),)
         if s is not None
     ]
     return max(sigmas) if sigmas else None
 
 
-@router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
-async def view_scenario(
-    request: Request,
-    scenario_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
-    loss_wide: int = Query(
-        default=0,
-        ge=0,
-        le=1,
-        description=(
-            "Finalize-advisory flash flag (Task 5, plan "
-            "2026-07-25-sigma-recal-pr1): set to 1 by the wizard finalize "
-            "POST's redirect when a stored PL/SL sigma exceeds the "
-            "within-scenario default. Mirrors the ?deleted=1 mechanics "
-            "(routes/scenarios.py:220-226) -- the value itself is NOT "
-            "smuggled through the URL; this handler re-derives it from the "
-            "scenario's own stored dicts."
-        ),
-    ),
-) -> HTMLResponse:
-    """Render the scenario detail page.
+def _field_has_provenance(dist: Any) -> bool:
+    """True when THIS field carries ``analyst_pin`` or
+    ``migration_recalibration`` provenance -- the single-field counterpart
+    of ``_loss_was_recalibrated`` (which ORs across both fields for the
+    separate recalibration banner above). Same defensive walk: ``dist`` may
+    be non-dict (``None``, or the literal JSON text ``"null"`` parsed to
+    Python ``None``), ``distribution_fit_metadata`` may be absent/non-dict,
+    ``sigma_recalibration`` may likewise be absent/non-dict.
+    """
+    if not isinstance(dist, dict):
+        return False
+    meta = dist.get("distribution_fit_metadata")
+    if not isinstance(meta, dict):
+        return False
+    stamp = meta.get("sigma_recalibration")
+    if not isinstance(stamp, dict):
+        return False
+    return stamp.get("source") in ("analyst_pin", "migration_recalibration")
 
-    Org-scoped lookup. Cross-org IDs return None → 404 (NOT 403) so we
-    don't leak existence of scenarios owned by other orgs (B9/B10
-    paranoid-review precedent). Eager-loads mitigating_controls for the
-    detail card (#68 UAT — view page must show configured controls
-    without forcing operator into edit mode).
+
+def _tripwire_component_sigma(dist: dict[str, Any]) -> float | None:
+    """Sigma used for the TRIPWIRE FIRING DECISION (T4.a gate fix, METH B-1
+    -- re-scoped D21, owner 2026-07-30). For ``lognormal``/``PERT`` this is
+    numerically identical to ``_stored_loss_sigma``'s own read. For
+    ``lognormal_mixture`` it is the MAX COMPONENT sigma, deliberately NOT
+    the pooled implied sigma ``_stored_loss_sigma`` returns for display:
+    calibration staleness lives in COMPONENTS (the PR1 sweep narrowed each
+    component to the within-scenario default; it never touched pooled
+    spread), and comparing the POOLED read against the per-component
+    constant fires on correctly-calibrated divergent mixtures once their
+    medians differ by as little as ~1.2%, is NON-MONOTONIC in component
+    sigma (a T4-gate executed minimum of 1.92 -- never clearable by
+    narrowing components further), and D21 gives mixtures no pin
+    acknowledgment path at all. A wide-COMPONENT mixture (a real stale
+    copy -- e.g. one component left at a pre-sweep sigma=2.9) still fires:
+    the original blind spot (max-component read silently defeating the
+    tripwire on a truly divergent-but-narrow-component mixture) stays
+    closed where it was real.
+
+    Returns ``None`` under the same malformed/empty-components conditions
+    ``_stored_loss_sigma``'s own docstring documents (silent-None note,
+    METH N-3).
+    """
+    kind = str(dist.get("distribution", "pert")).lower()
+    if kind != "lognormal_mixture":
+        return _stored_loss_sigma(dist)
+    comps = dist.get("components")
+    if not isinstance(comps, list) or not comps:
+        return None
+    sigmas = [
+        float(c["sigma"])
+        for c in comps
+        if isinstance(c, dict) and isinstance(c.get("sigma"), int | float) and c["sigma"] > 0
+    ]
+    return max(sigmas) if sigmas else None
+
+
+def _loss_sigma_display(dist: Any) -> dict[str, Any] | None:
+    """Basis-labeled sigma reading for ONE stored PL/SL dict -- the shared
+    payload both the stale-wide banner (per firing field) and the refresh
+    confirm page (current-vs-entry comparison) render through the SAME
+    honest-basis template branch (T4.a gate fix, METH I-4).
+
+    ``sigma`` is always the POOLED/display read (``_stored_loss_sigma`` --
+    for a mixture this INCLUDES between-expert divergence, unlike the
+    tripwire's own component-threshold decision above).
+    ``max_component_sigma`` is populated only for ``lognormal_mixture``
+    (the per-component ceiling the tripwire itself fires on, surfaced so
+    the honest mixture label can say "components <= Y.YY", per B-1);
+    ``None`` for every other kind. T4.b (confirmation-gate I-3): PERT gets
+    its OWN basis label in the macro ("PERT range basis: ln(high/low)/2z")
+    -- a HAND-AUTHORED PERT has no parent lognormal, and labeling it
+    "parent-lognormal basis" reversed the T3 adjudication that banned
+    exactly that framing for typed PERT triples.
+
+    Returns ``None`` when the field carries no sigma reading at all
+    (``_stored_loss_sigma`` returns ``None``).
+    """
+    sigma = _stored_loss_sigma(dist)
+    if sigma is None:
+        return None
+    kind = str(dist.get("distribution", "pert")).lower() if isinstance(dist, dict) else "pert"
+    max_component_sigma = _tripwire_component_sigma(dist) if kind == "lognormal_mixture" else None
+    return {"kind": kind, "sigma": sigma, "max_component_sigma": max_component_sigma}
+
+
+def _loss_stale_wide(scenario: Scenario) -> dict[str, Any] | None:
+    """Basis-labeled reading for the WIDEST stored loss field that
+    INDIVIDUALLY lacks provenance and trips the tripwire, or ``None`` when
+    nothing fires.
+
+    PER-FIELD suppression (plan-gate SC-1/B-M3a): a pin or migration stamp
+    on one field must never mute a wide, unstamped sibling -- scenario-level
+    suppression would silence exactly the mixed case prod already has
+    (PL-only migration stamps beside literal-``"null"`` SLs that may later
+    be hand-widened). Library linkage is NOT checked here (D23): the banner
+    fires on wild imports and hand-authored wide sigma too -- linkage only
+    gates whether the Refresh affordance renders (view.html), a template-
+    level check against ``scenario.library_pin``.
+
+    FIRING decision (T4.a gate fix, METH B-1) uses
+    ``_tripwire_component_sigma`` -- max-component for a mixture, the plain
+    read otherwise -- while the returned ``sigma`` stays the POOLED/display
+    read (``_loss_sigma_display``), so the banner shows the honest,
+    between-expert-inclusive number even when a narrower per-component
+    reading is what triggered it.
+
+    Return shape: ``{"field_label": "Primary loss"|"Secondary loss",
+    "kind": ..., "sigma": ..., "max_component_sigma": ... | None}``, or
+    ``None`` when nothing fires.
+    """
+    widest: dict[str, Any] | None = None
+    for dist, label in (
+        (scenario.primary_loss, "Primary loss"),
+        (scenario.secondary_loss, "Secondary loss"),
+    ):
+        if not isinstance(dist, dict) or _field_has_provenance(dist):
+            continue
+        trip_sigma = _tripwire_component_sigma(dist)
+        if trip_sigma is None or trip_sigma <= WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
+            continue
+        display = _loss_sigma_display(dist)
+        if display is None:
+            continue
+        # T4.b (confirmation-gate N-2): the WINNER is picked by the FIRING
+        # basis, not the display read — a mixture's pooled 4.29 must not
+        # outrank a plain lognormal's 3.5 when its firing component is 2.9.
+        if widest is None or trip_sigma > widest["_firing_sigma"]:
+            widest = {**display, "field_label": label, "_firing_sigma": trip_sigma}
+    return widest
+
+
+def _cap_remint_disclosure(old_dist: Any, new_dist: Any) -> tuple[float, float] | None:
+    """``(old_max, new_max)`` when a library refresh's freshly-minted
+    capacity cap DIFFERS from the field's PRIOR stored ``max`` -- ``None``
+    when either side carries no usable numeric ``max`` (nothing to
+    disclose) or the two agree within float noise.
+
+    T4.a gate fix (NTH, meth N-2): ``_resolve_refresh`` unconditionally
+    overwrites a lognormal/lognormal_mixture field's ``max`` with the
+    org's current ``capacity_max_for_org`` mint (D14 — entries carry no
+    ``max`` of their own). When the field's PRIOR cap was narrower than
+    that mint (a bespoke, previously-authored cap, or simply an org whose
+    revenue grew since the field was last capped), refresh silently
+    LOOSENS it -- the executed example loosened an existing cap ~200x with
+    no confirm-page disclosure before this fix.
+    """
+    if not isinstance(old_dist, dict) or not isinstance(new_dist, dict):
+        return None
+    old_max, new_max = old_dist.get("max"), new_dist.get("max")
+    if not (isinstance(old_max, int | float) and isinstance(new_max, int | float)):
+        return None
+    if math.isclose(float(old_max), float(new_max), rel_tol=1e-9):
+        return None
+    return float(old_max), float(new_max)
+
+
+async def _view_scenario_context(
+    db: AsyncSession, user: User, scenario_id: uuid.UUID
+) -> dict[str, Any] | None:
+    """Shared context builder for ``scenarios/view.html`` -- everything
+    EXCEPT ``flash`` (the one field that legitimately differs between a
+    plain GET, which derives it from query flags, and
+    ``_render_view_action_failure`` below, which sets it to a failure
+    message). Mirrors the ``_edit_form_context``/``_load_scenario_for_edit``
+    split (T3.a, SPEC B-1) one level up: a pin/refresh failure re-renders
+    the SAME page instead of surfacing a raw ``HTTPException`` JSON body.
+
+    Org-scoped lookup. Returns ``None`` on a missing/wrong-org scenario id
+    (NOT 403 — no existence oracle, B9/B10 paranoid-review precedent) so
+    callers can raise 404 themselves.
     """
     stmt = (
         select(Scenario)
@@ -912,7 +1309,7 @@ async def view_scenario(
     )
     scenario = (await db.execute(stmt)).scalar_one_or_none()
     if scenario is None:
-        raise HTTPException(status_code=404)
+        return None
 
     # P2c §6.3: nudge un-adopted recommended controls from the source library entry.
     # Custom scenarios (no library_pin) get an empty list → the panel renders nothing.
@@ -957,6 +1354,118 @@ async def view_scenario(
                 "updated_at": draft_row.updated_at,
             }
 
+    return {
+        "current_user": user,
+        "scenario": scenario,
+        "recommendations": recommendations,
+        "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
+        "reestimate_draft": reestimate_draft,
+        "loss_recalibrated": _loss_was_recalibrated(scenario),
+        # PR3 T4 (D23): standing stale-copy tripwire -- unconditional on
+        # EVERY GET (unlike ?loss_wide=1's one-shot redirect flash below),
+        # since a wide, unstamped field should keep surfacing until the
+        # analyst pins/refreshes/re-authors it, not just on the render right
+        # after finalize.
+        "loss_stale_wide": _loss_stale_wide(scenario),
+        # T4.a gate fix (METH I-2): a top-level context key so the
+        # stale-wide banner never reads `pin_panels.pl.sigma_default` --
+        # that key is ABSENT on `pin_panels["pl"]` whenever primary_loss is
+        # non-dict (None, or the literal JSON text "null"), which raised a
+        # Jinja UndefinedError (500) on a wide, non-dict-PL scenario
+        # (executed). This key is present unconditionally.
+        "sigma_default": WITHIN_SCENARIO_SIGMA_DEFAULT,
+        # PR3 T3: pin-state chip + unpin button per field. capacity_max
+        # is None here — the view page shows no readout mount, only the
+        # chip/unpin affordance, so _pin_panel_context's readout_cfg
+        # field goes unused (reusing the edit-form helper rather than
+        # hand-duplicating the pin-detection walk).
+        "pin_panels": _pin_panel_context(scenario, None),
+    }
+
+
+async def _render_view_action_failure(
+    request: Request,
+    db: AsyncSession,
+    user: User,
+    scenario_id: uuid.UUID,
+    *,
+    message: str,
+    status_code: int,
+) -> HTMLResponse:
+    """PR3 T4: render the scenario VIEW page with an alert flash on a
+    refresh failure, instead of letting a raw ``HTTPException`` propagate as
+    a JSON ``{"detail": ...}`` body -- the SAME idiom as T3.a's
+    ``_render_loss_action_failure``, retargeted at ``view.html`` because
+    refresh is triggered from the view page's tripwire banner, not the edit
+    form (pin/unpin's failure target). A missing/wrong-org scenario still
+    raises a plain 404 (no page to re-render for a scenario that doesn't
+    exist for this org).
+    """
+    ctx = await _view_scenario_context(db, user, scenario_id)
+    if ctx is None:
+        raise HTTPException(status_code=404)
+    ctx["flash"] = build_flash(message, "error")
+    return templates.TemplateResponse(request, "scenarios/view.html", ctx, status_code=status_code)
+
+
+@router.get("/scenarios/{scenario_id}", response_class=HTMLResponse)
+async def view_scenario(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+    loss_wide: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "Finalize-advisory flash flag (Task 5, plan "
+            "2026-07-25-sigma-recal-pr1): set to 1 by the wizard finalize "
+            "POST's redirect when a stored PL/SL sigma exceeds the "
+            "within-scenario default. Mirrors the ?deleted=1 mechanics "
+            "(routes/scenarios.py:220-226) -- the value itself is NOT "
+            "smuggled through the URL; this handler re-derives it from the "
+            "scenario's own stored dicts."
+        ),
+    ),
+    pinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "PR3 T3 (D20/D21): analyst-pin POST redirect flash flag. "
+            "Mirrors the ?deleted=1 mechanics (routes/scenarios.py:220-226) "
+            "-- generic confirmation text only, no field name or sigma "
+            "value smuggled through the URL (the pin route intentionally "
+            "does not know which field a caller will read this as)."
+        ),
+    ),
+    unpinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description="PR3 T3: analyst-unpin POST redirect flash flag. See ``pinned`` above.",
+    ),
+    loss_refreshed: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description="PR3 T4 (D23): library-refresh POST redirect flash flag. See ``pinned`` above.",
+    ),
+) -> HTMLResponse:
+    """Render the scenario detail page.
+
+    Org-scoped lookup. Cross-org IDs return None → 404 (NOT 403) so we
+    don't leak existence of scenarios owned by other orgs (B9/B10
+    paranoid-review precedent). Eager-loads mitigating_controls for the
+    detail card (#68 UAT — view page must show configured controls
+    without forcing operator into edit mode).
+    """
+    ctx = await _view_scenario_context(db, user, scenario_id)
+    if ctx is None:
+        raise HTTPException(status_code=404)
+    scenario = ctx["scenario"]
+
     # Task 5 finalize advisory (plan 2026-07-25-sigma-recal-pr1): re-derive
     # the sigma reading from the scenario's own live dicts -- the
     # ?loss_wide=1 flag carries no value, only a "check" instruction, so a
@@ -967,8 +1476,16 @@ async def view_scenario(
     # self-contradictory advisory. Mirrors the redirect's own gate exactly.
     flash = None
     if loss_wide == 1:
-        wide_sigma = _max_stored_loss_sigma(scenario)
-        if wide_sigma is not None and wide_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT:
+        # T4.b (confirmation-gate I-2): FIRING basis, not display max — a
+        # matched-default divergent mixture must not flash "wider than the
+        # default" here while the standing banner correctly stays quiet.
+        wide_sigma = _max_tripwire_sigma(scenario)
+        # T4.a gate fix (METH I-1): toleranced like every other sigma-vs-
+        # default comparison in this module (_SIGMA_TOL = 1e-5) -- a stored
+        # component sigma of exactly 1.7 that drifts to
+        # 1.7000000000000004 via dollar round-trips must NOT flash "wider
+        # than the default" here, mirroring _loss_stale_wide's own guard.
+        if wide_sigma is not None and wide_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL:
             flash = build_flash(
                 f"This scenario's loss dispersion (sigma={wide_sigma:.2f}) is "
                 f"wider than the within-scenario default "
@@ -976,20 +1493,165 @@ async def view_scenario(
                 "reference.",
                 "warning",
             )
+    # PR3 T3/T4: pin/unpin/refresh success flashes. Generic confirmation
+    # text only — no field name or sigma value is smuggled through the query
+    # string (same "flag, not a value" idiom as ?deleted=1 above; there is
+    # nothing per-field to re-derive here since the text names no field or
+    # number).
+    if flash is None and pinned == 1:
+        flash = build_flash("Loss dispersion pinned for this field.", "success")
+    elif flash is None and unpinned == 1:
+        flash = build_flash("Loss dispersion unpinned for this field.", "success")
+    elif flash is None and loss_refreshed == 1:
+        flash = build_flash("Loss dispersion refreshed from the library entry.", "success")
 
-    return templates.TemplateResponse(
-        request,
-        "scenarios/view.html",
-        {
-            "current_user": user,
-            "flash": flash,
-            "scenario": scenario,
-            "recommendations": recommendations,
-            "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
-            "reestimate_draft": reestimate_draft,
-            "loss_recalibrated": _loss_was_recalibrated(scenario),
-        },
+    ctx["flash"] = flash
+    return templates.TemplateResponse(request, "scenarios/view.html", ctx)
+
+
+async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -> dict[str, Any]:
+    """Shared context builder for ``scenarios/form.html`` in EDIT mode.
+
+    T3.a gate fix (SPEC B-1): factored out of ``edit_scenario_form`` so a
+    pin/unpin failure can re-render the SAME page (via
+    ``_render_loss_action_failure`` below) instead of surfacing a raw
+    ``HTTPException`` JSON body that wipes the analyst's in-flight pin-panel
+    input on the hx-boost 4xx force-swap. ``scenario`` must already have
+    ``mitigating_controls`` eager-loaded (``selectinload`` — both call sites
+    load it the same way). Callers set ``"flash"`` themselves (the one field
+    that legitimately differs between a plain GET and a failure re-render).
+    """
+    overlay_options = await load_overlay_options(db, user.organization_id)
+    available_controls = await ControlRepo(db).list_for_org(user.organization_id)
+    available_ids = {c.id for c in available_controls}
+    inactive_linked_controls = [
+        c for c in scenario.mitigating_controls if c.id not in available_ids
+    ]
+    # Issue #475 T9: render the scenario's existing mappings as initial rows.
+    attack_ctx = await load_attack_form_context(db, scenario=scenario)
+    organization = await db.get(Organization, user.organization_id)
+    if organization is not None:
+        edit_ctx = calibration_context_from_org(organization)
+        edit_org_industry: str | None = edit_ctx.industry
+        edit_org_revenue_tier: str | None = edit_ctx.revenue_tier
+    else:
+        edit_org_industry = None
+        edit_org_revenue_tier = None
+    # PR3 T3 (disclosed side effect, plan Step 5(b)): capacity_max now
+    # reaches the edit context too, mirroring new_scenario_form:340-344 —
+    # closes a pre-existing gap (the D17 capacity hint previously rendered
+    # on create only) and feeds both the pin panel's readout mount and the
+    # live form readout mounts' cap line.
+    capacity_max = (
+        capacity_max_for_org(organization.annual_revenue, get_settings().capacity_k)
+        if organization is not None
+        else None
     )
+    capacity_hint = (
+        d17_capacity_hint_revenue_set(capacity_max)
+        if capacity_max is not None
+        else D17_HINT_REVENUE_UNSET
+    )
+    form = form_from_scenario(scenario)
+    return {
+        "current_user": user,
+        "scenario": scenario,
+        "form": form,
+        "overlay_options": overlay_options,
+        "available_controls": available_controls,
+        "inactive_linked_controls": inactive_linked_controls,
+        "threat_category_choices": THREAT_CATEGORY_CHOICES,
+        "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
+        "asset_class_choices": ASSET_CLASS_CHOICES,
+        "attack_vector_choices": ATTACK_VECTOR_CHOICES,
+        "effect_choices": EFFECT_CHOICES,
+        "attack_technique_groups_json": attack_ctx.groups_json,
+        "attack_technique_options": attack_ctx.options,
+        "attack_mapping_rows": attack_ctx.rows,
+        "org_industry": edit_org_industry,
+        "org_revenue_tier": edit_org_revenue_tier,
+        "form_action": f"/scenarios/{scenario.id}",
+        "form_method": "post",
+        "errors": [],
+        # Multi-currency P2 (Task 3.5): pass is_edit=True so the template renders
+        # entry_currency/entry_rate as read-only provenance (not an editable select).
+        # entry_currency/entry_rate are accessed via scenario.entry_currency /
+        # scenario.entry_rate in the template (scenario is already in context).
+        "is_edit": True,
+        "capacity_max": capacity_max,
+        "capacity_hint": capacity_hint,
+        "readout_cfg": _expert_loss_readout_cfgs(form, capacity_max),
+        "pin_panels": _pin_panel_context(scenario, capacity_max),
+    }
+
+
+async def _load_scenario_for_edit(
+    db: AsyncSession, user: User, scenario_id: uuid.UUID
+) -> Scenario | None:
+    """Org-scoped scenario lookup with ``mitigating_controls`` eager-loaded —
+    the exact query both ``edit_scenario_form`` and
+    ``_render_loss_action_failure`` need before building ``_edit_form_context``.
+    """
+    edit_stmt = (
+        select(Scenario)
+        .where(
+            Scenario.id == scenario_id,
+            Scenario.organization_id == user.organization_id,
+        )
+        .options(selectinload(Scenario.mitigating_controls))
+    )
+    return (await db.execute(edit_stmt)).scalar_one_or_none()
+
+
+async def _render_loss_action_failure(
+    request: Request,
+    db: AsyncSession,
+    user: User,
+    scenario_id: uuid.UUID,
+    *,
+    field: Literal["primary", "secondary"],
+    message: str,
+    status_code: int,
+    submitted_p50: str | None = None,
+    submitted_p95: str | None = None,
+) -> HTMLResponse:
+    """T3.a gate fix (SPEC B-1): render the EDIT form with an alert banner
+    on a pin/unpin failure, instead of letting a raw ``HTTPException``
+    propagate as a JSON ``{"detail": ...}`` body.
+
+    base.html's hx-boost 4xx force-swap replaces the ENTIRE page with that
+    JSON body on any non-2xx response — the analyst's whole in-flight edit
+    (technique rows, mitigating-control checkboxes, unsaved field tweaks)
+    was lost for a failure that touches only the pin panel. Mirrors
+    ``update_scenario``'s own ConflictError/ValidationError re-render idiom
+    (``render_scenario_form``) — same "re-render the page instead of
+    raising" shape, applied here to the edit-form context builder above
+    since the pin panel only exists in edit mode.
+
+    The FAILED field's own pin-panel p50/p95 inputs are overridden with the
+    analyst's just-submitted raw strings (cheap to preserve — they are
+    already FastAPI Form params in hand) when supplied; unpin failures pass
+    neither (there is nothing to preserve). No error text is smuggled
+    through the query string (the value-smuggling bar) — the message is
+    rendered directly into this response's flash.
+
+    A missing/wrong-org scenario still raises a plain 404 ``HTTPException``
+    (SPEC B-1's scope is 422/409 form-state loss; there is no edit-form page
+    to re-render for a scenario that doesn't exist for this org).
+    """
+    scenario = await _load_scenario_for_edit(db, user, scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404)
+    ctx = await _edit_form_context(db, user, scenario)
+    field_key = "pl" if field == "primary" else "sl"
+    panel = ctx["pin_panels"].get(field_key)
+    if panel is not None:
+        if submitted_p50 is not None:
+            panel["prefill_p50"] = submitted_p50
+        if submitted_p95 is not None:
+            panel["prefill_p95"] = submitted_p95
+    ctx["flash"] = build_flash(message, "error")
+    return templates.TemplateResponse(request, "scenarios/form.html", ctx, status_code=status_code)
 
 
 @router.get("/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
@@ -1007,64 +1669,12 @@ async def edit_scenario_form(
     """
     # Eager-load mitigating_controls so we can surface links to non-ACTIVE
     # controls (issue #217) that the ACTIVE-only available_controls list omits.
-    edit_stmt = (
-        select(Scenario)
-        .where(
-            Scenario.id == scenario_id,
-            Scenario.organization_id == user.organization_id,
-        )
-        .options(selectinload(Scenario.mitigating_controls))
-    )
-    scenario = (await db.execute(edit_stmt)).scalar_one_or_none()
+    scenario = await _load_scenario_for_edit(db, user, scenario_id)
     if scenario is None:
         raise HTTPException(status_code=404)
-    overlay_options = await load_overlay_options(db, user.organization_id)
-    available_controls = await ControlRepo(db).list_for_org(user.organization_id)
-    available_ids = {c.id for c in available_controls}
-    inactive_linked_controls = [
-        c for c in scenario.mitigating_controls if c.id not in available_ids
-    ]
-    # Issue #475 T9: render the scenario's existing mappings as initial rows.
-    attack_ctx = await load_attack_form_context(db, scenario=scenario)
-    organization = await db.get(Organization, user.organization_id)
-    if organization is not None:
-        edit_ctx = calibration_context_from_org(organization)
-        edit_org_industry: str | None = edit_ctx.industry
-        edit_org_revenue_tier: str | None = edit_ctx.revenue_tier
-    else:
-        edit_org_industry = None
-        edit_org_revenue_tier = None
-    return templates.TemplateResponse(
-        request,
-        "scenarios/form.html",
-        {
-            "current_user": user,
-            "flash": None,
-            "scenario": scenario,
-            "form": form_from_scenario(scenario),
-            "overlay_options": overlay_options,
-            "available_controls": available_controls,
-            "inactive_linked_controls": inactive_linked_controls,
-            "threat_category_choices": THREAT_CATEGORY_CHOICES,
-            "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
-            "asset_class_choices": ASSET_CLASS_CHOICES,
-            "attack_vector_choices": ATTACK_VECTOR_CHOICES,
-            "effect_choices": EFFECT_CHOICES,
-            "attack_technique_groups_json": attack_ctx.groups_json,
-            "attack_technique_options": attack_ctx.options,
-            "attack_mapping_rows": attack_ctx.rows,
-            "org_industry": edit_org_industry,
-            "org_revenue_tier": edit_org_revenue_tier,
-            "form_action": f"/scenarios/{scenario.id}",
-            "form_method": "post",
-            "errors": [],
-            # Multi-currency P2 (Task 3.5): pass is_edit=True so the template renders
-            # entry_currency/entry_rate as read-only provenance (not an editable select).
-            # entry_currency/entry_rate are accessed via scenario.entry_currency /
-            # scenario.entry_rate in the template (scenario is already in context).
-            "is_edit": True,
-        },
-    )
+    ctx = await _edit_form_context(db, user, scenario)
+    ctx["flash"] = None
+    return templates.TemplateResponse(request, "scenarios/form.html", ctx)
 
 
 @router.post("/scenarios/{scenario_id}")
@@ -1431,6 +2041,347 @@ async def confirm_vuln_framing(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
+def _parse_pin_quantile(raw: str, *, field_name: str) -> float:
+    """Parse a ``pin_p50``/``pin_p95`` form string to float.
+
+    Parse-to-float happens HERE (the route), not in the service (Sec-I2 /
+    loss_pinning.pin_loss's own boundary-gate comment) — a non-parseable
+    string must 422, and the service's own finite/positive/ordering gate
+    only runs on already-parsed floats. Raises ``ValueError`` (never
+    ``HTTPException``) — T3.a gate fix (SPEC B-1): the caller renders a
+    proper 422 form via ``_render_loss_action_failure`` rather than letting
+    a bare HTTPException JSON body reach the analyst.
+    """
+    try:
+        return float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name}: not a number (got {raw!r})") from exc
+
+
+@router.post("/scenarios/{scenario_id}/loss/pin")
+async def pin_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    field: Literal["primary", "secondary"] = Form(...),
+    pin_p50: str = Form(...),
+    pin_p95: str = Form(...),
+    expected_row_version: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T3 (D20/D21): pin ``field``'s loss dispersion to an analyst-typed
+    (p50, p95) dollar pair.
+
+    Analyst+ only — ``Depends(require_role(UserRole.ANALYST,
+    UserRole.ADMIN))``, the update/delete/confirm_vuln_framing precedent
+    (Sec-I4: ``can_adopt`` at routes/library.py:267 is a template button
+    flag, NOT route enforcement — never hand-roll an inline role check).
+    ``field`` is a ``Literal["primary", "secondary"]`` Form param — FastAPI
+    422s on any other value automatically (Sec-I3), no service-level branch
+    needed. CSRF enforced by the global CSRFMiddleware, same as every other
+    POST in this module.
+
+    T3.a gate fix (SPEC B-1): every 422/409 failure branch below
+    RE-RENDERS the edit form (``_render_loss_action_failure``) with an
+    alert banner and the just-typed p50/p95 preserved, instead of raising
+    a raw ``HTTPException`` — base.html's hx-boost 4xx force-swap would
+    otherwise replace the analyst's whole page with a JSON
+    ``{"detail": ...}`` body. Only a genuinely missing/wrong-org scenario
+    (``NotFoundError``) still raises a plain 404 — there is no edit page to
+    re-render for a scenario that doesn't exist for this org.
+    """
+    row_version = parse_expected_row_version(expected_row_version)
+    if row_version is None:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message="expected_row_version: missing or invalid hidden form field",
+            status_code=422,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
+    try:
+        p50 = _parse_pin_quantile(pin_p50, field_name="pin_p50")
+        p95 = _parse_pin_quantile(pin_p95, field_name="pin_p95")
+    except ValueError as exc:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=str(exc),
+            status_code=422,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
+    try:
+        await pin_loss(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            field=field,
+            p50=p50,
+            p95=p95,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
+    except ValidationError as exc:
+        # Mirrors update_scenario's D19 wrap exactly — validate_fair_
+        # distributions raises FAIRCAMValidationError directly (not
+        # re-wrapped by the service; see loss_pinning.LossPinError's
+        # docstring), so this except catches BOTH that and LossPinError's
+        # own domain-validation failures via the shared ValidationError base.
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=message,
+            status_code=422,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?pinned=1", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/loss/unpin")
+async def unpin_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    field: Literal["primary", "secondary"] = Form(...),
+    expected_row_version: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T3 (D20/D21): remove the ``analyst_pin`` stamp from ``field``,
+    restoring sweep/banner eligibility (D20). See ``pin_scenario_loss`` for
+    the shared RBAC/CSRF/Literal-validation posture, and for the T3.a
+    (SPEC B-1) rendered-failure-path rationale — there is no p50/p95 to
+    preserve here (unpin has no quantile inputs), so
+    ``_render_loss_action_failure`` is called without ``submitted_p50``/
+    ``submitted_p95``.
+    """
+    row_version = parse_expected_row_version(expected_row_version)
+    if row_version is None:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message="expected_row_version: missing or invalid hidden form field",
+            status_code=422,
+        )
+    try:
+        await unpin_loss(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            field=field,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+        )
+    except ValidationError as exc:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=str(exc),
+            status_code=422,
+        )
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?unpinned=1", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/loss/refresh")
+async def refresh_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T4 (D23): refresh a scenario's PL/SL from its pinned library
+    entry's current published version.
+
+    Two-step confirm, mirroring ``delete_scenario``'s cascade-confirmation
+    shape (:1338 + confirm_delete.html) rather than the mixture-flatten
+    "informed replacement" advisory-text-only shape (that shape is for a
+    save the analyst is already committing to; this is a distinct,
+    reversible-only-by-re-refreshing action that deserves its own
+    look-before-you-leap step). The first POST (no ``confirm_refresh``)
+    renders ``confirm_loss_refresh.html`` with a current-vs-entry
+    comparison built READ-ONLY by ``loss_pinning.preview_loss_refresh`` --
+    no mutation, no row lock, so a scenario that can't actually be
+    refreshed (no linkage, a pinned field, an unresolvable entry) surfaces
+    its error on this first POST via ``_render_view_action_failure``
+    (T3.a's rendered-failure idiom, retargeted at view.html — never a raw
+    JSON 4xx body) rather than rendering a confirm page for an action that
+    can only fail on confirm. The second POST (``confirm_refresh=1``)
+    performs the write via ``loss_pinning.refresh_loss_from_library``,
+    which independently RE-validates under a row lock — no TOCTOU trust in
+    the preview step; another edit/pin/refresh can land between the two
+    requests.
+
+    Analyst+ only, same RBAC/CSRF posture as pin/unpin (Sec-I4: never a
+    hand-rolled inline role check). NO step-up (Arch-N4, decided): parity
+    with ``update_scenario``, which can equally overwrite PL/SL without
+    ``StepUpCategory.DESTRUCTIVE`` — delete remains the only destructive
+    step-up action on this router.
+    """
+    form_data = await request.form()
+    row_version = parse_expected_row_version(form_data.get("expected_row_version"))
+    if row_version is None:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="expected_row_version: missing or invalid hidden form field",
+            status_code=422,
+        )
+    confirm_refresh = form_data.get("confirm_refresh") == "1"
+
+    if not confirm_refresh:
+        try:
+            plan = await preview_loss_refresh(
+                db,
+                organization_id=user.organization_id,
+                scenario_id=scenario_id,
+                expected_row_version=row_version,
+            )
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ConflictError as exc:
+            return await _render_view_action_failure(
+                request,
+                db,
+                user,
+                scenario_id,
+                message=(
+                    "Another user updated this scenario — please reload and "
+                    "retry your edit. " + str(exc)
+                ),
+                status_code=409,
+            )
+        except ValidationError as exc:
+            return await _render_view_action_failure(
+                request, db, user, scenario_id, message=str(exc), status_code=422
+            )
+        return templates.TemplateResponse(
+            request,
+            "scenarios/confirm_loss_refresh.html",
+            {
+                "current_user": user,
+                "scenario": plan.scenario,
+                "entry": plan.resolved.entry,
+                "current_primary_loss": plan.scenario.primary_loss,
+                "current_secondary_loss": plan.scenario.secondary_loss,
+                "entry_primary_loss": plan.new_primary_loss,
+                "entry_secondary_loss": plan.new_secondary_loss,
+                # T4.a gate fix (METH I-4): basis-labeled dicts (kind +
+                # pooled/display sigma + mixture max_component_sigma), not a
+                # bare float -- the confirm page's sigma lines now render an
+                # honest basis ("parent-lognormal basis" for lognormal/PERT,
+                # the pooled+component label for a mixture) via the SAME
+                # macros/chart.html::sigma_basis_line macro the stale-wide
+                # banner uses.
+                "current_primary_loss_sigma": _loss_sigma_display(plan.scenario.primary_loss),
+                "current_secondary_loss_sigma": _loss_sigma_display(plan.scenario.secondary_loss),
+                "entry_primary_loss_sigma": _loss_sigma_display(plan.new_primary_loss),
+                "entry_secondary_loss_sigma": _loss_sigma_display(plan.new_secondary_loss),
+                # T4.a gate fix (NTH, meth N-2): disclose when the refresh's
+                # freshly-minted capacity cap differs from the field's PRIOR
+                # stored max -- the executed example silently loosened an
+                # existing cap ~200x with no confirm-page disclosure.
+                "primary_cap_remint": _cap_remint_disclosure(
+                    plan.scenario.primary_loss, plan.new_primary_loss
+                ),
+                "secondary_cap_remint": _cap_remint_disclosure(
+                    plan.scenario.secondary_loss, plan.new_secondary_loss
+                ),
+            },
+        )
+
+    try:
+        await refresh_loss_from_library(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+        )
+    except ValidationError as exc:
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
+        return await _render_view_action_failure(
+            request, db, user, scenario_id, message=message, status_code=422
+        )
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?loss_refreshed=1", status_code=303)
 
 
 @router.post("/scenarios/{scenario_id}/promote")
@@ -2116,7 +3067,7 @@ async def get_wizard_step(
         # overlays, gates the calibration banner to Impact (PL/SL), and supplies
         # the (i) tooltips + rendered questions + rounded initial rows.
         extra_ctx.update(
-            _fair_page_context(
+            await _fair_page_context(
                 request=request,
                 user=user,
                 state=state,
@@ -2125,6 +3076,7 @@ async def get_wizard_step(
                 org_revenue_tier=org_revenue_tier,
                 available_overlays=available_overlays,
                 sme_directory_for_dropdown=sme_dir,
+                db=db,
             )
         )
         # Milestone B (#loss-pert-overhaul): %-of-revenue display hint on the
@@ -2586,7 +3538,7 @@ async def _render_fair_page_with_flash(
         db,
         user.organization_id,
     )
-    ctx_dict = _fair_page_context(
+    ctx_dict = await _fair_page_context(
         request=request,
         user=user,
         state=state,
@@ -2595,6 +3547,7 @@ async def _render_fair_page_with_flash(
         org_revenue_tier=org_revenue_tier,
         available_overlays=available_overlays,
         sme_directory_for_dropdown=sme_dir,
+        db=db,
     )
     ctx_dict["flash"] = build_flash(message, "error", href=href, href_text=href_text)
     template = (
@@ -3150,10 +4103,18 @@ async def finalize_wizard(
         # ?deleted=1 query-param idiom (routes/scenarios.py:220-226) instead:
         # view_scenario re-derives the sigma from the scenario's own stored
         # dicts when it sees ?loss_wide=1 (no value smuggled through the URL).
-        max_sigma = _max_stored_loss_sigma(scenario)
+        # T4.b (confirmation-gate I-2): FIRING basis — same rationale as the
+        # ?loss_wide=1 re-derivation this redirect points at.
+        max_sigma = _max_tripwire_sigma(scenario)
+        # T4.a gate fix (METH I-1): toleranced (see the matching comment on
+        # view_scenario's ?loss_wide=1 re-derivation above) -- a redirect to
+        # ?loss_wide=1 for a stored sigma that only drifted a few ULPs above
+        # the default would immediately be re-derived AWAY by that same
+        # toleranced check, so gating the redirect itself the same way
+        # avoids a pointless redirect+re-derive round trip.
         wide_suffix = (
             "?loss_wide=1"
-            if max_sigma is not None and max_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT
+            if max_sigma is not None and max_sigma > WITHIN_SCENARIO_SIGMA_DEFAULT + _SIGMA_TOL
             else ""
         )
         return RedirectResponse(
@@ -3189,7 +4150,169 @@ async def cancel_wizard(
     return RedirectResponse(url="/scenarios", status_code=status.HTTP_303_SEE_OTHER)
 
 
-def _fair_page_context(
+async def _build_readout_cfg(
+    db: AsyncSession, user: User, state: WizardState
+) -> dict[str, dict[str, Any]]:
+    """PR3 T2 (D22): server-computed props for the wizard step-4 live
+    loss-dispersion readout (``lossDispersionReadout``, static/js/loss_preview.js).
+
+    Called ONLY when the page is Impact (Arch NTH-R2-1 — the fieldset loop is
+    page-scoped and pl/sl never render on Likelihood; a Likelihood render must
+    not pay a semaphore-serialized scipy fit for cfg nobody uses).
+
+    Returns one cfg dict per loss field (``"pl"``/``"sl"``), keyed by
+    ``fieldKey`` — the shape ``lossDispersionReadout(cfg)`` expects. Both
+    dicts share the same policy values (sigma default/warn threshold/cap/
+    currency/tef+vuln preview means); only ``fieldKey``/``label``/
+    ``initialLow``/``initialHigh``/``initialRowIndex``/``fieldCeilingExceeded``
+    differ.
+    """
+    preview_means: dict[str, float | None] = {"tef": None, "vuln": None}
+    try:
+        # Threadpool AND the finalize semaphore, BOTH REQUIRED (Sec-I1/Arch-I3):
+        # finalize's control is run_in_threadpool + _FINALIZE_SEMAPHORE
+        # (wizard_finalize.py:54, acquired routes/scenarios.py:2774) — Sec-21
+        # exists precisely so concurrent scipy.optimize loops cannot saturate
+        # the shared-cpu worker, and a step-4 GET is a HOTTER path than finalize.
+        async with _FINALIZE_SEMAPHORE:
+            results = await run_in_threadpool(process_sme_estimates, state)
+        for fs in ("tef", "vuln"):
+            r = results.get(fs)
+            # N1 (PR3 T2.a gate fix): guard on r.collapsed AND
+            # pert.high > 0. process_sme_estimates stores a
+            # PertTriple(0,0,0) SENTINEL when a fieldset's pipeline has no
+            # collapser (wizard_finalize.py:439-440 — today only catastrophic
+            # pl/sl, never tef/vuln, but this loop must not assume that stays
+            # true forever). An unguarded read would silently compute a
+            # confident $0 preview mean and feed it straight into the ALE
+            # line as if it were real.
+            if r is not None and r.collapsed and r.pert is not None and r.pert.high > 0:
+                p = r.pert
+                preview_means[fs] = (p.low + 4 * p.mode + p.high) / 6.0
+    except Exception:  # broad on purpose — preview only; finalize re-validates
+        # step-4 GET must never 500 because pooling would reject rows finalize
+        # will flash about later — the readout just degrades to hidden (ALE
+        # line requires both tefMean/vulnMean non-null).
+        logger.info("step-4 readout preview means unavailable", exc_info=True)
+
+    # M4 (PR3 T2.a gate fix): mirror finalize's cap precedence EXACTLY
+    # (the capacity_max block in post_wizard_finalize, ~routes/scenarios.py
+    # :2881-2896) — preserve-existing (D13 "snapshot-frozen at author time")
+    # FIRST when this draft targets an existing scenario (a wizard
+    # re-estimate), minted k*CURRENT-revenue only as fallback. Unguarded,
+    # the readout would show k*current-revenue while finalize silently
+    # keeps the authored/original cap -- a preview that lies about which cap
+    # actually gates the save. `lock=False` (the default): this is a
+    # read-only preview, not the locked read finalize itself takes before
+    # writing.
+    cap: float | None = None
+    if state.target_scenario_id is not None:
+        target = await ScenarioRepo(db).get_for_org(
+            organization_id=user.organization_id,
+            scenario_id=uuid.UUID(state.target_scenario_id),
+        )
+        if target is not None:
+            cap = _existing_capacity_max(target)
+    if cap is None:
+        cap = await _capacity_max_for_org(db, user.organization_id)
+
+    mode = "lognormal" if state.loss_shape == "catastrophic" else "capped_pert"
+
+    # M3(b) (PR3 T2.a gate fix): the ceiling verdict must be FIELD-scoped,
+    # not row-scoped -- D19 finalize rejects a catastrophic submission when
+    # ANY persisted row's fitted p95 meets/exceeds the cap, regardless of
+    # which row happens to be focused in the live preview (pre-fix: a green
+    # panel on a tight first row could still 422 at finalize because a
+    # wider second row alone breached the cap). Fit each row via the SAME
+    # p5/p95 basis the wizard rows already use
+    # (fair_cam.lognormal_from_quantiles, q_low=0.05/q_high=0.95). NOTE
+    # (re-gate N-c): for this symmetric fit the fitted p95 IS `high`
+    # identically — the fit exists here only so malformed rows
+    # (inverted/non-positive, e.g. mid-edit) raise inside the try and get
+    # skipped rather than misread as a breach. Only meaningful in catastrophic (lognormal)
+    # mode -- capped_pert rows collapse to a bounded PERT and finalize never
+    # mints/applies a capacity cap to them (state.loss_shape != "catastrophic"
+    # short-circuits the capacity_max block entirely).
+    field_ceiling_exceeded: dict[str, bool] = {"pl": False, "sl": False}
+    if mode == "lognormal" and cap is not None and cap > 0:
+        for fk in ("pl", "sl"):
+            # Re-gate I4: walk the SAME rows finalize will fit — the raw list
+            # can contain superseded duplicates (_dedup_latest_per_sme keeps
+            # the latest per sme identity), and warning on a row finalize
+            # discards makes "saving will be rejected" an absolute claim
+            # about a save that would succeed.
+            #
+            # PR3 T4 carryover (deferred T2 NTH): _dedup_latest_per_sme
+            # itself can raise -- ``row_identity_uuid`` does ``UUID(str(...))``
+            # on an unparseable sme_id (ValueError) or ``row["sme_name"]``/
+            # ``.casefold()`` on a missing or non-string sme_name
+            # (KeyError/AttributeError) -- reachable only via draft
+            # corruption (the HTTP form path always normalizes a blank
+            # sme_id to None, see the step-4 POST handler), but this call
+            # previously sat OUTSIDE the per-row try below, so one
+            # corrupted row 500'd the WHOLE step-4 GET instead of being
+            # skipped like every other malformed-row case in this preview
+            # builder. Wrapped here, falling back to "no ceiling verdict for
+            # this fieldset" (leaves field_ceiling_exceeded[fk] at its False
+            # default) -- same "a step-4 GET must never 500 because pooling
+            # would reject rows finalize will flash about later" philosophy
+            # already documented on the preview_means block above.
+            try:
+                dedup_rows = _dedup_latest_per_sme(state.sme_estimates.get(fk) or [])
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+            for row in dedup_rows:
+                try:
+                    low, high = float(row["low"]), float(row["high"])
+                    fit = lognormal_from_quantiles(low, high, q_low=0.05, q_high=0.95)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                row_p95 = float(lognormal_quantiles(fit["mean"], fit["sigma"], (0.95,))[0])
+                if row_p95 >= cap:
+                    field_ceiling_exceeded[fk] = True
+
+    base: dict[str, Any] = {
+        # N6: Task 3 (analyst pin/unpin) also consumes sigmaDefault/
+        # warnThreshold for the expert-form pin panel's own readout mount —
+        # keep this dict's shape stable for that reuse.
+        "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+        "warnThreshold": SIGMA_WARN_THRESHOLD,
+        "cap": cap,
+        # Global Constraints ("wizard elicits USD"): the wizard has no
+        # currency selector (entry_currency is an expert-form-only field,
+        # Multi-currency P2) — USD here is correct, not a placeholder.
+        "currency": "USD",
+        "quantileBasis": "p5p95",  # wizard SME rows are p5/p95
+        "tefMean": preview_means["tef"],
+        "vulnMean": preview_means["vuln"],
+    }
+    out: dict[str, dict[str, Any]] = {}
+    # N8 (PR3 T2.a gate fix): field key/label sourced from IMPACT_FIELDSETS
+    # (the single source of truth, services/wizard_questions.py) rather than
+    # a hand-typed tuple -- picks up "Secondary loss (optional)" instead of
+    # a bare "Secondary loss".
+    for field_key, label in IMPACT_FIELDSETS:
+        rows = state.sme_estimates.get(field_key) or []
+        last = rows[-1] if rows else None
+        cfg = dict(base)
+        cfg["mode"] = mode
+        cfg["fieldKey"] = field_key
+        cfg["label"] = label
+        # Seeds the readout so it isn't blank on first paint (before any row
+        # focus/blur fires the loss-row-input event) — the last row wins,
+        # matching the "readout tracks the last-focused SME row" default.
+        cfg["initialLow"] = last.get("low") if last else None
+        cfg["initialHigh"] = last.get("high") if last else None
+        # M2 (PR3 T2.a gate fix): the row index the seed above came from, so
+        # the client can attribute the first-paint seed ("previewing last
+        # saved row N") instead of leaving it unlabeled until a focus event.
+        cfg["initialRowIndex"] = (len(rows) - 1) if rows else None
+        cfg["fieldCeilingExceeded"] = field_ceiling_exceeded[field_key]
+        out[field_key] = cfg
+    return out
+
+
+async def _fair_page_context(
     request: Request,
     user: User,
     state: WizardState,
@@ -3198,6 +4321,7 @@ def _fair_page_context(
     org_revenue_tier: str | None,
     available_overlays: list[Any],
     sme_directory_for_dropdown: list[dict[str, Any]],
+    db: AsyncSession,
 ) -> dict[str, Any]:
     """Context for a split FAIR-param page (step 3 Likelihood / step 4 Impact)
     and its HTMX swap fragment (``_fair_params_form_inner.html``).
@@ -3208,6 +4332,12 @@ def _fair_page_context(
     ALL build context here so the partial renders identically regardless of
     swap source (Sec-25 PR2 single-source guard — omitting e.g. ``csrf_token``
     after an outerHTML swap would break the next POST).
+
+    PR3 T2 (D22): also the single-source builder for ``readout_cfg`` (the live
+    loss-dispersion readout's props) — built ONLY on the Impact page, so all
+    four render paths that funnel through here (GET step 4, the 422 flash
+    re-render, and the two HTMX prefill/overlay partial-swap POSTs) carry
+    identical props (SC-6's swap-boundary contract).
 
     Note: ``request`` is NOT returned in the dict. The caller passes ``request``
     as the first positional arg to ``templates.TemplateResponse`` so the
@@ -3232,6 +4362,11 @@ def _fair_page_context(
     initial_rows = _round_initial_rows_for_display(
         {fs: state.sme_estimates.get(fs, []) for fs in fieldset_keys}
     )
+    # PR3 T2 (D22): readout_cfg is built ONLY on the Impact page (Arch
+    # NTH-R2-1) — the fieldset loop in _fair_params_form_inner.html only
+    # mounts the pl/sl readouts there, and a Likelihood render must not pay
+    # the semaphore-serialized scipy fit for cfg nobody uses.
+    readout_cfg = await _build_readout_cfg(db, user, state) if page == "impact" else None
     return {
         "current_user": user,
         "flash": None,
@@ -3253,6 +4388,7 @@ def _fair_page_context(
         # library_entry_id present.
         "show_calibration_banner": page == "impact" and state.library_entry_id is not None,
         "override_active": state.override_id is not None,
+        "readout_cfg": readout_cfg,
     }
 
 
@@ -3339,7 +4475,7 @@ async def wizard_prefill_from_industry(
     return templates.TemplateResponse(
         request,
         "scenarios/wizard/_fair_params_form_inner.html",
-        _fair_page_context(
+        await _fair_page_context(
             request=request,
             user=user,
             state=state,
@@ -3348,6 +4484,7 @@ async def wizard_prefill_from_industry(
             org_revenue_tier=org_revenue_tier,
             available_overlays=available_overlays,
             sme_directory_for_dropdown=sme_dir,
+            db=db,
         ),
     )
 
@@ -3432,7 +4569,7 @@ async def wizard_apply_overlay(
     return templates.TemplateResponse(
         request,
         "scenarios/wizard/_fair_params_form_inner.html",
-        _fair_page_context(
+        await _fair_page_context(
             request=request,
             user=user,
             state=state,
@@ -3441,5 +4578,6 @@ async def wizard_apply_overlay(
             org_revenue_tier=org_revenue_tier,
             available_overlays=available_overlays,
             sme_directory_for_dropdown=sme_dir,
+            db=db,
         ),
     )

@@ -4,7 +4,7 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/form_field.html" import form_field %}
 {% from "macros/status_pill.html" import status_pill %}
-{% from "macros/chart.html" import pert_distribution_chart %}
+{% from "macros/chart.html" import pert_distribution_chart, sigma_basis_line %}
 {% block title %}Scenario — {{ scenario.name }}{% endblock %}
 {% block content %}
 
@@ -307,6 +307,62 @@
   </div>
   {% endif %}
 
+  {# stale-copy tripwire banner (PR3 T4, D23): standing, provenance-aware --
+     fires on EVERY view when a stored loss field's implied sigma is wide
+     (> the within-scenario default beyond the 1e-5 tolerance) AND that
+     field carries neither an analyst_pin nor a migration_recalibration
+     stamp (loss_stale_wide is computed PER FIELD -- a pin/stamp on one
+     field never mutes a wide, unstamped sibling; see
+     routes.scenarios._loss_stale_wide). Library linkage is NOT required to
+     fire -- wild imports and hand-authored wide sigma light this up too;
+     linkage only gates whether the Refresh button renders (below), never
+     the banner itself. #}
+  {% if loss_stale_wide %}
+  <div class="alert alert-warning mb-4" role="alert" data-testid="loss-stale-wide">
+    <div>
+      {# T4.a gate fix (METH I-3): loss_stale_wide is now a basis-labeled
+         dict {field_label, kind, sigma, max_component_sigma}, not a bare
+         float -- the copy below names the FIRING field instead of the
+         vague "this field", and renders the honest per-kind basis label
+         (METH I-4) via the shared macros/chart.html::sigma_basis_line
+         macro (T4.b/PR-gate M-3 split: mixture leads with the firing
+         components-ceiling, pooled as labeled context; lognormal:
+         "parent-lognormal basis"; PERT: "PERT range basis"). #}
+      <p class="font-semibold">
+        {{ loss_stale_wide.field_label }} dispersion is wider than the
+        within-scenario default ({{ sigma_basis_line(loss_stale_wide) }},
+        platform default &sigma;={{ "%.2f" | format(sigma_default) }}).
+      </p>
+      <p class="text-sm mt-1">
+        This is informational, not automatic &mdash; nothing was changed.
+        Three ways to proceed: <strong>refresh</strong> from the library
+        entry if the wide spread is a stale copy (this replaces BOTH
+        primary and secondary loss, wholesale);
+        <strong>pin</strong> the dispersion (lognormal fields only, via
+        Edit) if it is deliberate; or <strong>re-author</strong> it (Edit)
+        with your own estimates.
+      </p>
+      {% if can_adopt %}
+        {% if scenario.library_pin and scenario.library_pin.entry_id %}
+        <form method="post" action="/scenarios/{{ scenario.id }}/loss/refresh" class="mt-2">
+          {{ csrf_field() }}
+          <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+          <button type="submit" class="btn btn-sm btn-outline" data-testid="loss-refresh-button">
+            Refresh from library
+          </button>
+        </form>
+        {% else %}
+        <p class="text-sm mt-2">
+          This scenario has no linked library entry, so there is nothing to
+          refresh from &mdash; <a class="link" href="/scenarios/{{ scenario.id }}/edit">pin (lognormal fields) or re-author</a>
+          the dispersion to acknowledge it.
+        </p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   {# FAIR distributions — per-node shape: lognormal shows 5th/median/mean/95th;
      PERT shows Low/Mode/High. Heading updated from "(PERT)" — Epic B #326. #}
   <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
@@ -328,11 +384,46 @@
       </div>
       <div>
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Primary loss</h3>
+        {# PR3 T3 (D20/D21): pin-state chip + unpin button. σ + pinned_at
+           via format_datetime (a proper datetime object parsed server-side
+           by routes/scenarios.py::_pin_panel_context — never a raw
+           strftime/isoformat in this template, per the timezone-
+           localization UI convention). #}
+        {% if pin_panels and pin_panels.pl.pinned %}
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip-pl-view">
+          <span class="badge badge-ghost badge-sm">
+            pinned spread &sigma;={{ "%.2f" | format(pin_panels.pl.pinned_sigma) if pin_panels.pl.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(pin_panels.pl.sigma_default) }}){% if pin_panels.pl.pinned_at %} &mdash; {{ pin_panels.pl.pinned_at | format_datetime }}{% endif %}
+          </span>
+          {% if can_adopt %}
+          <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">
+            {{ csrf_field() }}
+            <input type="hidden" name="field" value="primary">
+            <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+            <button type="submit" class="link text-meta">Unpin</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
         {{ pert_distribution_chart("pl-dist", scenario.primary_loss, fmt="money") }}
       </div>
       {% if scenario.secondary_loss %}
       <div>
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Secondary loss</h3>
+        {% if pin_panels and pin_panels.sl.pinned %}
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip-sl-view">
+          <span class="badge badge-ghost badge-sm">
+            pinned spread &sigma;={{ "%.2f" | format(pin_panels.sl.pinned_sigma) if pin_panels.sl.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(pin_panels.sl.sigma_default) }}){% if pin_panels.sl.pinned_at %} &mdash; {{ pin_panels.sl.pinned_at | format_datetime }}{% endif %}
+          </span>
+          {% if can_adopt %}
+          <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">
+            {{ csrf_field() }}
+            <input type="hidden" name="field" value="secondary">
+            <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+            <button type="submit" class="link text-meta">Unpin</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
         {{ pert_distribution_chart("sl-dist", scenario.secondary_loss, fmt="money") }}
       </div>
       {% endif %}

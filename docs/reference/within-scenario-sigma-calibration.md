@@ -128,8 +128,75 @@ band). What stands instead:
   at 1.9687, −67.62% at 2.394 — **large across the entire defensible
   bracket**, so the drop is not an artifact of choosing 1.7.
 - **IC3 mean-preservation** (appendix `[external check]`): the one external,
-  citation-traced pass/fail check available — passes at 7.1e-16.
-- The owner-signed σ decision itself, methodology-gated.
+  citation-traced pass/fail check available — passes at 7.1e-16. **Scope
+  precision (PR3 D25):** this check validates the vendor mean-anchoring
+  (μ = ln(mean) − σ²/2) and is **σ-INDEPENDENT** — it passes identically at
+  any σ and is therefore not evidence for σ_default = 1.7.
+- **NetDiligence 2025 consistency reads (PR3 D24)** — the nearest published
+  per-incident dataset (claims-visible incident cost, 9,171 claims ≥ $1K;
+  full conditioning register + verbatim generated figures:
+  `calibration-sources/netdiligence_2025.md`, generator
+  `scripts/netdiligence_sigma_check.py`). Conditioning level: cross-firm ×
+  cross-type WITHIN a revenue band — §2's within-revenue-tier UPPER-BOUND
+  row, NOT the within-scenario quantity. **BOTH estimators quoted for every
+  included Table-3 row** (mixing them selectively is a framing bias — the
+  T0-gate I1 catch); plug-in reads carry their no-root rate + z_n ceiling:
+  - nano: plug-in 1.60 at ~p20 of [1.47, 2.52] (no-root 2.0%, ceiling
+    3.48); exact-E[max] 1.44.
+  - micro: plug-in 1.77 at ~p46 of [1.42, 2.53] (5.9%, 3.26); exact 1.54.
+  - small: plug-in 2.30 at ~p89 of [1.37, 2.48] — near-edge HIGH, and
+    root-conditional on the 20.4% no-root rate; ceiling 2.88 sits BELOW
+    IRIS's upper 2.92, so this row structurally cannot read above the IRIS
+    band regardless of the data; exact 1.72.
+  - mid: no plug-in root (43.5% no-root at truth 1.7 — plug-in artifact,
+    not tail-heaviness; ceiling 2.55); exact 2.09.
+  - large: no plug-in root (82.2%; ceiling 1.99); exact 1.85.
+
+  Applying the SAME estimator across all five rows (exact-E[max]; no
+  statistical-consistency claim intended or made — that estimator's
+  sampling distribution is not computed), the reads are
+  1.44 / 1.54 / 1.72 / 2.09 / 1.85 — four of five below IRIS's 1.97–2.92,
+  **two at-or-below 1.7 with a third at 1.72** (executed; the earlier
+  "three at-or-below" was an unexecuted count, T0-gate A-B1). Table-9
+  cause rows (same treatment, SME-conditioned, each with its own
+  conditioning): ransomware plug-in 2.36 at ~p91 of [1.44, 2.53]
+  (near-edge HIGH; no-root 3.8%, ceiling 3.36; exact 1.93);
+  **theft_of_money 1.02 at ~p0 — at/below its band's LOW edge, materially
+  inconsistent with 1.7 at this conditioning level in the LOW direction**
+  (no-root 11.8%, ceiling 3.04; the ≥$1K correction shifts the read only
+  +0.058 via converged cond-mean inflation — the mass-governed statistic,
+  not the mean share — leaving it at 1.079, far below the band's p5 of
+  1.40); BEC and hacker
+  have no plug-in root (no-root 5.3%/9.2%, ceilings 3.27/3.14; exact
+  2.39 / 2.13); wire 1.67 at ~p39 (no-root 35.9% — the estimator is
+  nearly as weak here as at mid — ceiling 2.67; exact 1.34). The per-row
+  relation to IRIS is MIXED and NO summary direction is stated (several
+  z_n ceilings — small 2.88, wire 2.67, mid 2.55, large 1.99 — sit below
+  IRIS's upper bound, so "no read above" would be partly mechanical).
+  Net posture, with the structural/evidential line drawn explicitly
+  (T0-gate A-B2): read as an upper-bound row, only sub-1.7 reads bind —
+  and four of ten included rows read below 1.7 under the same estimator
+  (nano 1.44, micro 1.54, wire 1.34, theft 0.92) while six read above
+  (1.72–2.39, median of the revenue-band five: 1.72). The one-way
+  asymmetry is STRUCTURAL, not evidential: an upper bound above the
+  convention cannot argue for raising it, whatever the data says. Of the
+  four rows where the plug-in genuinely has power (no-root ≤ 12% AND a
+  root exists — BEC and hacker clear the rate but produced no root), the
+  verdicts are: nano p20 and micro p46 consistent; ransomware p91
+  near-edge HIGH; **theft p0 materially LOW** — so "consistent" holds for
+  two of four powered rows, with both exceptions stated (T0-re-gate A1;
+  the earlier blanket "consistent where the plug-in has power" contradicted
+  the theft finding four lines above it). On σ the register's two live
+  bias mechanisms do NOT oppose (PR-gate M-1: the register states its
+  opposition on cost LEVEL — NetD below FAIR loss magnitude vs observed
+  population above the full population — and that opposition must not be
+  re-used to adjudicate dispersion): the ≥$1K reporting filter is a left
+  truncation that NARROWS the observed σ (quantified — the executed
+  read-shifts raise every read, ≤ +0.058 on cause rows, ≤ +0.011 on
+  revenue bands), and loss-form blindness omits loss components in the
+  same narrowing direction (unquantified). Aligned-narrowing biases make
+  the sub-1.7 reads weaker still as upper-bound evidence; the data
+  refutes neither direction on the true within-scenario σ.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is
