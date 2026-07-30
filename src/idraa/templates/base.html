@@ -125,6 +125,10 @@
      evaluates. The matching option-data is injected per-page via
      `window.SUB_FUNCTION_GROUPS` (set in the page that needs it). #}
   <script src="/static/js/sub_function_combobox.js?v={{ static_version }}"></script>
+  {# Loss-dispersion preview math + Alpine readout factory (σ-recal PR3).
+     Non-defer, like sub_function_combobox.js, so the factory is registered
+     before the deferred Alpine bundle initializes and walks x-data. #}
+  <script src="/static/js/loss_preview.js?v={{ static_version }}"></script>
   {# Client-side timezone localization. Server renders <time> elements with
      ISO UTC datetime + fallback text; this JS walks them on load + after
      each htmx swap and converts to the browser's local-format. #}
