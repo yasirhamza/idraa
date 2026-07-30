@@ -253,7 +253,12 @@
   </fieldset>
 
   {# ── Entry currency (multi-currency P2) ─────────────────────── #}
-  <fieldset class="space-y-2">
+  {# T3.b (confirmation-gate BLOCKER): bare `x-data` makes this fieldset an
+     Alpine root so the select's `@change` dispatch BINDS ON HARD LOADS —
+     without it the directive is inert on direct URL / F5 / first load and
+     only worked via the hx-boost swap's MutationObserver side effect
+     (executed browser repro; precedent: #attack-mappings' bare x-data). #}
+  <fieldset class="space-y-2" x-data>
     <legend class="text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Entry currency</legend>
     {% if is_edit %}
       <p class="text-meta text-ink-1">Loss amounts entered in
@@ -639,7 +644,11 @@
               <button type="submit" class="btn btn-outline btn-sm">Unpin</button>
             </form>
           {% else %}
-            <form method="post" action="/scenarios/{{ scenario.id }}/loss/pin" class="space-y-3">
+            {# T3.b (confirmation-gate IMPORTANT, same root cause as the
+               entry-currency BLOCKER): the pin inputs' @input dispatchers
+               had no Alpine root ancestor (the readout mount is a SIBLING),
+               so the panel's live readout was dead on hard loads. #}
+            <form method="post" action="/scenarios/{{ scenario.id }}/loss/pin" class="space-y-3" x-data>
               {{ csrf_field() }}
               <input type="hidden" name="field" value="{{ api_field }}">
               <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">

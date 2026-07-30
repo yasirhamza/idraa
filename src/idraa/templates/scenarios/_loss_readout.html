@@ -122,14 +122,18 @@
     </dl>
   </template>
   <p class="text-meta text-ink-3 mt-1" x-show="cfg.mode === 'lognormal' && !entryCurrencyIsUsd" x-cloak>
-    Dollar-denominated preview (median/mean/P95/P99, capacity cap, ceiling verdict) hidden while the entry currency above isn&rsquo;t USD — σ above is currency-free and stays accurate.
+    Dollar-denominated preview (median/mean/P95/P99, capacity cap, ceiling verdict, $1,000-floor advisory) hidden while the entry currency above isn&rsquo;t USD — σ above is currency-free and stays accurate.
   </p>
 
   {# N7 (PR3 T2.a gate fix): mirrors the CONDITION of
      fair_cam.quantile_pooling.clean_quantile_pair's pl/sl floor (values
      below $1,000 are floored to $1,000 at finalize) — advisory only, never
      a client-side transform of what the analyst typed. #}
-  <p class="text-meta text-ink-3 mt-1" x-show="stats.floorAdvisory" x-cloak>
+  {# T3.b (confirmation-gate ruling on the disclosed residual): gated on
+     entryCurrencyIsUsd like every other dollar-basis element — on a non-USD
+     create entry the $1,000 threshold compares against the wrong unit
+     (900 SAR would fire; 3,000 SAR would wrongly stay silent). #}
+  <p class="text-meta text-ink-3 mt-1" x-show="entryCurrencyIsUsd && stats.floorAdvisory" x-cloak>
     Values below $1,000 will be floored to $1,000 when this estimate is saved.
   </p>
 
