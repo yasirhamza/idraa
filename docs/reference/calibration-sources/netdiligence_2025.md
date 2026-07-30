@@ -4,7 +4,7 @@ year: 2025
 url: https://netdiligence.com/cyber-claims-study/
 accessed: 2026-07-29
 permalink: N/A  # paginated PDF (Report V1.1); printed page cites below
-methodology_summary: "10,402 cyber insurance claims from incidents occurring 2020-2024, contributed by 13+ insurers; cost analyses use the 9,171 claims reporting incident cost >= $1,000; SME (< $2B annual revenue) vs large-company split; 7 revenue bands, 18 sectors, 25 causes of loss."
+methodology_summary: "10,402 cyber insurance claims from incidents occurring 2020-2024, 14 named contributing insurers (printed p.50); cost analyses use the 9,171 claims reporting incident cost >= $1,000; SME (< $2B annual revenue) vs large-company split; 7 revenue bands, 18 sectors per p.7 (but see errata), 25 causes of loss."
 ---
 
 # NetDiligence Cyber Claims Study 2025 — Reference Data
@@ -68,9 +68,12 @@ Register of live bias mechanisms:
 - **Never percentile anchors** — the same bar the loss-anchor protocol
   applies to IC3 aggregate figures (`loss-anchors/research-protocol.md` §1).
 - **σ reads are consistency signals only**, at the stated conditioning
-  level, with the estimator caveats printed beside every figure (quantile
-  plug-in biased HIGH; no-root outcomes are plug-in artifacts; sampling
-  bands are conditional on a root existing and ceiling-truncated at z_n).
+  level, with the estimator caveats printed beside every figure (plug-in
+  bias is n-DEPENDENT — over-reads at large n, realized bias flips LOW at
+  small n via the z_n ceiling + root-conditional truncation, and each
+  printed band shows its own median-vs-truth offset; no-root outcomes are
+  plug-in artifacts; sampling bands are conditional on a root existing and
+  ceiling-truncated at z_n).
 - Every figure in this document is quoted verbatim from
   `scripts/netdiligence_sigma_check.py` (fail-loud transcription pins;
   tests at `tests/unit/test_netdiligence_sigma_check.py`). Regenerate with
@@ -91,28 +94,28 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
 
 [B-ND-BAND] Table 3 (p.52) — incident cost by revenue size
   nano_lt_50m  (n=4009, mean=$142,000, max=$10,400,000)
-      plug-in roots: 1.60 / 5.36 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 1.60 / 5.36 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.44 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.47, 1.79, 2.52] (p5/p50/p95), no-root rate 2.0%, z_n ceiling 3.48 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p20 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.47, 1.79, 2.52] (p5/p50/p95), no-root rate 2.0%, z_n ceiling 3.48 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.09 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p20 of the truth-1.7 band (evidential direction)
   micro_50m_300m  (n=1775, mean=$374,000, max=$25,000,000)
-      plug-in roots: 1.77 / 4.74 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 1.77 / 4.74 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.54 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.53] (p5/p50/p95), no-root rate 5.9%, z_n ceiling 3.26 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p46 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.53] (p5/p50/p95), no-root rate 5.9%, z_n ceiling 3.26 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p46 of the truth-1.7 band (evidential direction)
   small_300m_2b  (n=508, mean=$2,000,000, max=$108,000,000)
-      plug-in roots: 2.30 / 3.46 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 2.30 / 3.46 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.72 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.37, 1.80, 2.48] (p5/p50/p95), no-root rate 20.4%, z_n ceiling 2.88 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p89 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.37, 1.80, 2.48] (p5/p50/p95), no-root rate 20.4%, z_n ceiling 2.88 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.10 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p89 of the truth-1.7 band (evidential direction) (near-edge)
   mid_2b_10b  (n=187, mean=$5,100,000, max=$268,000,000)
-      plug-in: no root under the quantile plug-in (artifact, biased HIGH)
+      plug-in: no root under the quantile plug-in (artifact of the plug-in, never tail-heaviness)
       exact-E[max] root: 2.09 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.26, 1.71, 2.27] (p5/p50/p95), no-root rate 43.5%, z_n ceiling 2.55 (smaller root cannot exceed it)
+      plug-in sampling band @ truth 1.7: [1.26, 1.71, 2.27] (p5/p50/p95), no-root rate 43.5%, z_n ceiling 2.55 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.01 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   large_10b_100b  (n=43, mean=$30,500,000, max=$503,500,000)
-      plug-in: no root under the quantile plug-in (artifact, biased HIGH)
+      plug-in: no root under the quantile plug-in (artifact of the plug-in, never tail-heaviness)
       exact-E[max] root: 1.85 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.02, 1.41, 1.80] (p5/p50/p95), no-root rate 82.2%, z_n ceiling 1.99 (smaller root cannot exceed it)
+      plug-in sampling band @ truth 1.7: [1.02, 1.41, 1.80] (p5/p50/p95), no-root rate 82.2%, z_n ceiling 1.99 (smaller root cannot exceed it); realized root-conditional bias at this n: band median -0.29 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   mega_gt_100b  (n=4, mean=$38,300,000, max=$75,000,000)
       EXCLUDED from the sigma read: n=4 with a $10.6M minimum — a differently-truncated population
   unknown_rev  (n=2645, mean=$47,000, max=$2,700,000)
@@ -120,28 +123,28 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
 
 [B-ND-CAUSE] Table 9 (p.59) — incident cost by cause of loss, SMEs
   business_email_compromise  (n=1864, mean=$98,000, max=$30,000,000)
-      plug-in: no root under the quantile plug-in (artifact, biased HIGH)
+      plug-in: no root under the quantile plug-in (artifact of the plug-in, never tail-heaviness)
       exact-E[max] root: 2.39 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.54] (p5/p50/p95), no-root rate 5.3%, z_n ceiling 3.27 (smaller root cannot exceed it)
+      plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.54] (p5/p50/p95), no-root rate 5.3%, z_n ceiling 3.27 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   ransomware  (n=2571, mean=$631,000, max=$108,000,000)
-      plug-in roots: 2.36 / 4.36 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 2.36 / 4.36 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.93 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.44, 1.81, 2.53] (p5/p50/p95), no-root rate 3.8%, z_n ceiling 3.36 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p91 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.44, 1.81, 2.53] (p5/p50/p95), no-root rate 3.8%, z_n ceiling 3.36 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p91 of the truth-1.7 band (evidential direction) (near-edge)
   hacker  (n=1191, mean=$135,000, max=$22,000,000)
-      plug-in: no root under the quantile plug-in (artifact, biased HIGH)
+      plug-in: no root under the quantile plug-in (artifact of the plug-in, never tail-heaviness)
       exact-E[max] root: 2.13 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.40, 1.81, 2.49] (p5/p50/p95), no-root rate 9.2%, z_n ceiling 3.14 (smaller root cannot exceed it)
+      plug-in sampling band @ truth 1.7: [1.40, 1.81, 2.49] (p5/p50/p95), no-root rate 9.2%, z_n ceiling 3.14 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   wire_transfer_fraud  (n=260, mean=$178,000, max=$3,800,000)
-      plug-in roots: 1.67 / 3.66 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 1.67 / 3.66 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.34 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.29, 1.75, 2.32] (p5/p50/p95), no-root rate 35.9%, z_n ceiling 2.67 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p39 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.29, 1.75, 2.32] (p5/p50/p95), no-root rate 35.9%, z_n ceiling 2.67 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.05 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p39 of the truth-1.7 band (evidential direction)
   theft_of_money  (n=834, mean=$38,000, max=$500,000)
-      plug-in roots: 1.02 / 5.05 (smaller selected: larger implies a sub-$1 median vs a >=$1K population)
+      plug-in roots: 1.02 / 5.05 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 0.923 (point read; no sampling band computed)
-      plug-in sampling band @ truth 1.7: [1.40, 1.83, 2.56] (p5/p50/p95), no-root rate 11.8%, z_n ceiling 3.04 (smaller root cannot exceed it)
-      observed plug-in read sits at ~p0 of the truth-1.7 band (evidential direction; near-edge positions are stated as such)
+      plug-in sampling band @ truth 1.7: [1.40, 1.83, 2.56] (p5/p50/p95), no-root rate 11.8%, z_n ceiling 3.04 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.13 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
+      observed plug-in read sits at ~p0 of the truth-1.7 band (evidential direction) — AT/BELOW the band's LOW edge: materially inconsistent with truth 1.7 at this conditioning level, in the LOW direction
 
 [B-ND-REF] anchor REFERENCE bands (direction NOT established:
   loss-form blindness pushes NetD BELOW FAIR loss magnitude;
@@ -157,19 +160,31 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
   cross-type WITHIN a revenue band — the within-revenue-tier
   UPPER-BOUND row of within-scenario-sigma-calibration.md §2, NOT the
   within-scenario quantity. Relation to IRIS 1.97-2.92 at that level
-  is per-row and MIXED (see each row above); no read sits ABOVE the
-  IRIS band. The >=$1K filter's effect on the MC band is negligible
-  on included bands (mass <= 2%, nano worst ~1.9%; mean share
-  <= 0.01%, nano ~0.0083%).
+  is per-row and MIXED (see each row above) — NO summary direction is
+  stated: several rows' z_n ceilings (e.g. small 2.88, wire 2.67) sit
+  below IRIS's upper 2.92, so those rows structurally cannot read
+  above the band regardless of the data. The >=$1K filter's effect on
+  the MC bands: negligible on the revenue bands (mass <= 2%, nano
+  worst ~1.9%; mean share <= 0.01%, nano ~0.0083%); larger but still
+  mean-immaterial on cause rows (worst theft_of_money: ~9.9% of mass,
+  ~0.14% of the mean).
 ```
 
 ## Known anomalies / errata
 
-- Table-9 N differs from body-figure N for the same cause (e.g. wire
-  transfer fraud: 260 in the ≥$1K cost table vs 438 in Figure 36's
-  demographic count) — two populations, both legitimate; always cite which.
+- Table-9 N differs from the body figures' N for the same causes (wire
+  transfer fraud: 260 in Table 9 vs 438 in Figures 5 and 36) along an axis
+  **the report does not state**: Table 9's claims column sums to 8,936
+  (exactly Figure 9's SME N) while Figure 5 declares N=8,278, and four of
+  Figure 5's five cause counts match Table 9 while wire fraud does not.
+  Two genuinely different populations — but NOT the demographic-vs-≥$1K
+  split. Table 9's row is self-consistent (its n pairs with its max), so
+  it is the one used.
 - The ≥$1K qualifier for Table 9 is stated on p.7, not in the table
-  subtitle.
+  subtitle (Table 3's subtitle does carry it).
+- The report contradicts itself on sector count: p.7 says "18 business
+  sectors"; printed p.53 says "nineteen" and lists 19. The frontmatter
+  follows p.7; recorded here per the errata discipline.
 - BEC's incident-cost maximum ($30.0M) yields max/mean = 306 — no real
   root under the quantile plug-in at n=1,864; the exact-E[max] read (2.39)
   is the usable figure for that row.

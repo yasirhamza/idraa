@@ -54,12 +54,50 @@ def test_roots_satisfy_quadratic() -> None:
 
 def test_plugin_no_root_set_is_exactly_the_executed_three() -> None:
     # Executed 2026-07-30 (matches both plan-gate round-3/4 executions):
-    # the plug-in discriminant is negative for exactly these rows — a
-    # plug-in ARTIFACT, never "heavier than lognormal".
+    # among the REVENUE BANDS the plug-in discriminant is negative for
+    # exactly these rows — a plug-in ARTIFACT, never "heavier than
+    # lognormal". (Cause-row no-roots are covered separately below.)
     no_root = {
         name for name, n, mean, mx in REVENUE_BANDS if implied_sigma_roots(n, mean, mx) is None
     }
     assert no_root == {"mid_2b_10b", "large_10b_100b", "mega_gt_100b"}
+
+
+def test_cause_row_no_root_set() -> None:
+    # Executed 2026-07-30: BEC (max/mean = 306) and hacker also have no
+    # plug-in root; both carry real exact-E[max] reads.
+    no_root = {
+        name for name, n, mean, mx in CAUSE_ROWS_SME if implied_sigma_roots(n, mean, mx) is None
+    }
+    assert no_root == {"business_email_compromise", "hacker"}
+    for name, n, mean, mx in CAUSE_ROWS_SME:
+        if name in no_root:
+            assert exact_emax_sigma_root(n, mean, mx) is not None
+
+
+def test_doc_verbatim_block_matches_fresh_generator_output() -> None:
+    # Golden guard (T0-gate NTH): the calibration-source doc quotes the
+    # generator verbatim — drift in ANY row's figures must fail loudly, not
+    # ship silently. Re-runs the whole generator (~2s of MC per band).
+    import contextlib
+    import io
+    from pathlib import Path
+
+    from scripts.netdiligence_sigma_check import main
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        main()
+    fresh = buf.getvalue().strip()
+
+    doc = (
+        Path(__file__).resolve().parents[2]
+        / "docs/reference/calibration-sources/netdiligence_2025.md"
+    ).read_text(encoding="utf-8")
+    start = doc.index("```text\n") + len("```text\n")
+    end = doc.index("\n```", start)
+    quoted = doc[start:end].strip()
+    assert quoted == fresh
 
 
 def test_exact_emax_roots_real_where_plugin_has_none() -> None:

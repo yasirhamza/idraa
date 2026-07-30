@@ -8,8 +8,12 @@ docs/reference/calibration-sources/netdiligence_2025.md.
 
 Populations (p.7): demographic analyses use all 10,402 claims; COST analyses
 use the 9,171 claims that reported incident cost >= $1,000. Every table this
-script reads is a cost table (>= $1K population). Table-9 N therefore differs
-from body-figure N (e.g. wire fraud 260 here vs Fig-36's 438).
+script reads is a cost table (>= $1K population). Table-9 N differs from the
+body figures' N for the same causes (wire fraud 260 here vs Figure 5/36's
+438) along an axis the report does NOT state: Table 9's claims column sums
+to 8,936 (= Figure 9's SME N) while Figure 5 declares N=8,278 — two
+different populations, not the demographic-vs->=$1K split. Table 9's row is
+self-consistent (its n pairs with its max), so it is the one used.
 
 THREE estimators per row, all printed:
 
@@ -17,12 +21,16 @@ THREE estimators per row, all printed:
    observed max at the (1 - 1/n) quantile of a lognormal with
    mu = ln(mean) - sigma^2/2 (mean-anchored), giving
        sigma^2 - 2*z_n*sigma + 2*ln(max/mean) = 0,  z_n = norminv(1 - 1/n).
-   Both roots printed; the SMALLER is selected with the stated rationale:
-   the larger root implies a sub-dollar median against a >=$1K-filtered
-   population. The plug-in is biased HIGH (E[max] exceeds the (1-1/n)
-   quantile), and a negative discriminant is "no root under the quantile
-   plug-in" — a plug-in artifact, NEVER evidence the data is heavier than
-   lognormal.
+   Both roots printed; the SMALLER is selected on branch grounds: the
+   quantile exponent f(sigma) = z_n*sigma - sigma^2/2 turns over at
+   sigma = z_n, so the larger root sits on the DECREASING branch where
+   higher dispersion lowers the modeled max — not a physically sensible
+   read. Bias is n-DEPENDENT: at large n the plug-in over-reads sigma
+   (E[max] exceeds the (1-1/n) quantile); at small n the z_n ceiling plus
+   root-conditional truncation flip the REALIZED bias LOW (each printed
+   band shows its own median-vs-truth offset). A negative discriminant is
+   "no root under the quantile plug-in" — a plug-in artifact, NEVER
+   evidence the data is heavier than lognormal.
 2. EXACT E[max] root: solve E[max of n iid LN(mu, sigma)] == observed max
    with the same mean anchor, via h(sigma) = ln E[e^(sigma*M_n)]
    - sigma^2/2 - ln(max/mean) = 0 where M_n = max of n iid N(0,1) with
@@ -155,7 +163,10 @@ def exact_emax_sigma_root(n: int, mean: float, max_: float) -> float | None:
     lo, hi = 1e-6, 1.0
     while h(hi) < 0.0:
         hi *= 2.0
-        if hi > 64.0:  # unreachable given the ratio<n guard; belt only
+        # sup h = ln n is approached only ASYMPTOTICALLY, so ratio -> n from
+        # below can push the root arbitrarily high; 64 is a practical stop
+        # for the shipped data (largest ratio/n: mega 1.96/4), not a theorem.
+        if hi > 64.0:
             return None
     return float(brentq(h, lo, hi, xtol=1e-10))
 
@@ -231,27 +242,51 @@ def _row_block(name: str, n: int, mean: float, max_: float, excluded: str | None
         return out
     roots = implied_sigma_roots(n, mean, max_)
     if roots is None:
-        out.append("      plug-in: no root under the quantile plug-in (artifact, biased HIGH)")
+        out.append(
+            "      plug-in: no root under the quantile plug-in (artifact of the"
+            " plug-in, never tail-heaviness)"
+        )
     else:
         out.append(
             f"      plug-in roots: {_fmt(roots[0])} / {_fmt(roots[1])} "
-            f"(smaller selected: larger implies a sub-$1 median vs a >=$1K population)"
+            f"(smaller selected: past the sigma=z_n turnover the (1-1/n) quantile "
+            f"DECREASES as sigma rises, so the larger root sits on the decreasing "
+            f"branch — not a physically sensible read of a max)"
         )
     exact = exact_emax_sigma_root(n, mean, max_)
     out.append(f"      exact-E[max] root: {_fmt(exact)} (point read; no sampling band computed)")
     band = sampling_band(n)
+    realized_bias = band["p50"] - SIGMA_TRUE
     out.append(
         f"      plug-in sampling band @ truth {SIGMA_TRUE}: "
         f"[{_fmt(band['p5'])}, {_fmt(band['p50'])}, {_fmt(band['p95'])}] "
         f"(p5/p50/p95), no-root rate {band['no_root_rate']:.1%}, "
-        f"z_n ceiling {band['z_ceiling']:.2f} (smaller root cannot exceed it)"
+        f"z_n ceiling {band['z_ceiling']:.2f} (smaller root cannot exceed it); "
+        f"realized root-conditional bias at this n: band median "
+        f"{realized_bias:+.2f} vs truth (bias direction is n-DEPENDENT — high "
+        f"at large n, flipped LOW at small n by the ceiling + no-root truncation)"
     )
     if roots is not None:
         pct = observed_percentile_in_band(n, roots[0])
+        if pct <= 0.05:
+            edge = (
+                " — AT/BELOW the band's LOW edge: materially inconsistent with"
+                f" truth {SIGMA_TRUE} at this conditioning level, in the LOW"
+                " direction"
+            )
+        elif pct >= 0.95:
+            edge = (
+                " — AT/ABOVE the band's HIGH edge: materially inconsistent with"
+                f" truth {SIGMA_TRUE} at this conditioning level, in the HIGH"
+                " direction"
+            )
+        elif pct <= 0.15 or pct >= 0.85:
+            edge = " (near-edge)"
+        else:
+            edge = ""
         out.append(
             f"      observed plug-in read sits at ~p{round(pct * 100):d} of the "
-            f"truth-{SIGMA_TRUE} band (evidential direction; near-edge positions "
-            f"are stated as such)"
+            f"truth-{SIGMA_TRUE} band (evidential direction){edge}"
         )
     return out
 
@@ -290,10 +325,14 @@ def main() -> None:
     print("  cross-type WITHIN a revenue band — the within-revenue-tier")
     print("  UPPER-BOUND row of within-scenario-sigma-calibration.md §2, NOT the")
     print("  within-scenario quantity. Relation to IRIS 1.97-2.92 at that level")
-    print("  is per-row and MIXED (see each row above); no read sits ABOVE the")
-    print("  IRIS band. The >=$1K filter's effect on the MC band is negligible")
-    print("  on included bands (mass <= 2%, nano worst ~1.9%; mean share")
-    print("  <= 0.01%, nano ~0.0083%).")
+    print("  is per-row and MIXED (see each row above) — NO summary direction is")
+    print("  stated: several rows' z_n ceilings (e.g. small 2.88, wire 2.67) sit")
+    print("  below IRIS's upper 2.92, so those rows structurally cannot read")
+    print("  above the band regardless of the data. The >=$1K filter's effect on")
+    print("  the MC bands: negligible on the revenue bands (mass <= 2%, nano")
+    print("  worst ~1.9%; mean share <= 0.01%, nano ~0.0083%); larger but still")
+    print("  mean-immaterial on cause rows (worst theft_of_money: ~9.9% of mass,")
+    print("  ~0.14% of the mean).")
 
 
 if __name__ == "__main__":

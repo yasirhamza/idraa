@@ -138,22 +138,39 @@ band). What stands instead:
   `calibration-sources/netdiligence_2025.md`, generator
   `scripts/netdiligence_sigma_check.py`). Conditioning level: cross-firm ×
   cross-type WITHIN a revenue band — §2's within-revenue-tier UPPER-BOUND
-  row, NOT the within-scenario quantity. Per-band, evidential-direction
-  reads (observed quantile-plug-in σ vs its own truth-1.7 sampling band,
-  each with no-root rate and z_n ceiling): nano 1.60 at ~p20 of
-  [1.47, 2.52]; micro 1.77 at ~p46 of [1.42, 2.53]; small 2.30 at ~p89 of
-  [1.37, 2.48] (near-edge, stated as such); mid/large have no plug-in root
-  (no-root rates 43.5%/82.2% at truth 1.7 — plug-in artifact, not
-  tail-heaviness) with exact-E[max] point reads 2.09/1.85 (no sampling
-  band computed for that estimator). Relation to IRIS's 1.97–2.92 at the
-  same conditioning level is MIXED per row (nano/micro below; small
-  plug-in and mid exact-E[max] inside; no read above), and read literally
-  as an upper-bound row the below-band rows push the within-scenario
-  quantity below 1.7 while others do not — with the bands this wide and
-  ceiling-truncated, neither reading is decisive. NO blanket directional
-  conclusion is drawn: the reads are **consistent with the 1.7 convention
-  at the bands where the estimator has power, and uninformative where it
-  does not**; they cannot refute higher (or lower) true dispersion.
+  row, NOT the within-scenario quantity. **BOTH estimators quoted for every
+  included Table-3 row** (mixing them selectively is a framing bias — the
+  T0-gate I1 catch); plug-in reads carry their no-root rate + z_n ceiling:
+  - nano: plug-in 1.60 at ~p20 of [1.47, 2.52] (no-root 2.0%, ceiling
+    3.48); exact-E[max] 1.44.
+  - micro: plug-in 1.77 at ~p46 of [1.42, 2.53] (5.9%, 3.26); exact 1.54.
+  - small: plug-in 2.30 at ~p89 of [1.37, 2.48] — near-edge HIGH, and
+    root-conditional on the 20.4% no-root rate; ceiling 2.88 sits BELOW
+    IRIS's upper 2.92, so this row structurally cannot read above the IRIS
+    band regardless of the data; exact 1.72.
+  - mid: no plug-in root (43.5% no-root at truth 1.7 — plug-in artifact,
+    not tail-heaviness); exact 2.09.
+  - large: no plug-in root (82.2%); exact 1.85.
+
+  Under the CONSISTENT (exact-E[max]) estimator the five reads are
+  1.44 / 1.54 / 1.72 / 2.09 / 1.85 — four of five below IRIS's 1.97–2.92
+  and three at-or-below 1.7, at a level this document treats as an upper
+  bound for the within-scenario quantity: the exact reads lean LOW, stated
+  plainly (no consistency claim attaches to them — that estimator's
+  sampling distribution is not computed). Table-9 cause rows (same
+  treatment, SME-conditioned): ransomware plug-in 2.36 at ~p91
+  (near-edge HIGH; exact 1.93); **theft_of_money 1.02 at ~p0 — at/below
+  its band's LOW edge, materially inconsistent with 1.7 at this
+  conditioning level in the LOW direction** (verified not a ≥$1K-filter
+  artifact); BEC and hacker have no plug-in root (exact 2.39 / 2.13);
+  wire 1.67 at ~p39 (exact 1.34). The per-row relation to IRIS is MIXED
+  and NO summary direction is stated (several z_n ceilings sit below
+  IRIS's upper bound, so "no read above" would be partly mechanical).
+  Net posture: the reads are **consistent with the 1.7 convention where
+  the plug-in has power, and the low-leaning exact reads and theft's LOW
+  outlier cut toward "1.7 is not too low" at this conditioning level —
+  never toward raising it**; with opposing unquantified register biases
+  the data cannot refute higher (or lower) true dispersion.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is
