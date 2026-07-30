@@ -35,7 +35,15 @@
   {%- if display is none -%}
     &mdash;
   {%- elif display.kind == "lognormal_mixture" -%}
-    pooled &sigma;={{ "%.2f" | format(display.sigma) }} (includes between-expert divergence; components &le; {{ "%.2f" | format(display.max_component_sigma) }})
+    {#- T4.b (confirmation-gate N-1): the FIRING basis leads; the pooled
+        read follows as labeled context — a reader must not take
+        pooled-vs-1.70 as the comparison (B-1 ruled it invalid). -#}
+    components &le; &sigma; {{ "%.2f" | format(display.max_component_sigma) }} (the firing basis); pooled &sigma;={{ "%.2f" | format(display.sigma) }} shown for context (includes between-expert divergence)
+  {%- elif display.kind == "pert" -%}
+    {#- T4.b (confirmation-gate I-3): a hand-authored PERT has NO parent
+        lognormal — labeling it so reversed the T3 adjudication. This is
+        the _stored_loss_sigma PERT read, named as such. -#}
+    &sigma;={{ "%.2f" | format(display.sigma) }} (PERT range basis: ln(high/low)/2z)
   {%- else -%}
     &sigma;={{ "%.2f" | format(display.sigma) }} (parent-lognormal basis)
   {%- endif -%}

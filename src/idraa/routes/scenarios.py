@@ -1119,6 +1119,25 @@ def _max_stored_loss_sigma(scenario: Scenario) -> float | None:
 _SIGMA_TOL = 1e-5  # prod stores 1.7 +/- ~1.5e-7 via dollar round-trips
 
 
+def _max_tripwire_sigma(scenario: Scenario) -> float | None:
+    """Max FIRING-BASIS implied sigma across PL/SL (T4.b, confirmation-gate
+    I-2): every threshold consumer comparing against
+    ``WITHIN_SCENARIO_SIGMA_DEFAULT`` -- the tripwire, the ``?loss_wide=1``
+    flash, the finalize redirect -- must use the same basis: max COMPONENT
+    sigma for a mixture (re-scoped D21; the pooled read includes
+    between-expert divergence and is display-only), the plain read
+    otherwise. ``_max_stored_loss_sigma`` remains the DISPLAY max.
+    """
+    sigmas = [
+        s
+        for dist in (scenario.primary_loss, scenario.secondary_loss)
+        if isinstance(dist, dict)
+        for s in (_tripwire_component_sigma(dist),)
+        if s is not None
+    ]
+    return max(sigmas) if sigmas else None
+
+
 def _field_has_provenance(dist: Any) -> bool:
     """True when THIS field carries ``analyst_pin`` or
     ``migration_recalibration`` provenance -- the single-field counterpart
@@ -1188,12 +1207,11 @@ def _loss_sigma_display(dist: Any) -> dict[str, Any] | None:
     ``max_component_sigma`` is populated only for ``lognormal_mixture``
     (the per-component ceiling the tripwire itself fires on, surfaced so
     the honest mixture label can say "components <= Y.YY", per B-1);
-    ``None`` for every other kind. Plain ``lognormal`` and ``PERT`` share
-    ONE basis label ("parent-lognormal basis") -- a stored PERT's implied
-    sigma is mechanically the same ``exp(mu +/- Z*sigma)`` read of an
-    underlying lognormal fit that ``_stored_loss_sigma``'s own PERT-branch
-    docstring documents (D4' provenance), the identical basis word D22's
-    capped_pert chart label already uses.
+    ``None`` for every other kind. T4.b (confirmation-gate I-3): PERT gets
+    its OWN basis label in the macro ("PERT range basis: ln(high/low)/2z")
+    -- a HAND-AUTHORED PERT has no parent lognormal, and labeling it
+    "parent-lognormal basis" reversed the T3 adjudication that banned
+    exactly that framing for typed PERT triples.
 
     Returns ``None`` when the field carries no sigma reading at all
     (``_stored_loss_sigma`` returns ``None``).
@@ -1244,8 +1262,11 @@ def _loss_stale_wide(scenario: Scenario) -> dict[str, Any] | None:
         display = _loss_sigma_display(dist)
         if display is None:
             continue
-        if widest is None or display["sigma"] > widest["sigma"]:
-            widest = {**display, "field_label": label}
+        # T4.b (confirmation-gate N-2): the WINNER is picked by the FIRING
+        # basis, not the display read — a mixture's pooled 4.29 must not
+        # outrank a plain lognormal's 3.5 when its firing component is 2.9.
+        if widest is None or trip_sigma > widest["_firing_sigma"]:
+            widest = {**display, "field_label": label, "_firing_sigma": trip_sigma}
     return widest
 
 
@@ -1469,7 +1490,10 @@ async def view_scenario(
     # self-contradictory advisory. Mirrors the redirect's own gate exactly.
     flash = None
     if loss_wide == 1:
-        wide_sigma = _max_stored_loss_sigma(scenario)
+        # T4.b (confirmation-gate I-2): FIRING basis, not display max — a
+        # matched-default divergent mixture must not flash "wider than the
+        # default" here while the standing banner correctly stays quiet.
+        wide_sigma = _max_tripwire_sigma(scenario)
         # T4.a gate fix (METH I-1): toleranced like every other sigma-vs-
         # default comparison in this module (_SIGMA_TOL = 1e-5) -- a stored
         # component sigma of exactly 1.7 that drifts to
@@ -4093,7 +4117,9 @@ async def finalize_wizard(
         # ?deleted=1 query-param idiom (routes/scenarios.py:220-226) instead:
         # view_scenario re-derives the sigma from the scenario's own stored
         # dicts when it sees ?loss_wide=1 (no value smuggled through the URL).
-        max_sigma = _max_stored_loss_sigma(scenario)
+        # T4.b (confirmation-gate I-2): FIRING basis — same rationale as the
+        # ?loss_wide=1 re-derivation this redirect points at.
+        max_sigma = _max_tripwire_sigma(scenario)
         # T4.a gate fix (METH I-1): toleranced (see the matching comment on
         # view_scenario's ?loss_wide=1 re-derivation above) -- a redirect to
         # ?loss_wide=1 for a stored sigma that only drifted a few ULPs above

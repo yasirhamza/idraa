@@ -242,7 +242,9 @@ async def test_banner_fires_with_refresh_button_when_library_linked(
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
-    assert "Primary loss" in resp.text
+    # T4.b (confirmation-gate I-4): the bare heading is page furniture —
+    # assert the banner SENTENCE so the field attribution can actually fail.
+    assert "Primary loss dispersion is wider" in resp.text
     assert "2.50" in resp.text
     assert 'data-testid="loss-refresh-button"' in resp.text
 
@@ -341,7 +343,7 @@ async def test_banner_fires_mixed_provenance_migration_pl_beside_wide_unstamped_
     assert 'data-testid="loss-stale-wide"' in resp.text
     # T4.a gate fix (METH I-3): the banner now names the FIRING field --
     # must be "Secondary loss" here, not the narrow migration-stamped PL.
-    assert "Secondary loss" in resp.text
+    assert "Secondary loss dispersion is wider" in resp.text
 
 
 @pytest.mark.asyncio
@@ -384,7 +386,7 @@ async def test_banner_fires_mixed_provenance_pinned_pl_beside_wide_unstamped_sl(
     assert 'data-testid="loss-stale-wide"' in resp.text
     # T4.a gate fix (METH I-3): named field must be "Secondary loss" -- the
     # newly-pinned PL is suppressed, the wide unstamped SL is the firer.
-    assert "Secondary loss" in resp.text
+    assert "Secondary loss dispersion is wider" in resp.text
 
 
 @pytest.mark.asyncio
@@ -577,6 +579,31 @@ async def test_banner_absent_for_divergent_mixture_with_matched_default_componen
 
 
 @pytest.mark.asyncio
+async def test_loss_wide_flash_uses_firing_basis_not_pooled_display(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seed_scenario_factory: Any,
+    db_session: AsyncSession,
+) -> None:
+    """T4.b (confirmation-gate I-2): the ?loss_wide=1 flash must use the
+    SAME firing basis as the tripwire — pre-fix it read the POOLED mixture
+    sigma (2.94 here) and flashed "wider than the default" on the very
+    scenario whose standing banner correctly stays quiet (same page,
+    opposite verdicts, executed by the gate)."""
+    client, org_id = authed_analyst
+    scenario = await _seed_scenario_with_pl(
+        seed_scenario_factory,
+        db_session,
+        name="Matched-mixture-no-loss-wide-flash",
+        organization_id=org_id,
+        primary_loss=_divergent_mixture(),
+    )
+    resp = await client.get(f"/scenarios/{scenario.id}?loss_wide=1")
+    assert resp.status_code == 200
+    assert "wider than the within-scenario default" not in resp.text
+    assert 'data-testid="loss-stale-wide"' not in resp.text
+
+
+@pytest.mark.asyncio
 async def test_banner_fires_for_mixture_with_wide_component(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     seed_scenario_factory: Any,
@@ -596,7 +623,9 @@ async def test_banner_fires_for_mixture_with_wide_component(
     resp = await client.get(f"/scenarios/{scenario.id}")
     assert resp.status_code == 200
     assert 'data-testid="loss-stale-wide"' in resp.text
-    assert "Primary loss" in resp.text
+    # T4.b (confirmation-gate I-4): the bare heading is page furniture —
+    # assert the banner SENTENCE so the field attribution can actually fail.
+    assert "Primary loss dispersion is wider" in resp.text
     assert "4.29" in resp.text  # pooled display sigma, 2dp
     assert "2.90" in resp.text  # component ceiling in the honest mixture label
 
