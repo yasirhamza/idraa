@@ -73,6 +73,9 @@ REQUIRED_SYMBOLS: list[tuple[str, str]] = [
     ("fair_cam/quantile_pooling/_lognormal_native.py", "truncated_lognormal_mean"),
     ("fair_cam/quantile_pooling/_lognormal_native.py", "truncated_lognormal_mixture_mean"),
     ("fair_cam/quantile_pooling/_lognormal.py", "lognormal_mixture_to_pert_approx"),
+    # B-M3b (plan-gate): the TRUE mixture implied-sigma read the upgraded
+    # tripwire/advisory path uses instead of max-component sigma.
+    ("fair_cam/quantile_pooling/_lognormal.py", "mixture_quantile_lognorm"),
     # New files this PR creates (allowlisted below; symbols land with them).
     ("src/idraa/services/loss_pinning.py", "pin_loss"),
     ("src/idraa/services/loss_pinning.py", "unpin_loss"),
@@ -451,7 +454,10 @@ def coherence_section() -> list[str]:
     # is not a literal token — the `*` breaks it — so glob dirs are extracted
     # separately and checked as bare identifiers (their directory must be named by a
     # task). Round 7 found the bare extension-widening was inert without this.
-    tokens = set(re.findall(r"[\w./_-]+\.(?:py|html|json|toml|js|css|sql)", threading))
+    # `md` added at the PR3 re-point (Arch-N7): the decisions-only spec names
+    # reference DOCS as first-class surfaces; excluding .md made them
+    # invisible to the gate.
+    tokens = set(re.findall(r"[\w./_-]+\.(?:py|html|json|toml|js|css|sql|md)", threading))
     tokens |= {str(Path(g).parent) for g in re.findall(r"[\w./_-]+/\*\.\w+", threading)}
     tokens = sorted(tokens)
     missing: list[str] = []
