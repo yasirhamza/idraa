@@ -168,7 +168,7 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
   COND-MEAN INFLATION (governed by the mass below $1K, not the mean
   share): correcting each published conditional mean to its
   untruncated equivalent at truth 1.7 shifts the plug-in read by
-  <= +0.011 on included revenue bands and <= +0.052 at worst (theft_of_money; one-step correction, mildly understating — see filter_read_shift docstring)
+  <= +0.011 on included revenue bands and <= +0.059 at worst (theft_of_money; converged fixed-point correction — see filter_read_shift docstring)
   — conclusions unchanged (the worst-shifted read stays at/below its
   band's LOW edge).
 ```

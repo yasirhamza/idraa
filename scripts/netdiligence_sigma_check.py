@@ -249,17 +249,23 @@ def filter_read_shift(n: int, mean: float, max_: float, sigma: float = SIGMA_TRU
     Correcting the published mean to its untruncated equivalent RAISES the
     implied read; the shift is what gets printed, never the mean share.
 
-    DELIBERATE ONE-STEP approximation (T0-gate A5): mu is derived from the
-    conditional mean as if unconditional, then rescaled once — no fixed
-    point. This mildly UNDERSTATES the shift (~13% low on theft per the
-    gate's converged iteration); conclusions are shift-insensitive at that
-    scale, and the printed bounds are ceiling-rounded (A2).
+    CONVERGED fixed point (closing-gate upgrade of the T0-gate A5 one-step
+    form, which understated ~13% on theft): iterate M_(k+1) =
+    published * (1 - p_k)/(1 - s_k) with p_k, s_k evaluated at
+    mu(M_k) = ln(M_k) - sigma^2/2, until relative change < 1e-12 — so the
+    printed <= bounds are honest for the ESTIMAND, not an approximant.
     """
-    mu = math.log(mean) - sigma * sigma / 2.0
-    zc = (math.log(1000.0) - mu) / sigma
-    p = float(norm.cdf(zc))
-    s = float(norm.cdf(zc - sigma))
-    mean_untrunc = mean * (1.0 - p) / (1.0 - s)
+    mean_untrunc = mean
+    for _ in range(200):
+        mu = math.log(mean_untrunc) - sigma * sigma / 2.0
+        zc = (math.log(1000.0) - mu) / sigma
+        p = float(norm.cdf(zc))
+        s = float(norm.cdf(zc - sigma))
+        nxt = mean * (1.0 - p) / (1.0 - s)
+        if abs(nxt - mean_untrunc) <= 1e-12 * mean_untrunc:
+            mean_untrunc = nxt
+            break
+        mean_untrunc = nxt
     base = implied_sigma_roots(n, mean, max_)
     corr = implied_sigma_roots(n, mean_untrunc, max_)
     if base is None or corr is None:
@@ -393,8 +399,8 @@ def main() -> None:
 
     print(
         f"  <= +{_ceil3(band_max):.3f} on included revenue bands and"
-        f" <= +{_ceil3(cause_max):.3f} at worst ({cause_worst_name}; one-step"
-        f" correction, mildly understating — see filter_read_shift docstring)"
+        f" <= +{_ceil3(cause_max):.3f} at worst ({cause_worst_name}; converged"
+        f" fixed-point correction — see filter_read_shift docstring)"
     )
     print("  — conclusions unchanged (the worst-shifted read stays at/below its")
     print("  band's LOW edge).")

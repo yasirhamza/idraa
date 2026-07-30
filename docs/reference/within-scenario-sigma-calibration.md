@@ -164,8 +164,9 @@ band). What stands instead:
   **theft_of_money 1.02 at ~p0 — at/below its band's LOW edge, materially
   inconsistent with 1.7 at this conditioning level in the LOW direction**
   (no-root 11.8%, ceiling 3.04; the ≥$1K correction shifts the read only
-  +0.05 via cond-mean inflation — the mass-governed statistic, not the
-  mean share — leaving it below the band's p5 of 1.40); BEC and hacker
+  +0.058 via converged cond-mean inflation — the mass-governed statistic,
+  not the mean share — leaving it at 1.079, far below the band's p5 of
+  1.40); BEC and hacker
   have no plug-in root (no-root 5.3%/9.2%, ceilings 3.27/3.14; exact
   2.39 / 2.13); wire 1.67 at ~p39 (no-root 35.9% — the estimator is
   nearly as weak here as at mid — ceiling 2.67; exact 1.34). The per-row
@@ -179,7 +180,8 @@ band). What stands instead:
   (1.72–2.39, median of the revenue-band five: 1.72). The one-way
   asymmetry is STRUCTURAL, not evidential: an upper bound above the
   convention cannot argue for raising it, whatever the data says. Of the
-  four rows where the plug-in genuinely has power (no-root ≤ 12%), the
+  four rows where the plug-in genuinely has power (no-root ≤ 12% AND a
+  root exists — BEC and hacker clear the rate but produced no root), the
   verdicts are: nano p20 and micro p46 consistent; ransomware p91
   near-edge HIGH; **theft p0 materially LOW** — so "consistent" holds for
   two of four powered rows, with both exceptions stated (T0-re-gate A1;

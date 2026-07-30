@@ -14,8 +14,10 @@
  * quantile pairs where fair_cam raises ValueError (keystroke-transient
  * inputs must not throw); (2) meanCapped degrades one-sidedly at extreme
  * sigma via A&S 7.1.26's absolute error (re-gate-executed vs fair_cam at
- * mu=ln(250k)/cap=300k: <1e-3% at authored sigma <= 3.5, ~0.43% at
- * sigma=6.3, ~15% at sigma=8.2, null >= 8.4 via the underflow guard) —
+ * mu=ln(250k)/cap=300k: <0.02% at authored sigma <= 3.5 (0.017% at 3.5),
+ * ~0.43% at sigma=6.3, ~15% at sigma=8.2, NON-monotone just under the
+ * null threshold — up to ~90% at sigma=8.39, where Phi(b-sigma) quantizes
+ * at 5.55e-17 — and null >= 8.4 via the underflow guard) —
  * keystroke-transient territory only.
  *
  * Citations for the approximations below:

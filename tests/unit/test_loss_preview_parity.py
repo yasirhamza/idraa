@@ -68,7 +68,7 @@ TOL = {
     #   report -- so this comment quotes only the figure re-executed here.)
     "p99Capped": 2e-5,  # worst exec'd 6.27e-6 -> 3.19x headroom (N-1)
     "capBindProb": 1e-2,  # T1.a NTH: worst exec'd 6.893e-3 at sigma=1.3567,
-    #   cap=4e9 (non-binding cap -> capBindProb = 1 - Phi(b) ~ 4.87e-13
+    #   cap=4e9 (non-binding cap -> capBindProb = 1 - Phi(b) ~ 4.86e-13
     #   (re-gate B3: it is the COMPLEMENT that is tiny; Phi(b) ~ 1), same
     #   fixed-abs-error-
     #   through-a-tiny-ratio mechanism as meanCapped/p99Capped above).
