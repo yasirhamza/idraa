@@ -328,11 +328,46 @@
       </div>
       <div>
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Primary loss</h3>
+        {# PR3 T3 (D20/D21): pin-state chip + unpin button. σ + pinned_at
+           via format_datetime (a proper datetime object parsed server-side
+           by routes/scenarios.py::_pin_panel_context — never a raw
+           strftime/isoformat in this template, per the timezone-
+           localization UI convention). #}
+        {% if pin_panels and pin_panels.pl.pinned %}
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip">
+          <span class="badge badge-ghost badge-sm">
+            pinned &sigma;={{ "%.2f" | format(pin_panels.pl.pinned_sigma) if pin_panels.pl.pinned_sigma is not none else "—" }}{% if pin_panels.pl.pinned_at %} &mdash; {{ pin_panels.pl.pinned_at | format_datetime }}{% endif %}
+          </span>
+          {% if current_user and current_user.role.value in ("analyst", "admin") %}
+          <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">
+            {{ csrf_field() }}
+            <input type="hidden" name="field" value="primary">
+            <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+            <button type="submit" class="link text-meta">Unpin</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
         {{ pert_distribution_chart("pl-dist", scenario.primary_loss, fmt="money") }}
       </div>
       {% if scenario.secondary_loss %}
       <div>
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Secondary loss</h3>
+        {% if pin_panels and pin_panels.sl.pinned %}
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip">
+          <span class="badge badge-ghost badge-sm">
+            pinned &sigma;={{ "%.2f" | format(pin_panels.sl.pinned_sigma) if pin_panels.sl.pinned_sigma is not none else "—" }}{% if pin_panels.sl.pinned_at %} &mdash; {{ pin_panels.sl.pinned_at | format_datetime }}{% endif %}
+          </span>
+          {% if current_user and current_user.role.value in ("analyst", "admin") %}
+          <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">
+            {{ csrf_field() }}
+            <input type="hidden" name="field" value="secondary">
+            <input type="hidden" name="expected_row_version" value="{{ scenario.row_version }}">
+            <button type="submit" class="link text-meta">Unpin</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
         {{ pert_distribution_chart("sl-dist", scenario.secondary_loss, fmt="money") }}
       </div>
       {% endif %}

@@ -48,7 +48,7 @@ import logging
 import math
 import re
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fair_cam.quantile_pooling import lognormal_from_quantiles, lognormal_quantiles
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
@@ -138,6 +138,7 @@ from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService, is_selectable_currency
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
+from idraa.services.loss_pinning import pin_loss, unpin_loss
 from idraa.services.run_executor import _dict_to_fair_distribution
 from idraa.services.scenario_control_recommendations import recommended_controls_for
 from idraa.services.scenario_currency import convert_loss_inputs_to_usd
@@ -308,6 +309,141 @@ async def list_scenarios(
 # ---- new + create -----------------------------------------------------
 
 
+def _expert_loss_readout_cfgs(
+    form: dict[str, Any], capacity_max: float | None
+) -> dict[str, dict[str, Any]]:
+    """PR3 T3: live-preview cfg for the expert form's PL/SL readout mounts
+    (form.html, mounted under each field's dist-selector block per plan
+    Step 5(a)). Shares the cfg dict SHAPE ``lossDispersionReadout`` expects
+    -- Task 2's ``_build_readout_cfg`` N6 comment: "keep this dict's shape
+    stable for that reuse."
+
+    ``mode`` is ALWAYS ``"lognormal"`` here -- deliberately NOT threading
+    the live dist-selector's PERT state into a ``"capped_pert"`` mount.
+    Under PERT the operator types the distribution's own low/mode/high
+    triple directly (``dist_from_raw``'s PERT fallthrough) -- those are NOT
+    p5/p95 quantiles, and feeding them through ``fitP5P95`` ->
+    ``capPertFromFit`` (the ONLY thing loss_preview.js's ``"capped_pert"``
+    mode does) would silently mis-describe the exact PERT already being
+    typed. The mount is x-show-gated to the lognormal selector state in
+    form.html and simply hidden under PERT, where the raw low/mode/high
+    triple already IS the full, correct picture with nothing left to
+    preview (a deliberate, disclosed scope narrowing vs the wizard mount).
+
+    ``tefMean``/``vulnMean`` are left ``None`` (the ALE composition line
+    renders ONLY when both are non-null, per Task 2's Interfaces): the
+    expert form's TEF/vuln are typed PERT triples with no scipy fit
+    involved, and wiring their own live mean into ``$store.lossPreview``
+    is out of this task's scope.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for field_key, label in IMPACT_FIELDSETS:
+        initial_low: float | None = None
+        initial_high: float | None = None
+        if form.get(f"{field_key}_dist") == "lognormal":
+            try:
+                initial_low = float(form.get(f"{field_key}_low") or "")
+                initial_high = float(form.get(f"{field_key}_high") or "")
+            except (TypeError, ValueError):
+                initial_low = None
+                initial_high = None
+        out[field_key] = {
+            "mode": "lognormal",
+            "quantileBasis": "p5p95",
+            "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+            "warnThreshold": SIGMA_WARN_THRESHOLD,
+            "cap": capacity_max,
+            "currency": "USD",
+            "tefMean": None,
+            "vulnMean": None,
+            "fieldKey": field_key,
+            "label": label,
+            "initialLow": initial_low,
+            "initialHigh": initial_high,
+        }
+    return out
+
+
+def _pin_panel_context(scenario: Scenario, capacity_max: float | None) -> dict[str, dict[str, Any]]:
+    """PR3 T3 (D20/D21): per-field pin-panel context for the EDIT form
+    (form.html, rendered AFTER ``</form>`` per plan Step 5(b) -- the panel
+    POSTs to its own ``/loss/pin`` route, never nested inside the main
+    scenario-edit ``<form>``).
+
+    One entry per ``("pl", "sl")`` ALWAYS (even when ``secondary_loss`` is
+    unset), so the template's loop is unconditional; an absent/non-lognormal
+    field renders its one-line explanation instead of the pin controls
+    (``kind`` drives that branch — ``None`` for absent, ``"pert"`` /
+    ``"lognormal_mixture"`` / ``"lognormal"`` otherwise).
+
+    ``prefill_p50``/``prefill_p95`` seed the pin panel's own p50/p95 inputs
+    from the field's CURRENTLY stored lognormal fit (re-expressed from its
+    native p5/p95 basis) so the analyst edits forward from the live
+    dispersion rather than a blank pair.
+    """
+    from datetime import datetime as _datetime
+
+    out: dict[str, dict[str, Any]] = {}
+    for field_key, field_col, label in (
+        ("pl", "primary_loss", "Primary loss"),
+        ("sl", "secondary_loss", "Secondary loss"),
+    ):
+        dist = getattr(scenario, field_col)
+        if not isinstance(dist, dict):
+            out[field_key] = {"kind": None, "label": label, "pinned": False}
+            continue
+        kind = str(dist.get("distribution", "")).lower()
+        meta = dist.get("distribution_fit_metadata")
+        stamp = (meta or {}).get("sigma_recalibration") if isinstance(meta, dict) else None
+        pinned = isinstance(stamp, dict) and stamp.get("source") == "analyst_pin"
+        entry: dict[str, Any] = {
+            "kind": kind,
+            "label": label,
+            "pinned": pinned,
+            "pinned_at": None,
+            "pinned_sigma": None,
+            "readout_cfg": None,
+            "prefill_p50": "",
+            "prefill_p95": "",
+        }
+        if kind == "lognormal":
+            mu, sigma = dist.get("mean"), dist.get("sigma")
+            if (
+                isinstance(mu, int | float)
+                and isinstance(sigma, int | float)
+                and sigma > 0
+                and math.isfinite(float(mu))
+                and math.isfinite(float(sigma))
+            ):
+                p50, p95 = lognormal_quantiles(float(mu), float(sigma), (0.5, 0.95))
+                entry["prefill_p50"] = str(p50)
+                entry["prefill_p95"] = str(p95)
+                entry["readout_cfg"] = {
+                    "mode": "lognormal",
+                    "quantileBasis": "p50p95",
+                    "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
+                    "warnThreshold": SIGMA_WARN_THRESHOLD,
+                    "cap": capacity_max,
+                    "currency": "USD",
+                    "tefMean": None,
+                    "vulnMean": None,
+                    "fieldKey": f"{field_key}_pin",
+                    "label": label,
+                    "initialLow": p50,
+                    "initialHigh": p95,
+                }
+            if pinned:
+                pinned_at_raw = stamp.get("pinned_at") if isinstance(stamp, dict) else None
+                if isinstance(pinned_at_raw, str):
+                    try:
+                        entry["pinned_at"] = _datetime.fromisoformat(pinned_at_raw)
+                    except ValueError:
+                        entry["pinned_at"] = None
+                entry["pinned_sigma"] = float(sigma) if isinstance(sigma, int | float) else None
+        out[field_key] = entry
+    return out
+
+
 @router.get("/scenarios/new", response_class=HTMLResponse)
 async def new_scenario_form(
     request: Request,
@@ -386,6 +522,7 @@ async def new_scenario_form(
             "is_edit": False,
             "capacity_max": capacity_max,
             "capacity_hint": capacity_hint,
+            "readout_cfg": _expert_loss_readout_cfgs(defaults, capacity_max),
         },
     )
 
@@ -896,6 +1033,24 @@ async def view_scenario(
             "scenario's own stored dicts."
         ),
     ),
+    pinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "PR3 T3 (D20/D21): analyst-pin POST redirect flash flag. "
+            "Mirrors the ?deleted=1 mechanics (routes/scenarios.py:220-226) "
+            "-- generic confirmation text only, no field name or sigma "
+            "value smuggled through the URL (the pin route intentionally "
+            "does not know which field a caller will read this as)."
+        ),
+    ),
+    unpinned: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description="PR3 T3: analyst-unpin POST redirect flash flag. See ``pinned`` above.",
+    ),
 ) -> HTMLResponse:
     """Render the scenario detail page.
 
@@ -982,6 +1137,14 @@ async def view_scenario(
                 "reference.",
                 "warning",
             )
+    # PR3 T3: pin/unpin success flashes. Generic confirmation text only —
+    # no field name or sigma value is smuggled through the query string
+    # (same "flag, not a value" idiom as ?deleted=1 above; there is nothing
+    # per-field to re-derive here since the text names no field or number).
+    if flash is None and pinned == 1:
+        flash = build_flash("Loss dispersion pinned for this field.", "success")
+    elif flash is None and unpinned == 1:
+        flash = build_flash("Loss dispersion unpinned for this field.", "success")
 
     return templates.TemplateResponse(
         request,
@@ -994,6 +1157,12 @@ async def view_scenario(
             "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
             "reestimate_draft": reestimate_draft,
             "loss_recalibrated": _loss_was_recalibrated(scenario),
+            # PR3 T3: pin-state chip + unpin button per field. capacity_max
+            # is None here — the view page shows no readout mount, only the
+            # chip/unpin affordance, so _pin_panel_context's readout_cfg
+            # field goes unused (reusing the edit-form helper rather than
+            # hand-duplicating the pin-detection walk).
+            "pin_panels": _pin_panel_context(scenario, None),
         },
     )
 
@@ -1040,6 +1209,22 @@ async def edit_scenario_form(
     else:
         edit_org_industry = None
         edit_org_revenue_tier = None
+    # PR3 T3 (disclosed side effect, plan Step 5(b)): capacity_max now
+    # reaches the edit context too, mirroring new_scenario_form:340-344 —
+    # closes a pre-existing gap (the D17 capacity hint previously rendered
+    # on create only) and feeds both the pin panel's readout mount and the
+    # live form readout mounts' cap line.
+    capacity_max = (
+        capacity_max_for_org(organization.annual_revenue, get_settings().capacity_k)
+        if organization is not None
+        else None
+    )
+    capacity_hint = (
+        d17_capacity_hint_revenue_set(capacity_max)
+        if capacity_max is not None
+        else D17_HINT_REVENUE_UNSET
+    )
+    form = form_from_scenario(scenario)
     return templates.TemplateResponse(
         request,
         "scenarios/form.html",
@@ -1047,7 +1232,7 @@ async def edit_scenario_form(
             "current_user": user,
             "flash": None,
             "scenario": scenario,
-            "form": form_from_scenario(scenario),
+            "form": form,
             "overlay_options": overlay_options,
             "available_controls": available_controls,
             "inactive_linked_controls": inactive_linked_controls,
@@ -1069,6 +1254,10 @@ async def edit_scenario_form(
             # entry_currency/entry_rate are accessed via scenario.entry_currency /
             # scenario.entry_rate in the template (scenario is already in context).
             "is_edit": True,
+            "capacity_max": capacity_max,
+            "capacity_hint": capacity_hint,
+            "readout_cfg": _expert_loss_readout_cfgs(form, capacity_max),
+            "pin_panels": _pin_panel_context(scenario, capacity_max),
         },
     )
 
@@ -1437,6 +1626,122 @@ async def confirm_vuln_framing(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
+def _parse_pin_quantile(raw: str, *, field_name: str) -> float:
+    """Parse a ``pin_p50``/``pin_p95`` form string to float.
+
+    Parse-to-float happens HERE (the route), not in the service (Sec-I2 /
+    loss_pinning.pin_loss's own boundary-gate comment) — a non-parseable
+    string must 422, and the service's own finite/positive/ordering gate
+    only runs on already-parsed floats.
+    """
+    try:
+        return float(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{field_name}: not a number (got {raw!r})"
+        ) from exc
+
+
+@router.post("/scenarios/{scenario_id}/loss/pin")
+async def pin_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    field: Literal["primary", "secondary"] = Form(...),
+    pin_p50: str = Form(...),
+    pin_p95: str = Form(...),
+    expected_row_version: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T3 (D20/D21): pin ``field``'s loss dispersion to an analyst-typed
+    (p50, p95) dollar pair.
+
+    Analyst+ only — ``Depends(require_role(UserRole.ANALYST,
+    UserRole.ADMIN))``, the update/delete/confirm_vuln_framing precedent
+    (Sec-I4: ``can_adopt`` at routes/library.py:267 is a template button
+    flag, NOT route enforcement — never hand-roll an inline role check).
+    ``field`` is a ``Literal["primary", "secondary"]`` Form param — FastAPI
+    422s on any other value automatically (Sec-I3), no service-level branch
+    needed. CSRF enforced by the global CSRFMiddleware, same as every other
+    POST in this module.
+    """
+    row_version = parse_expected_row_version(expected_row_version)
+    if row_version is None:
+        raise HTTPException(
+            status_code=422,
+            detail="expected_row_version: missing or invalid hidden form field",
+        )
+    p50 = _parse_pin_quantile(pin_p50, field_name="pin_p50")
+    p95 = _parse_pin_quantile(pin_p95, field_name="pin_p95")
+    try:
+        await pin_loss(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            field=field,
+            p50=p50,
+            p95=p95,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        # Mirrors update_scenario's D19 wrap exactly — validate_fair_
+        # distributions raises FAIRCAMValidationError directly (not
+        # re-wrapped by the service; see loss_pinning.LossPinError's
+        # docstring), so this except catches BOTH that and LossPinError's
+        # own domain-validation failures via the shared ValidationError base.
+        message = (
+            wrap_d19_floor_message(exc)
+            if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
+            else str(exc)
+        )
+        raise HTTPException(status_code=422, detail=message) from exc
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?pinned=1", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/loss/unpin")
+async def unpin_scenario_loss(
+    request: Request,
+    scenario_id: uuid.UUID,
+    field: Literal["primary", "secondary"] = Form(...),
+    expected_row_version: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """PR3 T3 (D20/D21): remove the ``analyst_pin`` stamp from ``field``,
+    restoring sweep/banner eligibility (D20). See ``pin_scenario_loss`` for
+    the shared RBAC/CSRF/Literal-validation posture.
+    """
+    row_version = parse_expected_row_version(expected_row_version)
+    if row_version is None:
+        raise HTTPException(
+            status_code=422,
+            detail="expected_row_version: missing or invalid hidden form field",
+        )
+    try:
+        await unpin_loss(
+            db,
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            field=field,
+            expected_row_version=row_version,
+            actor=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/scenarios/{scenario_id}?unpinned=1", status_code=303)
 
 
 @router.post("/scenarios/{scenario_id}/promote")
