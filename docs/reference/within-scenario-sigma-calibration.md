@@ -149,28 +149,39 @@ band). What stands instead:
     IRIS's upper 2.92, so this row structurally cannot read above the IRIS
     band regardless of the data; exact 1.72.
   - mid: no plug-in root (43.5% no-root at truth 1.7 — plug-in artifact,
-    not tail-heaviness); exact 2.09.
-  - large: no plug-in root (82.2%); exact 1.85.
+    not tail-heaviness; ceiling 2.55); exact 2.09.
+  - large: no plug-in root (82.2%; ceiling 1.99); exact 1.85.
 
-  Under the CONSISTENT (exact-E[max]) estimator the five reads are
-  1.44 / 1.54 / 1.72 / 2.09 / 1.85 — four of five below IRIS's 1.97–2.92
-  and three at-or-below 1.7, at a level this document treats as an upper
-  bound for the within-scenario quantity: the exact reads lean LOW, stated
-  plainly (no consistency claim attaches to them — that estimator's
-  sampling distribution is not computed). Table-9 cause rows (same
-  treatment, SME-conditioned): ransomware plug-in 2.36 at ~p91
-  (near-edge HIGH; exact 1.93); **theft_of_money 1.02 at ~p0 — at/below
-  its band's LOW edge, materially inconsistent with 1.7 at this
-  conditioning level in the LOW direction** (verified not a ≥$1K-filter
-  artifact); BEC and hacker have no plug-in root (exact 2.39 / 2.13);
-  wire 1.67 at ~p39 (exact 1.34). The per-row relation to IRIS is MIXED
-  and NO summary direction is stated (several z_n ceilings sit below
+  Applying the SAME estimator across all five rows (exact-E[max]; no
+  statistical-consistency claim intended or made — that estimator's
+  sampling distribution is not computed), the reads are
+  1.44 / 1.54 / 1.72 / 2.09 / 1.85 — four of five below IRIS's 1.97–2.92,
+  **two at-or-below 1.7 with a third at 1.72** (executed; the earlier
+  "three at-or-below" was an unexecuted count, T0-gate A-B1). Table-9
+  cause rows (same treatment, SME-conditioned, each with its own
+  conditioning): ransomware plug-in 2.36 at ~p91 of [1.44, 2.53]
+  (near-edge HIGH; no-root 3.8%, ceiling 3.36; exact 1.93);
+  **theft_of_money 1.02 at ~p0 — at/below its band's LOW edge, materially
+  inconsistent with 1.7 at this conditioning level in the LOW direction**
+  (no-root 11.8%, ceiling 3.04; the ≥$1K correction shifts the read only
+  +0.05 via cond-mean inflation — the mass-governed statistic, not the
+  mean share — leaving it below the band's p5 of 1.40); BEC and hacker
+  have no plug-in root (no-root 5.3%/9.2%, ceilings 3.27/3.14; exact
+  2.39 / 2.13); wire 1.67 at ~p39 (no-root 35.9% — the estimator is
+  nearly as weak here as at mid — ceiling 2.67; exact 1.34). The per-row
+  relation to IRIS is MIXED and NO summary direction is stated (several
+  z_n ceilings — small 2.88, wire 2.67, mid 2.55, large 1.99 — sit below
   IRIS's upper bound, so "no read above" would be partly mechanical).
-  Net posture: the reads are **consistent with the 1.7 convention where
-  the plug-in has power, and the low-leaning exact reads and theft's LOW
-  outlier cut toward "1.7 is not too low" at this conditioning level —
-  never toward raising it**; with opposing unquantified register biases
-  the data cannot refute higher (or lower) true dispersion.
+  Net posture, with the structural/evidential line drawn explicitly
+  (T0-gate A-B2): read as an upper-bound row, only sub-1.7 reads bind —
+  and four of ten included rows read below 1.7 under the same estimator
+  (nano 1.44, micro 1.54, wire 1.34, theft 0.92) while six read above
+  (1.72–2.39, median of the revenue-band five: 1.72). The one-way
+  asymmetry is STRUCTURAL, not evidential: an upper bound above the
+  convention cannot argue for raising it, whatever the data says. The
+  reads are consistent with the 1.7 convention where the plug-in has
+  power; with opposing unquantified register biases the data refutes
+  neither direction.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is

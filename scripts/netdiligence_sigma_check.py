@@ -25,10 +25,12 @@ THREE estimators per row, all printed:
    quantile exponent f(sigma) = z_n*sigma - sigma^2/2 turns over at
    sigma = z_n, so the larger root sits on the DECREASING branch where
    higher dispersion lowers the modeled max — not a physically sensible
-   read. Bias is n-DEPENDENT: at large n the plug-in over-reads sigma
-   (E[max] exceeds the (1-1/n) quantile); at small n the z_n ceiling plus
-   root-conditional truncation flip the REALIZED bias LOW (each printed
-   band shows its own median-vs-truth offset). A negative discriminant is
+   read. Two DISTINCT bias statements, never conflated: the estimating-
+   equation bias is upward at EVERY n (E[M_n] exceeds z_n always, and the
+   gap grows as n shrinks); the REALIZED root-conditional band median is
+   what flips LOW at small n, via the z_n ceiling plus no-root truncation
+   (each printed band shows its own median-vs-truth offset). A negative
+   discriminant is
    "no root under the quantile plug-in" — a plug-in artifact, NEVER
    evidence the data is heavier than lognormal.
 2. EXACT E[max] root: solve E[max of n iid LN(mu, sigma)] == observed max
@@ -131,7 +133,13 @@ def z_of(n: int) -> float:
 
 
 def implied_sigma_roots(n: int, mean: float, max_: float) -> tuple[float, float] | None:
-    """Quantile PLUG-IN roots (NOT E[max]) — biased HIGH; None = plug-in artifact."""
+    """Quantile PLUG-IN roots (NOT E[max]); None = plug-in artifact.
+
+    Estimating-equation bias is UPWARD at every n (E[M_n] > z_n always);
+    the REALIZED root-conditional band median flips low at small n via the
+    z_n ceiling + no-root truncation — two different statements, both
+    printed per band.
+    """
     z = z_of(n)
     disc = z * z - 2.0 * math.log(max_ / mean)
     if disc < 0:
@@ -229,6 +237,28 @@ def observed_percentile_in_band(n: int, observed: float) -> float:
     return float(np.searchsorted(arr, observed) / len(arr))
 
 
+def filter_read_shift(n: int, mean: float, max_: float, sigma: float = SIGMA_TRUE) -> float | None:
+    """Plug-in read-shift from the >=$1K conditioning, at truth sigma.
+
+    The published mean is CONDITIONAL on >= $1K; the MC band draws
+    untruncated. The estimator feels the COND-MEAN INFLATION
+    (1 - s)/(1 - p) — governed by the MASS below $1K (p), not the mean
+    share (s), which understates the effect ~77x on theft (T0-gate A-I2).
+    Correcting the published mean to its untruncated equivalent RAISES the
+    implied read; the shift is what gets printed, never the mean share.
+    """
+    mu = math.log(mean) - sigma * sigma / 2.0
+    zc = (math.log(1000.0) - mu) / sigma
+    p = float(norm.cdf(zc))
+    s = float(norm.cdf(zc - sigma))
+    mean_untrunc = mean * (1.0 - p) / (1.0 - s)
+    base = implied_sigma_roots(n, mean, max_)
+    corr = implied_sigma_roots(n, mean_untrunc, max_)
+    if base is None or corr is None:
+        return None
+    return corr[0] - base[0]
+
+
 def _fmt(x: float | None, sf: int = 3) -> str:
     if x is None:
         return "no root (plug-in artifact)"
@@ -249,9 +279,10 @@ def _row_block(name: str, n: int, mean: float, max_: float, excluded: str | None
     else:
         out.append(
             f"      plug-in roots: {_fmt(roots[0])} / {_fmt(roots[1])} "
-            f"(smaller selected: past the sigma=z_n turnover the (1-1/n) quantile "
-            f"DECREASES as sigma rises, so the larger root sits on the decreasing "
-            f"branch — not a physically sensible read of a max)"
+            f"(smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 "
+            f"the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n "
+            f"turnover, so the larger root sits on the decreasing branch — not a "
+            f"physically sensible read of a max)"
         )
     exact = exact_emax_sigma_root(n, mean, max_)
     out.append(f"      exact-E[max] root: {_fmt(exact)} (point read; no sampling band computed)")
@@ -321,6 +352,20 @@ def main() -> None:
         row = next(r for r in CAUSE_ROWS_SME if r[0] == cause)
         print(f"  {cause}: SME mean ${row[2]:,.0f} (n={row[1]}) -> {lib_class}")
     print()
+    band_shifts = [
+        (name, filter_read_shift(n, mean, max_))
+        for name, n, mean, max_ in REVENUE_BANDS
+        if name not in SIGMA_READ_EXCLUDED
+    ]
+    cause_shifts = [
+        (name, filter_read_shift(n, mean, max_)) for name, n, mean, max_ in CAUSE_ROWS_SME
+    ]
+    band_max = max((s for _n, s in band_shifts if s is not None), default=float("nan"))
+    cause_worst_name, cause_max = max(
+        ((nm, s) for nm, s in cause_shifts if s is not None),
+        key=lambda t: t[1],
+        default=("n/a", float("nan")),
+    )
     print("[B-ND-COND] conditioning level of every read above: cross-firm x")
     print("  cross-type WITHIN a revenue band — the within-revenue-tier")
     print("  UPPER-BOUND row of within-scenario-sigma-calibration.md §2, NOT the")
@@ -328,11 +373,16 @@ def main() -> None:
     print("  is per-row and MIXED (see each row above) — NO summary direction is")
     print("  stated: several rows' z_n ceilings (e.g. small 2.88, wire 2.67) sit")
     print("  below IRIS's upper 2.92, so those rows structurally cannot read")
-    print("  above the band regardless of the data. The >=$1K filter's effect on")
-    print("  the MC bands: negligible on the revenue bands (mass <= 2%, nano")
-    print("  worst ~1.9%; mean share <= 0.01%, nano ~0.0083%); larger but still")
-    print("  mean-immaterial on cause rows (worst theft_of_money: ~9.9% of mass,")
-    print("  ~0.14% of the mean).")
+    print("  above the band regardless of the data. The >=$1K filter enters via")
+    print("  COND-MEAN INFLATION (governed by the mass below $1K, not the mean")
+    print("  share): correcting each published conditional mean to its")
+    print("  untruncated equivalent at truth 1.7 shifts the plug-in read by")
+    print(
+        f"  <= +{band_max:.3f} on included revenue bands and +{cause_max:.3f} at"
+        f" worst ({cause_worst_name})"
+    )
+    print("  — conclusions unchanged (the worst-shifted read stays at/below its")
+    print("  band's LOW edge).")
 
 
 if __name__ == "__main__":

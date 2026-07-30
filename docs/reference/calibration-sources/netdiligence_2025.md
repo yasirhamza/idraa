@@ -94,17 +94,17 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
 
 [B-ND-BAND] Table 3 (p.52) — incident cost by revenue size
   nano_lt_50m  (n=4009, mean=$142,000, max=$10,400,000)
-      plug-in roots: 1.60 / 5.36 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 1.60 / 5.36 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.44 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.47, 1.79, 2.52] (p5/p50/p95), no-root rate 2.0%, z_n ceiling 3.48 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.09 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p20 of the truth-1.7 band (evidential direction)
   micro_50m_300m  (n=1775, mean=$374,000, max=$25,000,000)
-      plug-in roots: 1.77 / 4.74 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 1.77 / 4.74 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.54 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.53] (p5/p50/p95), no-root rate 5.9%, z_n ceiling 3.26 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p46 of the truth-1.7 band (evidential direction)
   small_300m_2b  (n=508, mean=$2,000,000, max=$108,000,000)
-      plug-in roots: 2.30 / 3.46 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 2.30 / 3.46 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.72 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.37, 1.80, 2.48] (p5/p50/p95), no-root rate 20.4%, z_n ceiling 2.88 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.10 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p89 of the truth-1.7 band (evidential direction) (near-edge)
@@ -127,7 +127,7 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
       exact-E[max] root: 2.39 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.42, 1.81, 2.54] (p5/p50/p95), no-root rate 5.3%, z_n ceiling 3.27 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   ransomware  (n=2571, mean=$631,000, max=$108,000,000)
-      plug-in roots: 2.36 / 4.36 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 2.36 / 4.36 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.93 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.44, 1.81, 2.53] (p5/p50/p95), no-root rate 3.8%, z_n ceiling 3.36 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p91 of the truth-1.7 band (evidential direction) (near-edge)
@@ -136,12 +136,12 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
       exact-E[max] root: 2.13 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.40, 1.81, 2.49] (p5/p50/p95), no-root rate 9.2%, z_n ceiling 3.14 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.11 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
   wire_transfer_fraud  (n=260, mean=$178,000, max=$3,800,000)
-      plug-in roots: 1.67 / 3.66 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 1.67 / 3.66 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 1.34 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.29, 1.75, 2.32] (p5/p50/p95), no-root rate 35.9%, z_n ceiling 2.67 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.05 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p39 of the truth-1.7 band (evidential direction)
   theft_of_money  (n=834, mean=$38,000, max=$500,000)
-      plug-in roots: 1.02 / 5.05 (smaller selected: past the sigma=z_n turnover the (1-1/n) quantile DECREASES as sigma rises, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
+      plug-in roots: 1.02 / 5.05 (smaller selected: under the mean anchor mu = ln(mean) - sigma^2/2 the (1-1/n) quantile DECREASES as sigma rises past the sigma=z_n turnover, so the larger root sits on the decreasing branch — not a physically sensible read of a max)
       exact-E[max] root: 0.923 (point read; no sampling band computed)
       plug-in sampling band @ truth 1.7: [1.40, 1.83, 2.56] (p5/p50/p95), no-root rate 11.8%, z_n ceiling 3.04 (smaller root cannot exceed it); realized root-conditional bias at this n: band median +0.13 vs truth (bias direction is n-DEPENDENT — high at large n, flipped LOW at small n by the ceiling + no-root truncation)
       observed plug-in read sits at ~p0 of the truth-1.7 band (evidential direction) — AT/BELOW the band's LOW edge: materially inconsistent with truth 1.7 at this conditioning level, in the LOW direction
@@ -163,11 +163,13 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
   is per-row and MIXED (see each row above) — NO summary direction is
   stated: several rows' z_n ceilings (e.g. small 2.88, wire 2.67) sit
   below IRIS's upper 2.92, so those rows structurally cannot read
-  above the band regardless of the data. The >=$1K filter's effect on
-  the MC bands: negligible on the revenue bands (mass <= 2%, nano
-  worst ~1.9%; mean share <= 0.01%, nano ~0.0083%); larger but still
-  mean-immaterial on cause rows (worst theft_of_money: ~9.9% of mass,
-  ~0.14% of the mean).
+  above the band regardless of the data. The >=$1K filter enters via
+  COND-MEAN INFLATION (governed by the mass below $1K, not the mean
+  share): correcting each published conditional mean to its
+  untruncated equivalent at truth 1.7 shifts the plug-in read by
+  <= +0.010 on included revenue bands and +0.051 at worst (theft_of_money)
+  — conclusions unchanged (the worst-shifted read stays at/below its
+  band's LOW edge).
 ```
 
 ## Known anomalies / errata
