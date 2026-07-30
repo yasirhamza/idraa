@@ -29,6 +29,11 @@ AUDITED = {
     "services/scenario_import.py": "shows-all-by-design",  # dedup vs ALL statuses (converter parity, spec §3.1)
     "services/reports.py": "run-committed-upstream-gated",
     "services/qualitative_converter.py": "shows-all-by-design",  # dedup reads ALL statuses incl DRAFT (spec §3.1)
+    # PR3: pin/unpin/refresh operate on ONE explicitly-addressed scenario id
+    # (org-scoped, row-locked) reached from that scenario's own page — no
+    # cross-status sweep exists to filter, same rationale as
+    # services/scenarios.py's CRUD-on-explicit-ids entry.
+    "services/loss_pinning.py": "shows-all-by-design",
 }
 
 QUERY_RE = re.compile(
