@@ -16,7 +16,8 @@
  *     (1964), formula 7.1.26 (rational approximation attributed to
  *     Hastings 1955). Published max absolute error: 1.5e-7.
  *   - normInv(p) (inverse standard-normal CDF): Peter J. Acklam's rational
- *     approximation, primary source:
+ *     approximation, primary source (Wayback capture accessed 2015-10-30,
+ *     per the archive timestamp in the URL itself):
  *     https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/
  *     Published max relative error: 1.15e-9.
  *   - PERT density/sampling shape: Vose, D. (2008), "Risk Analysis: A
@@ -26,6 +27,10 @@
  *     utility/beta_pert.py (epic #324 equivalence gate). The alternate
  *     classic alpha+beta=6 form is explicitly NOT used here — fair_core's
  *     own comment records a ~0.5% median / ~2% ALE divergence from it.
+ *     No specific page/section number for the gamma=4 form is independently
+ *     verified here (do not invent one): cite as "Vose, Risk Analysis: A
+ *     Quantitative Guide — modified-PERT form as implemented by fair_cam
+ *     fair_core.py PERT branch (the authoritative mirror source)".
  *
  * Loaded non-defer by base.html (see the comment there) so this factory is
  * registered before the deferred Alpine bundle walks x-data.
@@ -149,12 +154,28 @@
   // test_fit_functions_parity).
   //   mu    = (zHi*ln(qLo) - zLo*ln(qHi)) / (zHi - zLo)
   //   sigma = (ln(qHi) - ln(qLo)) / (zHi - zLo)
+  //
+  // Ordering guard (methodology gate finding B-I3, T1.a): qHi<=qLo
+  // must return {mu: null, sigma: null}, mirroring
+  // fair_cam.quantile_pooling.lognormal_from_quantiles, which RAISES
+  // ValueError on an inverted pair (executed 2026-07-30:
+  // lognormal_from_quantiles(200_000, 100_000, q_low=0.05, q_high=0.95) ->
+  // "ValueError: high must be >= low"). This JS mirror has no exception
+  // channel, so the null-fields sentinel is the equivalent signal. Without
+  // this guard, an inverted pair silently produced a NEGATIVE sigma
+  // (pre-fix repro: fitP5P95(200_000, 100_000) -> sigma=-0.2107...) and an
+  // equal pair silently produced sigma=0 (a degenerate point-mass "fit"
+  // that every downstream sigma<=0 guard in this file already treats as
+  // invalid, so rejecting it here too keeps fitLognormal's own contract
+  // consistent with its callers rather than leaking a technically-truthy
+  // sigma:0 that looks unset but isn't null).
   function fitLognormal(qLo, qHi, zLo, zHi) {
     if (
       !Number.isFinite(qLo) ||
       !Number.isFinite(qHi) ||
       qLo <= 0 ||
       qHi <= 0 ||
+      qHi <= qLo ||
       !Number.isFinite(zLo) ||
       !Number.isFinite(zHi) ||
       zHi === zLo
@@ -225,8 +246,30 @@
       var phiB = normCdf(b);
       capBindProb = 1 - phiB;
       if (phiB > 0) {
-        meanCapped = mean * (normCdf(b - sigma) / phiB);
-        p99Capped = Math.exp(mu + sigma * normInv(0.99 * phiB));
+        var phiBMinusSigma = normCdf(b - sigma);
+        // B-I2 (methodology gate, PR3 T1.a): a TRUE zero mean only occurs
+        // at b-sigma = -Infinity, which is the degenerate-cap state
+        // capClamped already flags above. Any OTHER exact-zero here is
+        // float underflow of Phi(b-sigma) in the deep tail (executed
+        // 2026-07-30: sigma in roughly [9, 27] with cap near the median
+        // underflows Phi(b-sigma) to exactly 0 while Phi(b) stays > 0) --
+        // reporting that as a real $0 truncated mean would render a false
+        // number instead of admitting the estimate isn't representable at
+        // this approximation's precision.
+        if (phiBMinusSigma === 0) {
+          meanCapped = null;
+        } else {
+          var meanCappedRaw = mean * (phiBMinusSigma / phiB);
+          // B-I1: `mean` can independently overflow to Infinity (large
+          // sigma) while phiBMinusSigma is a tiny nonzero underflow-
+          // adjacent value -- Infinity * ~0 = NaN in IEEE754 (pre-fix
+          // repro: fitP5P95(1, 1e60) -> sigma~=42 -> meanCapped NaN).
+          // Guard the PRODUCT itself so a non-finite result never escapes
+          // this module as if it were a real number.
+          meanCapped = Number.isFinite(meanCappedRaw) ? meanCappedRaw : null;
+        }
+        var p99CappedRaw = Math.exp(mu + sigma * normInv(0.99 * phiB));
+        p99Capped = Number.isFinite(p99CappedRaw) ? p99CappedRaw : null;
       }
     }
 
@@ -444,11 +487,18 @@
   // (dropping the (1-u)^(beta-1) factor — immaterial at u1~1e-4, so
   // "approximately", not exact) instead of a naive trapezoid that would
   // under-count front-cell mass and bias the realized median position
-  // high. Trapezoid thereafter. Defensive symmetric sibling: a beta<1
-  // singularity at u=1 is unreachable from capPertFromFit (pl/sl support
-  // always yields beta well above 1 there) but this function is public, so
-  // the last cell gets the same closed-form treatment when beta<1. The CDF
-  // is finally re-normalized so the last point is exactly 1.
+  // high. Trapezoid thereafter. NOTE (T1.a NTH clarification): the closed
+  // form is applied unconditionally — strictly better than trapezoid at
+  // alpha>=1 too (the trapezoid rule's own error near a Beta density's
+  // interior curvature is never smaller than the closed form's, so there
+  // is no alpha<1 branch guarding this call; the singularity case is just
+  // the one where using the naive trapezoid instead would be visibly
+  // wrong, not the only case where the closed form is more accurate).
+  // Defensive symmetric sibling: a beta<1 singularity at u=1 is
+  // unreachable from capPertFromFit (pl/sl support always yields beta well
+  // above 1 there) but this function is public, so the last cell gets the
+  // same closed-form treatment when beta<1. The CDF is finally
+  // re-normalized so the last point is exactly 1.
   function cdfGrid(pert) {
     var low = pert.low,
       mode = pert.mode,
