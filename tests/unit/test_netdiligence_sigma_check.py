@@ -17,6 +17,7 @@ from scripts.netdiligence_sigma_check import (
     REVENUE_BANDS,
     SIGMA_READ_EXCLUDED,
     exact_emax_sigma_root,
+    filter_read_shift,
     implied_sigma_roots,
     sampling_band,
 )
@@ -73,6 +74,19 @@ def test_cause_row_no_root_set() -> None:
     for name, n, mean, mx in CAUSE_ROWS_SME:
         if name in no_root:
             assert exact_emax_sigma_root(n, mean, mx) is not None
+
+
+def test_filter_read_shift_pinned() -> None:
+    # T0-re-gate A6: the one new numeric function without a pin. Executed
+    # 2026-07-30 (matches the gate reviewer's independent hand-derivation
+    # of the theft chain to all printed digits: base 1.020293, corrected
+    # 1.071739, shift +0.051446).
+    theft = filter_read_shift(834, 38_000.0, 500_000.0)
+    nano = filter_read_shift(4009, 142_000.0, 10_400_000.0)
+    assert theft == pytest.approx(0.05144649327747697, rel=1e-12)
+    assert nano == pytest.approx(0.010436660377275198, rel=1e-12)
+    # No-root rows shift None (both roots must exist to compare).
+    assert filter_read_shift(187, 5_100_000.0, 268_000_000.0) is None
 
 
 def test_doc_verbatim_block_matches_fresh_generator_output() -> None:

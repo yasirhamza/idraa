@@ -45,9 +45,11 @@ THREE estimators per row, all printed:
    existing) and the structural z_n ceiling (smaller root <= z_n, so
    small-n bands mechanically cannot express large sigma). The band
    describes the PLUG-IN estimator only. The MC draws an untruncated
-   lognormal while the register names the >=$1K filter as live selection —
-   negligible on the included bands (mean share below $1K <= 0.01%;
-   nano ~0.0083%); stated in the output.
+   lognormal while the published means are CONDITIONAL on >= $1K — the
+   operative correction is the COND-MEAN INFLATION (1-s)/(1-p), governed
+   by the mass below $1K, and the output prints the executed per-row
+   READ-SHIFT it induces (never the mean share, which understates the
+   effect ~77x on theft — T0-gate A-I2/A3).
 
 Output at 2-3 significant figures — four-decimal sigma from a max statistic
 is false precision; the per-band width is the message.
@@ -246,6 +248,12 @@ def filter_read_shift(n: int, mean: float, max_: float, sigma: float = SIGMA_TRU
     share (s), which understates the effect ~77x on theft (T0-gate A-I2).
     Correcting the published mean to its untruncated equivalent RAISES the
     implied read; the shift is what gets printed, never the mean share.
+
+    DELIBERATE ONE-STEP approximation (T0-gate A5): mu is derived from the
+    conditional mean as if unconditional, then rescaled once — no fixed
+    point. This mildly UNDERSTATES the shift (~13% low on theft per the
+    gate's converged iteration); conclusions are shift-insensitive at that
+    scale, and the printed bounds are ceiling-rounded (A2).
     """
     mu = math.log(mean) - sigma * sigma / 2.0
     zc = (math.log(1000.0) - mu) / sigma
@@ -377,9 +385,16 @@ def main() -> None:
     print("  COND-MEAN INFLATION (governed by the mass below $1K, not the mean")
     print("  share): correcting each published conditional mean to its")
     print("  untruncated equivalent at truth 1.7 shifts the plug-in read by")
+
+    def _ceil3(x: float) -> float:
+        # A bound printed with floor-rounding is a FALSE <= claim (T0-gate
+        # A2: 0.010437 printed as "<= +0.010"); bounds ceiling-round.
+        return math.ceil(x * 1000.0) / 1000.0
+
     print(
-        f"  <= +{band_max:.3f} on included revenue bands and +{cause_max:.3f} at"
-        f" worst ({cause_worst_name})"
+        f"  <= +{_ceil3(band_max):.3f} on included revenue bands and"
+        f" <= +{_ceil3(cause_max):.3f} at worst ({cause_worst_name}; one-step"
+        f" correction, mildly understating — see filter_read_shift docstring)"
     )
     print("  — conclusions unchanged (the worst-shifted read stays at/below its")
     print("  band's LOW edge).")

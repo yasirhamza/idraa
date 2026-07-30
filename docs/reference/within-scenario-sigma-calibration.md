@@ -178,10 +178,14 @@ band). What stands instead:
   (nano 1.44, micro 1.54, wire 1.34, theft 0.92) while six read above
   (1.72–2.39, median of the revenue-band five: 1.72). The one-way
   asymmetry is STRUCTURAL, not evidential: an upper bound above the
-  convention cannot argue for raising it, whatever the data says. The
-  reads are consistent with the 1.7 convention where the plug-in has
-  power; with opposing unquantified register biases the data refutes
-  neither direction.
+  convention cannot argue for raising it, whatever the data says. Of the
+  four rows where the plug-in genuinely has power (no-root ≤ 12%), the
+  verdicts are: nano p20 and micro p46 consistent; ransomware p91
+  near-edge HIGH; **theft p0 materially LOW** — so "consistent" holds for
+  two of four powered rows, with both exceptions stated (T0-re-gate A1;
+  the earlier blanket "consistent where the plug-in has power" contradicted
+  the theft finding four lines above it). With opposing unquantified
+  register biases the data refutes neither direction.
 
 Basis note (PR-gate): the −90.16% row is the **no-override σ-sensitivity
 basis** (isolating the σ effect); the **shipped** library-wide after-value is

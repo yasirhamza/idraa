@@ -68,9 +68,10 @@ Register of live bias mechanisms:
 - **Never percentile anchors** — the same bar the loss-anchor protocol
   applies to IC3 aggregate figures (`loss-anchors/research-protocol.md` §1).
 - **σ reads are consistency signals only**, at the stated conditioning
-  level, with the estimator caveats printed beside every figure (plug-in
-  bias is n-DEPENDENT — over-reads at large n, realized bias flips LOW at
-  small n via the z_n ceiling + root-conditional truncation, and each
+  level, with the estimator caveats printed beside every figure (two
+  distinct bias statements, never conflated: the estimating-equation bias
+  is upward at EVERY n, while the REALIZED root-conditional band median
+  flips LOW at small n via the z_n ceiling + no-root truncation — each
   printed band shows its own median-vs-truth offset; no-root outcomes are
   plug-in artifacts; sampling bands are conditional on a root existing and
   ceiling-truncated at z_n).
@@ -167,7 +168,7 @@ bias directions, and caveats: module docstring + netdiligence_2025.md.
   COND-MEAN INFLATION (governed by the mass below $1K, not the mean
   share): correcting each published conditional mean to its
   untruncated equivalent at truth 1.7 shifts the plug-in read by
-  <= +0.010 on included revenue bands and +0.051 at worst (theft_of_money)
+  <= +0.011 on included revenue bands and <= +0.052 at worst (theft_of_money; one-step correction, mildly understating — see filter_read_shift docstring)
   — conclusions unchanged (the worst-shifted read stays at/below its
   band's LOW edge).
 ```
