@@ -79,7 +79,8 @@ def migrated_server_url() -> Iterator[str]:
     entries — including the 3 ``ot_integrity`` ones — and the control catalog are
     seeded deterministically. Yields the base URL; tears down the process + file.
     """
-    db_path = tempfile.mktemp(suffix=".db", prefix="rf_e2e_")  # noqa: S306 — test-local ephemeral DB
+    db_fd, db_path = tempfile.mkstemp(suffix=".db", prefix="rf_e2e_")
+    os.close(db_fd)
     db_url = f"sqlite+aiosqlite:///{db_path}"
     env = {**os.environ, "DATABASE_URL": db_url, "AUTH_MFA_POLICY": "optional"}
 
