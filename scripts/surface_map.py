@@ -1,4 +1,5 @@
-"""Machine-extracted surface map for the PR2 capacity-bound plan.
+"""Machine-extracted surface map — currently pointed at the PR3 pinning +
+authoring-sensitivity plan (previously: the PR2 capacity-bound plan).
 
 WHY THIS EXISTS
 ---------------
@@ -38,68 +39,68 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# (module path, symbol) pairs the PR2 plan depends on. A missing symbol is a
+# (module path, symbol) pairs the PR3 plan depends on. A missing symbol is a
 # generation-time failure: this is the check that would have caught form_from_raw.
+# (PR2's list is in git history at tag-time 8d1d956d..b5c10da9.)
 REQUIRED_SYMBOLS: list[tuple[str, str]] = [
-    ("src/idraa/routes/scenario_form_helpers.py", "dist_from_raw"),
-    ("src/idraa/routes/scenario_form_helpers.py", "dist_to_form"),
-    ("src/idraa/routes/scenario_form_helpers.py", "parse_scenario_form"),
-    ("src/idraa/routes/scenario_form_helpers.py", "form_from_scenario"),
-    ("src/idraa/routes/scenario_form_helpers.py", "form_defaults"),
-    ("src/idraa/routes/scenario_form_helpers.py", "render_scenario_form"),
-    ("src/idraa/services/run_executor.py", "_dict_to_fair_distribution"),
-    ("src/idraa/services/fair_cam_validation.py", "_validate_finite"),
+    # Producer chokepoint the pin/refresh writes go through (D20/D23).
     ("src/idraa/services/fair_cam_validation.py", "validate_fair_distributions"),
-    ("src/idraa/services/wizard_finalize.py", "build_scenario_payload"),
-    ("src/idraa/services/scenario_import.py", "_structural_dist_problem"),
-    ("src/idraa/services/scenario_import.py", "_validate_rows"),
-    ("src/idraa/services/scenario_export.py", "_normalize_dist"),
-    ("src/idraa/services/scenario_export.py", "_dist_cells"),
-    ("src/idraa/services/verification_workbook_let.py", "_invcdf"),
-    ("src/idraa/services/verification_workbook_let.py", "scaled_params"),
-    ("src/idraa/services/verification_workbook_let.py", "_assert_numeric_dist"),
     ("src/idraa/services/loss_capacity.py", "capacity_max_for_org"),
-    ("fair_cam/risk_engine/fair_core.py", "_scale_distribution"),
-    # rev-3 additions: every symbol the thin plan names must be verified here.
-    ("src/idraa/services/scenarios.py", "_apply_form_fields"),
-    ("fair_cam/risk_engine/fair_core.py", "sample"),
-    ("fair_cam/risk_engine/fair_core.py", "calculate_risk"),
-    ("src/idraa/app.py", "_money_filter"),
-    # Round-3 additions. Every symbol the plan names must appear here — round 3
-    # named these three WITHOUT map verification, and the first one was asserted
-    # (wrongly) not to exist at all.
-    ("src/idraa/errors.py", "FAIRCAMValidationError"),
-    ("fair_cam/quantile_pooling/_lognormal.py", "_qlnormtrunc"),
-    ("src/idraa/services/run_executor.py", "execute_run"),
-    # Round-4: the multi-currency entry path. `max` inputs land inside the
-    # currency-scoped block whose siblings are converted to USD before parsing,
-    # so this surface is load-bearing on the cap's units.
-    ("src/idraa/services/scenario_currency.py", "convert_loss_inputs_to_usd"),
-    ("tests/migrations/conftest.py", "alembic_config"),
-    # Round-5: the DISPLAY consumers. The Threading table stopped at surfaces that
-    # populate/persist/scale/validate the dict and never enumerated the ones that
-    # RENDER it, so post-PR2 these would state a mean and p95 from a distribution
-    # the engine no longer samples -- on screen and in the circulated PDF.
-    ("src/idraa/app.py", "lognormal_display_rows"),
-    ("src/idraa/app.py", "lognormal_mixture_display_rows"),
-    ("src/idraa/services/pdf_report.py", "_lognormal_input_percentiles"),
-    ("src/idraa/services/pdf_report.py", "_lognormal_mixture_percentiles"),
+    ("src/idraa/routes/scenario_form_helpers.py", "parse_scenario_form"),
+    ("src/idraa/routes/scenario_form_helpers.py", "dist_to_form"),
+    # Banner/readout render helpers (D23 tripwire sits beside them).
+    ("src/idraa/routes/scenarios.py", "_loss_was_recalibrated"),
+    ("src/idraa/routes/scenarios.py", "_stored_loss_sigma"),
+    ("src/idraa/routes/scenarios.py", "_max_stored_loss_sigma"),
+    ("src/idraa/routes/scenarios.py", "_capacity_max_for_org"),
+    ("src/idraa/routes/scenarios.py", "delete_scenario"),
+    ("src/idraa/routes/scenarios.py", "view_scenario"),
+    # Wizard preview props (Task 2) + storage-shape facts the JS mirrors.
+    ("src/idraa/services/wizard_finalize.py", "process_sme_estimates"),
+    ("src/idraa/services/wizard_finalize.py", "build_scenario_payload"),
+    ("src/idraa/services/wizard_finalize.py", "PerFieldsetResult"),
+    # Library refresh seam (D23): the exact pair fresh adoption uses.
+    ("src/idraa/services/scenario_library.py", "resolve_for_clone"),
+    ("src/idraa/services/library_calibration.py", "library_calibrated_pre_fill"),
+    # Audit + service seams the pin service mirrors.
+    ("src/idraa/services/audit.py", "AuditWriter"),
+    ("src/idraa/services/scenarios.py", "ScenarioService"),
+    # D19 operator copy reused verbatim by the pin route's error path.
+    ("src/idraa/services/capacity_bound_copy.py", "wrap_d19_floor_message"),
+    # fair_cam kernels the parity goldens are generated through (D22).
+    ("fair_cam/quantile_pooling/_lognormal_native.py", "lognormal_from_quantiles"),
+    ("fair_cam/quantile_pooling/_lognormal_native.py", "lognormal_quantiles"),
+    ("fair_cam/quantile_pooling/_lognormal_native.py", "truncated_lognormal_mean"),
+    ("fair_cam/quantile_pooling/_lognormal_native.py", "truncated_lognormal_mixture_mean"),
+    ("fair_cam/quantile_pooling/_lognormal.py", "lognormal_mixture_to_pert_approx"),
+    # New files this PR creates (allowlisted below; symbols land with them).
+    ("src/idraa/services/loss_pinning.py", "pin_loss"),
+    ("src/idraa/services/loss_pinning.py", "unpin_loss"),
+    ("src/idraa/services/loss_pinning.py", "refresh_loss_from_library"),
+    ("scripts/netdiligence_sigma_check.py", "implied_sigma_roots"),
 ]
 
 # Class attributes the plan names (models are AnnAssigns, not defs). Same
 # fail-loud contract: a missing attribute is a fabricated claim.
 REQUIRED_ATTRS: list[tuple[str, str, str]] = [
-    ("src/idraa/models/risk_analysis_run.py", "RiskAnalysisRun", "scenario_inputs_snapshot"),
-    # Sole justification for Task 1's mandatory Decimal test input.
+    # Refresh target linkage (D23) + optimistic-lock column the routes thread.
+    ("src/idraa/models/scenario.py", "Scenario", "library_pin"),
+    ("src/idraa/models/scenario.py", "Scenario", "row_version"),
     ("src/idraa/models/organization.py", "Organization", "annual_revenue"),
+    # Cap policy knob the pin/refresh minting reads (D19 semantics).
+    ("src/idraa/config.py", "Settings", "capacity_k"),
 ]
 
 # Files this PR CREATES. Only these may be absent; any other missing path is a
 # typo'd claim and must fail loud. Without this allowlist a wrong path renders as
 # "created by this PR" -- the same silent-skip that let bad claims through twice.
 EXPECTED_NEW_FILES = {
-    "src/idraa/services/loss_capacity.py",
-    "fair_cam/risk_engine/_truncation.py",
+    "src/idraa/services/loss_pinning.py",
+    "src/idraa/static/js/loss_preview.js",
+    "src/idraa/templates/scenarios/_loss_readout.html",
+    "src/idraa/templates/scenarios/confirm_loss_refresh.html",
+    "scripts/netdiligence_sigma_check.py",
+    "docs/reference/calibration-sources/netdiligence_2025.md",
 }
 
 # Symbols whose CALL SITES the plan makes claims about. Hand-counted censuses were
@@ -110,15 +111,11 @@ EXPECTED_NEW_FILES = {
 # that has 2 — the same inflation the lookbehind fix removed, in another dimension.
 CALL_SITE_SYMBOLS: list[tuple[str | None, str]] = [
     (None, "validate_fair_distributions"),
-    (None, "build_scenario_payload"),
-    (None, "dist_from_raw"),
-    (None, "dist_to_form"),
     (None, "capacity_max_for_org"),
-    (None, "form_defaults"),
-    ("src/idraa/services/scenario_import.py", "_structural_dist_problem"),
-    ("src/idraa/services/scenario_import.py", "_validate_rows"),
-    ("src/idraa/services/scenario_currency.py", "convert_loss_inputs_to_usd"),
-    ("tests/migrations/conftest.py", "alembic_config"),
+    (None, "library_calibrated_pre_fill"),
+    (None, "resolve_for_clone"),
+    (None, "lognormal_mixture_to_pert_approx"),
+    (None, "truncated_lognormal_mean"),
 ]
 
 
@@ -352,8 +349,8 @@ def collection_section() -> list[str]:
 # Operator-local (gitignored) planning documents. Absent in a fresh clone and in
 # CI, where the coherence check simply does not run -- it is a authoring-time gate,
 # not a merge gate.
-DESIGN_DOC = ROOT / "docs/superpowers/specs/2026-07-25-capacity-bound-design.md"
-PLAN_DOC = ROOT / "docs/superpowers/plans/2026-07-25-capacity-bound-pr2.md"
+DESIGN_DOC = ROOT / "docs/superpowers/specs/2026-07-29-sigma-recal-pr3-design.md"
+PLAN_DOC = ROOT / "docs/superpowers/plans/2026-07-30-sigma-recal-pr3.md"
 
 # Files the design's Threading table names that NO task needs to modify, with the
 # reason. Anything not listed here MUST appear in a plan TASK: that is the check.
@@ -367,25 +364,21 @@ THREADING_EXEMPT: dict[str, str] = {}
 # against the plan's task region. (All FOUR the design's Stores row names — round 7
 # found `wizard_drafts` had been omitted, so a store the design names went
 # unenforced while the check reported "pass".)
-THREADING_STORES = (
-    "scenarios",
-    "scenario_library_entries",
-    "scenario_library_overrides",
-    "wizard_drafts",
-)
+# PR3 writes exactly one store (pin/unpin/refresh all mutate scenario rows;
+# no migration, no new tables — spec D20/D23).
+THREADING_STORES = ("scenarios",)
 
 # Symbols the map verifies as supporting CONTEXT rather than because a task names
 # them. Every other REQUIRED_SYMBOLS entry must be reachable from some task, so a
 # dropped task cannot leave a silently-unused verification behind.
 CONTEXT_ONLY_SYMBOLS = {
-    "render_scenario_form": "signature quoted to show the pre-fill has no rate in scope",
-    "form_defaults": "census establishes the expert form's default-construction path",
-    "_assert_numeric_dist": "LET-path caveat, carried as a deferred nice-to-have",
-    "execute_run": "adapter-raise behaviour (run flips FAILED) cited by Task 3's guard",
-    "_qlnormtrunc": "Task 2's empirical-agreement reference",
-    "alembic_config": "fixture location claim for Task 5",
-    "calculate_risk": "secondary_loss_subtractor ordering pin in Task 2",
-    "sample": "the branch Task 2 modifies, named via fair_core.py::sample",
+    "build_scenario_payload": "storage-shape source: catastrophic single-SME lognormal node + "
+    "capped PERT emit that Task 1's goldens and JS mirror reproduce",
+    "dist_to_form": "establishes the expert form's lognormal inputs are p5/p95 (Task 3 basis)",
+    "parse_scenario_form": "capacity_max kwarg = the D17 producer precedent the pin mirrors",
+    "PerFieldsetResult": "r.pert consumption shape for Task 2's preview means",
+    "view_scenario": "query-param flash idiom host (?pinned=1 family lands here)",
+    "truncated_lognormal_mixture_mean": "mixture oracle available if goldens grow mixture cases",
 }
 
 
@@ -442,13 +435,11 @@ def coherence_section() -> list[str]:
     plan_tasks = plan[task_split.start() :] if task_split else plan
 
     m = re.search(r"\n## Threading\b(.*?)(?=\n## )", design, re.S)
-    if not m:
-        raise SystemExit(
-            "SURFACE MAP FAILED: could not locate the design's '## Threading' section. "
-            "If it was renamed, update this check -- do not let the coherence gate "
-            "silently pass by finding nothing."
-        )
-    threading = m.group(1)
+    # No-Threading fallback: PR3's spec is decisions-only (the epic's rev-5
+    # lesson). Scanning the WHOLE spec for file tokens is a strictly WIDER net
+    # than one section, so the fallback cannot silently weaken the gate; it can
+    # only add tokens the plan must name.
+    threading = m.group(1) if m else design
 
     def _ambiguous(basename: str) -> bool:
         """True if >1 tracked file under src/ or fair_cam/ shares this basename."""
