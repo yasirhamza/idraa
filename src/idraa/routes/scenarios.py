@@ -59,7 +59,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from idraa.app import _csrf_token_from_request, templates
+from idraa.app import _csrf_token_from_request, _format_money_input, templates
 from idraa.config import get_settings
 from idraa.errors import (
     ConflictError,
@@ -335,6 +335,17 @@ def _expert_loss_readout_cfgs(
     expert form's TEF/vuln are typed PERT triples with no scipy fit
     involved, and wiring their own live mean into ``$store.lossPreview``
     is out of this task's scope.
+
+    T3.a gate fix (METH B-1): ``cap`` is the FIELD's OWN ``{field_key}_max``
+    form value when present, falling back to the org-wide ``capacity_max``
+    only when it is blank/unparseable -- mirroring ``loss_pinning.pin_loss``'s
+    own ``existing_max if existing_max is not None else minted`` ternary.
+    Passing the bare org cap unconditionally (the pre-fix behavior) is
+    WRONG whenever a field carries a bespoke ``max`` narrower than
+    ``k * revenue``: the live preview would advertise a looser ceiling than
+    the chokepoint (``validate_fair_distributions``) actually enforces
+    against that field's stored ``max``, producing a false "will be
+    accepted" read that then 422s on save.
     """
     out: dict[str, dict[str, Any]] = {}
     for field_key, label in IMPACT_FIELDSETS:
@@ -347,12 +358,19 @@ def _expert_loss_readout_cfgs(
             except (TypeError, ValueError):
                 initial_low = None
                 initial_high = None
+        raw_field_max = form.get(f"{field_key}_max")
+        field_cap: float | None = None
+        if raw_field_max is not None and raw_field_max != "":
+            try:
+                field_cap = float(raw_field_max)
+            except (TypeError, ValueError):
+                field_cap = None
         out[field_key] = {
             "mode": "lognormal",
             "quantileBasis": "p5p95",
             "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
             "warnThreshold": SIGMA_WARN_THRESHOLD,
-            "cap": capacity_max,
+            "cap": field_cap if field_cap is not None else capacity_max,
             "currency": "USD",
             "tefMean": None,
             "vulnMean": None,
@@ -379,7 +397,11 @@ def _pin_panel_context(scenario: Scenario, capacity_max: float | None) -> dict[s
     ``prefill_p50``/``prefill_p95`` seed the pin panel's own p50/p95 inputs
     from the field's CURRENTLY stored lognormal fit (re-expressed from its
     native p5/p95 basis) so the analyst edits forward from the live
-    dispersion rather than a blank pair.
+    dispersion rather than a blank pair. T3.a gate fix (METH I-4): routed
+    through ``_format_money_input`` (2dp, no sci notation) -- the same PR
+    #247 precision-class bug the expert form's own ``pert_input`` macro
+    already guards against; a raw ``str(float)`` here rendered
+    ``353667.92334052623`` into the input's ``value`` attribute.
     """
     from datetime import datetime as _datetime
 
@@ -402,6 +424,10 @@ def _pin_panel_context(scenario: Scenario, capacity_max: float | None) -> dict[s
             "pinned": pinned,
             "pinned_at": None,
             "pinned_sigma": None,
+            # T3.a NTH N-1/N-2: threaded so the pinned-chip copy can read
+            # "(platform default X.XX)" beside the pinned sigma -- set
+            # unconditionally (cheap, and used only when ``pinned``).
+            "sigma_default": WITHIN_SCENARIO_SIGMA_DEFAULT,
             "readout_cfg": None,
             "prefill_p50": "",
             "prefill_p95": "",
@@ -416,14 +442,23 @@ def _pin_panel_context(scenario: Scenario, capacity_max: float | None) -> dict[s
                 and math.isfinite(float(sigma))
             ):
                 p50, p95 = lognormal_quantiles(float(mu), float(sigma), (0.5, 0.95))
-                entry["prefill_p50"] = str(p50)
-                entry["prefill_p95"] = str(p95)
+                entry["prefill_p50"] = _format_money_input(p50)
+                entry["prefill_p95"] = _format_money_input(p95)
+                # T3.a gate fix (METH B-1): the FIELD's own stored ``max``
+                # wins over the org-wide capacity_max fallback -- mirrors
+                # loss_pinning.pin_loss's own
+                # ``existing_max if existing_max is not None else minted``
+                # ternary exactly. Passing the bare org cap here (pre-fix)
+                # advertised a looser ceiling than the D19 chokepoint
+                # actually enforces against THIS field's stored max.
+                field_max = dist.get("max")
+                field_cap = float(field_max) if isinstance(field_max, int | float) else capacity_max
                 entry["readout_cfg"] = {
                     "mode": "lognormal",
                     "quantileBasis": "p50p95",
                     "sigmaDefault": WITHIN_SCENARIO_SIGMA_DEFAULT,
                     "warnThreshold": SIGMA_WARN_THRESHOLD,
-                    "cap": capacity_max,
+                    "cap": field_cap,
                     "currency": "USD",
                     "tefMean": None,
                     "vulnMean": None,
@@ -1167,32 +1202,18 @@ async def view_scenario(
     )
 
 
-@router.get("/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
-async def edit_scenario_form(
-    request: Request,
-    scenario_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
-) -> HTMLResponse:
-    """Render the scenario edit form. Analyst+ only.
+async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -> dict[str, Any]:
+    """Shared context builder for ``scenarios/form.html`` in EDIT mode.
 
-    The hidden ``expected_row_version`` input is templated from
-    ``scenario.row_version`` (P9 — the int row_version is the
-    optimistic-lock primitive, NOT the descriptive ``version: str``).
+    T3.a gate fix (SPEC B-1): factored out of ``edit_scenario_form`` so a
+    pin/unpin failure can re-render the SAME page (via
+    ``_render_loss_action_failure`` below) instead of surfacing a raw
+    ``HTTPException`` JSON body that wipes the analyst's in-flight pin-panel
+    input on the hx-boost 4xx force-swap. ``scenario`` must already have
+    ``mitigating_controls`` eager-loaded (``selectinload`` — both call sites
+    load it the same way). Callers set ``"flash"`` themselves (the one field
+    that legitimately differs between a plain GET and a failure re-render).
     """
-    # Eager-load mitigating_controls so we can surface links to non-ACTIVE
-    # controls (issue #217) that the ACTIVE-only available_controls list omits.
-    edit_stmt = (
-        select(Scenario)
-        .where(
-            Scenario.id == scenario_id,
-            Scenario.organization_id == user.organization_id,
-        )
-        .options(selectinload(Scenario.mitigating_controls))
-    )
-    scenario = (await db.execute(edit_stmt)).scalar_one_or_none()
-    if scenario is None:
-        raise HTTPException(status_code=404)
     overlay_options = await load_overlay_options(db, user.organization_id)
     available_controls = await ControlRepo(db).list_for_org(user.organization_id)
     available_ids = {c.id for c in available_controls}
@@ -1225,41 +1246,128 @@ async def edit_scenario_form(
         else D17_HINT_REVENUE_UNSET
     )
     form = form_from_scenario(scenario)
-    return templates.TemplateResponse(
-        request,
-        "scenarios/form.html",
-        {
-            "current_user": user,
-            "flash": None,
-            "scenario": scenario,
-            "form": form,
-            "overlay_options": overlay_options,
-            "available_controls": available_controls,
-            "inactive_linked_controls": inactive_linked_controls,
-            "threat_category_choices": THREAT_CATEGORY_CHOICES,
-            "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
-            "asset_class_choices": ASSET_CLASS_CHOICES,
-            "attack_vector_choices": ATTACK_VECTOR_CHOICES,
-            "effect_choices": EFFECT_CHOICES,
-            "attack_technique_groups_json": attack_ctx.groups_json,
-            "attack_technique_options": attack_ctx.options,
-            "attack_mapping_rows": attack_ctx.rows,
-            "org_industry": edit_org_industry,
-            "org_revenue_tier": edit_org_revenue_tier,
-            "form_action": f"/scenarios/{scenario.id}",
-            "form_method": "post",
-            "errors": [],
-            # Multi-currency P2 (Task 3.5): pass is_edit=True so the template renders
-            # entry_currency/entry_rate as read-only provenance (not an editable select).
-            # entry_currency/entry_rate are accessed via scenario.entry_currency /
-            # scenario.entry_rate in the template (scenario is already in context).
-            "is_edit": True,
-            "capacity_max": capacity_max,
-            "capacity_hint": capacity_hint,
-            "readout_cfg": _expert_loss_readout_cfgs(form, capacity_max),
-            "pin_panels": _pin_panel_context(scenario, capacity_max),
-        },
+    return {
+        "current_user": user,
+        "scenario": scenario,
+        "form": form,
+        "overlay_options": overlay_options,
+        "available_controls": available_controls,
+        "inactive_linked_controls": inactive_linked_controls,
+        "threat_category_choices": THREAT_CATEGORY_CHOICES,
+        "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
+        "asset_class_choices": ASSET_CLASS_CHOICES,
+        "attack_vector_choices": ATTACK_VECTOR_CHOICES,
+        "effect_choices": EFFECT_CHOICES,
+        "attack_technique_groups_json": attack_ctx.groups_json,
+        "attack_technique_options": attack_ctx.options,
+        "attack_mapping_rows": attack_ctx.rows,
+        "org_industry": edit_org_industry,
+        "org_revenue_tier": edit_org_revenue_tier,
+        "form_action": f"/scenarios/{scenario.id}",
+        "form_method": "post",
+        "errors": [],
+        # Multi-currency P2 (Task 3.5): pass is_edit=True so the template renders
+        # entry_currency/entry_rate as read-only provenance (not an editable select).
+        # entry_currency/entry_rate are accessed via scenario.entry_currency /
+        # scenario.entry_rate in the template (scenario is already in context).
+        "is_edit": True,
+        "capacity_max": capacity_max,
+        "capacity_hint": capacity_hint,
+        "readout_cfg": _expert_loss_readout_cfgs(form, capacity_max),
+        "pin_panels": _pin_panel_context(scenario, capacity_max),
+    }
+
+
+async def _load_scenario_for_edit(
+    db: AsyncSession, user: User, scenario_id: uuid.UUID
+) -> Scenario | None:
+    """Org-scoped scenario lookup with ``mitigating_controls`` eager-loaded —
+    the exact query both ``edit_scenario_form`` and
+    ``_render_loss_action_failure`` need before building ``_edit_form_context``.
+    """
+    edit_stmt = (
+        select(Scenario)
+        .where(
+            Scenario.id == scenario_id,
+            Scenario.organization_id == user.organization_id,
+        )
+        .options(selectinload(Scenario.mitigating_controls))
     )
+    return (await db.execute(edit_stmt)).scalar_one_or_none()
+
+
+async def _render_loss_action_failure(
+    request: Request,
+    db: AsyncSession,
+    user: User,
+    scenario_id: uuid.UUID,
+    *,
+    field: Literal["primary", "secondary"],
+    message: str,
+    status_code: int,
+    submitted_p50: str | None = None,
+    submitted_p95: str | None = None,
+) -> HTMLResponse:
+    """T3.a gate fix (SPEC B-1): render the EDIT form with an alert banner
+    on a pin/unpin failure, instead of letting a raw ``HTTPException``
+    propagate as a JSON ``{"detail": ...}`` body.
+
+    base.html's hx-boost 4xx force-swap replaces the ENTIRE page with that
+    JSON body on any non-2xx response — the analyst's whole in-flight edit
+    (technique rows, mitigating-control checkboxes, unsaved field tweaks)
+    was lost for a failure that touches only the pin panel. Mirrors
+    ``update_scenario``'s own ConflictError/ValidationError re-render idiom
+    (``render_scenario_form``) — same "re-render the page instead of
+    raising" shape, applied here to the edit-form context builder above
+    since the pin panel only exists in edit mode.
+
+    The FAILED field's own pin-panel p50/p95 inputs are overridden with the
+    analyst's just-submitted raw strings (cheap to preserve — they are
+    already FastAPI Form params in hand) when supplied; unpin failures pass
+    neither (there is nothing to preserve). No error text is smuggled
+    through the query string (the value-smuggling bar) — the message is
+    rendered directly into this response's flash.
+
+    A missing/wrong-org scenario still raises a plain 404 ``HTTPException``
+    (SPEC B-1's scope is 422/409 form-state loss; there is no edit-form page
+    to re-render for a scenario that doesn't exist for this org).
+    """
+    scenario = await _load_scenario_for_edit(db, user, scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404)
+    ctx = await _edit_form_context(db, user, scenario)
+    field_key = "pl" if field == "primary" else "sl"
+    panel = ctx["pin_panels"].get(field_key)
+    if panel is not None:
+        if submitted_p50 is not None:
+            panel["prefill_p50"] = submitted_p50
+        if submitted_p95 is not None:
+            panel["prefill_p95"] = submitted_p95
+    ctx["flash"] = build_flash(message, "error")
+    return templates.TemplateResponse(request, "scenarios/form.html", ctx, status_code=status_code)
+
+
+@router.get("/scenarios/{scenario_id}/edit", response_class=HTMLResponse)
+async def edit_scenario_form(
+    request: Request,
+    scenario_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> HTMLResponse:
+    """Render the scenario edit form. Analyst+ only.
+
+    The hidden ``expected_row_version`` input is templated from
+    ``scenario.row_version`` (P9 — the int row_version is the
+    optimistic-lock primitive, NOT the descriptive ``version: str``).
+    """
+    # Eager-load mitigating_controls so we can surface links to non-ACTIVE
+    # controls (issue #217) that the ACTIVE-only available_controls list omits.
+    scenario = await _load_scenario_for_edit(db, user, scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404)
+    ctx = await _edit_form_context(db, user, scenario)
+    ctx["flash"] = None
+    return templates.TemplateResponse(request, "scenarios/form.html", ctx)
 
 
 @router.post("/scenarios/{scenario_id}")
@@ -1634,14 +1742,15 @@ def _parse_pin_quantile(raw: str, *, field_name: str) -> float:
     Parse-to-float happens HERE (the route), not in the service (Sec-I2 /
     loss_pinning.pin_loss's own boundary-gate comment) — a non-parseable
     string must 422, and the service's own finite/positive/ordering gate
-    only runs on already-parsed floats.
+    only runs on already-parsed floats. Raises ``ValueError`` (never
+    ``HTTPException``) — T3.a gate fix (SPEC B-1): the caller renders a
+    proper 422 form via ``_render_loss_action_failure`` rather than letting
+    a bare HTTPException JSON body reach the analyst.
     """
     try:
         return float(raw)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=422, detail=f"{field_name}: not a number (got {raw!r})"
-        ) from exc
+        raise ValueError(f"{field_name}: not a number (got {raw!r})") from exc
 
 
 @router.post("/scenarios/{scenario_id}/loss/pin")
@@ -1666,15 +1775,44 @@ async def pin_scenario_loss(
     422s on any other value automatically (Sec-I3), no service-level branch
     needed. CSRF enforced by the global CSRFMiddleware, same as every other
     POST in this module.
+
+    T3.a gate fix (SPEC B-1): every 422/409 failure branch below
+    RE-RENDERS the edit form (``_render_loss_action_failure``) with an
+    alert banner and the just-typed p50/p95 preserved, instead of raising
+    a raw ``HTTPException`` — base.html's hx-boost 4xx force-swap would
+    otherwise replace the analyst's whole page with a JSON
+    ``{"detail": ...}`` body. Only a genuinely missing/wrong-org scenario
+    (``NotFoundError``) still raises a plain 404 — there is no edit page to
+    re-render for a scenario that doesn't exist for this org.
     """
     row_version = parse_expected_row_version(expected_row_version)
     if row_version is None:
-        raise HTTPException(
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message="expected_row_version: missing or invalid hidden form field",
             status_code=422,
-            detail="expected_row_version: missing or invalid hidden form field",
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
         )
-    p50 = _parse_pin_quantile(pin_p50, field_name="pin_p50")
-    p95 = _parse_pin_quantile(pin_p95, field_name="pin_p95")
+    try:
+        p50 = _parse_pin_quantile(pin_p50, field_name="pin_p50")
+        p95 = _parse_pin_quantile(pin_p95, field_name="pin_p95")
+    except ValueError as exc:
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=str(exc),
+            status_code=422,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
     try:
         await pin_loss(
             db,
@@ -1690,7 +1828,20 @@ async def pin_scenario_loss(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
     except ValidationError as exc:
         # Mirrors update_scenario's D19 wrap exactly — validate_fair_
         # distributions raises FAIRCAMValidationError directly (not
@@ -1702,7 +1853,17 @@ async def pin_scenario_loss(
             if isinstance(exc, FAIRCAMValidationError) and D19_FLOOR_MARKER in str(exc)
             else str(exc)
         )
-        raise HTTPException(status_code=422, detail=message) from exc
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=message,
+            status_code=422,
+            submitted_p50=pin_p50,
+            submitted_p95=pin_p95,
+        )
     return RedirectResponse(url=f"/scenarios/{scenario_id}?pinned=1", status_code=303)
 
 
@@ -1717,13 +1878,22 @@ async def unpin_scenario_loss(
 ) -> Response:
     """PR3 T3 (D20/D21): remove the ``analyst_pin`` stamp from ``field``,
     restoring sweep/banner eligibility (D20). See ``pin_scenario_loss`` for
-    the shared RBAC/CSRF/Literal-validation posture.
+    the shared RBAC/CSRF/Literal-validation posture, and for the T3.a
+    (SPEC B-1) rendered-failure-path rationale — there is no p50/p95 to
+    preserve here (unpin has no quantile inputs), so
+    ``_render_loss_action_failure`` is called without ``submitted_p50``/
+    ``submitted_p95``.
     """
     row_version = parse_expected_row_version(expected_row_version)
     if row_version is None:
-        raise HTTPException(
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message="expected_row_version: missing or invalid hidden form field",
             status_code=422,
-            detail="expected_row_version: missing or invalid hidden form field",
         )
     try:
         await unpin_loss(
@@ -1738,9 +1908,28 @@ async def unpin_scenario_loss(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=(
+                "Another user updated this scenario — please reload and "
+                "retry your edit. " + str(exc)
+            ),
+            status_code=409,
+        )
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return await _render_loss_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            field=field,
+            message=str(exc),
+            status_code=422,
+        )
     return RedirectResponse(url=f"/scenarios/{scenario_id}?unpinned=1", status_code=303)
 
 

@@ -334,9 +334,9 @@
            strftime/isoformat in this template, per the timezone-
            localization UI convention). #}
         {% if pin_panels and pin_panels.pl.pinned %}
-        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip">
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip-pl-view">
           <span class="badge badge-ghost badge-sm">
-            pinned &sigma;={{ "%.2f" | format(pin_panels.pl.pinned_sigma) if pin_panels.pl.pinned_sigma is not none else "—" }}{% if pin_panels.pl.pinned_at %} &mdash; {{ pin_panels.pl.pinned_at | format_datetime }}{% endif %}
+            pinned spread &sigma;={{ "%.2f" | format(pin_panels.pl.pinned_sigma) if pin_panels.pl.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(pin_panels.pl.sigma_default) }}){% if pin_panels.pl.pinned_at %} &mdash; {{ pin_panels.pl.pinned_at | format_datetime }}{% endif %}
           </span>
           {% if current_user and current_user.role.value in ("analyst", "admin") %}
           <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">
@@ -354,9 +354,9 @@
       <div>
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Secondary loss</h3>
         {% if pin_panels and pin_panels.sl.pinned %}
-        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip">
+        <div class="flex items-center gap-2 mb-2 text-meta text-ink-2" data-testid="loss-pinned-chip-sl-view">
           <span class="badge badge-ghost badge-sm">
-            pinned &sigma;={{ "%.2f" | format(pin_panels.sl.pinned_sigma) if pin_panels.sl.pinned_sigma is not none else "—" }}{% if pin_panels.sl.pinned_at %} &mdash; {{ pin_panels.sl.pinned_at | format_datetime }}{% endif %}
+            pinned spread &sigma;={{ "%.2f" | format(pin_panels.sl.pinned_sigma) if pin_panels.sl.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(pin_panels.sl.sigma_default) }}){% if pin_panels.sl.pinned_at %} &mdash; {{ pin_panels.sl.pinned_at | format_datetime }}{% endif %}
           </span>
           {% if current_user and current_user.role.value in ("analyst", "admin") %}
           <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin">

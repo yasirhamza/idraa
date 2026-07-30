@@ -17,6 +17,7 @@ no service-level branch needed for that case.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import math
 import uuid
@@ -106,6 +107,7 @@ async def _create_lognormal_scenario(
     name: str,
     pl_low: str = "100000",
     pl_high: str = "1000000",
+    pl_max: str | None = None,
     sl_dist: str | None = None,
     sl_low: str | None = None,
     sl_high: str | None = None,
@@ -118,6 +120,11 @@ async def _create_lognormal_scenario(
         "pl_low": pl_low,
         "pl_high": pl_high,
     }
+    if pl_max is not None:
+        # T3.a gate fix (METH B-1): a bespoke pl_max (below the org cap) is
+        # bound ABOVE-only by capacity_max_for_org, i.e. preserved verbatim
+        # -- see _resolve_capacity_max (scenario_form_helpers.py).
+        payload["pl_max"] = pl_max
     if sl_dist is not None:
         payload["sl_dist"] = sl_dist
         payload["sl_low"] = sl_low or ""
@@ -125,6 +132,23 @@ async def _create_lognormal_scenario(
     r = await csrf_post(client, "/scenarios", payload, follow_redirects=False)
     assert r.status_code == 303, r.text
     return r
+
+
+# ---------------------------------------------------------------------------
+# T3.a NTH batch (spec N-2): the module docstring above claims the D19
+# ceiling formula is "executed below" -- this test makes that literally
+# true instead of an unexecuted claim (never pin a value you did not
+# execute). Hand-math: ln(4_000_000_000 / 1_000_000) = ln(4000) =
+# 8.294049640102028; / Z_0_95 (1.6448536269514722) = 5.042424142915378
+# (executed via `python3 -c "import math; Z=1.6448536269514722;
+# print(repr(math.log(4_000_000_000.0/1_000_000.0)/Z))"` -> matches).
+# ---------------------------------------------------------------------------
+
+
+def test_d19_ceiling_formula_matches_module_docstring_claim() -> None:
+    assert math.log(4_000_000_000.0 / 1_000_000.0) / Z_0_95 == pytest.approx(
+        5.042424142915378, rel=1e-12
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +174,11 @@ async def test_pin_primary_stores_median_anchored_fit_and_mints_cap(
     await db_session.commit()
     await db_session.refresh(scenario)
     expected_row_version = scenario.row_version
+    # SPEC I-2: snapshot the PRE-pin dict verbatim (deep copy -- the dist is
+    # reassigned wholesale on pin, never mutated in place, but a defensive
+    # copy avoids any accidental aliasing) so the audit row's ``changes``
+    # can be asserted for CONTENT, not just key presence.
+    prior_dist_expected = copy.deepcopy(scenario.primary_loss)
 
     r = await csrf_post(
         client,
@@ -207,7 +236,18 @@ async def test_pin_primary_stores_median_anchored_fit_and_mints_cap(
     ).scalar_one()
     assert audit_row.changes["field"] == [None, "primary"]
     assert audit_row.changes["expected_row_version"] == [None, expected_row_version]
-    assert "primary_loss" in audit_row.changes
+    # SPEC I-2: assert the prior+new dist dict CONTENTS, not just key
+    # presence -- ``pl`` here IS the post-pin dict already asserted above,
+    # so this proves the audit row carries the exact same before/after
+    # dicts the write actually applied, not some other shape.
+    assert audit_row.changes["primary_loss"] == [prior_dist_expected, pl]
+
+    # T3.a NTH N-1/N-2: the pinned chip on the edit form is basis-labeled
+    # against the platform default beside the derived sigma.
+    edit_r = await client.get(f"/scenarios/{scenario.id}/edit")
+    assert edit_r.status_code == 200, edit_r.text
+    assert 'data-testid="loss-pinned-chip-pl-form"' in edit_r.text
+    assert "platform default 1.70" in edit_r.text
 
 
 # ---------------------------------------------------------------------------
@@ -224,13 +264,33 @@ async def test_pinned_dist_is_untouched_by_both_migration_helpers(
     await _create_lognormal_scenario(client, name="Pin-migration-roundtrip")
     scenario = await _get_scenario(db_session, org_id, "Pin-migration-roundtrip")
 
+    # T3.a gate fix (METH I-1): pin at sigma=2.5 (> WITHIN_SCENARIO_SIGMA_
+    # DEFAULT=1.7), not the prior 1_000_000/8_000_000 pair (implied sigma
+    # = ln(8)/Z_0_95 ~= 1.264 -- EXECUTED: math.log(8.0)/Z_0_95 ==
+    # 1.2637...). At sigma <= 1.7, c4e4d441087c's own _recalibrate_dist
+    # returns None on ITS OWN narrow-sigma rule (line 88: "prior_sigma <=
+    # _SIGMA_TARGET: return None") BEFORE ever reaching the analyst_pin
+    # skip-guard -- the assertion below would pass identically whether or
+    # not the skip-guard exists, so it did not discriminate. sigma=2.5
+    # is > 1.7, so _recalibrate_dist only returns None if the skip-guard
+    # (checked FIRST, line 84) actually fires -- now a real assertion of
+    # the skip-guard, not the narrow-sigma carve-out.
+    # p95 = p50 * exp(2.5 * Z_0_95), EXECUTED via
+    # `python3 -c "import math; Z=1.6448536269514722;
+    # print(repr(1e6*math.exp(2.5*Z)))"` -> 61076920.853300564. $4B revenue
+    # (I-M5) admits sigma up to ~5.04 (see
+    # test_d19_ceiling_formula_matches_module_docstring_claim), so this
+    # pin clears the D19 floor by construction.
+    p50 = 1_000_000.0
+    p95 = p50 * math.exp(2.5 * Z_0_95)
+    assert p95 == pytest.approx(61_076_920.853300564, rel=1e-12)
     r = await csrf_post(
         client,
         f"/scenarios/{scenario.id}/loss/pin",
         {
             "field": "primary",
-            "pin_p50": "1000000",
-            "pin_p95": "8000000",
+            "pin_p50": str(p50),
+            "pin_p95": str(p95),
             "expected_row_version": str(scenario.row_version),
         },
         follow_redirects=False,
@@ -238,6 +298,7 @@ async def test_pinned_dist_is_untouched_by_both_migration_helpers(
     assert r.status_code == 303, r.text
     await db_session.refresh(scenario)
     pinned_dist = dict(scenario.primary_loss)
+    assert pinned_dist["sigma"] == pytest.approx(2.5, rel=1e-9)
 
     sigma_mig = _import_migration_module("c4e4d441087c")
     tef_mig = _import_migration_module("b3f8a2d94c1e")
@@ -253,6 +314,14 @@ async def test_pinned_dist_is_untouched_by_both_migration_helpers(
 # ---------------------------------------------------------------------------
 
 
+# T3.a gate fix (meth N-4): as of Task 3, `_loss_stale_wide` / the
+# `data-testid="loss-stale-wide"` banner do not exist ANYWHERE in the
+# codebase (Task 4 adds them) -- so the assertion below currently passes
+# VACUOUSLY: it would pass identically whether pin-suppression works or not,
+# since the banner never renders regardless of provenance. Left AS-IS
+# (Task 4 owns wiring the banner + the per-field suppression it will need to
+# honor); this test becomes genuinely discriminating once Task 4 lands the
+# producer this asserts the absence of.
 @pytest.mark.asyncio
 async def test_view_page_suppresses_stale_banner_for_pinned_wide_field(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
@@ -319,8 +388,129 @@ async def test_pin_with_sigma_above_warn_threshold_succeeds(
 
 
 # ---------------------------------------------------------------------------
+# Case 4b (METH B-1): the pin panel's + expert-form's readout `cap` must
+# read the FIELD's own stored max, never the org-wide capacity_max, when
+# the two diverge.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pin_panel_and_readout_cap_use_field_own_max_not_org_cap(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Executed divergence (METH B-1): a bespoke pl_max=$5,000,000 against a
+    $4,000,000,000 org cap (k=1.0 default) -- pre-fix, both
+    ``_pin_panel_context`` and ``_expert_loss_readout_cfgs`` passed the bare
+    org cap into ``cfg.cap``, so the client-side ceiling read
+    ln(4e9/median)/Z_0_95 (a loose, WRONG ceiling for this field) instead of
+    ln(5e6/median)/Z_0_95 (the ceiling ``validate_fair_distributions``
+    actually enforces against this field's real stored ``max``) -- a false
+    "will be accepted" preview that then 422s on save.
+    """
+    client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "4000000000")  # $4B org cap
+    await _create_lognormal_scenario(client, name="Pin-panel-bespoke-cap", pl_max="5000000")
+    scenario = await _get_scenario(db_session, org_id, "Pin-panel-bespoke-cap")
+    assert scenario.primary_loss["max"] == pytest.approx(5_000_000.0)
+
+    r = await client.get(f"/scenarios/{scenario.id}/edit")
+    assert r.status_code == 200, r.text
+    # Both mounts (the main form's live PL readout AND the pin panel's own
+    # readout) must carry the field's bespoke $5M cap, not the org's $4B
+    # cap -- pre-fix, both would have read "cap": 4000000000.0 instead (the
+    # unset SL field's mount legitimately falls back to the org cap, so a
+    # blanket "4000000000.0 not in r.text" would be a false negative -- this
+    # positive count is the discriminating assertion).
+    assert r.text.count('"cap": 5000000.0') == 2, r.text
+
+
+# ---------------------------------------------------------------------------
+# Case 4c (METH I-2): pin_loss's own max preserved-vs-minted ternary,
+# discriminated for both branches (all prior fixtures had existing ==
+# minted, which never exercised this).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pin_preserves_bespoke_max_byte_equal_when_distinct_from_org_cap(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "4000000000")  # $4B org cap
+    await _create_lognormal_scenario(client, name="Pin-preserve-bespoke-max")
+    scenario = await _get_scenario(db_session, org_id, "Pin-preserve-bespoke-max")
+    # Overwrite the minted max with a bespoke value distinct from the org
+    # cap so "preserved" and "minted" are actually distinguishable.
+    scenario.primary_loss = {**scenario.primary_loss, "max": 5_000_000.0}
+    await db_session.commit()
+    await db_session.refresh(scenario)
+
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/pin",
+        {
+            "field": "primary",
+            "pin_p50": "1000000",
+            "pin_p95": "2000000",  # implied sigma well under the $5M cap's ceiling
+            "expected_row_version": str(scenario.row_version),
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, r.text
+    await db_session.refresh(scenario)
+    assert scenario.primary_loss["max"] == 5_000_000.0  # byte-equal, not approx
+
+
+@pytest.mark.asyncio
+async def test_pin_mints_cap_from_org_revenue_when_max_key_absent(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "4000000000")  # $4B org cap
+    await _create_lognormal_scenario(client, name="Pin-mint-max-absent")
+    scenario = await _get_scenario(db_session, org_id, "Pin-mint-max-absent")
+    # Pop the max key entirely (distinct from "max": None) so the mint
+    # branch (existing_max is None) is exercised, not the preserve branch.
+    dist_without_max = {k: v for k, v in scenario.primary_loss.items() if k != "max"}
+    scenario.primary_loss = dist_without_max
+    await db_session.commit()
+    await db_session.refresh(scenario)
+    assert "max" not in scenario.primary_loss
+
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/pin",
+        {
+            "field": "primary",
+            "pin_p50": "1000000",
+            "pin_p95": "8000000",
+            "expected_row_version": str(scenario.row_version),
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, r.text
+    await db_session.refresh(scenario)
+    assert scenario.primary_loss["max"] == pytest.approx(4_000_000_000.0)
+
+
+# ---------------------------------------------------------------------------
 # Case 5: rejections
 # ---------------------------------------------------------------------------
+
+
+def _assert_rendered_html_error(r: Any, *substrings: str) -> None:
+    """T3.a gate fix (SPEC B-1): a pin/unpin failure must re-render the edit
+    form (rendered HTML with an alert banner), never a bare HTTPException
+    JSON ``{"detail": ...}`` body -- mirrors test_wizard_finalize.py:429-450's
+    "readable flash, rendered HTML / not raw Pydantic JSON" shape. Checks
+    BOTH the response media type (the ground-truth discriminator: Starlette's
+    JSONResponse vs Jinja2Templates' TemplateResponse) and the ABSENCE of the
+    raw-detail marker, then the presence of every expected message substring.
+    """
+    assert r.headers["content-type"].startswith("text/html"), r.headers.get("content-type")
+    assert '"detail":' not in r.text
+    for s in substrings:
+        assert s in r.text, (s, r.text[:2000])
 
 
 @pytest.mark.asyncio
@@ -343,6 +533,7 @@ async def test_pin_rejects_non_positive_p50(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
+    _assert_rendered_html_error(r, "Pin needs finite dollar quantiles with p95 &gt; p50 &gt; 0")
 
 
 @pytest.mark.asyncio
@@ -365,6 +556,7 @@ async def test_pin_rejects_p95_at_or_below_p50(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
+    _assert_rendered_html_error(r, "Pin needs finite dollar quantiles with p95 &gt; p50 &gt; 0")
 
 
 @pytest.mark.asyncio
@@ -387,6 +579,34 @@ async def test_pin_rejects_non_finite_string(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
+    _assert_rendered_html_error(r, "pin_p50: not a number")
+
+
+@pytest.mark.asyncio
+async def test_pin_rejects_non_finite_inf_string(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """SPEC I-3: ``pin_p50="inf"`` PASSES ``float()`` (route-layer parsing
+    never rejects it) and only fails at the SERVICE's own
+    ``math.isfinite(p50)`` gate (loss_pinning.pin_loss) -- must 422 with a
+    rendered flash, never a 500."""
+    client, org_id = authed_analyst
+    await _set_annual_revenue(db_session, org_id, "4000000000")
+    await _create_lognormal_scenario(client, name="Pin-reject-inf")
+    scenario = await _get_scenario(db_session, org_id, "Pin-reject-inf")
+    r = await csrf_post(
+        client,
+        f"/scenarios/{scenario.id}/loss/pin",
+        {
+            "field": "primary",
+            "pin_p50": "inf",
+            "pin_p95": "8000000",
+            "expected_row_version": str(scenario.row_version),
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 422, r.text
+    _assert_rendered_html_error(r, "Pin needs finite dollar quantiles with p95 &gt; p50 &gt; 0")
 
 
 @pytest.mark.asyncio
@@ -447,7 +667,7 @@ async def test_pin_rejects_mixture_field_naming_reestimate(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
-    assert "Re-estimate" in r.text
+    _assert_rendered_html_error(r, "Re-estimate")
 
 
 @pytest.mark.asyncio
@@ -537,7 +757,10 @@ async def test_pin_stale_row_version_conflict(
         },
         follow_redirects=False,
     )
-    assert r.status_code in (409, 422), r.text
+    # ScenarioVersionConflictError subclasses ConflictError -- always 409
+    # (never the 422 fallback the prior looser assertion also allowed).
+    assert r.status_code == 409, r.text
+    _assert_rendered_html_error(r, "Another user updated this scenario")
 
 
 @pytest.mark.asyncio
@@ -569,7 +792,7 @@ async def test_pin_rejects_pert_field(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
-    assert "lognormal loss fields" in r.text
+    _assert_rendered_html_error(r, "lognormal loss fields")
 
 
 @pytest.mark.asyncio
@@ -601,6 +824,8 @@ async def test_pin_rejects_when_implied_sigma_exceeds_d19_ceiling(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
+    assert r.headers["content-type"].startswith("text/html"), r.headers.get("content-type")
+    assert '"detail":' not in r.text
     body = r.text.lower()
     assert "lower the loss estimates" in body
     assert "annual revenue" in body
@@ -636,6 +861,9 @@ async def test_unpin_removes_stamp_keeps_mean_sigma_max_byte_unchanged(
     mean_before = scenario.primary_loss["mean"]
     sigma_before = scenario.primary_loss["sigma"]
     max_before = scenario.primary_loss["max"]
+    # SPEC I-2: snapshot the PINNED (pre-unpin) dict verbatim so the audit
+    # row's ``changes`` can be asserted for CONTENT.
+    prior_dist_expected = copy.deepcopy(scenario.primary_loss)
 
     r = await csrf_post(
         client,
@@ -663,6 +891,8 @@ async def test_unpin_removes_stamp_keeps_mean_sigma_max_byte_unchanged(
         )
     ).scalar_one()
     assert audit_row.changes["field"] == [None, "primary"]
+    # SPEC I-2: prior+new dist dict CONTENTS, not just key presence.
+    assert audit_row.changes["primary_loss"] == [prior_dist_expected, pl]
 
 
 @pytest.mark.asyncio
@@ -680,6 +910,7 @@ async def test_unpin_on_unpinned_field_rejected_422(
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
+    _assert_rendered_html_error(r, "This field is not currently pinned")
 
 
 @pytest.mark.xfail(
@@ -742,3 +973,29 @@ async def test_edit_form_renders_readout_and_pin_panel_with_policy_props(
     assert '"cap": 4000000000.0' in r.text
     # D17-hint side effect: capacity_max now reaches the edit context too.
     assert "capacity" in r.text.lower()
+    # SPEC I-1: case 8 never asserted the pin panel actually rendered --
+    # the panel root's data-testid AND the pin panel's own quantileBasis
+    # ("p50p95", distinct from the main form mount's "p5p95") are both
+    # asserted here.
+    assert 'data-testid="loss-pin-panel-pl"' in r.text
+    assert '"quantileBasis": "p50p95"' in r.text
+    assert '"quantileBasis": "p5p95"' in r.text  # the main-form PL mount
+
+
+@pytest.mark.asyncio
+async def test_create_form_wires_entry_currency_suppression(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """METH I-3: the create form's live readout must not show USD-formatted
+    money cells / cap line / ceiling verdicts against a non-USD entry-
+    currency selection -- asserts the suppression WIRING is present in the
+    rendered create-form GET (the entry_currency select's window-CustomEvent
+    dispatch + the readout mount's listener + the entryCurrencyIsUsd gate),
+    per the T3.a fix in _loss_readout.html / loss_preview.js."""
+    client, _org_id = authed_analyst
+    r = await client.get("/scenarios/new")
+    assert r.status_code == 200, r.text
+    assert 'id="entry_currency"' in r.text
+    assert "entry-currency-changed" in r.text
+    assert "entryCurrencyIsUsd" in r.text
+    assert "onEntryCurrencyChanged" in r.text

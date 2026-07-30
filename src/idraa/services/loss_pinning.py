@@ -176,6 +176,16 @@ async def pin_loss(
     # both top-level fit keys AND superseded_fit simultaneously). Popped
     # keys are never lost either way: the full prior dist dict rides in the
     # audit row's changes.
+    #
+    # T3.a NTH N-3: this is ``setdefault`` (first-wins, never overwrites an
+    # existing ``superseded_fit``), while both migrations
+    # (c4e4d441087c/b3f8a2d94c1e) write ``meta["superseded_fit"] = superseded``
+    # unconditionally (last-wins). The divergence is safe because it is
+    # structurally unreachable in practice: a SECOND pin only ever follows a
+    # first pin/unpin/migration sweep, and none of those writers ever
+    # re-populate top-level FIT_RECORD_KEYS on an already-superseded dist —
+    # ``superseded`` is empty on every re-pin, so this line is a no-op guard
+    # against a case that cannot recur, not a live behavioral choice.
     superseded = {k: meta.pop(k) for k in FIT_RECORD_KEYS if k in meta}
     if superseded:
         meta.setdefault("superseded_fit", superseded)

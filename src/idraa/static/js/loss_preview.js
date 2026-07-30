@@ -894,6 +894,16 @@
       waterlineValue: null,
       isDragging: false,
       _debounceHandle: null,
+      // T3.a gate fix (METH I-3): true unless a LIVE `#entry_currency`
+      // selector exists AND currently reads a non-USD code. The selector
+      // only exists on the CREATE form (form.html) — the edit form and
+      // wizard mounts have no such element, so this stays `true` there by
+      // construction, matching "genuinely USD" for both (Global
+      // Constraints: wizard elicits USD; edit-form entry currency is fixed
+      // at creation). Gates the money cells / cap line / ceiling verdict in
+      // _loss_readout.html; σ is NEVER gated by this (pure log-ratio of the
+      // two typed quantiles, currency-free by construction).
+      entryCurrencyIsUsd: true,
 
       init: function () {
         var c = this.cfg;
@@ -915,6 +925,11 @@
             this.seededFromInit = true;
           }
         }
+        var entryCurrencyEl =
+          typeof document !== "undefined" ? document.getElementById("entry_currency") : null;
+        if (entryCurrencyEl) {
+          this.entryCurrencyIsUsd = entryCurrencyEl.value === "USD";
+        }
         this._recomputeNow();
       },
 
@@ -922,6 +937,12 @@
       onRowEvent: function (detail) {
         if (!detail || detail.fieldset !== this.cfg.fieldKey) return;
         this.bindRow(detail.idx, detail.low, detail.high);
+      },
+
+      // Called by the readout's own @entry-currency-changed.window listener
+      // (form.html's #entry_currency select dispatches this on @change).
+      onEntryCurrencyChanged: function (detail) {
+        this.entryCurrencyIsUsd = !detail || detail.value === "USD";
       },
 
       // Public per Task 2 Interfaces: wizard multi-SME row binding. Sets the

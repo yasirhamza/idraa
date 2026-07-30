@@ -263,7 +263,18 @@
     {% else %}
       <div class="max-w-xs">
         <label for="entry_currency" class="text-meta text-ink-2">Currency for loss-magnitude entry</label>
+        {# T3.a gate fix (METH I-3): the live loss-dispersion readout's
+           dollar-denominated cells/cap-line/ceiling-verdict are hardcoded
+           to a "$" USD reading regardless of what the analyst actually
+           selects here — a SAR (or any non-USD) entry renders as if it
+           were USD, understating the capacity-floor ceiling by ~0.80σ and
+           showing a false "will be rejected" state. Dispatch a window
+           CustomEvent on every change so lossDispersionReadout's mounts
+           (create-form only — the edit form has no selector, see
+           _loss_readout.html's entryCurrencyIsUsd wiring) can suppress the
+           misleading money-denominated pieces while this stays non-USD. #}
         <select id="entry_currency" name="entry_currency"
+                @change="window.dispatchEvent(new CustomEvent('entry-currency-changed', {detail: {value: $event.target.value}}))"
                 class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
           {% for code in selectable_currencies %}
           <option value="{{ code }}" {% if (form.entry_currency if form else 'USD') == code %}selected{% endif %}>{{ code }}</option>
@@ -615,8 +626,11 @@
             {% endwith %}
           {% endif %}
           {% if panel.pinned %}
-            <p class="text-meta text-ink-2 mb-2" data-testid="loss-pinned-chip">
-              Pinned at &sigma;={{ "%.2f" | format(panel.pinned_sigma) if panel.pinned_sigma is not none else "—" }}{% if panel.pinned_at %} &mdash; {{ panel.pinned_at | format_datetime }}{% endif %}
+            {# T3.a NTH N-1/N-2: basis-labeled against the platform default
+               so the analyst can see at a glance how far the pinned spread
+               diverges from it. #}
+            <p class="text-meta text-ink-2 mb-2" data-testid="loss-pinned-chip-{{ field_key }}-form">
+              Pinned spread &sigma;={{ "%.2f" | format(panel.pinned_sigma) if panel.pinned_sigma is not none else "—" }} (platform default {{ "%.2f" | format(panel.sigma_default) }}){% if panel.pinned_at %} &mdash; {{ panel.pinned_at | format_datetime }}{% endif %}
             </p>
             <form method="post" action="/scenarios/{{ scenario.id }}/loss/unpin" class="inline-block">
               {{ csrf_field() }}
