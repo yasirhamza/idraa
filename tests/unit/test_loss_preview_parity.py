@@ -68,7 +68,9 @@ TOL = {
     #   report -- so this comment quotes only the figure re-executed here.)
     "p99Capped": 2e-5,  # worst exec'd 6.27e-6 -> 3.19x headroom (N-1)
     "capBindProb": 1e-2,  # T1.a NTH: worst exec'd 6.893e-3 at sigma=1.3567,
-    #   cap=4e9 (non-binding cap -> Phi(b) ~ 4.8e-13, same fixed-abs-error-
+    #   cap=4e9 (non-binding cap -> capBindProb = 1 - Phi(b) ~ 4.87e-13
+    #   (re-gate B3: it is the COMPLEMENT that is tiny; Phi(b) ~ 1), same
+    #   fixed-abs-error-
     #   through-a-tiny-ratio mechanism as meanCapped/p99Capped above).
     "pertLow": 1e-9,
     "pertMode": 1e-9,
@@ -496,14 +498,15 @@ def test_mean_capped_never_nan_on_overflow_underflow_product(tmp_path: Path) -> 
 
 
 def test_mean_capped_null_on_true_underflow_not_spurious_zero(tmp_path: Path) -> None:
-    """B-I2 (methodology gate finding, PR3 T1.a): when normCdf(b-sigma)
-    underflows to EXACTLY 0 while normCdf(b) > 0 (deep tail; executed
-    2026-07-30: sigma in roughly [9, 27] with cap near the median), the
-    pre-fix code returned meanCapped=0 -- a genuine-looking $0 truncated
-    mean that is actually a float-underflow artifact, not a real answer. A
-    TRUE zero mean only occurs at b-sigma=-Infinity, which is the
-    capClamped degenerate state (asserted separately by
-    test_golden_vector_parity's capClamped checks).
+    """B-I2 (methodology gate finding, PR3 T1.a; rationale corrected at
+    the re-gate, B1): when normCdf(b-sigma) underflows to EXACTLY 0 while
+    normCdf(b) > 0 (re-gate-executed at mu=ln(250k)/cap=300k: sigma in
+    [8.40, 37.34]; mean overflows to Infinity from ~37.35 where the B-I1
+    guard governs), the pre-fix code returned meanCapped=0 -- a
+    genuine-looking $0 truncated mean that is actually a float-underflow
+    artifact. The closed form's true value is ALWAYS > 0 for any cap > 0,
+    so an exact 0 is never a real answer; null says "unrepresentable at
+    this approximation's precision".
 
     Pre-fix repro (executed 2026-07-30 against the file BEFORE this task's
     fix): sigma=9 and sigma=12 at mu=ln(250_000), cap=300_000 both returned
@@ -542,7 +545,9 @@ def test_mean_capped_null_on_true_underflow_not_spurious_zero(tmp_path: Path) ->
 # -- immaterial at u1 ~ 1e-4 but not "exact"; say approximately), trapezoid
 # thereafter, CDF normalized to end at exactly 1. Defensive sibling: a
 # beta < 1 singularity at u=1 is unreachable from capPertFromFit (executed
-# beta 3.33-3.39 across the SIGMAS grid) but cdfGrid is public -- the
+# beta 3.33-4.65 across the SIGMAS grid; re-gate B5 corrected the stale
+# 3.39 upper end -- sigma=0.4's interior mode gives beta=4.6548) but
+# cdfGrid is public -- the
 # implementation mirrors the closed-form last cell when beta < 1.
 class GoldenCase(NamedTuple):
     mu: float

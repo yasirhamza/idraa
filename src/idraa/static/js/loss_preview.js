@@ -9,7 +9,14 @@
  * If this file and fair_cam ever disagree, fair_cam wins and this file is
  * the bug (CLAUDE.md "Never re-derive FAIR calculations in the app
  * layer" — this module is the one narrow, test-gated exception, scoped to
- * a non-committal live preview).
+ * a non-committal live preview). Two DOCUMENTED envelope notes, not
+ * disagreements: (1) fitLognormal returns nulls on inverted/equal
+ * quantile pairs where fair_cam raises ValueError (keystroke-transient
+ * inputs must not throw); (2) meanCapped degrades one-sidedly at extreme
+ * sigma via A&S 7.1.26's absolute error (re-gate-executed vs fair_cam at
+ * mu=ln(250k)/cap=300k: <1e-3% at authored sigma <= 3.5, ~0.43% at
+ * sigma=6.3, ~15% at sigma=8.2, null >= 8.4 via the underflow guard) —
+ * keystroke-transient territory only.
  *
  * Citations for the approximations below:
  *   - erf(x): Abramowitz & Stegun, "Handbook of Mathematical Functions"
@@ -247,15 +254,18 @@
       capBindProb = 1 - phiB;
       if (phiB > 0) {
         var phiBMinusSigma = normCdf(b - sigma);
-        // B-I2 (methodology gate, PR3 T1.a): a TRUE zero mean only occurs
-        // at b-sigma = -Infinity, which is the degenerate-cap state
-        // capClamped already flags above. Any OTHER exact-zero here is
-        // float underflow of Phi(b-sigma) in the deep tail (executed
-        // 2026-07-30: sigma in roughly [9, 27] with cap near the median
-        // underflows Phi(b-sigma) to exactly 0 while Phi(b) stays > 0) --
-        // reporting that as a real $0 truncated mean would render a false
-        // number instead of admitting the estimate isn't representable at
-        // this approximation's precision.
+        // B-I2 (methodology gate, PR3 T1.a; rationale corrected at the
+        // re-gate, B1): the closed form's true value is ALWAYS > 0 for any
+        // cap > 0 (E[X | X <= cap] > 0 with mu/sigma/cap finite), so an
+        // exact 0 here is ALWAYS float underflow of Phi(b-sigma) beyond
+        // A&S 7.1.26's resolution -- never a real answer. (capClamped is
+        // cap <= median, a DIFFERENT state with real nonzero means, as the
+        // goldens assert.) Re-gate-executed at mu=ln(250k)/cap=300k: the
+        // finite-mean spurious-zero band is sigma in [8.40, 37.34]; from
+        // sigma ~ 37.35 the mean overflows and the B-I1 NaN guard governs.
+        // Reporting the underflow as a real $0 truncated mean would render
+        // a false number instead of admitting the estimate isn't
+        // representable at this approximation's precision.
         if (phiBMinusSigma === 0) {
           meanCapped = null;
         } else {
