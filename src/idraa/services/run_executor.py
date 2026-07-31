@@ -1905,6 +1905,34 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
         )
         await session.commit()
 
+        # #131: capture run identity into plain locals BEFORE the try — the
+        # except branch rolls back FIRST now, which expires the `run` ORM
+        # instance; reading run.* there would trigger a lazy refresh (async ->
+        # MissingGreenlet). These never change during a run's lifetime.
+        run_id_local = run.id
+        org_id_local = run.organization_id
+        created_by_local = run.created_by
+
+        # #131: audit rows that RIDE the terminal guarded-UPDATE transaction
+        # (attribution degradations — the #272 "audit + status + results land
+        # atomically" design). The except branch's leading rollback discards
+        # their flushed state, so they are captured here and RE-LOGGED after a
+        # matched FAILED flip. Sites that self-commit (run.start, the
+        # stale-per-scenario-ids fail path) must NOT use this wrapper — they
+        # are already durable and re-logging would duplicate them.
+        _terminal_audit_rows: list[tuple[str, dict[str, Any]]] = []
+
+        async def _log_terminal_audit(action: str, changes: dict[str, Any]) -> None:
+            _terminal_audit_rows.append((action, changes))
+            await AuditWriter(session).log(
+                organization_id=org_id_local,
+                user_id=created_by_local,
+                action=action,
+                entity_type="risk_analysis_run",
+                entity_id=run_id_local,
+                changes=changes,
+            )
+
         try:
             if not await _check_cancelled_or_continue(session, run_id):
                 return
@@ -2258,19 +2286,13 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # Same no-separate-commit pattern as the AGGREGATE block — rides the
                 # terminal guarded-UPDATE transaction below.
                 if any(_single_degradations.values()):
-                    _attr_writer = AuditWriter(session)
                     for _action_key, _action in (
                         ("shapley_skipped", "run.shapley_skipped"),
                         ("loo_skipped", "run.loo_skipped"),
                     ):
                         for _sid, _reason in _single_degradations[_action_key]:
-                            await _attr_writer.log(
-                                organization_id=run.organization_id,
-                                user_id=run.created_by,
-                                action=_action,
-                                entity_type="risk_analysis_run",
-                                entity_id=run.id,
-                                changes={"scenario_id": [None, _sid], "reason": [None, _reason]},
+                            await _log_terminal_audit(
+                                _action, {"scenario_id": [None, _sid], "reason": [None, _reason]}
                             )
                     for _action_key, _action, _basis in (
                         ("shapley_dropped", "run.non_finite_shapley", None),
@@ -2282,14 +2304,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                             _changes: dict[str, Any] = {"scenario_id": [None, _sid]}
                             if _basis is not None:
                                 _changes["basis"] = [None, _basis]
-                            await _attr_writer.log(
-                                organization_id=run.organization_id,
-                                user_id=run.created_by,
-                                action=_action,
-                                entity_type="risk_analysis_run",
-                                entity_id=run.id,
-                                changes=_changes,
-                            )
+                            await _log_terminal_audit(_action, _changes)
                 # Inject "if removed" into the SINGLE payload's flat adjustments
                 # (absent map -> no key -> "—", the absent≠0.0 convention).
                 for _basis_key, _adj_key in (
@@ -2411,46 +2426,24 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # Audit degraded scenarios. NO separate commit (B-Sec-N1): these log
                 # calls ride the terminal guarded-UPDATE transaction below so audit +
                 # status + results land atomically (the #272 design intent).
-                _shapley_writer = AuditWriter(session)
                 for _sid, _reason in shapley_skipped:  # {"over_cap","over_budget","error"}
-                    await _shapley_writer.log(
-                        organization_id=run.organization_id,
-                        user_id=run.created_by,
-                        action="run.shapley_skipped",
-                        entity_type="risk_analysis_run",
-                        entity_id=run.id,
-                        changes={"scenario_id": [None, _sid], "reason": [None, _reason]},
+                    await _log_terminal_audit(
+                        "run.shapley_skipped",
+                        {"scenario_id": [None, _sid], "reason": [None, _reason]},
                     )
                 for _sid in shapley_dropped:  # non-finite (post-compute)
-                    await _shapley_writer.log(
-                        organization_id=run.organization_id,
-                        user_id=run.created_by,
-                        action="run.non_finite_shapley",
-                        entity_type="risk_analysis_run",
-                        entity_id=run.id,
-                        changes={"scenario_id": [None, _sid]},
+                    await _log_terminal_audit(
+                        "run.non_finite_shapley", {"scenario_id": [None, _sid]}
                     )
                 # LOO-Meth-2: leave-one-out degradations get the same first-class
                 # audit as Shapley's — a "—" cell (or a partial aggregate sum) must
                 # have a durable record of why, not just a log line.
                 for _sid, _reason in loo_skipped:  # {"over_budget","error"}
-                    await _shapley_writer.log(
-                        organization_id=run.organization_id,
-                        user_id=run.created_by,
-                        action="run.loo_skipped",
-                        entity_type="risk_analysis_run",
-                        entity_id=run.id,
-                        changes={"scenario_id": [None, _sid], "reason": [None, _reason]},
+                    await _log_terminal_audit(
+                        "run.loo_skipped", {"scenario_id": [None, _sid], "reason": [None, _reason]}
                     )
                 for _sid in loo_dropped:  # non-finite (post-compute)
-                    await _shapley_writer.log(
-                        organization_id=run.organization_id,
-                        user_id=run.created_by,
-                        action="run.non_finite_loo",
-                        entity_type="risk_analysis_run",
-                        entity_id=run.id,
-                        changes={"scenario_id": [None, _sid]},
-                    )
+                    await _log_terminal_audit("run.non_finite_loo", {"scenario_id": [None, _sid]})
                 # Mean-basis passes share the typical passes' structural skip sets
                 # (cost/caps depend only on control counts), so only basis-specific
                 # NEW degradations get extra rows — tagged with the basis so a
@@ -2468,13 +2461,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     ("run.non_finite_loo", _mean_only_loo),
                 ):
                     for _sid in sorted(_sids):
-                        await _shapley_writer.log(
-                            organization_id=run.organization_id,
-                            user_id=run.created_by,
-                            action=_action,
-                            entity_type="risk_analysis_run",
-                            entity_id=run.id,
-                            changes={"scenario_id": [None, _sid], "basis": [None, "mean"]},
+                        await _log_terminal_audit(
+                            _action, {"scenario_id": [None, _sid], "basis": [None, "mean"]}
                         )
 
                 # #419 weight-robustness (AGGREGATE — Arch-I2): run the ensemble AFTER
@@ -2519,12 +2507,10 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # results_payload in place, popping the arrays into sample_arrays, so
             # we never hold two copies of the (up to 100k-iter AGGREGATE) heavy
             # arrays near the 2GB VM ceiling. The stripped summary stays on the
-            # run; the arrays go to run_samples. Capture run identity into locals
-            # BEFORE the guarded UPDATE — the in-memory `run` ORM object may be
-            # stale/expired after the write, so do not read off it below.
-            run_id_local = run.id
-            org_id_local = run.organization_id
-            created_by_local = run.created_by
+            # run; the arrays go to run_samples. Run identity locals
+            # (run_id_local / org_id_local / created_by_local) were captured
+            # before the try (#131) — do not read off the `run` ORM object
+            # below.
             # T2 (#351): _snapshot_local was already built as a pure local above
             # (BEFORE the engine call, after the 2nd cancel-check) — no ORM read needed.
             summary_payload, sample_arrays = split_simulation_payload(results_payload, copy=False)
@@ -2624,6 +2610,17 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             await session.commit()
 
         except Exception as exc:
+            # #131: ROLLBACK FIRST. The exception may have fired BETWEEN the
+            # COMPLETED flip UPDATE and its commit (the complete-audit flush,
+            # or the commit itself) — the guarded FAILED UPDATE below would
+            # then run inside the same uncommitted transaction, see its own
+            # COMPLETED write, match 0 rows, and misdiagnose "terminal state
+            # set by another actor", stranding the run RUNNING until the
+            # orphan reaper. Rolling back first makes the guarded UPDATE see
+            # the COMMITTED state. Cost: any flushed attribution audit rows
+            # are discarded — re-logged below from _terminal_audit_rows on
+            # the matched-flip path (self-committing sites are unaffected).
+            await session.rollback()
             # Atomic guarded FAILED flip (issue #272). Symmetric with the
             # COMPLETED branch: if a CANCELLED (or COMPLETED) was committed by
             # another session before this exception fired, the guarded UPDATE
@@ -2657,23 +2654,35 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     "(terminal state set by another actor)",
                     run_id,
                 )
-                # A terminal state was set by another actor — roll back the
-                # pending transaction: this discards any flushed attribution
-                # audit rows (run.shapley_skipped / run.non_finite_shapley /
-                # run.loo_skipped / run.non_finite_loo, written above on both
-                # the AGGREGATE and SINGLE paths) as well as the no-match UPDATE
-                # — both must be discarded atomically so audit rows never land
-                # without the matching terminal flip. Pre-attribution-flush
-                # exceptions have no flushed rows; rollback is a no-op there.
+                # #131: after the leading rollback above, this diagnosis is
+                # now TRUSTWORTHY — the guarded UPDATE ran against committed
+                # state, so rowcount==0 genuinely means another actor
+                # terminalized the run (cancel TOCTOU, reaper). Only the
+                # no-match UPDATE itself is pending; discard it. Attribution
+                # audit rows die with the other actor's terminal state — a
+                # row that landed without OUR terminal flip would be orphaned.
                 await session.rollback()
                 logger.exception("Run %s raised after terminalization", run_id)
                 return
+            # #131: re-log the attribution-degradation audit rows the leading
+            # rollback discarded — a FAILED run keeps its attribution audit
+            # trail, committed atomically WITH the FAILED flip (the #272
+            # atomicity intent, now on the failure path too).
+            for _action, _changes in _terminal_audit_rows:
+                await AuditWriter(session).log(
+                    organization_id=org_id_local,
+                    user_id=created_by_local,
+                    action=_action,
+                    entity_type="risk_analysis_run",
+                    entity_id=run_id_local,
+                    changes=_changes,
+                )
             await AuditWriter(session).log(
-                organization_id=run.organization_id,
-                user_id=run.created_by,
+                organization_id=org_id_local,
+                user_id=created_by_local,
                 action="risk_analysis_run.fail",
                 entity_type="risk_analysis_run",
-                entity_id=run.id,
+                entity_id=run_id_local,
                 changes={
                     "status": [RunStatus.RUNNING.value, RunStatus.FAILED.value],
                     "error_class": type(exc).__name__,
