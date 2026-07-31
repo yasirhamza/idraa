@@ -56,10 +56,14 @@ def client_ip(request: Request) -> str | None:
     Handlers that persist the IP should tolerate None — the audit / session
     rows accept nullable ip_address for this reason.
 
-    NOT proxy-aware. Returns the DIRECT peer IP; behind a reverse proxy
-    this is the proxy, not the user. Honoring X-Forwarded-For / Forwarded
-    requires a trusted-proxy allowlist gated in Settings — do NOT let this
-    helper silently read those headers without a trust boundary.
+    NOT proxy-aware ITSELF — returns ``request.client.host`` verbatim. What
+    that value is depends on uvicorn's ``FORWARDED_ALLOW_IPS``: with a
+    non-``*`` match, ProxyHeadersMiddleware has already rewritten it by
+    walking X-Forwarded-For right-to-left past trusted hops (usually the
+    real client); with no trusted-proxy config it is the raw socket peer
+    (behind an edge, the proxy — not the user); ``*`` (forbidden, README)
+    would make it the attacker-chosen leftmost XFF entry. Do NOT add header
+    parsing here — the trust boundary lives in ``_trusted_client_ip``.
 
     Not a FastAPI dependency — a simple free function. Handlers call it as
     ``client_ip(request)``, not ``Depends(client_ip)``. Factoring out of
@@ -124,14 +128,25 @@ def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
 
 
 def audit_client_ip(request: Request) -> str | None:
-    """Client IP for AUDIT rows: trusted-strategy IP, else the direct peer.
+    """Client IP for AUDIT rows: trusted-strategy IP, else ``request.client``.
 
     idraa#110: audit differs from throttling in its failure mode. A throttle
     keyed on an untrusted IP is an attacker-controlled bypass, so
     ``resolve_throttle_source`` returns ``None`` without a trust strategy. An
-    audit row is forensic best-effort: recording the direct peer (the edge hop
-    behind a proxy, the real client in dev/tests) beats recording nothing.
-    Records the RAW trusted IP — not the namespaced/normalized throttle key.
+    audit row is forensic best-effort: a fallback value beats recording
+    nothing. Records the RAW trusted IP — not the namespaced/normalized
+    throttle key. An empty-string trusted header value (falsy) also falls
+    back — "" is not a useful forensic datum.
+
+    What the fallback actually is (do not oversimplify to "the direct peer"):
+    ``request.client`` as resolved by uvicorn. With a non-``*``
+    ``FORWARDED_ALLOW_IPS`` match, uvicorn's ProxyHeadersMiddleware rewrites
+    it by walking X-Forwarded-For RIGHT-to-left past trusted hops — i.e.
+    usually the real client, not the forgeable leftmost entry. With no
+    trusted-proxy config it is the raw socket peer (the edge hop behind a
+    proxy, the real client in dev/tests). Only ``FORWARDED_ALLOW_IPS=*``
+    (explicitly forbidden in README) would make it the attacker-chosen
+    leftmost XFF entry.
     """
     return _trusted_client_ip(request) or client_ip(request)
 

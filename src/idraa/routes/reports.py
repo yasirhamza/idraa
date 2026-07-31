@@ -41,7 +41,7 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.user import User
 from idraa.repositories.run_repo import RunRepo
-from idraa.routes.deps import audit_client_ip, client_ip, get_db, require_step_up, require_user
+from idraa.routes.deps import audit_client_ip, get_db, require_step_up, require_user
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.org import require_sole_org
 from idraa.services.pdf_report import render_executive_pdf
@@ -182,7 +182,7 @@ async def download_run_pdf(
         )
         raise HTTPException(status_code=500)
 
-    client = client_ip(request)
+    client = audit_client_ip(request)
 
     # L4 (riskflow#564): throttle + budget-count the heavy PDF export BEFORE
     # spending CPU, sharing the sliding-window budget with the CSV exports. The
@@ -304,7 +304,7 @@ async def download_verification_workbook(
         )
         raise HTTPException(status_code=500)
 
-    client = client_ip(request)
+    client = audit_client_ip(request)
 
     # L4 (riskflow#564): throttle + budget-count the heavy xlsx export BEFORE the
     # CPU build, sharing the sliding-window budget with the CSV exports (the

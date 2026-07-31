@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +46,10 @@ class _Snapshot:
 
 
 _cache: _Snapshot | None = None  # None = not loaded -> env fallback
+# True once a warm/load has COMPLETED successfully in this process, even if it
+# found no SecuritySettings row. Distinguishes "empty" (normal: no row saved
+# yet) from "cold" (never warmed / warm failed) in cache_state() — idraa#107.
+_warmed: bool = False
 
 _CAT_ATTR = {
     StepUpCategory.EXPORTS: "exports",
@@ -55,22 +60,32 @@ _CAT_ATTR = {
 
 
 def invalidate() -> None:
-    global _cache
+    global _cache, _warmed
     _cache = None
+    _warmed = False
 
 
-def cache_state() -> str:
-    """``"warm"`` when the snapshot cache is loaded, else ``"cold"``.
+def cache_state() -> Literal["warm", "empty", "cold"]:
+    """Tri-state warm signal for /healthz (idraa#107(2)).
 
-    idraa#107(2): operator-visible warm-state signal. A cold cache means
-    effective_* helpers are on env fallback — notably a persisted
-    ``mfa_policy=required`` override would be relaxed to the env default
-    until the next settings write or boot re-warm. Cold is NORMAL pre-setup
-    (no org yet); post-setup cold after boot indicates the boot warm failed
-    (see the warm_cache exception log). Read-only on module state — safe for
-    /healthz, which must stay DB-free during the boot-write window.
+    - ``"warm"``  — snapshot loaded; persisted overrides are in effect.
+    - ``"empty"`` — a warm/load completed successfully but no
+      ``SecuritySettings`` row exists. This is the NORMAL state until an
+      admin first saves security settings; env defaults apply by design.
+    - ``"cold"``  — never warmed (or the boot warm FAILED — see the
+      ``warm_cache`` exception log). Env fallback is in effect; a persisted
+      ``mfa_policy=required`` override would be silently relaxed until the
+      next settings write or restart. Post-boot ``cold`` is the actionable
+      operator signal this field exists for.
+
+    A two-state warm/cold signal would report "cold" forever on a healthy
+    install that never wrote a settings row, training operators to ignore
+    the field. Read-only on module state — safe for /healthz, which must
+    stay DB-free during the boot-write window.
     """
-    return "warm" if _cache is not None else "cold"
+    if _cache is not None:
+        return "warm"
+    return "empty" if _warmed else "cold"
 
 
 async def load_security_settings(db: AsyncSession, org_id: uuid.UUID) -> None:
@@ -98,11 +113,15 @@ async def warm_cache(settings: Settings) -> None:
     from idraa.db import get_session
     from idraa.services.org import get_sole_org  # existing helper (app.py lifespan uses it)
 
+    global _warmed
     try:
         async with get_session() as db:
             org = await get_sole_org(db)
             if org is not None:
                 await load_security_settings(db, org.id)
+        # Mark the warm as completed even when no org/row exists yet — that is
+        # the normal "empty" state, not a failure (cache_state(), idraa#107).
+        _warmed = True
     except Exception:
         logger.exception(
             "security_settings cache warm FAILED; env defaults in effect (MFA policy "

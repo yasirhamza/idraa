@@ -62,5 +62,9 @@ def export_bundle_response(
     return Response(
         content=payload.encode("utf-8"),
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            # idraa#110: bulk-egress no-store parity (csv_response / PDF / #109).
+            "Cache-Control": "private, no-store",
+        },
     )

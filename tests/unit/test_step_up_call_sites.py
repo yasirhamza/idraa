@@ -1,16 +1,17 @@
 import pathlib
 import re
 
-# 36 refactored route WIRINGS after #107 (routes/settings.py's POST
+# 37 refactored route WIRINGS after #107 (routes/settings.py's POST
 # /settings/security is the 33rd; GET /runs/{run_id}/samples.csv.gz (#109)
-# is the 34th; #107 gated the two pre-category exports — GET
-# /scenarios/{id}/export is the 35th and GET /runs/{id}/control-matrix.csv
-# the 36th). Count only `Depends(require_step_up(` call sites and EXCLUDE
-# deps.py (which holds the `def require_step_up(` definition AND a
-# docstring example `Depends(require_step_up(...))` — neither is a
-# wiring). This tripwire fails loudly if an auth decorator is silently
-# dropped.
-_EXPECTED_STEP_UP_WIRINGS = 36
+# is the 34th; #107 gated the three pre-category exports — GET
+# /scenarios/{id}/export the 35th, GET /runs/{id}/control-matrix.csv the
+# 36th, and GET /library/entries/{id}/export the 37th, the last surfaced
+# by the #107 review pass). Count only `Depends(require_step_up(` call
+# sites and EXCLUDE deps.py (which holds the `def require_step_up(`
+# definition AND a docstring example `Depends(require_step_up(...))` —
+# neither is a wiring). This tripwire fails loudly if an auth decorator
+# is silently dropped.
+_EXPECTED_STEP_UP_WIRINGS = 37
 
 # Built dynamically (not a literal) so this guard itself never contains the
 # retired token — a raw repo-wide grep for it (the feature's final acceptance

@@ -873,6 +873,7 @@ async def scenarios_export(
 )
 async def scenario_export_one(
     scenario_id: uuid.UUID,
+    request: Request,
     format: str = "csv",
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),  # B3
@@ -881,12 +882,25 @@ async def scenario_export_one(
 
     Cross-org IDs return 404 (NOT 403) so we don't leak existence of scenarios
     owned by other orgs (mirrors view_scenario's B9/B10 precedent).
+
+    idraa#107/#110 review: audited like the bulk sibling so per-id exports
+    consume the export budget (``log_bulk_export`` IS the rate limiter).
     """
     from idraa.services.scenario_export import export_csv_response, export_json_response
 
     scenario = await db.get(Scenario, scenario_id)
     if scenario is None or scenario.organization_id != user.organization_id:
         raise HTTPException(status_code=404, detail="Scenario not found")
+    await log_bulk_export(
+        db,
+        organization_id=user.organization_id,
+        entity_type="scenario",
+        fmt=format if format == "json" else "csv",
+        count=1,
+        user_id=user.id,
+        ip_address=audit_client_ip(request),
+        filters={"scenario_id": str(scenario_id)},
+    )
     if format == "json":
         return export_json_response([scenario], filename=f"scenario-{scenario_id}.json")
     return export_csv_response([scenario], filename=f"scenario-{scenario_id}.csv")

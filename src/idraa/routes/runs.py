@@ -233,6 +233,7 @@ def _emit_v2_snapshot_read_log(
 )
 async def get_aggregate_matrix_csv(
     run_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ) -> Response:
@@ -366,6 +367,18 @@ async def get_aggregate_matrix_csv(
             "Per-control attribution unavailable for this run (predates Shapley attribution or exceeded attribution limits)."
         )
 
+    # idraa#107/#110 review: budget-counted like the PDF/xlsx report exports
+    # ({"kind": ...} filter convention) — log_bulk_export IS the rate limiter.
+    await log_bulk_export(
+        db,
+        organization_id=user.organization_id,
+        entity_type="risk_analysis_run",
+        fmt="csv",
+        count=1,
+        user_id=user.id,
+        ip_address=audit_client_ip(request),
+        filters={"kind": "control_matrix", "run_id": str(run_id)},
+    )
     return csv_response(
         filename=f"run-{run_id}-control-matrix.csv",
         header=header,

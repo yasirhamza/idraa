@@ -80,18 +80,14 @@ async def test_scenario_export_audit_records_status_filter(
     assert filters is not None and filters[1] == {"status": "active"}
 
 
-@pytest.mark.asyncio
-async def test_single_entity_export_writes_no_bulk_audit_row(
-    admin_client: AsyncClient,
-    db_session: AsyncSession,
-    seed_library_entry: object,
-) -> None:
-    """Per-entry exports are NOT bulk egress — no bulk audit row (issue #304
-    scopes the audit to bulk endpoints; single-entity reads mirror the UI)."""
-    r = await admin_client.get(f"/library/entries/{seed_library_entry.id}/export")  # type: ignore[attr-defined]
-    assert r.status_code == 200
-    rows = await _audit_rows(db_session, "library_bundle.export")
-    assert rows == []
+# REVERSED (idraa#107/#110 review, 2026-07-31): #304 scoped audit to bulk
+# endpoints on the theory that single-entity exports "mirror the UI". The
+# #107 review showed that leaves a budget bypass: enumerating ids pulls the
+# whole catalog one entry at a time with zero *.export rows and zero
+# consumption of the export rate limit (log_bulk_export IS the limiter).
+# Single-item exports are now audited with count=1 + an id filter — pinned in
+# tests/integration/test_export_hardening.py (library entry, scenario) and
+# test_aggregate_matrix_csv.py (control matrix).
 
 
 @pytest.mark.asyncio
