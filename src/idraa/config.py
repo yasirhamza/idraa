@@ -30,6 +30,23 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./idraa.db",
         description="SQLAlchemy DSN. Postgres in prod; SQLite in dev.",
     )
+    sqlite_busy_timeout_ms: int = Field(
+        default=30_000,
+        ge=0,
+        le=60_000,
+        description=(
+            "PRAGMA busy_timeout for every SQLite connection (idraa#72 fix 3). "
+            "The old hardcoded 5s turned any longer writer hold (retention "
+            "VACUUM, long seed transactions) into instant 'database is locked' "
+            "500s for concurrent writes; 30s rides out realistic holds. "
+            "0 means FAIL IMMEDIATELY on a locked writer (SQLite semantics), "
+            "NOT wait-forever — it reinstates a harsher version of the bug. "
+            "Capped at 60s: past the edge proxy's request deadline a blocked "
+            "request becomes a proxy timeout with no error id — the exact "
+            "un-diagnosable shape #72 exists to eliminate. Ignored on "
+            "non-SQLite backends."
+        ),
+    )
     session_secret: str = Field(
         default=_DEFAULT_SECRET,
         min_length=16,

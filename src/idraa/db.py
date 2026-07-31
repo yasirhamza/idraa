@@ -107,7 +107,10 @@ def _install_sqlite_pragmas(engine: AsyncEngine) -> None:
         # platform's scheduled volume snapshots; litestream WAL-shipping is
         # the upgrade path for a tighter RPO.
         cur.execute("PRAGMA synchronous=FULL")
-        cur.execute("PRAGMA busy_timeout=5000")
+        # Settings-driven (idraa#72 fix 3): read at connect time so tests'
+        # reset_for_tests() is honored. The value is int-validated by pydantic
+        # (ge/le bounds) — safe to interpolate.
+        cur.execute(f"PRAGMA busy_timeout={get_settings().sqlite_busy_timeout_ms}")
         cur.close()
 
 

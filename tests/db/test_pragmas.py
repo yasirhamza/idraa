@@ -24,3 +24,27 @@ async def test_synchronous_full_durability(db_session):
     """
     sync = (await db_session.execute(text("PRAGMA synchronous"))).scalar()
     assert int(sync) == 2  # FULL
+
+
+@pytest.mark.asyncio
+async def test_busy_timeout_follows_settings(db_session):
+    """idraa#72 (fix 3): busy_timeout is settings-driven, default 30s.
+
+    The 5s hardcoded timeout meant any writer hold >5s (retention VACUUM,
+    long seed transactions) turned concurrent writes into instant
+    "database is locked" 500s. 30s rides out realistic holds; the value is
+    an env knob (SQLITE_BUSY_TIMEOUT_MS) per the no-hardcoded-deploy-values
+    convention.
+    """
+    from idraa.config import Settings, get_settings
+
+    # Live contract: the connection's pragma follows the effective settings —
+    # whatever they are (an operator SQLITE_BUSY_TIMEOUT_MS override included).
+    bt = (await db_session.execute(text("PRAGMA busy_timeout"))).scalar()
+    assert int(bt) == get_settings().sqlite_busy_timeout_ms
+
+    # Anti-drift pin on the DEFAULT via the class field — the one place no
+    # settings source (env var OR .env file) can touch (review I3 round 2:
+    # _env_file=None only disables the dotenv source; os.environ still wins).
+    # Same pattern as test_config_environment_guard's quantile-budget pin.
+    assert Settings.model_fields["sqlite_busy_timeout_ms"].default == 30_000
