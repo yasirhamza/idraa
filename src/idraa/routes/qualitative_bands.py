@@ -25,15 +25,18 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.errors import NotFoundError, QualitativeBandVersionConflictError, ValidationError
 from idraa.models.enums import StepUpCategory, UserRole
+from idraa.models.qualitative_mapping import QualitativeMappingOrgBand
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.flash import build_flash
 from idraa.services.qualitative_bands import QualitativeBandService
+from idraa.utils.money import sanitize_money_str
 
 router = APIRouter(tags=["qualitative-bands"])
 
@@ -44,6 +47,23 @@ KIND_OPTIONS: list[tuple[str, str]] = [
 
 
 # ---- read paths ------------------------------------------------------
+
+
+def _band_number(value: str, field: str, *, money: bool) -> float:
+    """Parse a band-bound form field to float.
+
+    MAGNITUDE bands render as Excel-like money inputs (form_field's dynamic
+    input_type — review B6), so their values arrive comma-grouped;
+    benign-sanitize before float. FREQUENCY bands are rates: money=False
+    keeps strict coercion (round-2 review: sanitizing a rate launders a
+    European "0,5" into 5.0). Non-numeric leftovers 422 loudly either way.
+    """
+    try:
+        return float(sanitize_money_str(value) if money else value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{field}: not a number (got {value!r})"
+        ) from exc
 
 
 @router.get("/qualitative-bands", response_class=HTMLResponse)
@@ -121,9 +141,9 @@ async def create_band(
     request: Request,
     kind: str = Form(...),
     label: str = Form(...),
-    low: float = Form(...),
-    mode: float = Form(...),
-    high: float = Form(...),
+    low: str = Form(...),
+    mode: str = Form(...),
+    high: str = Form(...),
     reason: str = Form(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ADMIN)),
@@ -134,9 +154,9 @@ async def create_band(
             organization_id=user.organization_id,
             kind=kind,
             label=label,
-            low=low,
-            mode=mode,
-            high=high,
+            low=_band_number(low, "low", money=(kind == "magnitude")),
+            mode=_band_number(mode, "mode", money=(kind == "magnitude")),
+            high=_band_number(high, "high", money=(kind == "magnitude")),
             reason=reason,
             user=user,
             ip_address=client_ip(request),
@@ -207,22 +227,37 @@ async def edit_band_form(
 async def update_band(
     request: Request,
     band_id: uuid.UUID,
-    low: float = Form(...),
-    mode: float = Form(...),
-    high: float = Form(...),
+    low: str = Form(...),
+    mode: str = Form(...),
+    high: str = Form(...),
     reason: str = Form(...),
     expected_row_version: int = Form(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> Response:
     svc = QualitativeBandService(db)
+    # The edit form posts no kind — read it off the stored row to choose the
+    # sanitize strictness (money for magnitude bands, strict for frequency).
+    # ORG-SCOPED (round-3 review): an unscoped PK read here made parse
+    # strictness — and thus 404-vs-422 — depend on another org's row kind, a
+    # cross-tenant existence oracle the moment multi-tenancy lands. Unknown /
+    # cross-org ids fall through strict; the service still 404s them.
+    _band_row = (
+        await db.execute(
+            select(QualitativeMappingOrgBand).where(
+                QualitativeMappingOrgBand.id == band_id,
+                QualitativeMappingOrgBand.organization_id == user.organization_id,
+            )
+        )
+    ).scalar_one_or_none()
+    _is_money = _band_row is not None and _band_row.kind == "magnitude"
     try:
         await svc.update_org_band(
             organization_id=user.organization_id,
             band_id=band_id,
-            low=low,
-            mode=mode,
-            high=high,
+            low=_band_number(low, "low", money=_is_money),
+            mode=_band_number(mode, "mode", money=_is_money),
+            high=_band_number(high, "high", money=_is_money),
             reason=reason,
             expected_row_version=expected_row_version,
             user=user,

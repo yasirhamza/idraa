@@ -74,6 +74,7 @@ from idraa.services.calibration import (
     revenue_tier_from_annual_revenue,
 )
 from idraa.services.industry_mapping import V3_TO_FAIR_CAM_INDUSTRY
+from idraa.utils.money import sanitize_money_str
 
 __all__ = [
     "ASSET_CLASS_CHOICES",
@@ -353,6 +354,23 @@ def flatten_validation_errors(exc: PydanticValidationError) -> list[str]:
     return out
 
 
+_MONEY_PREFIXES = frozenset({"pl", "sl"})
+
+
+def _dist_float(raw_value: object, prefix: str) -> float:
+    """Coerce a distribution form value; benign money-sanitize LOSS prefixes only.
+
+    Round-2 review: applying the money sanitize to TEF/vuln laundered a
+    European "0,5" TEF into 5.0 — a 10x frequency error on an UNBOUNDED FAIR
+    node (vuln is caught by the probability bound; TEF is not). Rates keep
+    strict float coercion: "0,5" 422s exactly as on main.
+    """
+    s = str(raw_value)
+    if prefix in _MONEY_PREFIXES:
+        s = sanitize_money_str(s)
+    return float(s)
+
+
 def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     """Build a PERT distribution dict from ``{prefix}_low/_mode/_high`` form keys.
 
@@ -361,9 +379,9 @@ def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     """
     return {
         "distribution": "PERT",
-        "low": float(raw[f"{prefix}_low"]),
-        "mode": float(raw[f"{prefix}_mode"]),
-        "high": float(raw[f"{prefix}_high"]),
+        "low": _dist_float(raw[f"{prefix}_low"], prefix),
+        "mode": _dist_float(raw[f"{prefix}_mode"], prefix),
+        "high": _dist_float(raw[f"{prefix}_high"], prefix),
     }
 
 
@@ -399,8 +417,8 @@ def dist_from_raw(
     """
     kind = (raw.get(f"{prefix}_dist") or "pert").strip().lower()
     if kind == "lognormal":
-        low = float(raw[f"{prefix}_low"])
-        high = float(raw[f"{prefix}_high"])
+        low = _dist_float(raw[f"{prefix}_low"], prefix)
+        high = _dist_float(raw[f"{prefix}_high"], prefix)
         dist: dict[str, Any] = {"distribution": "lognormal", **lognormal_from_quantiles(low, high)}
         if prefix == "pl":
             resolved_max = _resolve_capacity_max(raw, prefix, capacity_max)
@@ -604,7 +622,8 @@ def _resolve_capacity_max(
     if not raw_val:
         return capacity_max
     try:
-        typed = float(raw_val)
+        # Money field: benign-sanitize the comma-grouped entry (review B4).
+        typed = float(sanitize_money_str(raw_val))
     except ValueError as exc:
         raise ScenarioFormValidationError(f"{prefix}_max: not a number (got {raw_val!r})") from exc
     if not math.isfinite(typed) or typed <= 0:
@@ -669,7 +688,9 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
             resolved_sl_max = _resolve_capacity_max(raw, "sl", capacity_max)
             secondary_loss: dict[str, Any] | None = {
                 "distribution": "lognormal",
-                **lognormal_from_quantiles(float(sl_low), float(sl_high)),
+                **lognormal_from_quantiles(
+                    float(sanitize_money_str(sl_low)), float(sanitize_money_str(sl_high))
+                ),
                 **({"max": resolved_sl_max} if resolved_sl_max is not None else {}),
             }
         else:
@@ -679,9 +700,9 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
         if sl_low and sl_mode and sl_high:
             secondary_loss = {
                 "distribution": "PERT",
-                "low": float(sl_low),
-                "mode": float(sl_mode),
-                "high": float(sl_high),
+                "low": float(sanitize_money_str(sl_low)),
+                "mode": float(sanitize_money_str(sl_mode)),
+                "high": float(sanitize_money_str(sl_high)),
             }
         else:
             secondary_loss = None

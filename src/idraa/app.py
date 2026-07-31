@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import Undefined as JinjaUndefined
 from jinja2 import pass_context
 from markupsafe import Markup
 from sqlalchemy import func, select
@@ -450,7 +451,40 @@ def _format_probability_input(value: float | None) -> str:
     return f"{v:.4f}"
 
 
+def _format_money_attr(value: object) -> str:
+    """value= attribute for Excel-like money inputs (owner UAT 2026-08-01).
+
+    Numeric -> whole-dollar comma-grouped ("1,500,000" — matches
+    idraaMoneyFmt in money_input.js). None/blank -> "". ANYTHING ELSE is
+    echoed VERBATIM: a 422 re-render must preserve the analyst's invalid
+    input for correction, and Jinja's `| float` default-0.0 would silently
+    launder it server-side (the same never-launder invariant the client
+    enforces).
+    """
+    if value is None or isinstance(value, JinjaUndefined) or value == "":
+        return ""  # includes 422 re-renders where the dict lacks the key
+    if isinstance(value, Markup):
+        # The org form's _v() macro returns already-escaped Markup; unwrap so
+        # the autoescape on output doesn't double-escape the verbatim echo
+        # (review I2 — "a&b" was compounding to "a&amp;amp;b" per resubmit).
+        value = value.unescape()
+    try:
+        f = float(value)  # type: ignore[arg-type]  # non-numeric -> fallback
+    except (TypeError, ValueError):
+        return str(value)
+    if not math.isfinite(f):
+        # "Infinity"/"nan" parse as floats but are not money — echo verbatim
+        # (int(inf) OverflowError'd the 422 re-render into a 500 otherwise).
+        return str(value)
+    # Whole-dollar DISPLAY policy must not mutate STORED sub-dollar precision
+    # on an untouched re-save (review I1: rounding here round-tripped 1290.67
+    # into the DB as 1291). Integral values render whole; fractional values
+    # keep their cents (DB money columns are Numeric(18,2)).
+    return f"{f:,.0f}" if f == int(f) else f"{f:,.2f}"
+
+
 templates.env.filters["format_money_input"] = _format_money_input
+templates.env.filters["format_money_attr"] = _format_money_attr
 templates.env.filters["format_rate_input"] = _format_rate_input
 templates.env.filters["format_probability_input"] = _format_probability_input
 

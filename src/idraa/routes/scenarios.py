@@ -196,6 +196,7 @@ from idraa.services.wizard_state import (
     load_sme_rows,
     seed_wizard_state_from_scenario,
 )
+from idraa.utils.money import sanitize_money_str
 
 router = APIRouter()
 
@@ -2644,8 +2645,8 @@ def _parse_sme_rows_subset(
                 break
             sme_id_str = _str_or_none(form.get(f"{fieldset}_sme_id_{idx}"))
             sme_name_str = _str_or_none(form.get(f"{fieldset}_sme_name_{idx}"))
-            low = float(str(form[low_key]).replace(",", ""))
-            high = float(str(form[f"{fieldset}_high_{idx}"]).replace(",", ""))
+            low = float(sanitize_money_str(str(form[low_key])))
+            high = float(sanitize_money_str(str(form[f"{fieldset}_high_{idx}"])))
             rows.append(
                 {
                     "sme_id": sme_id_str or None,

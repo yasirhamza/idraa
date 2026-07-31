@@ -33,6 +33,7 @@ from idraa.services.scenario_library import (
     OverrideDraft,
     ScenarioLibraryService,
 )
+from idraa.utils.money import sanitize_money_str
 
 router = APIRouter(tags=["library-overrides"])
 
@@ -40,14 +41,35 @@ router = APIRouter(tags=["library-overrides"])
 # ---- helpers ---------------------------------------------------------
 
 
+def _form_number(value: str | None, field: str, *, money: bool = True) -> float | None:
+    """Parse an optional numeric form field to float.
+
+    Money fields post comma-grouped values (Excel-like entry, owner UAT
+    2026-08-01) — strip the benign allowlist first (utils/money.py). Blank ->
+    None. Anything non-numeric AFTER the strip 422s loudly (never-launder).
+    NOTE: FastAPI 0.139 discards Annotated[BeforeValidator] metadata when the
+    default is Form(...), so this MUST happen in the handler (review B2 —
+    the annotation approach validated nothing).
+    """
+    if value is None or value.strip() == "":
+        return None
+    try:
+        # Round-2 review: sanitize MONEY fields only — stripping a European
+        # "0,5" from a TEF/vuln rate is a 10x launder; rates 422 on commas.
+        return float(sanitize_money_str(value) if money else value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{field}: not a number (got {value!r})"
+        ) from exc
+
+
 def _parse_distribution(
     low: float | None, mode: float | None, high: float | None
 ) -> dict[str, Any] | None:
     """Build a PERT dict from three optional floats; return None if any are missing.
 
-    Form-layer typing makes FastAPI return 422 on non-numeric input
-    (e.g. tef_low="abc") before this function is reached. No exception
-    guard required.
+    Inputs arrive pre-parsed via _form_number (which 422s on non-numeric
+    input after the benign money-sanitize). No exception guard required.
     """
     if low is None or mode is None or high is None:
         return None
@@ -105,18 +127,18 @@ async def new_override_form(
 async def create_override(
     request: Request,
     entry_id: uuid.UUID = Form(...),
-    tef_low: float | None = Form(None),
-    tef_mode: float | None = Form(None),
-    tef_high: float | None = Form(None),
-    vuln_low: float | None = Form(None),
-    vuln_mode: float | None = Form(None),
-    vuln_high: float | None = Form(None),
-    pl_low: float | None = Form(None),
-    pl_mode: float | None = Form(None),
-    pl_high: float | None = Form(None),
-    sl_low: float | None = Form(None),
-    sl_mode: float | None = Form(None),
-    sl_high: float | None = Form(None),
+    tef_low: str | None = Form(None),
+    tef_mode: str | None = Form(None),
+    tef_high: str | None = Form(None),
+    vuln_low: str | None = Form(None),
+    vuln_mode: str | None = Form(None),
+    vuln_high: str | None = Form(None),
+    pl_low: str | None = Form(None),
+    pl_mode: str | None = Form(None),
+    pl_high: str | None = Form(None),
+    sl_low: str | None = Form(None),
+    sl_mode: str | None = Form(None),
+    sl_high: str | None = Form(None),
     reason: str = Form(...),
     methodology_change_reason: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -124,10 +146,26 @@ async def create_override(
 ) -> Response:
     svc = ScenarioLibraryService(db)
     draft = OverrideDraft(
-        threat_event_frequency=_parse_distribution(tef_low, tef_mode, tef_high),
-        vulnerability=_parse_distribution(vuln_low, vuln_mode, vuln_high),
-        primary_loss=_parse_distribution(pl_low, pl_mode, pl_high),
-        secondary_loss=_parse_distribution(sl_low, sl_mode, sl_high),
+        threat_event_frequency=_parse_distribution(
+            _form_number(tef_low, "tef_low", money=False),
+            _form_number(tef_mode, "tef_mode", money=False),
+            _form_number(tef_high, "tef_high", money=False),
+        ),
+        vulnerability=_parse_distribution(
+            _form_number(vuln_low, "vuln_low", money=False),
+            _form_number(vuln_mode, "vuln_mode", money=False),
+            _form_number(vuln_high, "vuln_high", money=False),
+        ),
+        primary_loss=_parse_distribution(
+            _form_number(pl_low, "pl_low"),
+            _form_number(pl_mode, "pl_mode"),
+            _form_number(pl_high, "pl_high"),
+        ),
+        secondary_loss=_parse_distribution(
+            _form_number(sl_low, "sl_low"),
+            _form_number(sl_mode, "sl_mode"),
+            _form_number(sl_high, "sl_high"),
+        ),
     )
     try:
         await svc.create_override(
@@ -214,18 +252,18 @@ async def edit_override_form(
 async def update_override(
     request: Request,
     override_id: uuid.UUID,
-    tef_low: float | None = Form(None),
-    tef_mode: float | None = Form(None),
-    tef_high: float | None = Form(None),
-    vuln_low: float | None = Form(None),
-    vuln_mode: float | None = Form(None),
-    vuln_high: float | None = Form(None),
-    pl_low: float | None = Form(None),
-    pl_mode: float | None = Form(None),
-    pl_high: float | None = Form(None),
-    sl_low: float | None = Form(None),
-    sl_mode: float | None = Form(None),
-    sl_high: float | None = Form(None),
+    tef_low: str | None = Form(None),
+    tef_mode: str | None = Form(None),
+    tef_high: str | None = Form(None),
+    vuln_low: str | None = Form(None),
+    vuln_mode: str | None = Form(None),
+    vuln_high: str | None = Form(None),
+    pl_low: str | None = Form(None),
+    pl_mode: str | None = Form(None),
+    pl_high: str | None = Form(None),
+    sl_low: str | None = Form(None),
+    sl_mode: str | None = Form(None),
+    sl_high: str | None = Form(None),
     reason: str = Form(...),
     methodology_change_reason: str | None = Form(None),
     expected_version: int = Form(...),
@@ -234,10 +272,26 @@ async def update_override(
 ) -> Response:
     svc = ScenarioLibraryService(db)
     draft = OverrideDraft(
-        threat_event_frequency=_parse_distribution(tef_low, tef_mode, tef_high),
-        vulnerability=_parse_distribution(vuln_low, vuln_mode, vuln_high),
-        primary_loss=_parse_distribution(pl_low, pl_mode, pl_high),
-        secondary_loss=_parse_distribution(sl_low, sl_mode, sl_high),
+        threat_event_frequency=_parse_distribution(
+            _form_number(tef_low, "tef_low", money=False),
+            _form_number(tef_mode, "tef_mode", money=False),
+            _form_number(tef_high, "tef_high", money=False),
+        ),
+        vulnerability=_parse_distribution(
+            _form_number(vuln_low, "vuln_low", money=False),
+            _form_number(vuln_mode, "vuln_mode", money=False),
+            _form_number(vuln_high, "vuln_high", money=False),
+        ),
+        primary_loss=_parse_distribution(
+            _form_number(pl_low, "pl_low"),
+            _form_number(pl_mode, "pl_mode"),
+            _form_number(pl_high, "pl_high"),
+        ),
+        secondary_loss=_parse_distribution(
+            _form_number(sl_low, "sl_low"),
+            _form_number(sl_mode, "sl_mode"),
+            _form_number(sl_high, "sl_high"),
+        ),
     )
     try:
         await svc.update_override(

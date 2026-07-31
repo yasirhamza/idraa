@@ -52,8 +52,12 @@ def test_form_field_money_includes_dollar_prefix() -> None:
         value="10000000",
     )
     assert "$" in html
-    assert 'type="number"' in html
-    assert 'inputmode="decimal"' in html
+    # Excel-like money entry (owner UAT 2026-08-01): text input + moneyField
+    # component + comma-grouped server-rendered value; not a number spinner.
+    assert 'type="text"' in html
+    assert 'inputmode="numeric"' in html
+    assert "x-data='moneyField(" in html
+    assert 'value="10,000,000"' in html
 
 
 def test_form_field_percent_includes_percent_suffix() -> None:

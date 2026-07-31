@@ -33,10 +33,10 @@
  *     Alpine blur handler re-syncs it after fmt() writes el.value
  *     without an input event; the one prefill-time no-op before any
  *     input event is accepted.
- *   - never forces decimal places while typing (blur still commits the
- *     canonical 2-decimal display via the Alpine fmt(), whose strict
- *     Number() parse blanks non-numeric leftovers — the loud legacy
- *     failure mode).
+ *   - never forces decimal places while typing (blur commits the
+ *     canonical display via the Alpine fmt(): WHOLE dollars for integral
+ *     values, stored cents preserved for fractional ones; strict Number()
+ *     blanks non-numeric leftovers — the loud legacy failure mode).
  *
  * Loaded globally from base.html BEFORE any HTMX swap, so inline x-data
  * handlers may reference it without the PR #205 stale-global race.
@@ -54,6 +54,72 @@
   function sanitize(raw) {
     return raw.replace(BENIGN, "");
   }
+
+  // Shared helpers (owner UAT round 2: money entry on ALL surfaces).
+  // idraaMoneySanitize: benign strip, letters/signs survive (never-launder).
+  // idraaMoneyFmt: canonical WHOLE-DOLLAR display — the owner ruled decimals
+  // out of every money surface (FX *rates* are not money and keep their own
+  // inputs). Strict Number(): non-numeric leftovers blank loudly; a typed or
+  // pasted sub-dollar fraction rounds on commit (magnitude preserved to <$1
+  // — deliberate precision policy, not a launder).
+  window.idraaMoneySanitize = function (s) {
+    return s === null || s === undefined ? "" : String(s).replace(BENIGN, "");
+  };
+
+  window.idraaMoneyFmt = function (v) {
+    if (v === "" || v === null || v === undefined) return "";
+    var s = window.idraaMoneySanitize(String(v));
+    var n = s === "" ? NaN : Number(s);
+    if (isNaN(n)) return "";
+    // Whole-dollar DISPLAY policy — but stored sub-dollar precision must
+    // survive an untouched hydrate/blur round-trip (review I1: rounding here
+    // would persist 1290.67 as 1291 on a no-edit re-save). Integral renders
+    // whole; fractional keeps cents (server mirror: format_money_attr).
+    var frac = n !== Math.trunc(n);
+    return n.toLocaleString("en-US", {
+      minimumFractionDigits: frac ? 2 : 0,
+      maximumFractionDigits: frac ? 2 : 0,
+    });
+  };
+
+  // Reusable Alpine component for SINGLE money fields (controls cost, org
+  // profile, expert-form loss params, overrides, qualitative magnitude
+  // bands…). The input keeps its NAME and posts the comma-grouped display
+  // value — EVERY server parser of a money field must therefore sanitize
+  // via utils/money.py sanitize_money_str (the server mirror of BENIGN).
+  // Adding a money field without its server-side sanitize is the bug class
+  // review round-1 found five of (B2-B6). Registered on alpine:init — this
+  // file loads non-defer before the deferred Alpine bundle, the factory
+  // pattern loss_preview.js already uses (no #205 race; the factory is
+  // registered once and survives HTMX swaps).
+  document.addEventListener("alpine:init", function () {
+    window.Alpine.data("moneyField", function (initial) {
+      return {
+        display: "",
+        init: function () {
+          // Numeric initials render canonically; a NON-numeric initial (a 422
+          // re-render echoing invalid input) is preserved VERBATIM so Alpine
+          // hydration cannot blank what the server deliberately echoed — the
+          // field stays pattern-invalid and correctable (never-launder).
+          var f = window.idraaMoneyFmt(initial);
+          this.display =
+            f === "" && initial !== null && initial !== undefined && String(initial).trim() !== ""
+              ? String(initial)
+              : f;
+        },
+        get raw() {
+          return window.idraaMoneySanitize(this.display);
+        },
+        live: function (el, ev) {
+          this.display = window.idraaMoneyLive(el, ev);
+        },
+        commit: function (el) {
+          this.display = window.idraaMoneyFmt(this.display);
+          el.__idraaMoneyPrev = this.display;
+        },
+      };
+    });
+  });
 
   window.idraaMoneyLive = function (el, ev) {
     var raw = el.value;

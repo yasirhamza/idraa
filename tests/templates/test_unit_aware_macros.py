@@ -35,6 +35,12 @@ def env():
     e.globals["sub_function_units_map"] = {
         sf: unit.value for sf, unit in SUB_FUNCTION_UNITS.items()
     }
+    # Money-entry rollout (owner UAT 2026-08-01): the currency widget renders
+    # its value attr via the app's format_money_attr filter — register the
+    # real one so this bare env matches production rendering.
+    from idraa.app import _format_money_attr
+
+    e.filters["format_money_attr"] = _format_money_attr
     return e
 
 

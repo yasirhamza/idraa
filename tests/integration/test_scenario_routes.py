@@ -645,8 +645,8 @@ async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
     # (exact-identity anchor Q_mix(0.05) = Q_A(0.10) ≈ $1,290.666; the money
     # input filter renders 2-decimal fixed).
     assert 'value="lognormal" selected' in r.text
-    assert 'value="1290.67"' in r.text
-    assert 'value="32444657.93"' in r.text
+    assert 'value="1,290.67"' in r.text
+    assert 'value="32,444,657.93"' in r.text
     # Informed-replacement warning names the pooled provenance.
     assert "pooled from 2 expert estimates" in r.text
     # Non-mixture nodes (tef here is PERT) do not render the warning.

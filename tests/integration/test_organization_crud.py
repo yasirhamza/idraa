@@ -44,10 +44,13 @@ async def test_get_organization_renders_revenue_tier_hint(
     r = await client.get("/organization")
     assert r.status_code == 200
     body = r.text
-    assert 'x-model="value"' in body
-    assert 'x-text="label(value)"' in body
+    # Excel-like money entry (owner UAT 2026-08-01): the input binds the
+    # FORMATTED display; the tier label reads the sanitized raw value.
+    assert "x-data='moneyField(" in body  # single-quoted attr (tojson emits ")
+    assert 'x-model="display"' in body
+    assert 'x-text="label(raw)"' in body
     assert "Enter total annual revenue in USD" in body
-    assert "5000000000 for $5 billion" in body
+    assert "5,000,000,000 for $5 billion" in body
 
 
 async def test_get_organization_size_maturity_appetite_options_are_humanized(
@@ -161,7 +164,7 @@ async def test_post_organization_persists_annual_security_budget(
     page = await client.get("/organization")
     assert page.status_code == 200
     assert 'name="annual_security_budget"' in page.text
-    assert "3500000" in page.text
+    assert "3,500,000" in page.text  # whole-dollar comma-grouped display
 
 
 # ---- Hotfix tests: empty optional number fields + validation-error UX ----
@@ -251,7 +254,7 @@ async def test_post_organization_validation_error_preserves_form_values(
     # User's typed-in name is preserved (NOT reverted to org's prior value)
     assert 'value="User Typed Name"' in r.text
     # User's typed-in invalid annual_revenue is preserved (so they can fix it)
-    assert 'value="-1000"' in r.text
+    assert 'value="-1,000"' in r.text  # preserved (formatted); ge=0 still rejects
     # The form-errors alert is present with proper ARIA semantics
     # F22: form_error_summary uses role="alert" (id="form-errors" removed)
     assert 'role="alert"' in r.text

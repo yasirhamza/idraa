@@ -326,8 +326,8 @@ async def test_edit_form_prefills_existing_pl_and_sl_max(
 
     edit_r = await client.get(f"/scenarios/{s.id}/edit")
     assert edit_r.status_code == 200
-    assert 'value="20000000.00"' in edit_r.text
-    assert 'value="15000000.00"' in edit_r.text
+    assert 'value="20,000,000"' in edit_r.text
+    assert 'value="15,000,000"' in edit_r.text
 
 
 @pytest.mark.asyncio
@@ -365,8 +365,8 @@ async def test_unchanged_resave_preserves_pl_and_sl_max_byte_for_byte(
 
     edit_r = await client.get(f"/scenarios/{sid}/edit")
     assert edit_r.status_code == 200
-    assert 'value="20000000.00"' in edit_r.text
-    assert 'value="15000000.00"' in edit_r.text
+    assert 'value="20,000,000"' in edit_r.text
+    assert 'value="15,000,000"' in edit_r.text
 
     # Resubmit the SAME values (as the edit form would echo them, 2dp per
     # format_money_input) — an unrelated no-op resave.

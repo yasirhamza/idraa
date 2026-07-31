@@ -31,6 +31,7 @@ from idraa.models.enums import (
     SecurityMaturity,
 )
 from idraa.schemas._csv import split_csv
+from idraa.utils.money import sanitize_money_str
 
 # Matches Numeric(18, 2) on the corresponding DB columns — 16 digits left
 # of the decimal, 2 right. Reject beyond this at the 400-path rather than
@@ -86,12 +87,26 @@ class OrganizationForm(BaseModel):
         return split_csv(v)  # type: ignore[arg-type]
 
     @field_validator(
-        "employee_count",
         "annual_revenue",
         "annual_security_budget",
         "cyber_insurance_limit",
         "cyber_insurance_deductible",
         "loss_tolerance_amount",
+        mode="before",
+    )
+    @classmethod
+    def _sanitize_money_then_blank(cls, v: object) -> object:
+        """Money fields ONLY (review I6: sanitizing employee_count /
+        loss_tolerance_probability would launder a European "0,5" into 05 —
+        the benign strip is a MONEY contract). Sanitize FIRST so "$ " and
+        whitespace-only both blank to None (review N1 — JS/no-JS parity)."""
+        if isinstance(v, str):
+            s = sanitize_money_str(v)
+            return None if s.strip() == "" else s
+        return v
+
+    @field_validator(
+        "employee_count",
         "loss_tolerance_probability",
         mode="before",
     )

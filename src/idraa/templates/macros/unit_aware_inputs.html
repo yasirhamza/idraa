@@ -96,7 +96,11 @@
         inputmode="numeric" still triggers a numeric soft-keyboard on
         mobile. Server-side Pydantic ge=0 + float coercion is the real
         validation gate. -#}
-    <div class="relative">
+    {# Upgraded to the Excel-like moneyField (owner UAT 2026-08-01): live
+       comma regroup with caret preservation + benign-paste sanitize. The
+       input keeps its name + server-formatted value (no-JS parity); the
+       server sanitizes benign separators (utils/money.py). #}
+    <div class="relative" x-data='moneyField({{ (v | format_money_attr) | tojson }})'>
       <span
         aria-hidden="true"
         class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2 text-sm">$</span>
@@ -105,7 +109,11 @@
         type="text"
         inputmode="numeric"
         autocomplete="off"
-        value="{{ '{:,.0f}'.format(v) if v is not none else '' }}"
+        pattern="[0-9,]+(\.[0-9]+)?"
+        value="{{ v | format_money_attr }}"
+        x-model="display"
+        @input="live($el, $event)"
+        @blur="commit($el)"
         placeholder="0"
         class="h-10 w-full pl-7 pr-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 text-right tabular-nums font-mono" />
     </div>
