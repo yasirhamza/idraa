@@ -277,16 +277,18 @@
                    keep ``type="number"`` — trailing zeros + comma formatting
                    aren't UX concerns there.
 
-                   UAT R3 formatted-display fix (Option A): PL/SL inputs show
-                   human-readable comma-grouped numbers ("388,920.40") on blur
-                   and strip commas on focus so the analyst can type raw
-                   digits. Nested x-data per money input keeps display state
-                   (the formatted string) separate from the parent combobox
-                   scope. The visible input's `:name` still submits the
-                   display string; the backend defensively strips commas
-                   before float parsing in case the user clicks Finalize
-                   while an input is focused (displaying raw digits).
-                   `pattern` accepts both `[0-9,]` and a decimal portion. #}
+                   UAT R3 formatted-display fix, superseded by the Excel-like
+                   entry rework (owner UAT 2026-07-31): PL/SL inputs stay
+                   comma-grouped AT ALL TIMES — idraaMoneyLive regroups live
+                   on every keystroke with caret preservation; there is no
+                   focus-time strip anymore. Nested x-data per money input
+                   keeps display state (the formatted string) separate from
+                   the parent combobox scope. The visible input's `:name`
+                   submits the comma-grouped display string; the backend
+                   strips commas before float parsing (its ValueError path
+                   422-flashes on anything non-numeric that survives the
+                   benign client sanitize). `pattern` accepts `[0-9,]` plus
+                   a decimal portion. #}
                 <div>
                   <span class="md:hidden text-meta text-ink-2 block mb-1">Low (5%)</span>
                   <template x-if="['pl', 'sl'].includes(fieldset)">
@@ -295,16 +297,30 @@
                           init() { this.display = this.fmt(row.low); },
                           fmt(v) {
                             if (v === '' || v === null || v === undefined) return '';
-                            const n = parseFloat(String(v).replace(/,/g, ''));
+                            /* Strict Number(), not parseFloat (review B1):
+                               parseFloat('1.5M') = 1.5 would silently launder
+                               a magnitude-suffixed paste; Number() -> NaN ->
+                               blank + required halt (the loud legacy path). */
+                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
+                            const n = s === '' ? NaN : Number(s);
                             return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                           },
-                          strip(s) { return s ? String(s).replace(/,/g, '') : ''; }
+                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
                         }">
+                      {# Excel-like entry (owner UAT 2026-07-31): NO focus-time
+                         value swap — the old `display = strip(display)` threw
+                         away the click position (caret jumped), making
+                         leftmost-digit edits a fight. idraaMoneyLive (static/
+                         js/money_input.js) regroups commas on every keystroke
+                         with caret preservation and sanitizes pastes
+                         ("$1 000 000" -> "1,000,000"). Blur still commits the
+                         canonical 2-decimal display via fmt(). #}
                       <input type="text" inputmode="decimal"
                              pattern="[0-9,]+(\.[0-9]+)?" required
                              class="input input-bordered input-sm w-full"
                              x-model="display"
-                             @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @focus="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @input="display = window.idraaMoneyLive($el, $event)"
                              {# F1/N3 (PR3 T2.a gate fix): live update WHILE
                                 TYPING, before blur commits row.low. Dispatches
                                 the CURRENT input value (strip(display)), not
@@ -314,7 +330,7 @@
                                 just keeps the event itself from firing on
                                 every keystroke. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: strip(display), high: row.high})"
-                             @blur="row.low = strip(display); display = fmt(row.low); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="row.low = strip(display); display = fmt(row.low); if (display === '') row.low = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_low_' + idx">
                     </div>
                   </template>
@@ -336,19 +352,28 @@
                           init() { this.display = this.fmt(row.high); },
                           fmt(v) {
                             if (v === '' || v === null || v === undefined) return '';
-                            const n = parseFloat(String(v).replace(/,/g, ''));
+                            /* Strict Number(), not parseFloat (review B1):
+                               parseFloat('1.5M') = 1.5 would silently launder
+                               a magnitude-suffixed paste; Number() -> NaN ->
+                               blank + required halt (the loud legacy path). */
+                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
+                            const n = s === '' ? NaN : Number(s);
                             return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                           },
-                          strip(s) { return s ? String(s).replace(/,/g, '') : ''; }
+                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
                         }">
+                      {# Excel-like entry: mirrors the Low input above (no
+                         focus swap; caret-preserving live regroup; tolerant
+                         paste). #}
                       <input type="text" inputmode="decimal"
                              pattern="[0-9,]+(\.[0-9]+)?" required
                              class="input input-bordered input-sm w-full"
                              x-model="display"
-                             @focus="display = strip(display); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @focus="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @input="display = window.idraaMoneyLive($el, $event)"
                              {# F1/N3: mirrors the Low input's live-typing dispatch above. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: strip(display)})"
-                             @blur="row.high = strip(display); display = fmt(row.high); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="row.high = strip(display); display = fmt(row.high); if (display === '') row.high = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_high_' + idx">
                       {% if org_annual_revenue %}
                       {# Milestone B (#loss-pert-overhaul): display-only
@@ -358,8 +383,8 @@
                          org_annual_revenue for step 4 ONLY (A-N2). #}
                       <span class="text-meta text-ink-2 block mt-1 max-w-[28ch] whitespace-normal"
                             data-revenue-hint data-annual-revenue="{{ org_annual_revenue }}"
-                            x-show="!catastrophic && strip(display)"
-                            x-text="'≈ ' + ((parseFloat(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>
+                            x-show="!catastrophic && strip(display) && !isNaN(Number(strip(display)))"
+                            x-text="'≈ ' + ((Number(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>
                       {% endif %}
                     </div>
                   </template>

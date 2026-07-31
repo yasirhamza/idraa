@@ -129,6 +129,12 @@
      Non-defer, like sub_function_combobox.js, so the factory is registered
      before the deferred Alpine bundle initializes and walks x-data. #}
   <script src="/static/js/loss_preview.js?v={{ static_version }}"></script>
+  {# money_input.js registers window.idraaMoneyLive for the wizard's money
+     fields. Unlike loss_preview.js above it registers NO Alpine factory, so
+     it has no ordering constraint vs the deferred Alpine bundle — inline
+     @input expressions resolve the global lazily at event time. Non-defer
+     anyway: cheapest guarantee it exists before any conceivable input. #}
+  <script src="/static/js/money_input.js?v={{ static_version }}"></script>
   {# Client-side timezone localization. Server renders <time> elements with
      ISO UTC datetime + fallback text; this JS walks them on load + after
      each htmx swap and converts to the browser's local-format. #}
