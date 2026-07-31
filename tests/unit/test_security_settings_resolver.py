@@ -55,3 +55,46 @@ async def test_snapshot_survives_session_close(db_session, seed_organization):
     await ss.load_security_settings(db_session, seed_organization.id)
     await db_session.close()
     assert ss.effective_mfa_policy() == "required"  # no DetachedInstanceError
+
+
+@pytest.mark.asyncio
+async def test_warm_cache_marks_warmed_on_no_org(monkeypatch):
+    """#107 review R1 pin: warm_cache sets the warmed flag even with NO org/row.
+
+    This drives the REAL warm path (not a hand-poked flag): the `_warmed =
+    True` statement must sit outside the `if org is not None:` block. Moving
+    it inside — the exact regression the tri-state exists to prevent — makes
+    /healthz report "cold" (= boot warm FAILED) on every healthy fresh
+    install, and this test fails.
+    """
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def _fake_session():
+        yield object()  # never touched: get_sole_org is patched to ignore it
+
+    async def _no_org(db):
+        return None
+
+    monkeypatch.setattr("idraa.db.get_session", _fake_session)
+    monkeypatch.setattr("idraa.services.org.get_sole_org", _no_org)
+    ss.invalidate()
+    assert ss.cache_state() == "cold"
+    await ss.warm_cache(get_settings())
+    assert ss.cache_state() == "empty"  # warmed, no row — NOT "cold"
+
+
+@pytest.mark.asyncio
+async def test_warm_cache_failure_stays_cold(monkeypatch):
+    """A failed warm must swallow the exception AND leave the state "cold"."""
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def _boom():
+        raise RuntimeError("db down at boot")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr("idraa.db.get_session", _boom)
+    ss.invalidate()
+    await ss.warm_cache(get_settings())  # must not raise (boot must not block)
+    assert ss.cache_state() == "cold"

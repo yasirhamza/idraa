@@ -60,6 +60,15 @@ _CAT_ATTR = {
 
 
 def invalidate() -> None:
+    """Drop the snapshot AND the process warm flag (full reset to "cold").
+
+    Today's callers are tests (autouse conftest fixture) and the settings
+    write path, which always reloads immediately after — so the transient
+    "cold" is unobservable in prod. If a future prod path ever invalidates
+    WITHOUT reloading (e.g. a settings-row delete), split the flag handling
+    first: leaving _warmed True there is correct ("empty", not "cold" =
+    boot-warm-failed false alarm on /healthz). See cache_state().
+    """
     global _cache, _warmed
     _cache = None
     _warmed = False

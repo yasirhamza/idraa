@@ -222,6 +222,7 @@ async def test_scenario_single_export_writes_audit_row(
         "/scenarios/export",  # shared csv_response helper
         "/scenarios/export?format=json",  # scenario JSON export
         "/controls/export.csv",  # another csv_response consumer
+        "/library/export",  # library bundle JSON (library_bundle_export)
     ],
 )
 async def test_export_responses_are_no_store(admin_client: AsyncClient, path: str) -> None:

@@ -367,8 +367,11 @@ async def get_aggregate_matrix_csv(
             "Per-control attribution unavailable for this run (predates Shapley attribution or exceeded attribution limits)."
         )
 
-    # idraa#107/#110 review: budget-counted like the PDF/xlsx report exports
-    # ({"kind": ...} filter convention) — log_bulk_export IS the rate limiter.
+    # idraa#107/#110 review: budget-counted, sharing the report exports'
+    # {"kind": ...} filter convention. Unlike reports.py this audits AFTER the
+    # build (R2): a request that 400s/404s is never counted, and pre-counting
+    # buys nothing here — the identical build is reachable un-limited via the
+    # /runs/{id} HTML detail page anyway.
     await log_bulk_export(
         db,
         organization_id=user.organization_id,
