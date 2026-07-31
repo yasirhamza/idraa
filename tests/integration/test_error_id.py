@@ -29,10 +29,12 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 from collections.abc import AsyncIterator
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 import idraa.db as db
@@ -40,11 +42,18 @@ from idraa import config
 
 
 @contextlib.asynccontextmanager
-async def _fresh_app_client(db_url: str) -> AsyncIterator[tuple[AsyncClient, object]]:
-    """A bare app + client on an isolated DB, with engine-leak hygiene."""
+async def _fresh_app_client(db_url: str) -> AsyncIterator[tuple[AsyncClient, FastAPI]]:
+    """A bare app + client on the given isolated DB, with engine-leak hygiene.
+
+    Owns the DATABASE_URL wiring itself (review nit: a helper that takes
+    db_url but relies on the caller's setenv invites a caller to drop the
+    setenv and silently hit the ambient dev DB).
+    """
     from idraa.app import create_app
 
+    prior_url = os.environ.get("DATABASE_URL")
     try:
+        os.environ["DATABASE_URL"] = db_url
         config.reset_for_tests()
         db.reset_for_tests()
         app = create_app()
@@ -52,15 +61,18 @@ async def _fresh_app_client(db_url: str) -> AsyncIterator[tuple[AsyncClient, obj
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, app
     finally:
+        if prior_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = prior_url
         db.reset_for_tests()
         config.reset_for_tests()
 
 
 @pytest.mark.asyncio
 async def test_unhandled_500_carries_error_id(
-    monkeypatch: pytest.MonkeyPatch, db_url: str, caplog: pytest.LogCaptureFixture
+    db_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setenv("DATABASE_URL", db_url)
     reached: list[bool] = []
 
     async with _fresh_app_client(db_url) as (client, app):
@@ -94,7 +106,7 @@ async def test_unhandled_500_carries_error_id(
 
 @pytest.mark.asyncio
 async def test_http_500_exception_gets_id_and_leaks_no_detail(
-    monkeypatch: pytest.MonkeyPatch, db_url: str, caplog: pytest.LogCaptureFixture
+    db_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Review I2: HTTPException(5xx) must not ship exc.detail to the client.
 
@@ -104,7 +116,6 @@ async def test_http_500_exception_gets_id_and_leaks_no_detail(
     """
     from fastapi import HTTPException
 
-    monkeypatch.setenv("DATABASE_URL", db_url)
     reached: list[bool] = []
 
     async with _fresh_app_client(db_url) as (client, app):
@@ -130,13 +141,9 @@ async def test_http_500_exception_gets_id_and_leaks_no_detail(
 
 
 @pytest.mark.asyncio
-async def test_http_4xx_detail_passthrough_unchanged(
-    monkeypatch: pytest.MonkeyPatch, db_url: str
-) -> None:
+async def test_http_4xx_detail_passthrough_unchanged(db_url: str) -> None:
     """4xx HTTPExceptions keep their JSON detail contract (no drift)."""
     from fastapi import HTTPException
-
-    monkeypatch.setenv("DATABASE_URL", db_url)
 
     async with _fresh_app_client(db_url) as (client, app):
 
@@ -152,18 +159,18 @@ async def test_http_4xx_detail_passthrough_unchanged(
 
 
 @pytest.mark.asyncio
-async def test_error_ids_are_unique_per_failure(
-    monkeypatch: pytest.MonkeyPatch, db_url: str
-) -> None:
-    monkeypatch.setenv("DATABASE_URL", db_url)
+async def test_error_ids_are_unique_per_failure(db_url: str) -> None:
+    reached: list[bool] = []
 
     async with _fresh_app_client(db_url) as (client, app):
 
         @app.get("/login/boom-test-route")
         async def _boom() -> None:
+            reached.append(True)
             raise RuntimeError("boom")
 
         r1 = await client.get("/login/boom-test-route")
         r2 = await client.get("/login/boom-test-route")
 
+    assert len(reached) == 2, "route body must execute on both requests (B2 guard)"
     assert r1.headers["X-Error-Id"] != r2.headers["X-Error-Id"]

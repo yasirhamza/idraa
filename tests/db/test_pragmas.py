@@ -43,8 +43,8 @@ async def test_busy_timeout_follows_settings(db_session):
     bt = (await db_session.execute(text("PRAGMA busy_timeout"))).scalar()
     assert int(bt) == get_settings().sqlite_busy_timeout_ms
 
-    # Anti-drift pin on the DEFAULT, isolated from ambient env AND .env file
-    # (review I3: asserting on get_settings() here broke the suite for any
-    # developer legitimately using the documented env knob).
-    isolated = Settings(environment="test", session_secret="x" * 40, _env_file=None)
-    assert isolated.sqlite_busy_timeout_ms == 30_000
+    # Anti-drift pin on the DEFAULT via the class field — the one place no
+    # settings source (env var OR .env file) can touch (review I3 round 2:
+    # _env_file=None only disables the dotenv source; os.environ still wins).
+    # Same pattern as test_config_environment_guard's quantile-budget pin.
+    assert Settings.model_fields["sqlite_busy_timeout_ms"].default == 30_000

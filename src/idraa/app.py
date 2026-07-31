@@ -780,8 +780,10 @@ async def _export_rate_limited_handler(request: StarletteRequest, exc: Exception
 def _internal_error_response(
     request: StarletteRequest, exc: BaseException, log_detail: str | None = None
 ) -> Response:
-    """Generic 500 with a correlation id (idraa#72 fix 4) — the ONLY sanctioned
-    500 shape.
+    """Generic 500 with a correlation id (idraa#72 fix 4) — the sanctioned 500
+    shape for uncaught exceptions and ``fastapi.HTTPException(5xx)``. (A bare
+    ``starlette.exceptions.HTTPException(5xx)`` would fall to Starlette's
+    default handler without an id — nothing in src raises one today.)
 
     Shared by the unhandled-exception handler AND the ``HTTPException(5xx)``
     path in ``_auth_redirect_handler``, so no 500 ships without an id or
