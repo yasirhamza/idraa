@@ -18,6 +18,8 @@ attribution-degradation audit trail.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +39,7 @@ def _fail_on_complete_audit(monkeypatch: pytest.MonkeyPatch) -> None:
     window the bug lives in."""
     real_log = AuditWriter.log
 
-    async def _failing_log(self: AuditWriter, **kwargs: object) -> object:
+    async def _failing_log(self: AuditWriter, **kwargs: Any) -> Any:
         if kwargs.get("action") == "risk_analysis_run.complete":
             raise RuntimeError("simulated audit-flush failure between flip and commit")
         return await real_log(self, **kwargs)
@@ -77,13 +79,17 @@ async def test_late_exception_flips_failed_not_stranded(
     assert len(rows) == 1, "exactly one fail audit row must land with the flip"
 
 
-# The sibling contract — a CANCELLED committed by another actor surviving the
-# FAILED flip (the rowcount==0 preserve path) — is pinned by
-# tests/integration/test_run_executor_cancel_toctou.py::
-# test_cancel_during_fail_window_not_overwritten, which interleaves the
-# external commit at a point where the executor session holds no write lock.
-# (Interleaving it AFTER the COMPLETED flip, as an earlier draft of this file
-# did, is mechanically impossible on SQLite: the executor's uncommitted flip
-# holds the writer, so the competing commit just times out.) That test stays
-# green under rollback-first — the diagnosis on that path is now trustworthy
-# rather than conflated with the own-uncommitted-write misread.
+# Sibling contracts pinned elsewhere:
+# - The STRONG rowcount==0 preserve pin (flushed attribution rows must NOT
+#   survive a lost race) is tests/integration/test_aggregate_shapley_persist.py
+#   ::test_aggregate_cancel_during_fail_window_rolls_back_shapley_audit —
+#   it forces shapley_skipped rows into the pending transaction, interleaves
+#   an external CANCELLED at a lock-free point, and asserts zero rows land.
+# - The re-log pin (attribution rows DO survive a matched FAILED flip, exact
+#   multiplicity) is test_attribution_rows_survive_failed_flip in the same
+#   file.
+# (Interleaving an external commit AFTER the COMPLETED flip, as an earlier
+# draft of this file did, is mechanically impossible on SQLite: the
+# executor's uncommitted flip holds the writer, so the competing commit
+# times out. On Postgres it would block rather than time out — the
+# impossibility argument is engine-specific.)

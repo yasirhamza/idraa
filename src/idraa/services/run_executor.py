@@ -1922,8 +1922,24 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
         # are already durable and re-logging would duplicate them.
         _terminal_audit_rows: list[tuple[str, dict[str, Any]]] = []
 
+        # T4M-5-I1 (#351) + #131 review I3: pre-declare ABOVE the try — the
+        # except handler reads both directly, and even the FIRST statement of
+        # the try (_check_cancelled_or_continue's SELECT — "database is
+        # locked" is a documented hazard in this function) can raise. Declared
+        # inside the try, that path would UnboundLocalError in the except and
+        # strand the run RUNNING — the class this fix removes. Exceptions
+        # before the assignment points legitimately produce None ("not yet
+        # captured" sentinel).
+        _snapshot_local: dict[str, Any] | None = None
+        # P3 (currency): pre-declare alongside _snapshot_local, same reason.
+        _fx_snapshot_local: dict[str, Any] | None = None
+
         async def _log_terminal_audit(action: str, changes: dict[str, Any]) -> None:
-            _terminal_audit_rows.append((action, changes))
+            # Capture AFTER the log flush succeeds (review I1): if the flush
+            # itself is the exception source (locked DB, disk-full), a
+            # captured-but-never-flushed row would be replayed in the except
+            # branch, hit the same failing condition there, and re-strand the
+            # run — the exact class this fix removes.
             await AuditWriter(session).log(
                 organization_id=org_id_local,
                 user_id=created_by_local,
@@ -1932,6 +1948,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 entity_id=run_id_local,
                 changes=changes,
             )
+            _terminal_audit_rows.append((action, changes))
 
         try:
             if not await _check_cancelled_or_continue(session, run_id):
@@ -1943,14 +1960,6 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             fair_params: FAIRParameters | None = None
             per_scenario_inputs: list[tuple[str, str, FAIRParameters]] | None = None
             scenarios: list[Scenario]
-            # T4M-5-I1 (#351): pre-declare here (alongside fair_params/per_scenario_inputs)
-            # so the FAILED except handler can reference it directly without locals().get().
-            # Semantics unchanged: exceptions before the assignment point legitimately
-            # produce None (scenario-load errors in the discriminator branch, etc.).
-            _snapshot_local: dict[str, Any] | None = None
-            # P3 (currency): pre-declare alongside _snapshot_local for the same reason —
-            # FAILED handler can reference it without locals().get().
-            _fx_snapshot_local: dict[str, Any] | None = None
             # #419 (weight-robustness): pre-declare the LOCAL var (Arch-N2). NEVER
             # assign run.weight_robustness before the guarded COMPLETED UPDATE — that
             # would mark the ORM dirty and let _check_cancelled_or_continue's SELECT
@@ -2618,9 +2627,37 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # set by another actor", stranding the run RUNNING until the
             # orphan reaper. Rolling back first makes the guarded UPDATE see
             # the COMMITTED state. Cost: any flushed attribution audit rows
-            # are discarded — re-logged below from _terminal_audit_rows on
-            # the matched-flip path (self-committing sites are unaffected).
+            # are discarded — re-logged below from _terminal_audit_rows (only
+            # rows whose original flush SUCCEEDED are captured; self-committing
+            # sites are unaffected). Trade-off on the record (review N1): the
+            # rollback releases the SQLite write lock the FAILED UPDATE must
+            # then re-acquire; with WAL + busy_timeout in this single-process
+            # app a meaningful stall is implausible, and the orphan reaper
+            # remains the backstop.
             await session.rollback()
+            # Re-log the discarded attribution rows BEFORE the guarded flip so
+            # an audit-I/O failure here can be dropped with a second rollback
+            # WITHOUT losing the flip — the flip's commit is never hostage to
+            # audit I/O. On the matched path they commit atomically with the
+            # flip (#272 intent); on the rowcount==0 path the rollback below
+            # discards them again — correct, they must never land without OUR
+            # terminal flip.
+            try:
+                for _action, _changes in _terminal_audit_rows:
+                    await AuditWriter(session).log(
+                        organization_id=org_id_local,
+                        user_id=created_by_local,
+                        action=_action,
+                        entity_type="risk_analysis_run",
+                        entity_id=run_id_local,
+                        changes=_changes,
+                    )
+            except Exception:
+                logger.exception(
+                    "Run %s: attribution audit re-log failed; failing the run without those rows",
+                    run_id,
+                )
+                await session.rollback()
             # Atomic guarded FAILED flip (issue #272). Symmetric with the
             # COMPLETED branch: if a CANCELLED (or COMPLETED) was committed by
             # another session before this exception fired, the guarded UPDATE
@@ -2657,26 +2694,13 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # #131: after the leading rollback above, this diagnosis is
                 # now TRUSTWORTHY — the guarded UPDATE ran against committed
                 # state, so rowcount==0 genuinely means another actor
-                # terminalized the run (cancel TOCTOU, reaper). Only the
-                # no-match UPDATE itself is pending; discard it. Attribution
-                # audit rows die with the other actor's terminal state — a
-                # row that landed without OUR terminal flip would be orphaned.
+                # terminalized the run (cancel TOCTOU, reaper). Pending here:
+                # the no-match UPDATE and any re-logged attribution rows —
+                # discard both; a row that landed without OUR terminal flip
+                # would be orphaned against the other actor's state.
                 await session.rollback()
                 logger.exception("Run %s raised after terminalization", run_id)
                 return
-            # #131: re-log the attribution-degradation audit rows the leading
-            # rollback discarded — a FAILED run keeps its attribution audit
-            # trail, committed atomically WITH the FAILED flip (the #272
-            # atomicity intent, now on the failure path too).
-            for _action, _changes in _terminal_audit_rows:
-                await AuditWriter(session).log(
-                    organization_id=org_id_local,
-                    user_id=created_by_local,
-                    action=_action,
-                    entity_type="risk_analysis_run",
-                    entity_id=run_id_local,
-                    changes=_changes,
-                )
             await AuditWriter(session).log(
                 organization_id=org_id_local,
                 user_id=created_by_local,
