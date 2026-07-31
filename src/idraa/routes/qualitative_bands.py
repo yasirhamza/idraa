@@ -25,6 +25,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
@@ -237,9 +238,18 @@ async def update_band(
     svc = QualitativeBandService(db)
     # The edit form posts no kind — read it off the stored row to choose the
     # sanitize strictness (money for magnitude bands, strict for frequency).
-    # Cross-org / unknown ids fall through as strict; the service's own
-    # org-scoped lookup below still 404s them.
-    _band_row = await db.get(QualitativeMappingOrgBand, band_id)
+    # ORG-SCOPED (round-3 review): an unscoped PK read here made parse
+    # strictness — and thus 404-vs-422 — depend on another org's row kind, a
+    # cross-tenant existence oracle the moment multi-tenancy lands. Unknown /
+    # cross-org ids fall through strict; the service still 404s them.
+    _band_row = (
+        await db.execute(
+            select(QualitativeMappingOrgBand).where(
+                QualitativeMappingOrgBand.id == band_id,
+                QualitativeMappingOrgBand.organization_id == user.organization_id,
+            )
+        )
+    ).scalar_one_or_none()
     _is_money = _band_row is not None and _band_row.kind == "magnitude"
     try:
         await svc.update_org_band(
