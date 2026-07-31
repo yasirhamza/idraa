@@ -2534,6 +2534,21 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # round-trip stays lossless. Bump policy: see simulation_payload.py.
             summary_payload["schema_version"] = SIMULATION_RESULTS_SCHEMA_VERSION
 
+            # Sec-L8/#84 ordering constraint: encode the heavy arrays BEFORE the
+            # guarded COMPLETED flip. The codec fails closed on float32 overflow
+            # (ValueError), and the except-branch's FAILED flip is guarded on
+            # status==RUNNING — an encode failure AFTER the COMPLETED UPDATE
+            # would see its own uncommitted COMPLETED write inside the same
+            # transaction, match 0 rows, misdiagnose "terminal state set by
+            # another actor", and strand the run RUNNING until the orphan
+            # reaper. Encoding first keeps an overflow on the clean FAILED path
+            # (error_class=ValueError in the audit row). NOTE: the streaming
+            # encoder EMPTIES sample_arrays — the emptiness check must happen
+            # here, not at the RunSamples insert below.
+            arrays_codec_local: bytes | None = (
+                encode_sample_arrays_streaming(sample_arrays) if sample_arrays else None
+            )
+
             # Atomic guarded COMPLETED flip (issue #272). The WHERE status=RUNNING
             # clause re-validates the row's CURRENT persisted status at write
             # time, so a CANCELLED committed by another session in the window is
@@ -2579,8 +2594,10 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 return
             # The flip matched our RUNNING row: persist the heavy arrays in the
             # 1:1 run_samples table (skip when empty — a degenerate run may carry
-            # no sample arrays). This must happen on the matched branch only.
-            if sample_arrays:
+            # no sample arrays; the emptiness check lives at the pre-flip encode
+            # above because the streaming encoder empties the dict). This must
+            # happen on the matched branch only.
+            if arrays_codec_local is not None:
                 session.add(
                     RunSamples(
                         run_id=run_id_local,
@@ -2592,7 +2609,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         # rows with arrays populated / arrays_codec NULL are
                         # read-only history, not re-written here.
                         arrays=None,
-                        arrays_codec=encode_sample_arrays_streaming(sample_arrays),
+                        arrays_codec=arrays_codec_local,
                         derived_seed_keys=derived_seed_keys,
                     )
                 )

@@ -60,11 +60,26 @@ _Z95: float = float(norm.ppf(0.95))
 # no legitimate FAIR frequency or USD loss approaches this. A finite-but-enormous
 # distribution parameter overflows the float32 sample-array codec (sample_codec.py)
 # on encode, producing inf/nan and silently corrupting the stored run. This is a
-# representability guard, NOT a semantic loss ceiling. Applies to every numeric
-# the user can author into a stored distribution, INCLUDING the D13-D19 capacity
-# ``max`` (analyst-typeable per D17; ``_validate_capacity_floor`` bounds it from
-# below only).
+# representability guard, NOT a semantic loss ceiling.
+#
+# BASIS MATTERS (the sigma-recalibration epic's root defect class): this constant
+# applies directly only to LINEAR-space numerics — PERT/uniform/triangular
+# low/mode/high (USD or events/yr) and the D13-D19 capacity ``max`` (USD;
+# analyst-typeable per D17, floored by ``_validate_capacity_floor``, ceilinged
+# here). The stored lognormal ``mean`` is LOG-space meanlog (fed unconverted to
+# ``rng.lognormal(mean, sigma)`` in fair_cam/risk_engine/fair_core.py, and
+# compared as ``mean + z95*sigma`` against ``ln(max)`` by the D19 floor), so its
+# representability bound is _MEANLOG_MAX below — a 1e38 cap on a meanlog would
+# be vacuous (meanlog=300 => median e^300 ~ 1.9e130 USD sails under it).
 _MAGNITUDE_MAX: float = 1e38
+
+# Log-space companion bound: exp(_MEANLOG_MAX) == _MAGNITUDE_MAX, i.e. the
+# lognormal's MEDIAN (exp(meanlog)) must itself be float32-representable.
+# Purely the same representability constant expressed in the correct basis —
+# still not a semantic loss ceiling. Draws above the median are bounded by the
+# capacity ``max`` clip when present (truncated_lognormal), and by the codec's
+# fail-closed overflow guard (sample_codec.py) for legacy no-``max`` rows.
+_MEANLOG_MAX: float = math.log(_MAGNITUDE_MAX)
 
 
 def _validate_vulnerability(vuln: dict[str, Any]) -> list[str]:
@@ -94,13 +109,16 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
     distributions before storage (Meth-B1 #307; Epic B #326 extends to lognormal;
     #27 extends to lognormal_mixture).
 
-    PERT/uniform/triangular: low/mode/high must be finite AND |v| <= _MAGNITUDE_MAX.
-    Lognormal: mean must be finite AND |mean| <= _MAGNITUDE_MAX; sigma must be
-    finite AND 0 < sigma <= 10 (an unbounded right tail makes a non-finite mean
-    or non-positive sigma catastrophic; an extreme-but-finite sigma is a
-    user-controllable OOM/DoS path to the engine sampler at the 100k cap —
-    Sec-I2. sigma=10 already spans ~17 orders of magnitude p5->p95, beyond any
-    defensible cyber-loss range).
+    PERT/uniform/triangular: low/mode/high must be finite AND |v| <= _MAGNITUDE_MAX
+    (linear-space values, so the linear ceiling applies directly).
+    Lognormal: mean is LOG-space meanlog (see _MAGNITUDE_MAX's basis note), so it
+    must be finite AND mean <= _MEANLOG_MAX (median exp(mean) representable;
+    negative meanlog — sub-$1 medians — is representationally harmless and NOT
+    bounded below); sigma must be finite AND 0 < sigma <= 10 (an unbounded right
+    tail makes a non-finite mean or non-positive sigma catastrophic; an
+    extreme-but-finite sigma is a user-controllable OOM/DoS path to the engine
+    sampler at the 100k cap — Sec-I2. sigma=10 already spans ~17 orders of
+    magnitude p5->p95, beyond any defensible cyber-loss range).
     lognormal_mixture: same per-component finiteness + magnitude + sigma bound
     as lognormal, PLUS weight > 0 per component, weights summing to 1 (±1e-9),
     and 1 <= len(components) <= Settings.max_smes_per_fieldset (Sec-N1: the
@@ -124,10 +142,11 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
         if isinstance(mean, (int, float)) and not isinstance(mean, bool):
             if not math.isfinite(mean):
                 errs.append(f"{field_name}.mean must be finite, got {mean!r}")
-            elif abs(mean) > _MAGNITUDE_MAX:
+            elif mean > _MEANLOG_MAX:
                 errs.append(
-                    f"{field_name}.mean magnitude exceeds the representable ceiling "
-                    f"{_MAGNITUDE_MAX:g}, got {mean!r}"
+                    f"{field_name}.mean (log-space meanlog) implies a median exp(mean) "
+                    f"beyond the representable ceiling {_MAGNITUDE_MAX:g}; mean must be "
+                    f"<= {_MEANLOG_MAX:.4f}, got {mean!r}"
                 )
         if isinstance(sigma, (int, float)) and not isinstance(sigma, bool):
             if not math.isfinite(sigma):
@@ -170,10 +189,12 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
             if isinstance(c_mean, (int, float)) and not isinstance(c_mean, bool):
                 if not math.isfinite(c_mean):
                     errs.append(f"{field_name}.components[{i}].mean must be finite, got {c_mean!r}")
-                elif abs(c_mean) > _MAGNITUDE_MAX:
+                elif c_mean > _MEANLOG_MAX:
                     errs.append(
-                        f"{field_name}.components[{i}].mean magnitude exceeds the "
-                        f"representable ceiling {_MAGNITUDE_MAX:g}, got {c_mean!r}"
+                        f"{field_name}.components[{i}].mean (log-space meanlog) implies "
+                        f"a median exp(mean) beyond the representable ceiling "
+                        f"{_MAGNITUDE_MAX:g}; mean must be <= {_MEANLOG_MAX:.4f}, "
+                        f"got {c_mean!r}"
                     )
             if isinstance(c_sigma, (int, float)) and not isinstance(c_sigma, bool):
                 if not math.isfinite(c_sigma):
@@ -279,6 +300,11 @@ def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]
     component here would silently drop the floor for every other
     component.
 
+    Sec-L8/#84 ceiling: a finite ``max`` above ``_MAGNITUDE_MAX`` is ALSO
+    rejected here (collected alongside the floor verdict, not
+    short-circuiting it) -- ``max`` is the upper bound actually enforced on
+    lognormal draws, so it must itself be float32-representable.
+
     Malformed input -- missing/non-numeric ``mean``/``sigma``,
     non-list/empty/non-dict ``components``, or a non-numeric/non-finite/
     non-positive ``max`` -- returns an error string rather than raising or
@@ -314,6 +340,21 @@ def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]
             f"{field_name}.max must be a finite positive number to validate the max > p95 "
             f"floor, got {max_raw!r}"
         ]
+    # Sec-L8/#84 ceiling: the capacity cap is the upper bound actually
+    # enforced on lognormal draws (truncated_lognormal clips at ``max``),
+    # so it must itself be float32-representable — a max above the codec
+    # ceiling clips nothing into representable range and the stored run
+    # would still overflow on encode. COLLECTED, not short-circuited: the
+    # floor comparison below still runs (it is log-space and finite-safe for
+    # any finite float64 max), so the huge-max tests that pin the
+    # no-OverflowError floor behaviour keep exercising it, and the operator
+    # sees both defects in one 422 batch.
+    ceiling_errs: list[str] = []
+    if max_raw > _MAGNITUDE_MAX:
+        ceiling_errs.append(
+            f"{field_name}.max magnitude exceeds the representable ceiling "
+            f"{_MAGNITUDE_MAX:g}, got {max_raw!r}"
+        )
     ln_max = math.log(float(max_raw))
 
     if kind == "lognormal":
@@ -321,34 +362,38 @@ def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]
         sigma = dist.get("sigma")
         if not isinstance(mean, (int, float)) or isinstance(mean, bool):
             return [
-                f"{field_name}.mean must be numeric to validate the max > p95 floor, got {mean!r}"
+                *ceiling_errs,
+                f"{field_name}.mean must be numeric to validate the max > p95 floor, got {mean!r}",
             ]
         if not isinstance(sigma, (int, float)) or isinstance(sigma, bool):
             return [
-                f"{field_name}.sigma must be numeric to validate the max > p95 floor, got {sigma!r}"
+                *ceiling_errs,
+                f"{field_name}.sigma must be numeric to validate the max > p95 floor, got {sigma!r}",
             ]
         if not math.isfinite(mean) or not math.isfinite(sigma):
             # Non-finite mean/sigma is already rejected by _validate_finite
             # in the same error batch -- skip here rather than emit a
             # second, less-precise message about the same root cause.
-            return []
+            return ceiling_errs
         ln_p95 = float(mean) + _Z95 * float(sigma)
         if ln_max <= ln_p95:
             return [
+                *ceiling_errs,
                 f"{field_name}.max={max_raw!r} must exceed the distribution's p95 "
                 f"({_p95_repr(ln_p95)}); a cap at or below the p95 violates the D19 "
-                f"capacity floor"
+                f"capacity floor",
             ]
-        return []
+        return ceiling_errs
 
     # kind == "lognormal_mixture"
     components = dist.get("components")
     if not isinstance(components, list) or not components:
         return [
+            *ceiling_errs,
             f"{field_name}.components must be a non-empty list to validate the max > p95 "
-            f"floor, got {components!r}"
+            f"floor, got {components!r}",
         ]
-    errs: list[str] = []
+    errs: list[str] = []  # component malformations only; ceiling_errs composed at terminals
     worst_ln_p95: float | None = None
     worst_i: int | None = None
     for i, comp in enumerate(components):
@@ -383,14 +428,15 @@ def _validate_capacity_floor(field_name: str, dist: dict[str, Any]) -> list[str]
             worst_ln_p95 = ln_p95_i
             worst_i = i
     if errs:
-        return errs
+        return ceiling_errs + errs
     if worst_ln_p95 is not None and ln_max <= worst_ln_p95:
         return [
+            *ceiling_errs,
             f"{field_name}.max={max_raw!r} must exceed EVERY component's p95 "
             f"(components[{worst_i}] p95={_p95_repr(worst_ln_p95)} is the binding one); "
-            f"a cap at or below any component's p95 violates the D19 capacity floor"
+            f"a cap at or below any component's p95 violates the D19 capacity floor",
         ]
-    return []
+    return ceiling_errs
 
 
 def _validate_loss_max_required(field_name: str, dist: dict[str, Any]) -> list[str]:
