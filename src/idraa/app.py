@@ -777,6 +777,41 @@ async def _export_rate_limited_handler(request: StarletteRequest, exc: Exception
     )
 
 
+def _internal_error_response(
+    request: StarletteRequest, exc: BaseException, log_detail: str | None = None
+) -> Response:
+    """Generic 500 with a correlation id (idraa#72 fix 4) — the ONLY sanctioned
+    500 shape.
+
+    Shared by the unhandled-exception handler AND the ``HTTPException(5xx)``
+    path in ``_auth_redirect_handler``, so no 500 ships without an id or
+    leaks internal detail (``exc.detail`` used to reach the client via the
+    JSON fallback). The id is random (no request data) and ties the response
+    to the server-side log line, so a user-reported id is greppable to a
+    full traceback — or its absence is provable — after the platform log
+    buffer rotates (the #72 investigation dead-end).
+
+    Caveat: a 500 raised AFTER the response has started streaming (e.g. the
+    gzip samples export) cannot be intercepted — the client sees a truncated
+    body with no id; only the server log carries the traceback.
+    """
+    error_id = uuid.uuid4().hex[:12]
+    logging.getLogger(__name__).exception(
+        "Internal server error on %s %s [error_id=%s]%s",
+        request.method,
+        request.url.path,
+        error_id,
+        f" detail={log_detail}" if log_detail else "",
+        exc_info=exc,
+    )
+    settings = get_settings()
+    response = PlainTextResponse(f"Internal Server Error\nError ID: {error_id}", status_code=500)
+    response.headers["X-Error-Id"] = error_id
+    for name, value in security_header_map(settings.environment == "prod").items():
+        response.headers[name] = value
+    return response
+
+
 async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) -> Response:
     """401 -> 303 /login?next=... for HTML callers; JSON for API callers.
 
@@ -800,7 +835,16 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     Scope: 401-only. 403 (``require_role``) falls through to the default
     JSON handler — the right behaviour for "signed in but wrong role",
     where a redirect would loop the user back and forth.
+
+    5xx interception (idraa#72): a raised ``HTTPException(5xx)`` (e.g. the
+    finalize row-version-capture 500, the reports COMPLETED-but-empty 500s)
+    is an internal failure, not an API contract — it gets the same
+    generic-body + error-id treatment as an uncaught exception. Before this,
+    the JSON fallback shipped ``exc.detail`` (internal strings) to the
+    client with no correlation id.
     """
+    if exc.status_code >= 500:
+        return _internal_error_response(request, exc, log_detail=str(exc.detail))
     if exc.status_code == 401:
         accept = request.headers.get("accept", "")
         if "application/json" not in accept:
@@ -853,26 +897,7 @@ async def _server_error_handler(request: StarletteRequest, exc: Exception) -> Re
     by exact-then-MRO type match), so this only ever fires for truly
     uncaught errors.
     """
-    # idraa#72 (fix 4): a short correlation id ties THIS response to THIS log
-    # line. The #72 investigation dead-ended because the platform log buffer
-    # had rotated before the owner-reported 500 was investigated — with the id
-    # in the user's screenshot, the traceback is greppable (or its absence is
-    # provable) long after. The id is random (no request data), so it leaks
-    # nothing.
-    error_id = uuid.uuid4().hex[:12]
-    logging.getLogger(__name__).exception(
-        "Unhandled exception on %s %s [error_id=%s]",
-        request.method,
-        request.url.path,
-        error_id,
-        exc_info=exc,
-    )
-    settings = get_settings()
-    response = PlainTextResponse(f"Internal Server Error\nError ID: {error_id}", status_code=500)
-    response.headers["X-Error-Id"] = error_id
-    for name, value in security_header_map(settings.environment == "prod").items():
-        response.headers[name] = value
-    return response
+    return _internal_error_response(request, exc)
 
 
 @contextlib.asynccontextmanager
