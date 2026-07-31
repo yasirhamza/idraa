@@ -15,8 +15,10 @@ in. Normalize on write; normalize on read; stay consistent.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.errors import UserDeleteError, UserHasHistoryError
@@ -100,6 +102,87 @@ async def _is_last_admin(db: AsyncSession, org_id: uuid.UUID) -> bool:
     return active_admin_count is not None and active_admin_count <= 1
 
 
+def _other_active_admins_remain(org_id: uuid.UUID, user_id: uuid.UUID) -> ColumnElement[bool]:
+    """Guard clause: at least one ACTIVE admin other than ``user_id`` exists.
+
+    Embedded in the WHERE of the disarming write itself (idraa#83) so the
+    last-admin invariant is re-verified atomically WITH the write — a stale
+    pre-check count can no longer produce a zero-admin lockout.
+    """
+    return (
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.organization_id == org_id,
+            User.role == UserRole.ADMIN,
+            User.is_active == True,  # noqa: E712 — SQLAlchemy column comparison requires ==
+            User.id != user_id,
+        )
+        .scalar_subquery()
+        >= 1
+    )
+
+
+async def _lock_active_admin_rows(db: AsyncSession, org_id: uuid.UUID) -> None:
+    """Serialize concurrent admin-disarm writes on row-locking backends.
+
+    On Postgres (READ COMMITTED — the stated migration target) two concurrent
+    conditional UPDATEs on *different* admin rows would each see the other's
+    uncommitted row as still-active (write skew), so the subquery guard alone
+    is insufficient there. FOR UPDATE on the org's active-admin rows makes the
+    second writer block until the first commits, and its re-evaluated row set
+    then excludes the freshly-disarmed admin. SQLite ignores FOR UPDATE — its
+    single-writer model already serializes the conditional writes.
+    """
+    await db.execute(
+        select(User.id)
+        .where(
+            User.organization_id == org_id,
+            User.role == UserRole.ADMIN,
+            User.is_active == True,  # noqa: E712 — SQLAlchemy column comparison requires ==
+        )
+        .with_for_update()
+    )
+
+
+async def guarded_admin_disarm(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+    new_role: UserRole,
+    new_active: bool,
+) -> bool:
+    """Atomically demote/deactivate an ACTIVE admin, refusing a last-admin lockout.
+
+    The check-then-write guards in ``routes/users.py`` are racy (idraa#83):
+    two concurrent requests each disarming a *different* admin both count 2
+    active admins, both pass, and both commit — leaving the org with zero
+    active admins (in-app-irrecoverable). This helper moves the invariant into
+    the write: the UPDATE's WHERE re-verifies that another active admin
+    remains, so at most one of the racing writes can apply.
+
+    Returns ``True`` when the write applied (rowcount 1). ``False`` means the
+    guard refused: no other active admin remains — or the target stopped being
+    an active admin concurrently, in which case refusing is also safe (the
+    disarm already happened).
+    """
+    await _lock_active_admin_rows(db, org_id)
+    result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+        update(User)
+        .where(
+            User.id == user_id,
+            User.organization_id == org_id,
+            User.role == UserRole.ADMIN,
+            User.is_active == True,  # noqa: E712 — SQLAlchemy column comparison requires ==
+            _other_active_admins_remain(org_id, user_id),
+        )
+        .values(role=new_role, is_active=new_active)
+        .execution_options(synchronize_session="fetch")
+    )
+    return int(result.rowcount or 0) == 1
+
+
 async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
     """Count business entities authored by ``user_id`` within ``org_id``.
 
@@ -143,6 +226,14 @@ async def delete_user(
     to NULL attribution, not a dangling FK. Acceptable for single-org
     small-team.
 
+    TOCTOU (guarded, idraa#83): the last-admin check is NOT left racy — when
+    the target is an active admin, the DELETE itself carries the
+    "another active admin remains" predicate (same guard as
+    :func:`guarded_admin_disarm`), so two concurrent deletes of different
+    admins cannot leave zero active admins. Core DELETE is equivalent to
+    ``db.delete(user)`` here: ``User`` has no ORM relationships; all
+    referential behavior is DB-side (SET NULL / CASCADE, foreign_keys=ON).
+
     Audit: emits a ``user.delete`` row with a REDACTED email (local part
     stripped) per the audit no-raw-email contract.
 
@@ -165,14 +256,35 @@ async def delete_user(
         raise UserHasHistoryError(
             "user authored entities (runs / scenarios / controls) — deactivate instead"
         )
+    # Capture audit values BEFORE the delete; the row may be gone after.
+    email_redacted = redact_email(user.email)
+    role_value = user.role.value
+
+    # Delete FIRST, audit after: if the guarded DELETE refuses, no audit row
+    # has been flushed for a delete that never happened.
+    if user.role == UserRole.ADMIN and user.is_active:
+        await _lock_active_admin_rows(db, org_id)
+        result: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+            delete(User)
+            .where(
+                User.id == user.id,
+                User.organization_id == org_id,
+                _other_active_admins_remain(org_id, user.id),
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        if int(result.rowcount or 0) == 0:
+            raise UserDeleteError("cannot delete the last admin")
+    else:
+        await db.delete(user)
+
     await AuditWriter(db).log(
         organization_id=org_id,
         user_id=actor_id,
         action="user.delete",
         entity_type="user",
         entity_id=user_id,
-        changes={"email_redacted": redact_email(user.email), "role": [user.role.value, None]},
+        changes={"email_redacted": email_redacted, "role": [role_value, None]},
     )
-    await db.delete(user)
     await db.commit()
     return True

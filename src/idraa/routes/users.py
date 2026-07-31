@@ -41,6 +41,7 @@ from idraa.services.users import (
     _authored_count,
     delete_user,
     get_user,
+    guarded_admin_disarm,
     invite_user,
     list_users,
 )
@@ -311,21 +312,49 @@ async def edit_post(
     changes: dict[str, list[object]] = {}
     if user.role != new_role:
         changes["role"] = [user.role.value, new_role.value]
-        user.role = new_role
     if user.is_active != new_active:
         changes["is_active"] = [user.is_active, new_active]
-        user.is_active = new_active
-        if not new_active:  # idraa#80 L13 — deactivation kills live sessions
-            revoked = await revoke_user_sessions(db, user.id)
-            await AuditWriter(db).log(
-                organization_id=user.organization_id,
-                entity_type="user",
-                entity_id=user.id,
-                action="user.sessions_revoked",
-                changes={"count": revoked, "via": "ui"},
-                user_id=me.id,
-                ip_address=client_ip(request),
+
+    # idraa#83: disarming an ACTIVE admin (demote and/or deactivate) goes
+    # through the atomic guarded write. The count check above is a friendly
+    # fast-fail but is check-then-write racy — the guard embedded in the
+    # UPDATE's WHERE is what actually prevents a concurrent zero-admin
+    # lockout when two requests disarm two different admins simultaneously.
+    if (
+        user.role == UserRole.ADMIN
+        and user.is_active
+        and (new_role != UserRole.ADMIN or not new_active)
+    ):
+        applied = await guarded_admin_disarm(
+            db,
+            user_id=user.id,
+            org_id=user.organization_id,
+            new_role=new_role,
+            new_active=new_active,
+        )
+        if not applied:
+            return _edit_error(
+                request,
+                me,
+                user,
+                "Cannot demote or deactivate the last active admin",
             )
+    else:
+        user.role = new_role
+        user.is_active = new_active
+
+    if "is_active" in changes and not new_active:
+        # idraa#80 L13 — deactivation kills live sessions
+        revoked = await revoke_user_sessions(db, user.id)
+        await AuditWriter(db).log(
+            organization_id=user.organization_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="user.sessions_revoked",
+            changes={"count": revoked, "via": "ui"},
+            user_id=me.id,
+            ip_address=client_ip(request),
+        )
     if changes:
         await AuditWriter(db).log(
             organization_id=user.organization_id,
@@ -389,7 +418,24 @@ async def set_active_post(
                 )
 
     changes: dict[str, list[object]] = {"is_active": [user.is_active, new_active]}
-    user.is_active = new_active
+    # idraa#83: deactivating an ACTIVE admin goes through the atomic guarded
+    # write (see edit_post) — the count check above is a racy fast-fail only.
+    # The early no-op return guarantees user.is_active is True here.
+    if not new_active and user.role == UserRole.ADMIN:
+        applied = await guarded_admin_disarm(
+            db,
+            user_id=user.id,
+            org_id=user.organization_id,
+            new_role=UserRole.ADMIN,
+            new_active=False,
+        )
+        if not applied:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot deactivate the last active admin",
+            )
+    else:
+        user.is_active = new_active
     if not new_active:  # idraa#80 L13 — deactivation kills live sessions
         revoked = await revoke_user_sessions(db, user.id)
         await AuditWriter(db).log(
