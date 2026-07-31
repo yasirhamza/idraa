@@ -10,10 +10,11 @@ Spec §8.1. Mirrors routes/calibration_overrides.py preamble:
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import BeforeValidator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from idraa.services.scenario_library import (
     OverrideDraft,
     ScenarioLibraryService,
 )
+from idraa.utils.money import sanitize_money_str
 
 router = APIRouter(tags=["library-overrides"])
 
@@ -105,18 +107,18 @@ async def new_override_form(
 async def create_override(
     request: Request,
     entry_id: uuid.UUID = Form(...),
-    tef_low: float | None = Form(None),
-    tef_mode: float | None = Form(None),
-    tef_high: float | None = Form(None),
-    vuln_low: float | None = Form(None),
-    vuln_mode: float | None = Form(None),
-    vuln_high: float | None = Form(None),
-    pl_low: float | None = Form(None),
-    pl_mode: float | None = Form(None),
-    pl_high: float | None = Form(None),
-    sl_low: float | None = Form(None),
-    sl_mode: float | None = Form(None),
-    sl_high: float | None = Form(None),
+    tef_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    tef_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    tef_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
     reason: str = Form(...),
     methodology_change_reason: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -214,18 +216,18 @@ async def edit_override_form(
 async def update_override(
     request: Request,
     override_id: uuid.UUID,
-    tef_low: float | None = Form(None),
-    tef_mode: float | None = Form(None),
-    tef_high: float | None = Form(None),
-    vuln_low: float | None = Form(None),
-    vuln_mode: float | None = Form(None),
-    vuln_high: float | None = Form(None),
-    pl_low: float | None = Form(None),
-    pl_mode: float | None = Form(None),
-    pl_high: float | None = Form(None),
-    sl_low: float | None = Form(None),
-    sl_mode: float | None = Form(None),
-    sl_high: float | None = Form(None),
+    tef_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    tef_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    tef_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    vuln_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    pl_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_low: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_mode: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
+    sl_high: Annotated[float | None, BeforeValidator(sanitize_money_str)] = Form(None),
     reason: str = Form(...),
     methodology_change_reason: str | None = Form(None),
     expected_version: int = Form(...),

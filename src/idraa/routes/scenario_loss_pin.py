@@ -57,6 +57,7 @@ from idraa.app import _format_money_input
 from idraa.models.scenario import Scenario
 from idraa.services.calibration import SIGMA_WARN_THRESHOLD, WITHIN_SCENARIO_SIGMA_DEFAULT
 from idraa.services.wizard_questions import IMPACT_FIELDSETS
+from idraa.utils.money import sanitize_money_str
 
 
 def _expert_loss_readout_cfgs(
@@ -562,6 +563,6 @@ def _parse_pin_quantile(raw: str, *, field_name: str) -> float:
     a bare HTTPException JSON body reach the analyst.
     """
     try:
-        return float(raw)
+        return float(sanitize_money_str(raw))
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field_name}: not a number (got {raw!r})") from exc

@@ -86,21 +86,33 @@
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
           <span class="label-text">Low</span>
-          <input type="number" name="pl_low" step="any"
-                 value="{{ override.primary_loss.low | format_money_input if override and override.primary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.primary_loss.low if override and override.primary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="low_low"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.primary_loss.low if override and override.primary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
         <label class="form-control">
           <span class="label-text">Mode</span>
-          <input type="number" name="pl_mode" step="any"
-                 value="{{ override.primary_loss.mode | format_money_input if override and override.primary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.primary_loss.mode if override and override.primary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="mode_mode"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.primary_loss.mode if override and override.primary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
         <label class="form-control">
           <span class="label-text">High</span>
-          <input type="number" name="pl_high" step="any"
-                 value="{{ override.primary_loss.high | format_money_input if override and override.primary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.primary_loss.high if override and override.primary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="high_high"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.primary_loss.high if override and override.primary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
       </div>
     </fieldset>
@@ -111,21 +123,33 @@
       <div class="grid grid-cols-3 gap-2">
         <label class="form-control">
           <span class="label-text">Low</span>
-          <input type="number" name="sl_low" step="any"
-                 value="{{ override.secondary_loss.low | format_money_input if override and override.secondary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.secondary_loss.low if override and override.secondary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="low_low"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.secondary_loss.low if override and override.secondary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
         <label class="form-control">
           <span class="label-text">Mode</span>
-          <input type="number" name="sl_mode" step="any"
-                 value="{{ override.secondary_loss.mode | format_money_input if override and override.secondary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.secondary_loss.mode if override and override.secondary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="mode_mode"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.secondary_loss.mode if override and override.secondary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
         <label class="form-control">
           <span class="label-text">High</span>
-          <input type="number" name="sl_high" step="any"
-                 value="{{ override.secondary_loss.high | format_money_input if override and override.secondary_loss else '' }}"
-                 class="input input-bordered font-mono">
+          <span x-data='moneyField({{ ((override.secondary_loss.high if override and override.secondary_loss else none) | format_money_attr) | tojson }})'>
+                 <input type="text" inputmode="numeric" autocomplete="off" name="high_high"
+                        pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                        value="{{ (override.secondary_loss.high if override and override.secondary_loss else none) | format_money_attr }}"
+                        @input="live($el, $event)" @blur="commit($el)"
+                        class="input input-bordered font-mono w-full">
+                 </span>
         </label>
       </div>
     </fieldset>

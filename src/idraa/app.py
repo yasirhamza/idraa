@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import Undefined as JinjaUndefined
 from jinja2 import pass_context
 from markupsafe import Markup
 from sqlalchemy import func, select
@@ -450,7 +451,26 @@ def _format_probability_input(value: float | None) -> str:
     return f"{v:.4f}"
 
 
+def _format_money_attr(value: object) -> str:
+    """value= attribute for Excel-like money inputs (owner UAT 2026-08-01).
+
+    Numeric -> whole-dollar comma-grouped ("1,500,000" — matches
+    idraaMoneyFmt in money_input.js). None/blank -> "". ANYTHING ELSE is
+    echoed VERBATIM: a 422 re-render must preserve the analyst's invalid
+    input for correction, and Jinja's `| float` default-0.0 would silently
+    launder it server-side (the same never-launder invariant the client
+    enforces).
+    """
+    if value is None or isinstance(value, JinjaUndefined) or value == "":
+        return ""  # includes 422 re-renders where the dict lacks the key
+    try:
+        return f"{float(value):,.0f}"  # type: ignore[arg-type]  # fallback below
+    except (TypeError, ValueError):
+        return str(value)
+
+
 templates.env.filters["format_money_input"] = _format_money_input
+templates.env.filters["format_money_attr"] = _format_money_attr
 templates.env.filters["format_rate_input"] = _format_rate_input
 templates.env.filters["format_probability_input"] = _format_probability_input
 

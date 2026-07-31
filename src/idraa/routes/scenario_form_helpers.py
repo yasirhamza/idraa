@@ -74,6 +74,7 @@ from idraa.services.calibration import (
     revenue_tier_from_annual_revenue,
 )
 from idraa.services.industry_mapping import V3_TO_FAIR_CAM_INDUSTRY
+from idraa.utils.money import sanitize_money_str
 
 __all__ = [
     "ASSET_CLASS_CHOICES",
@@ -361,9 +362,9 @@ def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     """
     return {
         "distribution": "PERT",
-        "low": float(raw[f"{prefix}_low"]),
-        "mode": float(raw[f"{prefix}_mode"]),
-        "high": float(raw[f"{prefix}_high"]),
+        "low": float(sanitize_money_str(raw[f"{prefix}_low"])),
+        "mode": float(sanitize_money_str(raw[f"{prefix}_mode"])),
+        "high": float(sanitize_money_str(raw[f"{prefix}_high"])),
     }
 
 
@@ -399,8 +400,8 @@ def dist_from_raw(
     """
     kind = (raw.get(f"{prefix}_dist") or "pert").strip().lower()
     if kind == "lognormal":
-        low = float(raw[f"{prefix}_low"])
-        high = float(raw[f"{prefix}_high"])
+        low = float(sanitize_money_str(raw[f"{prefix}_low"]))
+        high = float(sanitize_money_str(raw[f"{prefix}_high"]))
         dist: dict[str, Any] = {"distribution": "lognormal", **lognormal_from_quantiles(low, high)}
         if prefix == "pl":
             resolved_max = _resolve_capacity_max(raw, prefix, capacity_max)

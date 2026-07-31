@@ -72,11 +72,36 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
            {% if disabled %}disabled{% endif %}
            class="{{ _input_classes(error, disabled) }}">
 
-  {% elif input_type in ('number','money','percent','count') %}
-    {%- set step = step if step is not none else ('0.01' if input_type in ('money','percent') else '1') -%}
+  {% elif input_type == 'money' %}
+    {# Excel-like whole-dollar entry (owner UAT 2026-07-31/08-01): live comma
+       regroup with caret preservation (money_input.js moneyField component),
+       benign-paste sanitize, never-launder loudness, NO decimal display.
+       The input keeps its NAME and a server-formatted value, so a no-JS
+       browser renders and posts it exactly like the wizard fields — every
+       money parser sanitizes the benign separators server-side
+       (utils/money.py, the server mirror of the client allowlist). #}
+    <div class="relative" x-data='moneyField({{ (value | format_money_attr) | tojson }})'>
+      <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix or '$' }}</span>
+      <input id="{{ name }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
+             pattern="[0-9,]+(\.[0-9]+)?"
+             value="{{ value | format_money_attr }}"
+             x-model="display"
+             @input="live($el, $event)"
+             @blur="commit($el)"
+             {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+             {% if required %}required aria-required="true"{% endif %}
+             {% if disabled %}disabled{% endif %}
+             class="{{ _input_classes(error, disabled) }} pl-7{% if suffix %} pr-7{% endif %} font-mono tabular-nums">
+      {% if suffix %}
+        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-ink-2" aria-hidden="true">{{ suffix }}</span>
+      {% endif %}
+    </div>
+
+  {% elif input_type in ('number','percent','count') %}
+    {%- set step = step if step is not none else ('0.01' if input_type == 'percent' else '1') -%}
     <div class="relative">
-      {% if input_type == 'money' or prefix %}
-        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix or '$' }}</span>
+      {% if prefix %}
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix }}</span>
       {% endif %}
       <input id="{{ name }}" name="{{ name }}" type="number"
              inputmode="decimal" step="{{ step }}"
@@ -85,7 +110,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
              {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
              {% if required %}required aria-required="true"{% endif %}
              {% if disabled %}disabled{% endif %}
-             class="{{ _input_classes(error, disabled) }}{% if input_type == 'money' or prefix %} pl-7{% endif %}{% if input_type == 'percent' or suffix %} pr-7{% endif %} font-mono tabular-nums">
+             class="{{ _input_classes(error, disabled) }}{% if prefix %} pl-7{% endif %}{% if input_type == 'percent' or suffix %} pr-7{% endif %} font-mono tabular-nums">
       {% if input_type == 'percent' or suffix %}
         <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-ink-2" aria-hidden="true">{{ suffix or '%' }}</span>
       {% endif %}

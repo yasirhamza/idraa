@@ -10,7 +10,8 @@ behavior (static/js/money_input.js + the wizard partial's handlers):
 - no focus-time value mutation at all;
 - pastes sanitize ("$1 000 000" -> "1,000,000") instead of failing the
   pattern;
-- blur still commits the canonical 2-decimal display.
+- blur commits the canonical WHOLE-DOLLAR display (no decimals on any
+  money surface — owner ruling; FX rates are not money).
 
 Self-bootstraps via /setup (convention copied from test_loss_readout_e2e);
 drives the wizard blank flow to step 4 where the eager-seeded PL row exists.
@@ -194,15 +195,15 @@ async def test_money_entry_is_excel_like(migrated_server_url: str) -> None:
         )
         assert await field.input_value() == "1,000,000"
 
-        # 5. Blur commits the canonical 2-decimal display; HTML pattern
-        #    validation passes (validity.valid) so submit is not blocked.
+        # 5. Blur commits the canonical WHOLE-DOLLAR display (owner ruling:
+        #    no decimals on any money surface); pattern stays valid.
         await field.press("Tab")
-        assert await field.input_value() == "1,000,000.00"
+        assert await field.input_value() == "1,000,000"
         assert await field.evaluate("el => el.validity.valid") is True
 
         # 6. No focus-time value swap: re-focusing leaves the text untouched.
         await field.click()
-        assert await field.input_value() == "1,000,000.00"
+        assert await field.input_value() == "1,000,000"
 
         # 7. Magnitude-suffixed paste must fail LOUDLY, never launder
         #    (review B1: a blanket sanitize turned "$1.5M" into 1.5 — a
@@ -232,24 +233,26 @@ async def test_money_entry_is_excel_like(migrated_server_url: str) -> None:
         # 9. THROUGH-A-BLUR shapes (round-2 blocker: fmt() writes el.value via
         #    x-model with no input event, so the eat's prev-tracking desynced
         #    after every blur — both symptoms below reproduced pre-fix).
-        #    9a. Selection-delete of the cents must NOT eat extra digits:
-        #        "1,000.00" minus selected ".00" is "1,000", never "100".
+        #    9a. A multi-character selection-delete must NOT trigger the
+        #        separator-eat even right after a blur re-sync: selecting the
+        #        trailing ",000" of "1,000,000" and deleting yields "1,000",
+        #        never a mis-eaten neighbour digit.
         await field.press("ControlOrMeta+a")
-        await page.keyboard.type("1000")
+        await page.keyboard.type("1000000")
         await field.press("Tab")
-        assert await field.input_value() == "1,000.00"
+        assert await field.input_value() == "1,000,000"
         await field.click()
-        await field.evaluate("el => el.setSelectionRange(5, 8)")  # select ".00"
+        await field.evaluate("el => el.setSelectionRange(5, 9)")  # ",000" tail
         await field.press("Backspace")
         assert await field.input_value() == "1,000"
         #    9b. The separator-eat still works on the FIRST delete after a
         #        blur (pre-fix it silently no-opped once per focus cycle).
         await field.press("Tab")
-        assert await field.input_value() == "1,000.00"
+        assert await field.input_value() == "1,000"
         await field.click()
         await field.evaluate("el => el.setSelectionRange(2, 2)")  # after ","
         await field.press("Backspace")
-        assert await field.input_value() == "000.00"  # digit died with comma
+        assert await field.input_value() == "000"  # digit died with its comma
 
         # 10. European dot-grouped paste must fail LOUDLY, never launder
         #     (round-2 important: the old first-dot collapse turned

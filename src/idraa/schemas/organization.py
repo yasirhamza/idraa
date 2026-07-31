@@ -31,6 +31,7 @@ from idraa.models.enums import (
     SecurityMaturity,
 )
 from idraa.schemas._csv import split_csv
+from idraa.utils.money import sanitize_money_str
 
 # Matches Numeric(18, 2) on the corresponding DB columns — 16 digits left
 # of the decimal, 2 right. Reject beyond this at the 400-path rather than
@@ -108,6 +109,12 @@ class OrganizationForm(BaseModel):
 
         Hotfix for first-real-user 400 on POST /organization.
         """
-        if isinstance(v, str) and v.strip() == "":
-            return None
+        if isinstance(v, str):
+            if v.strip() == "":
+                return None
+            # Excel-like money entry (owner UAT 2026-08-01): fields submit
+            # comma-grouped values; strip the benign formatting allowlist
+            # (server mirror of money_input.js — utils/money.py). Letters/
+            # signs survive and fail numeric coercion loudly (never-launder).
+            return sanitize_money_str(v)
         return v

@@ -55,6 +55,63 @@
     return raw.replace(BENIGN, "");
   }
 
+  // Shared helpers (owner UAT round 2: money entry on ALL surfaces).
+  // idraaMoneySanitize: benign strip, letters/signs survive (never-launder).
+  // idraaMoneyFmt: canonical WHOLE-DOLLAR display — the owner ruled decimals
+  // out of every money surface (FX *rates* are not money and keep their own
+  // inputs). Strict Number(): non-numeric leftovers blank loudly; a typed or
+  // pasted sub-dollar fraction rounds on commit (magnitude preserved to <$1
+  // — deliberate precision policy, not a launder).
+  window.idraaMoneySanitize = function (s) {
+    return s === null || s === undefined ? "" : String(s).replace(BENIGN, "");
+  };
+
+  window.idraaMoneyFmt = function (v) {
+    if (v === "" || v === null || v === undefined) return "";
+    var s = window.idraaMoneySanitize(String(v));
+    var n = s === "" ? NaN : Number(s);
+    return isNaN(n)
+      ? ""
+      : n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  // Reusable Alpine component for SINGLE money fields (controls cost, org
+  // profile, expert-form loss params, overrides…). The VISIBLE input is
+  // unnamed (formatted display, HTML validation); a HIDDEN input carries the
+  // form name with the sanitized value, so no server parser needs comma
+  // tolerance. Registered on alpine:init — this file loads non-defer before
+  // the deferred Alpine bundle, the factory pattern loss_preview.js already
+  // uses (no #205 race; the factory is registered once and survives HTMX
+  // swaps).
+  document.addEventListener("alpine:init", function () {
+    window.Alpine.data("moneyField", function (initial) {
+      return {
+        display: "",
+        init: function () {
+          // Numeric initials render canonically; a NON-numeric initial (a 422
+          // re-render echoing invalid input) is preserved VERBATIM so Alpine
+          // hydration cannot blank what the server deliberately echoed — the
+          // field stays pattern-invalid and correctable (never-launder).
+          var f = window.idraaMoneyFmt(initial);
+          this.display =
+            f === "" && initial !== null && initial !== undefined && String(initial).trim() !== ""
+              ? String(initial)
+              : f;
+        },
+        get raw() {
+          return window.idraaMoneySanitize(this.display);
+        },
+        live: function (el, ev) {
+          this.display = window.idraaMoneyLive(el, ev);
+        },
+        commit: function (el) {
+          this.display = window.idraaMoneyFmt(this.display);
+          el.__idraaMoneyPrev = this.display;
+        },
+      };
+    });
+  });
+
   window.idraaMoneyLive = function (el, ev) {
     var raw = el.value;
     var prev = el.__idraaMoneyPrev || "";

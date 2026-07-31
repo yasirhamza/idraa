@@ -295,17 +295,8 @@
                     <div x-data="{
                           display: '',
                           init() { this.display = this.fmt(row.low); },
-                          fmt(v) {
-                            if (v === '' || v === null || v === undefined) return '';
-                            /* Strict Number(), not parseFloat (review B1):
-                               parseFloat('1.5M') = 1.5 would silently launder
-                               a magnitude-suffixed paste; Number() -> NaN ->
-                               blank + required halt (the loud legacy path). */
-                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
-                            const n = s === '' ? NaN : Number(s);
-                            return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                          },
-                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
+                          fmt(v) { return window.idraaMoneyFmt(v); },
+                          strip(s) { return window.idraaMoneySanitize(s); }
                         }">
                       {# Excel-like entry (owner UAT 2026-07-31): NO focus-time
                          value swap — the old `display = strip(display)` threw
@@ -350,17 +341,8 @@
                     <div x-data="{
                           display: '',
                           init() { this.display = this.fmt(row.high); },
-                          fmt(v) {
-                            if (v === '' || v === null || v === undefined) return '';
-                            /* Strict Number(), not parseFloat (review B1):
-                               parseFloat('1.5M') = 1.5 would silently launder
-                               a magnitude-suffixed paste; Number() -> NaN ->
-                               blank + required halt (the loud legacy path). */
-                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
-                            const n = s === '' ? NaN : Number(s);
-                            return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                          },
-                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
+                          fmt(v) { return window.idraaMoneyFmt(v); },
+                          strip(s) { return window.idraaMoneySanitize(s); }
                         }">
                       {# Excel-like entry: mirrors the Low input above (no
                          focus swap; caret-preserving live regroup; tolerant

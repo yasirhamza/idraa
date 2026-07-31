@@ -337,6 +337,22 @@
         <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}</label>
         {% if req %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
       </div>
+      {% if fmt == "money" %}
+      {# Excel-like whole-dollar entry (owner UAT 2026-08-01): moneyField
+         component, visible input unnamed, hidden carrier posts sanitized
+         digits. The readout dispatch reads the VISIBLE (formatted) value —
+         loss_preview's _num strips separators. #}
+      <span x-data='moneyField({{ (raw | format_money_attr) | tojson }})'>
+        <input id="{{ name }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
+               pattern="[0-9,]+(\.[0-9]+)?"
+               value="{{ raw | format_money_attr }}"
+               x-model="display"
+               {% if req %}required aria-required="true"{% endif %}
+               @input="live($el, $event){% if dispatch_fieldset %}; window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ dispatch_fieldset }}', idx: 0, low: document.getElementById('{{ dispatch_fieldset }}_low').value, high: document.getElementById('{{ dispatch_fieldset }}_high').value}})){% endif %}"
+               @blur="commit($el)"
+               class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get(name) %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      </span>
+      {% else %}
       <input id="{{ name }}" name="{{ name }}"
              type="number" step="any"
              value="{{ display_value }}"
@@ -345,6 +361,7 @@
              @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ dispatch_fieldset }}', idx: 0, low: document.getElementById('{{ dispatch_fieldset }}_low').value, high: document.getElementById('{{ dispatch_fieldset }}_high').value}}))"
              {% endif %}
              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if errors_dict.get(name) %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+      {% endif %}
       {% if errors_dict.get(name) %}
         <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_dict[name] }}</p>
       {% endif %}
@@ -664,20 +681,30 @@
                     <label for="{{ field_key }}_pin_p50" class="text-meta text-ink-2">p50 (median)</label>
                     <span class="text-micro text-ink-3">REQUIRED</span>
                   </div>
-                  <input id="{{ field_key }}_pin_p50" name="pin_p50" type="number" step="any"
-                         value="{{ panel.prefill_p50 }}" required aria-required="true"
-                         @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                  <span x-data='moneyField({{ (panel.prefill_p50 | format_money_attr) | tojson }})'>
+                  <input id="{{ field_key }}_pin_p50" name="pin_p50" type="text" inputmode="numeric" autocomplete="off"
+                         value="{{ panel.prefill_p50 | format_money_attr }}"
+                         pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                         required aria-required="true"
+                         @input="live($el, $event); window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                         @blur="commit($el)"
                          class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+                  </span>
                 </div>
                 <div>
                   <div class="flex items-center justify-between">
                     <label for="{{ field_key }}_pin_p95" class="text-meta text-ink-2">p95</label>
                     <span class="text-micro text-ink-3">REQUIRED</span>
                   </div>
-                  <input id="{{ field_key }}_pin_p95" name="pin_p95" type="number" step="any"
-                         value="{{ panel.prefill_p95 }}" required aria-required="true"
-                         @input="window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                  <span x-data='moneyField({{ (panel.prefill_p95 | format_money_attr) | tojson }})'>
+                  <input id="{{ field_key }}_pin_p95" name="pin_p95" type="text" inputmode="numeric" autocomplete="off"
+                         value="{{ panel.prefill_p95 | format_money_attr }}"
+                         pattern="[0-9,]+(\.[0-9]+)?" x-model="display"
+                         required aria-required="true"
+                         @input="live($el, $event); window.dispatchEvent(new CustomEvent('loss-row-input', {detail: {fieldset: '{{ field_key }}_pin', idx: 0, low: document.getElementById('{{ field_key }}_pin_p50').value, high: document.getElementById('{{ field_key }}_pin_p95').value}}))"
+                         @blur="commit($el)"
                          class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+                  </span>
                 </div>
               </div>
               <button type="submit" class="btn btn-primary btn-sm">Pin dispersion</button>

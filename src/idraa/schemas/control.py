@@ -26,6 +26,7 @@ from idraa.models.enums import (
 )
 from idraa.schemas._csv import split_csv
 from idraa.schemas.organization import _MONEY_MAX
+from idraa.utils.money import sanitize_money_str
 
 
 class ControlFunctionAssignmentDTO(BaseModel):
@@ -80,7 +81,7 @@ class ControlFunctionAssignmentDTO(BaseModel):
         if v is None:
             return None
         if isinstance(v, str):
-            s = v.strip().replace(",", "").replace(" ", "")
+            s = sanitize_money_str(v.strip())
             if not s:
                 return None
             return s
@@ -182,6 +183,15 @@ class ControlForm(BaseModel):
         max_digits=18,
         decimal_places=2,
     )
+
+    @field_validator("annual_cost", mode="before")
+    @classmethod
+    def _sanitize_money(cls, v: object) -> object:
+        """Excel-like money entry submits comma-grouped values (owner UAT
+        2026-08-01); strip the benign allowlist server-side (utils/money.py
+        mirror of money_input.js). Letters/signs survive -> loud 422."""
+        return sanitize_money_str(v)
+
     nist_csf_functions: list[str] = Field(default_factory=list)
     iso_27001_domains: list[str] = Field(default_factory=list)
     compliance_mappings: dict[str, Any] = Field(default_factory=dict)

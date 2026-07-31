@@ -262,8 +262,12 @@ async def _goto_new_scenario_lognormal_pl(
     await page.wait_for_function(
         "() => document.querySelectorAll(\"input[name='pl_mode']\").length === 0"
     )
-    await page.fill("input[name='pl_low']", str(pl_low))
-    await page.fill("input[name='pl_high']", str(pl_high))
+    # Money-entry rollout (owner UAT 2026-08-01): the expert form's PL
+    # fields are now the same x-model moneyField inputs as the wizard's —
+    # plain fill() APPENDS on those (see _fill_money's docstring); clear
+    # first, same workaround.
+    await _fill_money(page, "input[name='pl_low']", str(pl_low))
+    await _fill_money(page, "input[name='pl_high']", str(pl_high))
 
 
 async def _fill_money(page: Page, selector: str, value: str) -> None:

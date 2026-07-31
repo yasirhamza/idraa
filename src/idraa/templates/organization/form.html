@@ -95,38 +95,43 @@
     {{ form_field(name="employee_count", label="Employees", input_type="number",
                   value=_v('employee_count'), error=errors_by_field.get('employee_count', []) | join('; ') or none) }}
 
-    {# Annual revenue with live IRIS tier echo — requires Alpine, kept inline per CLAUDE.md rule #}
+    {# Annual revenue with live IRIS tier echo — Excel-like money entry
+       (moneyField from money_input.js) + tier label reading the sanitized
+       value. Inline x-data per CLAUDE.md rule; the label helper is merged
+       into the moneyField component scope via a nested x-data. #}
     <div class="max-w-md"
-         x-data='{
-           value: {{ _v("annual_revenue") | tojson }},
-           label(v) {
-             if (v === "" || v === null || v === undefined) return null;
-             const n = Number(v);
-             if (!isFinite(n)) return null;
-             if (n < 10000000) return "< $10M";
-             if (n < 100000000) return "$10M – $100M";
-             if (n < 1000000000) return "$100M – $1B";
-             if (n < 10000000000) return "$1B – $10B";
-             if (n < 100000000000) return "$10B – $100B";
-             return "> $100B";
-           }
-         }'>
+         x-data='moneyField({{ (_v('annual_revenue') | format_money_attr) | tojson }})'>
       <div class="flex items-center justify-between">
         <label for="annual_revenue" class="text-meta text-ink-2">Annual revenue</label>
       </div>
-      <div class="relative">
+      <div class="relative"
+           x-data='{
+             label(v) {
+               if (v === "" || v === null || v === undefined) return null;
+               const n = Number(v);
+               if (!isFinite(n)) return null;
+               if (n < 10000000) return "< $10M";
+               if (n < 100000000) return "$10M – $100M";
+               if (n < 1000000000) return "$100M – $1B";
+               if (n < 10000000000) return "$1B – $10B";
+               if (n < 100000000000) return "$10B – $100B";
+               return "> $100B";
+             }
+           }'>
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">$</span>
-        <input id="annual_revenue" name="annual_revenue" type="number"
-               inputmode="decimal" step="0.01"
-               x-model="value"
-               value="{{ _v('annual_revenue') }}"
+        <input id="annual_revenue" name="annual_revenue" type="text" inputmode="numeric" autocomplete="off"
+               pattern="[0-9,]+(\.[0-9]+)?"
+               value="{{ _v('annual_revenue') | format_money_attr }}"
+               x-model="display"
+               @input="live($el, $event)"
+               @blur="commit($el)"
                class="h-10 w-full px-3 pl-7 rounded-input bg-surface-1 text-ink-1 border {% if errors_by_field.get('annual_revenue') %}border-status-critical{% else %}border-border-strong{% endif %} focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 font-mono tabular-nums">
+        <p class="text-micro text-ink-2 mt-1" x-show="label(raw) !== null">
+          Range: <span x-text="label(raw)"></span>
+        </p>
       </div>
-      <p class="text-micro text-ink-2 mt-1" x-show="label(value) !== null">
-        Range: <span x-text="label(value)"></span>
-      </p>
       <p class="text-micro text-ink-2 mt-1">
-        Enter total annual revenue in USD (e.g. 5000000000 for $5 billion).
+        Enter total annual revenue in USD (e.g. 5,000,000,000 for $5 billion).
       </p>
       {% if errors_by_field.get('annual_revenue') %}
         <p class="text-micro text-status-critical mt-1" role="alert">&#9888; {{ errors_by_field['annual_revenue'] | join('; ') }}</p>
