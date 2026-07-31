@@ -62,6 +62,7 @@ from idraa.models.user import User
 from idraa.repositories.overlay_repo import OverlayRepo
 from idraa.routes.deps import (
     MAX_UPLOAD_BYTES,
+    audit_client_ip,
     client_ip,
     get_db,
     require_role,
@@ -234,7 +235,7 @@ async def overlays_export_csv(
         fmt="csv",
         count=len(overlays),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = [
         "id",

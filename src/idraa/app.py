@@ -1213,7 +1213,17 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
-        return {"status": "ok", "version": settings.version}
+        # security_settings_cache (idraa#107): "cold" post-setup means the
+        # boot warm failed and env-fallback policy is in effect — an operator
+        # signal, deliberately DB-free (healthz is the liveness probe during
+        # the boot-write window; it must never contend for the SQLite writer).
+        from idraa.services.security_settings import cache_state
+
+        return {
+            "status": "ok",
+            "version": settings.version,
+            "security_settings_cache": cache_state(),
+        }
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker() -> FileResponse:

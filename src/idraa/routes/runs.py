@@ -66,7 +66,7 @@ from idraa.models.user import User
 from idraa.repositories.run_repo import RunRepo
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
-    client_ip,
+    audit_client_ip,
     get_db,
     require_role,
     require_step_up,
@@ -227,7 +227,10 @@ def _emit_v2_snapshot_read_log(
 
 # Plan-gate Arch-2: registered BEFORE /runs/{run_id} GET so the UUID path-
 # segment parser does not shadow the literal string "control-matrix.csv".
-@router.get("/runs/{run_id}/control-matrix.csv")
+@router.get(
+    "/runs/{run_id}/control-matrix.csv",
+    dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))],
+)
 async def get_aggregate_matrix_csv(
     run_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -455,7 +458,7 @@ async def get_run_samples_csv_gz(
             fmt="csv.gz",
             count=run.mc_iterations,
             user_id=user.id,
-            ip_address=client_ip(request),
+            ip_address=audit_client_ip(request),
             filters={"run_id": str(run_id)},
         )
         # Plan-gate Sec-B1: FastAPI's function-scoped teardown already
@@ -1052,7 +1055,7 @@ async def analyses_export_csv(
         fmt="csv",
         count=len(runs),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = ["id", "name", "run_type", "status", "mc_iterations", "created_at"]
     rows = (

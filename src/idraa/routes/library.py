@@ -33,6 +33,7 @@ from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 from idraa.routes.deps import (
+    audit_client_ip,
     client_ip,
     get_db,
     require_role,
@@ -162,7 +163,7 @@ async def library_export_csv(
         fmt="csv",
         count=len(entries),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = ["id", "name", "threat_event_type", "threat_actor_type", "asset_class", "status"]
     rows = (
@@ -207,7 +208,7 @@ async def library_export(
         fmt="json",
         count=len(entries),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     return export_bundle_response(entries, filename="scenario-library.json")
 

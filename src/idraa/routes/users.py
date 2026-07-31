@@ -32,7 +32,7 @@ from idraa.errors import UserDeleteError
 from idraa.formatting import utc_isoformat
 from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
+from idraa.routes.deps import audit_client_ip, client_ip, get_db, require_role, require_step_up
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.auth import is_locked, reset_login_throttle, revoke_user_sessions
 from idraa.services.mfa_enrollment import reset_user_mfa
@@ -129,7 +129,7 @@ async def users_export_csv(
         fmt="csv",
         count=len(users),
         user_id=me.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = ["email", "role", "is_active", "created_at"]
     rows = (

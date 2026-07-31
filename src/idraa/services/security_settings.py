@@ -59,6 +59,20 @@ def invalidate() -> None:
     _cache = None
 
 
+def cache_state() -> str:
+    """``"warm"`` when the snapshot cache is loaded, else ``"cold"``.
+
+    idraa#107(2): operator-visible warm-state signal. A cold cache means
+    effective_* helpers are on env fallback — notably a persisted
+    ``mfa_policy=required`` override would be relaxed to the env default
+    until the next settings write or boot re-warm. Cold is NORMAL pre-setup
+    (no org yet); post-setup cold after boot indicates the boot warm failed
+    (see the warm_cache exception log). Read-only on module state — safe for
+    /healthz, which must stay DB-free during the boot-write window.
+    """
+    return "warm" if _cache is not None else "cold"
+
+
 async def load_security_settings(db: AsyncSession, org_id: uuid.UUID) -> None:
     """Load the committed row into the snapshot cache (single atomic reassignment)."""
     global _cache

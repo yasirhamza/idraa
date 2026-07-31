@@ -264,5 +264,10 @@ def export_json_response(scenarios: Iterable[Scenario], *, filename: str) -> Res
     return Response(
         content=payload.encode("utf-8"),
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            # idraa#110: same no-store parity as csv_response — JSON export is
+            # the same bulk-egress class as the CSV variant.
+            "Cache-Control": "private, no-store",
+        },
     )

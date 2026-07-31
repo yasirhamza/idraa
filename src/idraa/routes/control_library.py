@@ -30,7 +30,7 @@ from idraa.models.enums import (
     UserRole,
 )
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
+from idraa.routes.deps import audit_client_ip, get_db, require_role, require_step_up
 from idraa.services.audit import log_bulk_export
 from idraa.services.control_library import (
     ControlLibraryBrowseFilters,
@@ -171,7 +171,7 @@ async def control_library_export_csv(
         fmt="csv",
         count=len(page.entries),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = [
         "id",
