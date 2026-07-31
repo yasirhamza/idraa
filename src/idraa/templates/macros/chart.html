@@ -195,7 +195,7 @@
     <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
   {%- else -%}
   {%- set uid = chart_uid() -%}
-  <figure class="m-0" data-chart="lec-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
+  <figure class="m-0 max-w-4xl" data-chart="lec-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
     <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%"
          role="img" aria-label="Loss exceedance curve{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          class="chart-svg">
@@ -265,7 +265,7 @@
     <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
   {%- else -%}
   {%- set uid = chart_uid() -%}
-  <figure class="m-0" data-chart="epc-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
+  <figure class="m-0 max-w-4xl" data-chart="epc-single" data-chart-hydrate="curve" data-chart-uid="{{ uid }}">
     <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%"
          role="img" aria-label="Exceedance probability vs loss{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"
          class="chart-svg">
@@ -455,7 +455,11 @@
   {%- set log = chart_svg.dual_curve(payload, tolerance, x_label=x_label, y_scale="log", currency_symbol=_sym) -%}
   {%- set uid = chart_uid() -%}
   {%- set _init_p = (tolerance.probability if tolerance and tolerance.probability is not none else 0.05) -%}
-  <figure class="m-0" data-chart="dual-lec" data-chart-hydrate="lec" data-chart-uid="{{ uid }}">
+  {# max-w cap (owner UAT 2026-07-31): the fixed 820x380 viewBox scales
+     width:100%; uncapped it ballooned to ~1500x700 on wide screens and
+     shoved everything below the fold. 56rem keeps the curve readable and
+     the page scannable on every chart surface (run detail, dashboard). #}
+  <figure class="m-0 max-w-4xl" data-chart="dual-lec" data-chart-hydrate="lec" data-chart-uid="{{ uid }}">
     <div class="flex items-center gap-3 flex-wrap mb-2" data-chart-controls>
       <label class="text-micro text-ink-2 whitespace-nowrap" for="p-slider-{{ uid }}">Exceedance probability</label>
       <input type="range" id="p-slider-{{ uid }}" data-role="p-slider" min="0" max="100" step="1"
@@ -538,7 +542,7 @@
     <p class="text-micro text-ink-3">No exceedance-curve data was persisted for this run.</p>
   {%- else -%}
   {%- set uid = chart_uid() -%}
-  <figure class="m-0" data-chart="dual-epc" data-chart-hydrate="epc" data-chart-uid="{{ uid }}">
+  <figure class="m-0 max-w-4xl" data-chart="dual-epc" data-chart-hydrate="epc" data-chart-uid="{{ uid }}">
     {{ _chart_legend(g.tolerance_marker, "exceedance-probability") }}
     <svg viewBox="0 0 {{ g.view_w }} {{ g.view_h }}" width="100%" data-y-scale="log"
          role="img" aria-label="Exceedance probability vs {{ g.y_label|lower }}{% if g.tolerance_marker %}, risk appetite {{ g.tolerance_marker.label }}{% endif %}"

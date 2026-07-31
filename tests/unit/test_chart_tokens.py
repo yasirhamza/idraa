@@ -77,3 +77,24 @@ def test_reduction_token_python_and_css_only():
         assert re.search(rf"--chart-reduction:\s*{hexval};", APP_CSS), (
             f"--chart-reduction {hexval} missing"
         )
+
+
+def test_curve_figures_carry_max_width_cap():
+    """Owner UAT 2026-07-31: the fixed 820x380 viewBox scales width:100%;
+    without a cap the curves balloon to ~1500x700 on wide screens. Every
+    curve <figure> in macros/chart.html must carry max-w-4xl so no chart
+    surface (run detail, dashboard, scenario view) regresses to full-bleed.
+
+    Deliberately does NOT pin the figure inventory (review N5): a
+    legitimate new curve figure must fail on the max-w line below, not on
+    an inventory-equality line."""
+    import re
+    from pathlib import Path
+
+    macro = Path("src/idraa/templates/macros/chart.html").read_text()
+    figures = re.findall(r"<figure[^>]*data-chart=", macro)
+    assert len(figures) >= 4, "expected at least the four known curve figures"
+    for m in re.finditer(r"<figure([^>]*)>", macro):
+        attrs = m.group(1)
+        if "data-chart=" in attrs:
+            assert "max-w-4xl" in attrs, f"uncapped curve figure: {attrs[:80]}"
