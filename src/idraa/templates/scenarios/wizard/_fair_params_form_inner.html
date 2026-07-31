@@ -301,11 +301,11 @@
                                parseFloat('1.5M') = 1.5 would silently launder
                                a magnitude-suffixed paste; Number() -> NaN ->
                                blank + required halt (the loud legacy path). */
-                            const s = String(v).replace(/[\s$€£¥,'_()]/g, '');
+                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
                             const n = s === '' ? NaN : Number(s);
                             return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                           },
-                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_()]/g, '') : ''; }
+                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
                         }">
                       {# Excel-like entry (owner UAT 2026-07-31): NO focus-time
                          value swap — the old `display = strip(display)` threw
@@ -330,7 +330,7 @@
                                 just keeps the event itself from firing on
                                 every keystroke. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: strip(display), high: row.high})"
-                             @blur="row.low = strip(display); display = fmt(row.low); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="row.low = strip(display); display = fmt(row.low); if (display === '') row.low = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_low_' + idx">
                     </div>
                   </template>
@@ -356,11 +356,11 @@
                                parseFloat('1.5M') = 1.5 would silently launder
                                a magnitude-suffixed paste; Number() -> NaN ->
                                blank + required halt (the loud legacy path). */
-                            const s = String(v).replace(/[\s$€£¥,'_()]/g, '');
+                            const s = String(v).replace(/[\s$€£¥,'_]/g, '');
                             const n = s === '' ? NaN : Number(s);
                             return isNaN(n) ? '' : n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                           },
-                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_()]/g, '') : ''; }
+                          strip(s) { return s ? String(s).replace(/[\s$€£¥,'_]/g, '') : ''; }
                         }">
                       {# Excel-like entry: mirrors the Low input above (no
                          focus swap; caret-preserving live regroup; tolerant
@@ -373,7 +373,7 @@
                              @input="display = window.idraaMoneyLive($el, $event)"
                              {# F1/N3: mirrors the Low input's live-typing dispatch above. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: strip(display)})"
-                             @blur="row.high = strip(display); display = fmt(row.high); $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="row.high = strip(display); display = fmt(row.high); if (display === '') row.high = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_high_' + idx">
                       {% if org_annual_revenue %}
                       {# Milestone B (#loss-pert-overhaul): display-only
@@ -383,8 +383,8 @@
                          org_annual_revenue for step 4 ONLY (A-N2). #}
                       <span class="text-meta text-ink-2 block mt-1 max-w-[28ch] whitespace-normal"
                             data-revenue-hint data-annual-revenue="{{ org_annual_revenue }}"
-                            x-show="!catastrophic && strip(display)"
-                            x-text="'≈ ' + ((parseFloat(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>
+                            x-show="!catastrophic && strip(display) && !isNaN(Number(strip(display)))"
+                            x-text="'≈ ' + ((Number(strip(display)) / annualRevenue) * 100).toFixed(1) + '% of annual revenue'"></span>
                       {% endif %}
                     </div>
                   </template>

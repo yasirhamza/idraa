@@ -229,5 +229,39 @@ async def test_money_entry_is_excel_like(migrated_server_url: str) -> None:
         caret = await field.evaluate("el => el.selectionStart")
         assert caret == 0
 
+        # 9. THROUGH-A-BLUR shapes (round-2 blocker: fmt() writes el.value via
+        #    x-model with no input event, so the eat's prev-tracking desynced
+        #    after every blur — both symptoms below reproduced pre-fix).
+        #    9a. Selection-delete of the cents must NOT eat extra digits:
+        #        "1,000.00" minus selected ".00" is "1,000", never "100".
+        await field.press("ControlOrMeta+a")
+        await page.keyboard.type("1000")
+        await field.press("Tab")
+        assert await field.input_value() == "1,000.00"
+        await field.click()
+        await field.evaluate("el => el.setSelectionRange(5, 8)")  # select ".00"
+        await field.press("Backspace")
+        assert await field.input_value() == "1,000"
+        #    9b. The separator-eat still works on the FIRST delete after a
+        #        blur (pre-fix it silently no-opped once per focus cycle).
+        await field.press("Tab")
+        assert await field.input_value() == "1,000.00"
+        await field.click()
+        await field.evaluate("el => el.setSelectionRange(2, 2)")  # after ","
+        await field.press("Backspace")
+        assert await field.input_value() == "000.00"  # digit died with comma
+
+        # 10. European dot-grouped paste must fail LOUDLY, never launder
+        #     (round-2 important: the old first-dot collapse turned
+        #     "€1.500.000,00" into 1.50 — same 10^6 class as B1).
+        await field.evaluate(
+            "el => { el.value = '€1.500.000,00'; "
+            "el.dispatchEvent(new Event('input', { bubbles: true })); }"
+        )
+        assert await field.input_value() == "€1.500.000,00"  # left as pasted
+        assert await field.evaluate("el => el.validity.valid") is False
+        await field.press("Tab")
+        assert await field.input_value() == ""  # strict Number() -> loud blank
+
         await context.close()
         await browser.close()
