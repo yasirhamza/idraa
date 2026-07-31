@@ -49,7 +49,7 @@ _SIGMA_MAX: float = 10.0
 # Canonical 95th-percentile standard-normal z-score, used by the D19
 # ``max > p95`` floor below (``services/loss_capacity.py``'s PR2 capacity
 # bound). Matches the constant every other p95 reader in the codebase uses
-# (``routes/scenarios.py``'s ``_Z_0_95``, ``services/pdf_report.py``'s
+# (``routes/scenario_loss_pin.py``'s ``_Z_0_95``, ``services/pdf_report.py``'s
 # ``_Z_P95``, ``fair_cam/quantile_pooling/_lognormal_native.py``'s
 # ``Z_0_95``) -- computed via scipy here rather than re-hardcoding the
 # literal, since this module already has a real (non-test) scipy transitive

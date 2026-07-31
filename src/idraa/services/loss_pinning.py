@@ -339,7 +339,7 @@ async def unpin_loss(
 def _stamp_source(dist: Any) -> str | None:
     """The ``sigma_recalibration.source`` string stamped on ONE field's
     dist dict, or ``None`` when absent/malformed at any layer. Same
-    defensive walk as ``routes.scenarios._field_has_provenance`` -- kept as
+    defensive walk as ``routes.scenario_loss_pin._field_has_provenance`` -- kept as
     a separate, smaller helper here (only the ``analyst_pin`` value matters
     to the refuse-on-pinned check below; the routes-layer helper additionally
     treats ``migration_recalibration`` as provenance for the tripwire, which

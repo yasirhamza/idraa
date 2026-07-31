@@ -1157,6 +1157,7 @@ def create_app() -> FastAPI:
     from idraa.routes import register_import as register_import_router
     from idraa.routes import reports as reports_router
     from idraa.routes import runs as runs_router
+    from idraa.routes import scenario_export_routes as scenario_export_routes_router
     from idraa.routes import scenario_import as scenario_import_router
     from idraa.routes import scenarios as scenarios_router
     from idraa.routes import settings as settings_router
@@ -1191,10 +1192,15 @@ def create_app() -> FastAPI:
     app.include_router(control_library_router.router)
     app.include_router(controls_router.router)
     app.include_router(overlays_router.router)
-    # scenario_import MUST be included BEFORE scenarios_router: scenarios owns
-    # GET /scenarios/{scenario_id} as an UNTYPED path param, which would
-    # otherwise capture /scenarios/import (and the static subpaths) and 404.
+    # scenario_import and scenario_export_routes MUST be included BEFORE
+    # scenarios_router: scenarios owns GET /scenarios/{scenario_id} as an
+    # UNTYPED path param, which would otherwise capture /scenarios/import
+    # (and the static subpaths) and /scenarios/export and 404/422.
+    # scenario_export_routes extracted from routes/scenarios.py under #119;
+    # it inherits the exact same ordering constraint the export routes had
+    # inline (B5 declaration-order precedent).
     app.include_router(scenario_import_router.router)
+    app.include_router(scenario_export_routes_router.router)
     app.include_router(scenarios_router.router)
     app.include_router(runs_router.router)
     # library_import MUST be included BEFORE library_router: library owns

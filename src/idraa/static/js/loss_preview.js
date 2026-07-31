@@ -375,7 +375,7 @@
   // ---- PERT moment stats ---------------------------------------------------
 
   // Vose gamma=4 PERT mean; impliedSigma matches
-  // routes/scenarios.py:_stored_loss_sigma's PERT read: ln(high/low)/(2*Z95).
+  // routes/scenario_loss_pin.py:_stored_loss_sigma's PERT read: ln(high/low)/(2*Z95).
   function pertStats(args) {
     var low = args.low,
       mode = args.mode,

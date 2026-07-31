@@ -202,7 +202,7 @@ def test_iris_pl_seed_respread_narrow_only() -> None:
     since _quantile_pair returns symmetric log-quantiles) is held exactly."""
     import math
 
-    from idraa.routes.scenarios import _iris_seed_rows
+    from idraa.routes.scenario_wizard_seeding import _iris_seed_rows
 
     z = 1.6448536269514722
     med = 1_000_000.0
@@ -216,7 +216,7 @@ def test_iris_pl_seed_respread_narrow_only() -> None:
 def test_iris_pl_seed_narrower_than_default_untouched() -> None:
     """AGRICULTURE/MINING/REAL_ESTATE-class priors: implied sigma < default
     -> no change (this is what auto-excludes them, D10')."""
-    from idraa.routes.scenarios import _iris_seed_rows
+    from idraa.routes.scenario_wizard_seeding import _iris_seed_rows
 
     narrow = {"pl": {"low": 100_000.0, "high": 1_000_000.0}}  # sigma ~0.70
     rows = _iris_seed_rows(narrow, "sme-1")
@@ -226,7 +226,7 @@ def test_iris_pl_seed_narrower_than_default_untouched() -> None:
 def test_tef_and_vuln_seeds_never_respread() -> None:
     """The re-spread applies ONLY to pl/sl -- tef/vuln pass through verbatim
     even when their span would exceed the loss-dispersion default."""
-    from idraa.routes.scenarios import _iris_seed_rows
+    from idraa.routes.scenario_wizard_seeding import _iris_seed_rows
 
     f = {"tef": {"low": 0.29, "high": 1.05}, "vuln": {"low": 0.1, "high": 0.4}}
     rows = _iris_seed_rows(f, "sme-1")
