@@ -64,6 +64,15 @@ def test_decode_rejects_truncated_or_inconsistent_blob():
         decode_sample_arrays(good[:-16])  # drop trailing float bytes → truncated stream
 
 
+def test_encode_rejects_float32_overflow():
+    # Sec-L8/#84: a float64 value that overflows on cast to float32 (source
+    # magnitude exceeds ~3.4e38) must fail closed at write time rather than
+    # silently persist inf into the codec blob.
+    arrays = {"base_risk": np.array([1.0, 1e50, 3.0], dtype=np.float64)}
+    with pytest.raises(ValueError, match="codec overflow"):
+        encode_sample_arrays(arrays)
+
+
 def test_decode_rejects_truncated_stream():
     # Plan-gate SWE2-B1 re-pin (renamed from test_decode_rejects_manifest_sum_mismatch):
     # the new eof/unconsumed_tail guard (Sec-N2) fires BEFORE the manifest-sum

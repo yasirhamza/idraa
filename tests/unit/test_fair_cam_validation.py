@@ -772,3 +772,169 @@ def test_require_loss_max_true_huge_mean_with_present_max_no_overflow():
             require_loss_max=True,
         )
     assert "p95" in str(exc_info.value).lower()
+
+
+# ---- #84 (Sec-L8): representability caps — finite-but-enormous values overflow
+# the float32 sample-array codec on write and must be rejected, not clamped.
+# BASIS: PERT/uniform/triangular keys and the capacity `max` are LINEAR-space
+# (capped at _MAGNITUDE_MAX = 1e38); the lognormal `mean` is LOG-space meanlog
+# (capped at _MEANLOG_MAX = ln(1e38) ~= 87.5 — median-representability). --------
+
+
+def test_pert_high_magnitude_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 1e50})
+
+
+def test_tef_magnitude_rejected():
+    # Guard applies to TEF too — a 1e50 events/yr TEF also feeds risk=LEF*LM
+    # through the codec.
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(
+            threat_event_frequency={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 1e50}
+        )
+
+
+def test_lognormal_meanlog_over_ceiling_rejected():
+    # meanlog=100 => median e^100 ~ 2.7e43 USD > float32 max. The original #84
+    # draft capped |mean| at 1e38 — a LINEAR-space constant applied to a
+    # LOG-space value — under which this exact input sailed through (100 < 1e38)
+    # and corrupted the stored run. This test pins the basis fix.
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(primary_loss={"distribution": "lognormal", "mean": 100.0, "sigma": 1.2})
+
+
+def test_lognormal_absurd_meanlog_rejected():
+    # The original draft's vector, still rejected under the meanlog cap.
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(primary_loss={"distribution": "lognormal", "mean": 1e50, "sigma": 1.2})
+
+
+def test_lognormal_large_meanlog_under_ceiling_accepted():
+    # meanlog=80 => median e^80 ~ 5.5e34 USD — absurd but representable; the
+    # cap is a representability guard, not a semantic loss ceiling, so it must
+    # NOT fire. (Semantic plausibility is the capacity floor's / analyst's job.)
+    _call(primary_loss={"distribution": "lognormal", "mean": 80.0, "sigma": 1.0})
+
+
+def test_negative_meanlog_accepted():
+    # meanlog=-5 => median ~ $0.0067 — representationally harmless (float32
+    # underflow flushes toward 0.0, which cannot corrupt the codec). Pins that
+    # the cap is one-sided: an abs() regression would wrongly reject this.
+    _call(primary_loss={"distribution": "lognormal", "mean": -5.0, "sigma": 1.0})
+
+
+def test_mixture_component_meanlog_over_ceiling_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(
+            primary_loss=_mixture(
+                [
+                    _good_component(mean=100.0, sigma=0.7, weight=0.5),
+                    _good_component(mean=15.77, sigma=1.19, weight=0.5),
+                ]
+            )
+        )
+
+
+def test_capacity_max_over_ceiling_rejected():
+    # I-1: the capacity `max` (linear USD) is the bound actually enforced on
+    # lognormal draws, so it must itself be float32-representable. Floor
+    # passes here (ln(1e50) ~ 115 >> p95 ~ 11.6) — only the ceiling fires.
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(primary_loss={"distribution": "lognormal", "mean": 10.0, "sigma": 1.0, "max": 1e50})
+
+
+def test_capacity_max_ceiling_composes_with_floor_not_short_circuits():
+    # A too-big max that ALSO violates the floor reports BOTH defects in one
+    # batch: the ceiling must not starve the log-space floor comparison the
+    # D19 huge-max tests pin (no OverflowError either way). Vector chosen so
+    # the meanlog cap stays silent (mean=80 < _MEANLOG_MAX) and exactly the
+    # two named errors fold: ceiling (1e40 > 1e38) and floor
+    # (ln(1e40) ~= 92.10 <= 80 + z95*10 ~= 96.45).
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 80.0,
+                "sigma": 10.0,
+                "max": 1e40,
+            }
+        )
+    msg = str(exc_info.value).lower()
+    assert "max magnitude exceeds the representable ceiling" in msg
+    assert "p95" in msg
+
+
+def test_mixture_component_malformation_composes_with_max_ceiling():
+    # The one ceiling_errs terminal not otherwise covered: component
+    # malformation AND an over-ceiling max fold into the same batch (the
+    # floor is skipped when a component can't be interpreted — fails closed
+    # on the malformation, but the ceiling verdict must not be lost).
+    with pytest.raises(FAIRCAMValidationError) as exc_info:
+        _call(
+            primary_loss=_mixture([_good_component(), "not-a-dict"])  # type: ignore[list-item]
+            | {"max": 1e50}
+        )
+    msg = str(exc_info.value).lower()
+    assert "max magnitude exceeds the representable ceiling" in msg
+    assert "components[1]" in msg
+
+
+def test_meanlog_boundary_inclusive():
+    # Pins the cap's <= semantics against a future >= slip: exactly
+    # _MEANLOG_MAX is accepted, one ulp above is rejected.
+    from idraa.services.fair_cam_validation import _MEANLOG_MAX
+
+    _call(primary_loss={"distribution": "lognormal", "mean": _MEANLOG_MAX, "sigma": 1.0})
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": math.nextafter(_MEANLOG_MAX, math.inf),
+                "sigma": 1.0,
+            }
+        )
+
+
+def test_capacity_max_boundary_inclusive():
+    # max == _MAGNITUDE_MAX exactly is accepted (ceiling is <=); the floor
+    # passes by construction (ln(1e38) ~= 87.5 >> p95 ~= 11.6).
+    from idraa.services.fair_cam_validation import _MAGNITUDE_MAX
+
+    _call(
+        primary_loss={
+            "distribution": "lognormal",
+            "mean": 10.0,
+            "sigma": 1.0,
+            "max": _MAGNITUDE_MAX,
+        }
+    )
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(
+            primary_loss={
+                "distribution": "lognormal",
+                "mean": 10.0,
+                "sigma": 1.0,
+                "max": math.nextafter(_MAGNITUDE_MAX, math.inf),
+            }
+        )
+
+
+def test_mixture_capacity_max_over_ceiling_rejected():
+    with pytest.raises(FAIRCAMValidationError, match="representable ceiling"):
+        _call(
+            primary_loss=_mixture(
+                [
+                    _good_component(mean=10.0, sigma=0.7, weight=0.5),
+                    _good_component(mean=12.0, sigma=1.1, weight=0.5),
+                ]
+            )
+            | {"max": 1e50}
+        )
+
+
+def test_legitimate_large_loss_still_accepted():
+    # A large-but-genuinely-valid loss (e.g. a catastrophic-scenario ceiling)
+    # must NOT be rejected — the cap is a float32-representability guard, not
+    # a semantic loss ceiling.
+    _call(primary_loss={"distribution": "PERT", "low": 1e6, "mode": 1e9, "high": 1e12})

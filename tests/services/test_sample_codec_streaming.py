@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from idraa.services.sample_codec import (
     decode_sample_arrays,
@@ -21,3 +22,10 @@ def test_streaming_empties_the_input_dict():
     arrays = {"base_risk": np.array([1.0, 2.0])}
     encode_sample_arrays_streaming(arrays)
     assert arrays == {}  # popped as encoded, so the caller's refs are released
+
+
+def test_streaming_rejects_float32_overflow():
+    # Sec-L8/#84: same fail-closed guard as the batch encoder.
+    arrays = {"base_risk": np.array([1.0, 1e50, 3.0], dtype=np.float64)}
+    with pytest.raises(ValueError, match="codec overflow"):
+        encode_sample_arrays_streaming(arrays)
