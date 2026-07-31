@@ -33,7 +33,11 @@ from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
-from idraa.routes.scenarios import _field_has_provenance, _loss_stale_wide, _stored_loss_sigma
+from idraa.routes.scenario_loss_pin import (
+    _field_has_provenance,
+    _loss_stale_wide,
+    _stored_loss_sigma,
+)
 from idraa.services.library_calibration import library_calibrated_pre_fill
 from idraa.services.loss_capacity import capacity_max_for_org
 from tests.conftest import csrf_post
