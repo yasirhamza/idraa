@@ -130,9 +130,18 @@ async def _lock_active_admin_rows(db: AsyncSession, org_id: uuid.UUID) -> None:
     conditional UPDATEs on *different* admin rows would each see the other's
     uncommitted row as still-active (write skew), so the subquery guard alone
     is insufficient there. FOR UPDATE on the org's active-admin rows makes the
-    second writer block until the first commits, and its re-evaluated row set
-    then excludes the freshly-disarmed admin. SQLite ignores FOR UPDATE — its
-    single-writer model already serializes the conditional writes.
+    second writer block until the first commits. SQLite ignores FOR UPDATE —
+    its single-writer model already serializes the conditional writes.
+
+    LOAD-BEARING: the lock must stay a SEPARATE statement issued BEFORE the
+    guarded write. It works because after the blocker commits, the caller's
+    NEXT statement (the guarded UPDATE/DELETE) gets a fresh READ-COMMITTED
+    snapshot whose guard subquery sees the committed disarm. Folding the lock
+    into the write itself (CTE, or deleting this "unused" SELECT) silently
+    reintroduces the skew: Postgres's EvalPlanQual recheck re-evaluates only
+    the ROW qual against the updated row — sub-SELECTs in the qual still run
+    against the ORIGINAL snapshot. The discarded result below is not dead
+    code; executing the SELECT *is* the point.
     """
     await db.execute(
         select(User.id)

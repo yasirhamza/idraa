@@ -7,17 +7,34 @@ pass, and both commit — leaving zero active admins (in-app-irrecoverable).
 
 The fix moves the invariant INTO the write: ``guarded_admin_disarm`` (and the
 guarded DELETE inside ``delete_user``) re-verify "another active admin
-remains" in the same statement that flips the row, so a stale pre-check can
-never produce a lockout. These tests replay the racy interleaving as a
-deterministic schedule: both pre-checks pass, then both writes execute — the
-second write MUST refuse.
+remains" in the same statement that flips the row.
+
+Coverage strategy (the true cross-transaction race cannot be replayed
+deterministically in one test session — a single session always sees its own
+uncommitted writes, so ANY re-count implementation, atomic or not, refuses
+the second disarm):
+
+- The *_schedule_* tests pin the guard's call-time semantics (refuse when no
+  other active cover remains; inactive admins are not cover).
+- ``test_disarm_update_carries_guard_predicate`` /
+  ``test_delete_carries_guard_predicate`` pin ATOMICITY structurally: they
+  capture the emitted SQL and assert the guard subquery lives in the WHERE of
+  the disarming UPDATE/DELETE itself. A future count-then-write refactor
+  (the racy shape) emits a bare UPDATE/DELETE and fails these.
+- ``test_delete_write_guard_survives_stale_precheck`` forces the
+  pre-check/write divergence by pinning ``_is_last_admin`` to the stale
+  answer — the only black-box way to simulate the race in one session.
+- The *_refuse_branch_* route tests cover the route-level refusal rendering,
+  which is sequentially unreachable (the guarded predicate is a strict
+  subset of the friendly pre-check, so only a genuine race reaches it) —
+  exercised via a refusing ``guarded_admin_disarm`` stub.
 """
 
 from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import idraa.services.users as users_service
@@ -39,7 +56,12 @@ async def _two_active_admins(db: AsyncSession, org: Organization) -> tuple[User,
 async def test_race_schedule_second_deactivation_refused(
     db_session: AsyncSession, organization: Organization
 ) -> None:
-    """Write-skew schedule: both pre-checks saw 2 admins; second write refuses."""
+    """Call-time guard semantics: after one disarm, the second must refuse.
+
+    Atomicity itself is pinned by test_disarm_update_carries_guard_predicate
+    (see module docstring — this collapsed schedule cannot distinguish an
+    atomic guard from a re-count).
+    """
     x, y = await _two_active_admins(db_session, organization)
 
     # Both racing requests already passed the naive count check (count==2).
@@ -151,6 +173,152 @@ async def test_delete_write_guard_survives_stale_precheck(
     survivor = (await db_session.execute(select(User).where(User.id == x.id))).scalar_one_or_none()
     assert survivor is not None
     assert survivor.is_active is True
+
+
+async def test_disarm_update_carries_guard_predicate(
+    db_session: AsyncSession, organization: Organization
+) -> None:
+    """ATOMICITY PIN: the guard subquery must live in the UPDATE's own WHERE.
+
+    Captures the SQL emitted by guarded_admin_disarm and asserts the
+    "another active admin remains" count subquery is part of the UPDATE
+    statement itself — the property that makes the guard race-proof. A
+    count-then-write refactor (separate SELECT, then a bare UPDATE) passes
+    every sequential behavior test but fails this one.
+    """
+    x, _y = await _two_active_admins(db_session, organization)
+
+    captured: list[str] = []
+
+    def _capture(conn: object, cursor: object, statement: str, *args: object) -> None:
+        captured.append(statement)
+
+    sync_engine = db_session.bind.sync_engine  # type: ignore[union-attr]
+    event.listen(sync_engine, "before_cursor_execute", _capture)
+    try:
+        applied = await guarded_admin_disarm(
+            db_session,
+            user_id=x.id,
+            org_id=organization.id,
+            new_role=UserRole.ADMIN,
+            new_active=False,
+        )
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", _capture)
+
+    assert applied is True
+    updates = [s for s in captured if s.lstrip().upper().startswith("UPDATE")]
+    assert len(updates) == 1, f"expected exactly one UPDATE, got: {updates}"
+    stmt = updates[0].lower()
+    assert "select count" in stmt, "guard subquery missing from the UPDATE statement"
+    assert "users.id !=" in stmt, "guard subquery must exclude the target row"
+
+
+async def test_delete_carries_guard_predicate(
+    db_session: AsyncSession, organization: Organization
+) -> None:
+    """ATOMICITY PIN (delete path): guard subquery inside the DELETE itself."""
+    x, y = await _two_active_admins(db_session, organization)
+
+    captured: list[str] = []
+
+    def _capture(conn: object, cursor: object, statement: str, *args: object) -> None:
+        captured.append(statement)
+
+    sync_engine = db_session.bind.sync_engine  # type: ignore[union-attr]
+    event.listen(sync_engine, "before_cursor_execute", _capture)
+    try:
+        deleted = await delete_user(db_session, user_id=x.id, actor_id=y.id, org_id=organization.id)
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", _capture)
+
+    assert deleted is True
+    deletes = [s for s in captured if s.lstrip().upper().startswith("DELETE")]
+    assert len(deletes) == 1, f"expected exactly one DELETE, got: {deletes}"
+    stmt = deletes[0].lower()
+    assert "select count" in stmt, "guard subquery missing from the DELETE statement"
+    assert "users.id !=" in stmt, "guard subquery must exclude the target row"
+
+
+async def test_edit_post_refuse_branch_renders_form_error(
+    authed_admin: tuple[AsyncClient, object],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route-level refusal rendering for edit_post (sequentially unreachable).
+
+    The guarded predicate is a strict subset of the friendly pre-check, so
+    only a genuine cross-transaction race reaches this branch — a refusing
+    stub stands in for the lost race.
+    """
+    client, _ = authed_admin
+    await csrf_post(
+        client,
+        "/users/invite",
+        {
+            "email": "race-loser@test.local",
+            "full_name": "Race Loser",
+            "role": "admin",
+            "password": "pw-12345678",
+        },
+    )
+    target = (
+        await db_session.execute(select(User).where(User.email == "race-loser@test.local"))
+    ).scalar_one()
+
+    async def _refuse(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr("idraa.routes.users.guarded_admin_disarm", _refuse)
+
+    r = await csrf_post(
+        client,
+        f"/users/{target.id}/edit",
+        {"role": "analyst", "is_active": "on"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert "Cannot demote or deactivate the last active admin" in r.text
+    await db_session.refresh(target)
+    assert target.role == UserRole.ADMIN  # nothing was written
+    assert target.is_active is True
+
+
+async def test_set_active_refuse_branch_returns_400(
+    authed_admin: tuple[AsyncClient, object],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route-level refusal for set_active_post (sequentially unreachable)."""
+    client, _ = authed_admin
+    await csrf_post(
+        client,
+        "/users/invite",
+        {
+            "email": "race-loser-2@test.local",
+            "full_name": "Race Loser Two",
+            "role": "admin",
+            "password": "pw-12345678",
+        },
+    )
+    target = (
+        await db_session.execute(select(User).where(User.email == "race-loser-2@test.local"))
+    ).scalar_one()
+
+    async def _refuse(*args: object, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr("idraa.routes.users.guarded_admin_disarm", _refuse)
+
+    r = await csrf_post(
+        client,
+        f"/users/{target.id}/set-active",
+        {"active": "0"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    await db_session.refresh(target)
+    assert target.is_active is True  # nothing was written
 
 
 async def test_admin_can_deactivate_other_admin_via_route(
