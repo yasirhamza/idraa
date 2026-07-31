@@ -87,12 +87,26 @@ class OrganizationForm(BaseModel):
         return split_csv(v)  # type: ignore[arg-type]
 
     @field_validator(
-        "employee_count",
         "annual_revenue",
         "annual_security_budget",
         "cyber_insurance_limit",
         "cyber_insurance_deductible",
         "loss_tolerance_amount",
+        mode="before",
+    )
+    @classmethod
+    def _sanitize_money_then_blank(cls, v: object) -> object:
+        """Money fields ONLY (review I6: sanitizing employee_count /
+        loss_tolerance_probability would launder a European "0,5" into 05 —
+        the benign strip is a MONEY contract). Sanitize FIRST so "$ " and
+        whitespace-only both blank to None (review N1 — JS/no-JS parity)."""
+        if isinstance(v, str):
+            s = sanitize_money_str(v)
+            return None if s.strip() == "" else s
+        return v
+
+    @field_validator(
+        "employee_count",
         "loss_tolerance_probability",
         mode="before",
     )
@@ -109,12 +123,6 @@ class OrganizationForm(BaseModel):
 
         Hotfix for first-real-user 400 on POST /organization.
         """
-        if isinstance(v, str):
-            if v.strip() == "":
-                return None
-            # Excel-like money entry (owner UAT 2026-08-01): fields submit
-            # comma-grouped values; strip the benign formatting allowlist
-            # (server mirror of money_input.js — utils/money.py). Letters/
-            # signs survive and fail numeric coercion loudly (never-launder).
-            return sanitize_money_str(v)
+        if isinstance(v, str) and v.strip() == "":
+            return None
         return v

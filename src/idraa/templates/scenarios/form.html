@@ -330,7 +330,8 @@
     {%- elif fmt == "probability" -%}
       {%- set display_value = raw | format_probability_input -%}
     {%- else -%}
-      {%- set display_value = raw | format_money_input -%}
+      {#- money branch renders via format_money_attr below; no display_value -#}
+      {%- set display_value = none -%}
     {%- endif -%}
     <div>
       <div class="flex items-center justify-between">
@@ -339,8 +340,9 @@
       </div>
       {% if fmt == "money" %}
       {# Excel-like whole-dollar entry (owner UAT 2026-08-01): moneyField
-         component, visible input unnamed, hidden carrier posts sanitized
-         digits. The readout dispatch reads the VISIBLE (formatted) value —
+         component; the NAMED input posts the comma-grouped display value —
+         the server parsers sanitize (utils/money.py; every money parse site
+         must). The readout dispatch reads the formatted value —
          loss_preview's _num strips separators. #}
       <span x-data='moneyField({{ (raw | format_money_attr) | tojson }})'>
         <input id="{{ name }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"

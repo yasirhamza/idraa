@@ -321,7 +321,7 @@
                                 just keeps the event itself from firing on
                                 every keystroke. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: strip(display), high: row.high})"
-                             @blur="row.low = strip(display); display = fmt(row.low); if (display === '') row.low = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="display = fmt(strip(display)); row.low = strip(display); $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_low_' + idx">
                     </div>
                   </template>
@@ -355,7 +355,7 @@
                              @input="display = window.idraaMoneyLive($el, $event)"
                              {# F1/N3: mirrors the Low input's live-typing dispatch above. #}
                              @input.debounce.150ms="$dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: strip(display)})"
-                             @blur="row.high = strip(display); display = fmt(row.high); if (display === '') row.high = ''; $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
+                             @blur="display = fmt(strip(display)); row.high = strip(display); $el.__idraaMoneyPrev = display; $dispatch('loss-row-input', {fieldset: fieldset, idx: idx, low: row.low, high: row.high})"
                              :name="fieldset + '_high_' + idx">
                       {% if org_annual_revenue %}
                       {# Milestone B (#loss-pert-overhaul): display-only

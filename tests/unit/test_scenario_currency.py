@@ -46,10 +46,19 @@ def test_convert_non_numeric_loss_raises_value_error() -> None:
         convert_loss_inputs_to_usd({"pl_low": "abc"}, "SAR", Decimal("3.75"))
 
 
-def test_convert_comma_formatted_loss_raises_value_error() -> None:
-    """convert_loss_inputs_to_usd raises ValueError on comma-formatted loss (Fix B)."""
+def test_convert_comma_formatted_loss_now_sanitizes() -> None:
+    """REVERSED (owner UAT 2026-08-01 + review B5): money surfaces post
+    comma-grouped values by design now, so the converter benign-sanitizes
+    before Decimal. The old Fix-B rejection contract is obsolete; the
+    never-launder guarantee moved to the leftovers check below."""
+    out = convert_loss_inputs_to_usd({"pl_low": "1,000"}, "SAR", Decimal("3.75"))
+    assert Decimal(out["pl_low"]) == Decimal("1000") / Decimal("3.75")
+
+
+def test_convert_suffixed_loss_still_raises() -> None:
+    """Never-launder survives the sanitize: letters are NOT stripped."""
     with pytest.raises(ValueError, match="invalid loss amount"):
-        convert_loss_inputs_to_usd({"pl_low": "1,000"}, "SAR", Decimal("3.75"))
+        convert_loss_inputs_to_usd({"pl_low": "1.5M"}, "SAR", Decimal("3.75"))
 
 
 def test_convert_nan_loss_raises_value_error() -> None:

@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from idraa.utils.money import sanitize_money_str
+
 _LOSS_KEYS = (
     "pl_low",
     "pl_mode",
@@ -52,7 +54,9 @@ def convert_loss_inputs_to_usd(
         if val is None or str(val).strip() == "":
             continue
         try:
-            parsed = Decimal(str(val))
+            # Excel-like money entry posts comma-grouped values (review B5);
+            # benign-sanitize first — letters/signs survive and still raise.
+            parsed = Decimal(sanitize_money_str(str(val)))
         except (InvalidOperation, ArithmeticError) as exc:
             raise ValueError(f"invalid loss amount: {val!r}") from exc
         if not parsed.is_finite():

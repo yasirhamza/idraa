@@ -208,3 +208,37 @@ def test_input_filters_none_yields_empty_string_for_optional_fields() -> None:
 # were deleted — they tested currency_symbol / abbreviate_money which are retired.
 # The security guard (markup rejection) is now enforced by safe_money_format,
 # tested in tests/unit/test_safe_money_format.py::test_markup_code_sanitized_no_injection.
+
+
+def test_format_money_attr_shapes():
+    """value= attribute for Excel-like money inputs (owner UAT 2026-08-01).
+
+    Integral -> whole-dollar grouped; fractional keeps cents (review I1: the
+    attr must not round stored sub-dollar values into a re-save); None/blank/
+    Undefined -> ""; non-numeric echoed VERBATIM (422 preservation, and a
+    Markup input is unwrapped so autoescape doesn't double-escape — I2).
+    """
+    from jinja2 import Undefined
+    from markupsafe import Markup
+
+    from idraa.app import _format_money_attr
+
+    assert _format_money_attr(1500000) == "1,500,000"
+    assert _format_money_attr("20000000.00") == "20,000,000"
+    assert _format_money_attr(1290.67) == "1,290.67"
+    assert _format_money_attr(None) == ""
+    assert _format_money_attr("") == ""
+    assert _format_money_attr(Undefined(name="x")) == ""
+    assert _format_money_attr("-1000") == "-1,000"
+    assert _format_money_attr("abc") == "abc"  # verbatim, never laundered
+    assert _format_money_attr(Markup("a&amp;b")) == "a&b"  # unwrapped once
+
+
+def test_sanitize_money_str_contract():
+    from idraa.utils.money import sanitize_money_str
+
+    assert sanitize_money_str("1,500,000") == "1500000"
+    assert sanitize_money_str("$2 000_000'5") == "20000005"
+    assert sanitize_money_str("1.5M") == "1.5M"  # letters survive (never-launder)
+    assert sanitize_money_str("-500") == "-500"  # signs survive
+    assert sanitize_money_str(1234) == 1234  # non-strings pass through

@@ -46,7 +46,7 @@ async def test_get_organization_renders_revenue_tier_hint(
     body = r.text
     # Excel-like money entry (owner UAT 2026-08-01): the input binds the
     # FORMATTED display; the tier label reads the sanitized raw value.
-    assert 'x-data="moneyField(' in body
+    assert "x-data='moneyField(" in body  # single-quoted attr (tojson emits ")
     assert 'x-model="display"' in body
     assert 'x-text="label(raw)"' in body
     assert "Enter total annual revenue in USD" in body

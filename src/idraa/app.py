@@ -463,10 +463,24 @@ def _format_money_attr(value: object) -> str:
     """
     if value is None or isinstance(value, JinjaUndefined) or value == "":
         return ""  # includes 422 re-renders where the dict lacks the key
+    if isinstance(value, Markup):
+        # The org form's _v() macro returns already-escaped Markup; unwrap so
+        # the autoescape on output doesn't double-escape the verbatim echo
+        # (review I2 — "a&b" was compounding to "a&amp;amp;b" per resubmit).
+        value = value.unescape()
     try:
-        return f"{float(value):,.0f}"  # type: ignore[arg-type]  # fallback below
+        f = float(value)  # type: ignore[arg-type]  # non-numeric -> fallback
     except (TypeError, ValueError):
         return str(value)
+    if not math.isfinite(f):
+        # "Infinity"/"nan" parse as floats but are not money — echo verbatim
+        # (int(inf) OverflowError'd the 422 re-render into a 500 otherwise).
+        return str(value)
+    # Whole-dollar DISPLAY policy must not mutate STORED sub-dollar precision
+    # on an untouched re-save (review I1: rounding here round-tripped 1290.67
+    # into the DB as 1291). Integral values render whole; fractional values
+    # keep their cents (DB money columns are Numeric(18,2)).
+    return f"{f:,.0f}" if f == int(f) else f"{f:,.2f}"
 
 
 templates.env.filters["format_money_input"] = _format_money_input

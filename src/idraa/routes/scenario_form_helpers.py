@@ -605,7 +605,8 @@ def _resolve_capacity_max(
     if not raw_val:
         return capacity_max
     try:
-        typed = float(raw_val)
+        # Money field: benign-sanitize the comma-grouped entry (review B4).
+        typed = float(sanitize_money_str(raw_val))
     except ValueError as exc:
         raise ScenarioFormValidationError(f"{prefix}_max: not a number (got {raw_val!r})") from exc
     if not math.isfinite(typed) or typed <= 0:
@@ -670,7 +671,9 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
             resolved_sl_max = _resolve_capacity_max(raw, "sl", capacity_max)
             secondary_loss: dict[str, Any] | None = {
                 "distribution": "lognormal",
-                **lognormal_from_quantiles(float(sl_low), float(sl_high)),
+                **lognormal_from_quantiles(
+                    float(sanitize_money_str(sl_low)), float(sanitize_money_str(sl_high))
+                ),
                 **({"max": resolved_sl_max} if resolved_sl_max is not None else {}),
             }
         else:
@@ -680,9 +683,9 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
         if sl_low and sl_mode and sl_high:
             secondary_loss = {
                 "distribution": "PERT",
-                "low": float(sl_low),
-                "mode": float(sl_mode),
-                "high": float(sl_high),
+                "low": float(sanitize_money_str(sl_low)),
+                "mode": float(sanitize_money_str(sl_mode)),
+                "high": float(sanitize_money_str(sl_high)),
             }
         else:
             secondary_loss = None

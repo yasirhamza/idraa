@@ -34,6 +34,7 @@ from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.flash import build_flash
 from idraa.services.qualitative_bands import QualitativeBandService
+from idraa.utils.money import sanitize_money_str
 
 router = APIRouter(tags=["qualitative-bands"])
 
@@ -44,6 +45,22 @@ KIND_OPTIONS: list[tuple[str, str]] = [
 
 
 # ---- read paths ------------------------------------------------------
+
+
+def _band_number(value: str, field: str) -> float:
+    """Parse a band-bound form field to float.
+
+    Magnitude bands render as Excel-like money inputs (form_field's dynamic
+    input_type — review B6), so values arrive comma-grouped; benign-sanitize
+    first (utils/money.py). Non-numeric leftovers 422 loudly (never-launder).
+    Frequency bands share this path harmlessly (rates carry no separators).
+    """
+    try:
+        return float(sanitize_money_str(value))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{field}: not a number (got {value!r})"
+        ) from exc
 
 
 @router.get("/qualitative-bands", response_class=HTMLResponse)
@@ -121,9 +138,9 @@ async def create_band(
     request: Request,
     kind: str = Form(...),
     label: str = Form(...),
-    low: float = Form(...),
-    mode: float = Form(...),
-    high: float = Form(...),
+    low: str = Form(...),
+    mode: str = Form(...),
+    high: str = Form(...),
     reason: str = Form(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ADMIN)),
@@ -134,9 +151,9 @@ async def create_band(
             organization_id=user.organization_id,
             kind=kind,
             label=label,
-            low=low,
-            mode=mode,
-            high=high,
+            low=_band_number(low, "low"),
+            mode=_band_number(mode, "mode"),
+            high=_band_number(high, "high"),
             reason=reason,
             user=user,
             ip_address=client_ip(request),
@@ -207,9 +224,9 @@ async def edit_band_form(
 async def update_band(
     request: Request,
     band_id: uuid.UUID,
-    low: float = Form(...),
-    mode: float = Form(...),
-    high: float = Form(...),
+    low: str = Form(...),
+    mode: str = Form(...),
+    high: str = Form(...),
     reason: str = Form(...),
     expected_row_version: int = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -220,9 +237,9 @@ async def update_band(
         await svc.update_org_band(
             organization_id=user.organization_id,
             band_id=band_id,
-            low=low,
-            mode=mode,
-            high=high,
+            low=_band_number(low, "low"),
+            mode=_band_number(mode, "mode"),
+            high=_band_number(high, "high"),
             reason=reason,
             expected_row_version=expected_row_version,
             user=user,
