@@ -22,7 +22,8 @@ AUDITED = {
     "services/runs.py": "excludes-drafts",  # server-side gate (P1a T1)
     "services/run_executor.py": "run-committed-upstream-gated",  # defense-in-depth guard (P1a T1)
     "repositories/scenario_repo.py": "shows-all-by-design",  # primitives; callers decide
-    "routes/scenarios.py": "shows-all-by-design",  # list/view/export show drafts (spec §4)
+    "routes/scenarios.py": "shows-all-by-design",  # list/view show drafts (spec §4)
+    "routes/scenario_export_routes.py": "shows-all-by-design",  # export shows drafts (spec §4)
     "services/scenarios.py": "shows-all-by-design",  # CRUD on explicit ids
     "services/dashboard.py": "excludes-drafts",  # ACTIVE-only counts (P1a T2)
     "services/attack_coverage.py": "excludes-drafts",  # pre-existing ACTIVE filter

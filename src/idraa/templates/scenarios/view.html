@@ -313,7 +313,7 @@
      field carries neither an analyst_pin nor a migration_recalibration
      stamp (loss_stale_wide is computed PER FIELD -- a pin/stamp on one
      field never mutes a wide, unstamped sibling; see
-     routes.scenarios._loss_stale_wide). Library linkage is NOT required to
+     routes.scenario_loss_pin._loss_stale_wide). Library linkage is NOT required to
      fire -- wild imports and hand-authored wide sigma light this up too;
      linkage only gates whether the Refresh button renders (below), never
      the banner itself. #}
@@ -386,7 +386,7 @@
         <h3 class="text-sm font-semibold text-ink-2 mb-1">Primary loss</h3>
         {# PR3 T3 (D20/D21): pin-state chip + unpin button. σ + pinned_at
            via format_datetime (a proper datetime object parsed server-side
-           by routes/scenarios.py::_pin_panel_context — never a raw
+           by routes/scenario_loss_pin.py::_pin_panel_context — never a raw
            strftime/isoformat in this template, per the timezone-
            localization UI convention). #}
         {% if pin_panels and pin_panels.pl.pinned %}

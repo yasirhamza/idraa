@@ -932,7 +932,8 @@ async def view_scenario(
         # default" here while the standing banner correctly stays quiet.
         wide_sigma = _max_tripwire_sigma(scenario)
         # T4.a gate fix (METH I-1): toleranced like every other sigma-vs-
-        # default comparison in this module (_SIGMA_TOL = 1e-5) -- a stored
+        # default comparison in the codebase (_SIGMA_TOL = 1e-5, imported
+        # from scenario_loss_pin) -- a stored
         # component sigma of exactly 1.7 that drifts to
         # 1.7000000000000004 via dollar round-trips must NOT flash "wider
         # than the default" here, mirroring _loss_stale_wide's own guard.
