@@ -612,3 +612,66 @@ async def test_aggregate_cancel_during_fail_window_rolls_back_shapley_audit(
         assert complete_audit == [], (
             f"iteration {_iteration}: spurious complete audit row found: {complete_audit}"
         )
+
+
+@pytest.mark.asyncio
+async def test_attribution_rows_survive_failed_flip(
+    db_session: AsyncSession,
+    seed_aggregate_run_factory: Callable[..., Awaitable[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """idraa#131 re-log pin: a FAILED run keeps its attribution audit rows.
+
+    Same harness as the fail-window TOCTOU test but WITHOUT the concurrent
+    cancel: 2 scenarios forced shapley-skipped (rows flushed in the terminal
+    transaction), then split_simulation_payload booms. The except branch's
+    leading rollback discards the flushed rows; the re-log must restore them
+    atomically WITH the FAILED flip. Asserts EXACT multiplicity — this is
+    also the duplicate-row guard (a capture bug that replayed rows on top of
+    durable ones would overshoot 2).
+    """
+    import idraa.services.run_executor as rex
+    from idraa.models.audit_log import AuditLog
+    from idraa.models.risk_analysis_run import RiskAnalysisRun
+
+    run = await seed_aggregate_run_factory(n_scenarios=2, n_controls=1, n_simulations=200)
+    run_id = run.id
+
+    def _forced_skip(calc, per_scenario_inputs, per_scenario_dict, universe_ids, **kwargs):  # type: ignore[misc]
+        return ({}, [(sid, "over_cap") for sid, _name, _fp in per_scenario_inputs])
+
+    def _boom(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("boom after attribution flush")
+
+    monkeypatch.setattr(rex, "_compute_shapley_by_scenario", _forced_skip)
+    monkeypatch.setattr("idraa.services.run_executor.split_simulation_payload", _boom)
+
+    from idraa.services.run_executor import execute_run
+
+    await execute_run(run_id)
+
+    refreshed = (
+        await db_session.execute(
+            select(RiskAnalysisRun)
+            .where(RiskAnalysisRun.id == run_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert refreshed.status == RunStatus.FAILED
+
+    shapley_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "run.shapley_skipped",
+                    AuditLog.entity_id == run_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(shapley_rows) == 2, (
+        f"expected exactly 2 re-logged shapley_skipped rows on the FAILED run, "
+        f"got {len(shapley_rows)}"
+    )
