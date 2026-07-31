@@ -30,6 +30,18 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./idraa.db",
         description="SQLAlchemy DSN. Postgres in prod; SQLite in dev.",
     )
+    sqlite_busy_timeout_ms: int = Field(
+        default=30_000,
+        ge=0,
+        le=600_000,
+        description=(
+            "PRAGMA busy_timeout for every SQLite connection (idraa#72 fix 3). "
+            "The old hardcoded 5s turned any longer writer hold (retention "
+            "VACUUM, long seed transactions) into instant 'database is locked' "
+            "500s for concurrent writes; 30s rides out realistic holds. "
+            "Ignored on non-SQLite backends."
+        ),
+    )
     session_secret: str = Field(
         default=_DEFAULT_SECRET,
         min_length=16,

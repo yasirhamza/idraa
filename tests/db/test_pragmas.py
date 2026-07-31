@@ -24,3 +24,20 @@ async def test_synchronous_full_durability(db_session):
     """
     sync = (await db_session.execute(text("PRAGMA synchronous"))).scalar()
     assert int(sync) == 2  # FULL
+
+
+@pytest.mark.asyncio
+async def test_busy_timeout_follows_settings(db_session):
+    """idraa#72 (fix 3): busy_timeout is settings-driven, default 30s.
+
+    The 5s hardcoded timeout meant any writer hold >5s (retention VACUUM,
+    long seed transactions) turned concurrent writes into instant
+    "database is locked" 500s. 30s rides out realistic holds; the value is
+    an env knob (SQLITE_BUSY_TIMEOUT_MS) per the no-hardcoded-deploy-values
+    convention.
+    """
+    from idraa.config import get_settings
+
+    bt = (await db_session.execute(text("PRAGMA busy_timeout"))).scalar()
+    assert int(bt) == get_settings().sqlite_busy_timeout_ms
+    assert get_settings().sqlite_busy_timeout_ms == 30_000  # raised default

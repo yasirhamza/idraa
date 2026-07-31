@@ -853,11 +853,23 @@ async def _server_error_handler(request: StarletteRequest, exc: Exception) -> Re
     by exact-then-MRO type match), so this only ever fires for truly
     uncaught errors.
     """
+    # idraa#72 (fix 4): a short correlation id ties THIS response to THIS log
+    # line. The #72 investigation dead-ended because the platform log buffer
+    # had rotated before the owner-reported 500 was investigated — with the id
+    # in the user's screenshot, the traceback is greppable (or its absence is
+    # provable) long after. The id is random (no request data), so it leaks
+    # nothing.
+    error_id = uuid.uuid4().hex[:12]
     logging.getLogger(__name__).exception(
-        "Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc
+        "Unhandled exception on %s %s [error_id=%s]",
+        request.method,
+        request.url.path,
+        error_id,
+        exc_info=exc,
     )
     settings = get_settings()
-    response = PlainTextResponse("Internal Server Error", status_code=500)
+    response = PlainTextResponse(f"Internal Server Error\nError ID: {error_id}", status_code=500)
+    response.headers["X-Error-Id"] = error_id
     for name, value in security_header_map(settings.environment == "prod").items():
         response.headers[name] = value
     return response
