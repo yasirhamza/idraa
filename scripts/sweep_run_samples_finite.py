@@ -24,8 +24,9 @@ but not decoded — that channel was always guarded by strict_json_dumps.
 Rows with BOTH channels NULL violate the run_samples writer invariant and
 are reported as findings.
 
-Exit codes: 0 = all codec rows finite; 1 = corrupt row(s) found (repair per
-the #346 gated-migration pattern is a SEPARATE, deliberate step); 2 = usage.
+Exit codes: 0 = clean; 1 = finding(s) present — non-finite values, decode
+failures, or writer-invariant violations (repair per the #346
+gated-migration pattern is a SEPARATE, deliberate step); 2 = usage.
 """
 
 from __future__ import annotations
@@ -94,7 +95,7 @@ def sweep(db_path: Path) -> int:
             print(f"  NON-FINITE  run {run_id}: {desc}")
         if corrupt or decode_failures or both_null:
             print(
-                "VERDICT: corrupt rows present — repair/annotate per the #346 gated-migration pattern."
+                "VERDICT: findings present — repair/annotate per the #346 gated-migration pattern."
             )
             return 1
         print("VERDICT: clean — no legacy codec row carries a non-finite value.")
