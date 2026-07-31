@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.app import templates
 from idraa.errors import NotFoundError, QualitativeBandVersionConflictError, ValidationError
 from idraa.models.enums import StepUpCategory, UserRole
+from idraa.models.qualitative_mapping import QualitativeMappingOrgBand
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.services.flash import build_flash
@@ -47,16 +48,17 @@ KIND_OPTIONS: list[tuple[str, str]] = [
 # ---- read paths ------------------------------------------------------
 
 
-def _band_number(value: str, field: str) -> float:
+def _band_number(value: str, field: str, *, money: bool) -> float:
     """Parse a band-bound form field to float.
 
-    Magnitude bands render as Excel-like money inputs (form_field's dynamic
-    input_type — review B6), so values arrive comma-grouped; benign-sanitize
-    first (utils/money.py). Non-numeric leftovers 422 loudly (never-launder).
-    Frequency bands share this path harmlessly (rates carry no separators).
+    MAGNITUDE bands render as Excel-like money inputs (form_field's dynamic
+    input_type — review B6), so their values arrive comma-grouped;
+    benign-sanitize before float. FREQUENCY bands are rates: money=False
+    keeps strict coercion (round-2 review: sanitizing a rate launders a
+    European "0,5" into 5.0). Non-numeric leftovers 422 loudly either way.
     """
     try:
-        return float(sanitize_money_str(value))
+        return float(sanitize_money_str(value) if money else value)
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=422, detail=f"{field}: not a number (got {value!r})"
@@ -151,9 +153,9 @@ async def create_band(
             organization_id=user.organization_id,
             kind=kind,
             label=label,
-            low=_band_number(low, "low"),
-            mode=_band_number(mode, "mode"),
-            high=_band_number(high, "high"),
+            low=_band_number(low, "low", money=(kind == "magnitude")),
+            mode=_band_number(mode, "mode", money=(kind == "magnitude")),
+            high=_band_number(high, "high", money=(kind == "magnitude")),
             reason=reason,
             user=user,
             ip_address=client_ip(request),
@@ -233,13 +235,19 @@ async def update_band(
     user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> Response:
     svc = QualitativeBandService(db)
+    # The edit form posts no kind — read it off the stored row to choose the
+    # sanitize strictness (money for magnitude bands, strict for frequency).
+    # Cross-org / unknown ids fall through as strict; the service's own
+    # org-scoped lookup below still 404s them.
+    _band_row = await db.get(QualitativeMappingOrgBand, band_id)
+    _is_money = _band_row is not None and _band_row.kind == "magnitude"
     try:
         await svc.update_org_band(
             organization_id=user.organization_id,
             band_id=band_id,
-            low=_band_number(low, "low"),
-            mode=_band_number(mode, "mode"),
-            high=_band_number(high, "high"),
+            low=_band_number(low, "low", money=_is_money),
+            mode=_band_number(mode, "mode", money=_is_money),
+            high=_band_number(high, "high", money=_is_money),
             reason=reason,
             expected_row_version=expected_row_version,
             user=user,

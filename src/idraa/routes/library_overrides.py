@@ -41,7 +41,7 @@ router = APIRouter(tags=["library-overrides"])
 # ---- helpers ---------------------------------------------------------
 
 
-def _form_number(value: str | None, field: str) -> float | None:
+def _form_number(value: str | None, field: str, *, money: bool = True) -> float | None:
     """Parse an optional numeric form field to float.
 
     Money fields post comma-grouped values (Excel-like entry, owner UAT
@@ -54,7 +54,9 @@ def _form_number(value: str | None, field: str) -> float | None:
     if value is None or value.strip() == "":
         return None
     try:
-        return float(sanitize_money_str(value))
+        # Round-2 review: sanitize MONEY fields only — stripping a European
+        # "0,5" from a TEF/vuln rate is a 10x launder; rates 422 on commas.
+        return float(sanitize_money_str(value) if money else value)
     except ValueError as exc:
         raise HTTPException(
             status_code=422, detail=f"{field}: not a number (got {value!r})"
@@ -145,14 +147,14 @@ async def create_override(
     svc = ScenarioLibraryService(db)
     draft = OverrideDraft(
         threat_event_frequency=_parse_distribution(
-            _form_number(tef_low, "tef_low"),
-            _form_number(tef_mode, "tef_mode"),
-            _form_number(tef_high, "tef_high"),
+            _form_number(tef_low, "tef_low", money=False),
+            _form_number(tef_mode, "tef_mode", money=False),
+            _form_number(tef_high, "tef_high", money=False),
         ),
         vulnerability=_parse_distribution(
-            _form_number(vuln_low, "vuln_low"),
-            _form_number(vuln_mode, "vuln_mode"),
-            _form_number(vuln_high, "vuln_high"),
+            _form_number(vuln_low, "vuln_low", money=False),
+            _form_number(vuln_mode, "vuln_mode", money=False),
+            _form_number(vuln_high, "vuln_high", money=False),
         ),
         primary_loss=_parse_distribution(
             _form_number(pl_low, "pl_low"),
@@ -271,14 +273,14 @@ async def update_override(
     svc = ScenarioLibraryService(db)
     draft = OverrideDraft(
         threat_event_frequency=_parse_distribution(
-            _form_number(tef_low, "tef_low"),
-            _form_number(tef_mode, "tef_mode"),
-            _form_number(tef_high, "tef_high"),
+            _form_number(tef_low, "tef_low", money=False),
+            _form_number(tef_mode, "tef_mode", money=False),
+            _form_number(tef_high, "tef_high", money=False),
         ),
         vulnerability=_parse_distribution(
-            _form_number(vuln_low, "vuln_low"),
-            _form_number(vuln_mode, "vuln_mode"),
-            _form_number(vuln_high, "vuln_high"),
+            _form_number(vuln_low, "vuln_low", money=False),
+            _form_number(vuln_mode, "vuln_mode", money=False),
+            _form_number(vuln_high, "vuln_high", money=False),
         ),
         primary_loss=_parse_distribution(
             _form_number(pl_low, "pl_low"),

@@ -213,3 +213,28 @@ def test_pin_quantile_parser_accepts_commas() -> None:
     assert _parse_pin_quantile("$2 500 000", field_name="pin_p95") == 2_500_000.0
     with _pytest.raises(ValueError, match="pin_p50"):
         _parse_pin_quantile("1.5M", field_name="pin_p50")
+
+
+def test_rate_fields_still_reject_commas() -> None:
+    """Round-2 review: the money sanitize must NOT touch rate fields — a
+    European "0,5" TEF stripped to 5.0 is a 10x frequency launder on an
+    UNBOUNDED FAIR node. Rates keep strict coercion (422/ValueError)."""
+    import pytest as _pytest
+    from fastapi import HTTPException
+
+    from idraa.routes.library_overrides import _form_number
+    from idraa.routes.qualitative_bands import _band_number
+    from idraa.routes.scenario_form_helpers import _dist_float
+
+    # Money prefixes sanitize; rate prefixes stay strict.
+    assert _dist_float("1,000", "pl") == 1000.0
+    with _pytest.raises(ValueError):
+        _dist_float("0,5", "tef")
+    with _pytest.raises(ValueError):
+        _dist_float("0,5", "vuln")
+    assert _form_number("1,000", "pl_low") == 1000.0
+    with _pytest.raises(HTTPException):
+        _form_number("0,5", "tef_low", money=False)
+    assert _band_number("1,000,000", "low", money=True) == 1000000.0
+    with _pytest.raises(HTTPException):
+        _band_number("0,5", "low", money=False)

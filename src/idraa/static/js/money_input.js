@@ -77,7 +77,7 @@
     // whole; fractional keeps cents (server mirror: format_money_attr).
     var frac = n !== Math.trunc(n);
     return n.toLocaleString("en-US", {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: frac ? 2 : 0,
       maximumFractionDigits: frac ? 2 : 0,
     });
   };

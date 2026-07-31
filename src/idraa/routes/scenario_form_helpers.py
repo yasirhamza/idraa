@@ -354,6 +354,23 @@ def flatten_validation_errors(exc: PydanticValidationError) -> list[str]:
     return out
 
 
+_MONEY_PREFIXES = frozenset({"pl", "sl"})
+
+
+def _dist_float(raw_value: object, prefix: str) -> float:
+    """Coerce a distribution form value; benign money-sanitize LOSS prefixes only.
+
+    Round-2 review: applying the money sanitize to TEF/vuln laundered a
+    European "0,5" TEF into 5.0 — a 10x frequency error on an UNBOUNDED FAIR
+    node (vuln is caught by the probability bound; TEF is not). Rates keep
+    strict float coercion: "0,5" 422s exactly as on main.
+    """
+    s = str(raw_value)
+    if prefix in _MONEY_PREFIXES:
+        s = sanitize_money_str(s)
+    return float(s)
+
+
 def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     """Build a PERT distribution dict from ``{prefix}_low/_mode/_high`` form keys.
 
@@ -362,9 +379,9 @@ def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     """
     return {
         "distribution": "PERT",
-        "low": float(sanitize_money_str(raw[f"{prefix}_low"])),
-        "mode": float(sanitize_money_str(raw[f"{prefix}_mode"])),
-        "high": float(sanitize_money_str(raw[f"{prefix}_high"])),
+        "low": _dist_float(raw[f"{prefix}_low"], prefix),
+        "mode": _dist_float(raw[f"{prefix}_mode"], prefix),
+        "high": _dist_float(raw[f"{prefix}_high"], prefix),
     }
 
 
@@ -400,8 +417,8 @@ def dist_from_raw(
     """
     kind = (raw.get(f"{prefix}_dist") or "pert").strip().lower()
     if kind == "lognormal":
-        low = float(sanitize_money_str(raw[f"{prefix}_low"]))
-        high = float(sanitize_money_str(raw[f"{prefix}_high"]))
+        low = _dist_float(raw[f"{prefix}_low"], prefix)
+        high = _dist_float(raw[f"{prefix}_high"], prefix)
         dist: dict[str, Any] = {"distribution": "lognormal", **lognormal_from_quantiles(low, high)}
         if prefix == "pl":
             resolved_max = _resolve_capacity_max(raw, prefix, capacity_max)
