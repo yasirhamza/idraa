@@ -33,6 +33,7 @@ from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 from idraa.routes.deps import (
+    audit_client_ip,
     client_ip,
     get_db,
     require_role,
@@ -162,7 +163,7 @@ async def library_export_csv(
         fmt="csv",
         count=len(entries),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     header = ["id", "name", "threat_event_type", "threat_actor_type", "asset_class", "status"]
     rows = (
@@ -207,14 +208,18 @@ async def library_export(
         fmt="json",
         count=len(entries),
         user_id=user.id,
-        ip_address=client_ip(request),
+        ip_address=audit_client_ip(request),
     )
     return export_bundle_response(entries, filename="scenario-library.json")
 
 
-@router.get("/library/entries/{entry_id}/export")
+@router.get(
+    "/library/entries/{entry_id}/export",
+    dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))],
+)
 async def library_export_one(
     entry_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ) -> Response:
@@ -223,10 +228,25 @@ async def library_export_one(
     Registered BEFORE the bare ``/library/entries/{entry_id}`` detail route so
     the ``/export`` suffix is matched as its own handler. ``require_user`` —
     same read-of-public-catalog posture as the bulk export.
+
+    idraa#107/#110 review: gated + audited like the bulk sibling. Without the
+    audit row, enumerating entry ids pulls the whole catalog one entry at a
+    time with no step-up, zero ``*.export`` rows, and no consumption of the
+    export budget (``log_bulk_export`` IS the rate limiter).
     """
     entry = await ScenarioLibraryRepo(db).get_latest_published_by_id(entry_id)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="library entry not found")
+    await log_bulk_export(
+        db,
+        organization_id=user.organization_id,
+        entity_type="library_bundle",
+        fmt="json",
+        count=1,
+        user_id=user.id,
+        ip_address=audit_client_ip(request),
+        filters={"entry_id": str(entry_id)},
+    )
     return export_bundle_response([entry], filename=f"library-entry-{entry_id}.json")
 
 

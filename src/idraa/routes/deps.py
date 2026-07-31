@@ -56,10 +56,14 @@ def client_ip(request: Request) -> str | None:
     Handlers that persist the IP should tolerate None — the audit / session
     rows accept nullable ip_address for this reason.
 
-    NOT proxy-aware. Returns the DIRECT peer IP; behind a reverse proxy
-    this is the proxy, not the user. Honoring X-Forwarded-For / Forwarded
-    requires a trusted-proxy allowlist gated in Settings — do NOT let this
-    helper silently read those headers without a trust boundary.
+    NOT proxy-aware ITSELF — returns ``request.client.host`` verbatim. What
+    that value is depends on uvicorn's ``FORWARDED_ALLOW_IPS``: with a
+    non-``*`` match, ProxyHeadersMiddleware has already rewritten it by
+    walking X-Forwarded-For right-to-left past trusted hops (usually the
+    real client); with no trusted-proxy config it is the raw socket peer
+    (behind an edge, the proxy — not the user); ``*`` (forbidden, README)
+    would make it the attacker-chosen leftmost XFF entry. Do NOT add header
+    parsing here — the trust boundary lives in ``_trusted_client_ip``.
 
     Not a FastAPI dependency — a simple free function. Handlers call it as
     ``client_ip(request)``, not ``Depends(client_ip)``. Factoring out of
@@ -81,20 +85,23 @@ def _normalize_ip(ip: str) -> str:
     return ip
 
 
-def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
-    """Trusted client IP for throttling, namespaced by ``surface`` (e.g. "login").
+def _trusted_client_ip(request: Request) -> str | None:
+    """RAW trusted client IP per the configured trust strategy, else ``None``.
 
-    Returns ``None`` (throttle no-ops) when no configured strategy positively
-    yields a client IP. NEVER falls back to ``request.client.host`` — behind the
-    prod edge that is the spoofable leftmost X-Forwarded-For, not the client.
+    Shared parsing for throttling (``resolve_throttle_source``) and audit
+    (``audit_client_ip``). Returns the un-normalized IP string; callers apply
+    their own post-processing (throttle normalizes IPv6 /64, audit records
+    verbatim). ``None`` = no configured strategy positively identified the
+    client — NEVER silently substitutes ``request.client.host`` here, because
+    behind the prod edge that is the spoofable leftmost X-Forwarded-For.
     """
     s = get_settings()
-    ip: str | None = None
-    if s.trusted_client_ip_header:  # shape 1: dedicated header
+    if s.trusted_client_ip_header:  # shape 1: dedicated OVERWRITE-protected header
         val = request.headers.get(s.trusted_client_ip_header)
         if val:
-            ip = val.split(",")[0].strip()  # single-valued; split is defensive
-    elif s.trusted_proxy_count > 0:  # shape 2: XFF + known hop count
+            return val.split(",")[0].strip()  # single-valued; split is defensive
+        return None
+    if s.trusted_proxy_count > 0:  # shape 2: XFF + known hop count
         parts = [
             p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()
         ]
@@ -103,10 +110,45 @@ def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
         # A client can only PREPEND forged entries to the LEFT of that boundary.
         idx = len(parts) - s.trusted_proxy_count
         if 0 <= idx < len(parts):
-            ip = parts[idx]
+            return parts[idx]
+    return None
+
+
+def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
+    """Trusted client IP for throttling, namespaced by ``surface`` (e.g. "login").
+
+    Returns ``None`` (throttle no-ops) when no configured strategy positively
+    yields a client IP. NEVER falls back to ``request.client.host`` — behind the
+    prod edge that is the spoofable leftmost X-Forwarded-For, not the client.
+    """
+    ip = _trusted_client_ip(request)
     if ip is None:
         return None
     return f"{surface}:{_normalize_ip(ip)}"
+
+
+def audit_client_ip(request: Request) -> str | None:
+    """Client IP for AUDIT rows: trusted-strategy IP, else ``request.client``.
+
+    idraa#110: audit differs from throttling in its failure mode. A throttle
+    keyed on an untrusted IP is an attacker-controlled bypass, so
+    ``resolve_throttle_source`` returns ``None`` without a trust strategy. An
+    audit row is forensic best-effort: a fallback value beats recording
+    nothing. Records the RAW trusted IP — not the namespaced/normalized
+    throttle key. An empty-string trusted header value (falsy) also falls
+    back — "" is not a useful forensic datum.
+
+    What the fallback actually is (do not oversimplify to "the direct peer"):
+    ``request.client`` as resolved by uvicorn. With a non-``*``
+    ``FORWARDED_ALLOW_IPS`` match, uvicorn's ProxyHeadersMiddleware rewrites
+    it by walking X-Forwarded-For RIGHT-to-left past trusted hops — i.e.
+    usually the real client, not the forgeable leftmost entry. With no
+    trusted-proxy config it is the raw socket peer (the edge hop behind a
+    proxy, the real client in dev/tests). Only ``FORWARDED_ALLOW_IPS=*``
+    (explicitly forbidden in README) would make it the attacker-chosen
+    leftmost XFF entry.
+    """
+    return _trusted_client_ip(request) or client_ip(request)
 
 
 def require_user(user: User | None = Depends(current_user)) -> User:

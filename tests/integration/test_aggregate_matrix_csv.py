@@ -537,3 +537,36 @@ async def test_csv_cells_match_persisted_shapley_values(
                         f"Cell mismatch for scenario={sc_name!r} control={ctrl_name!r}: "
                         f"CSV has {csv_cell!r}, persisted shapley_value yields {expected_cell!r}"
                     )
+
+
+@pytest.mark.asyncio
+async def test_matrix_csv_writes_bulk_export_audit_row(
+    aggregate_run_client: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """idraa#107 review N6: the newly gated matrix export is budget-counted.
+
+    One risk_analysis_run.export row per download (log_bulk_export IS the
+    export rate limiter), with the run id in filters — sibling parity with
+    the PDF/xlsx report exports' {"kind": ...} convention.
+    """
+    from sqlalchemy import select as _select
+
+    from idraa.models.audit_log import AuditLog
+
+    client, run_id = aggregate_run_client
+    resp = await client.get(f"/runs/{run_id}/control-matrix.csv")
+    assert resp.status_code == 200
+    rows = (
+        (
+            await db_session.execute(
+                _select(AuditLog).where(AuditLog.action == "risk_analysis_run.export")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    filters = rows[0].changes["filters"][1]  # changes store [old, new] pairs
+    assert filters["kind"] == "control_matrix"
+    assert filters["run_id"] == str(run_id)

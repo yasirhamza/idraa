@@ -5,7 +5,7 @@ import pytest
 from starlette.requests import Request
 
 from idraa.config import Settings
-from idraa.routes.deps import resolve_throttle_source
+from idraa.routes.deps import audit_client_ip, resolve_throttle_source
 
 
 def _req(headers: dict[str, str], peer: str | None = "10.0.0.9") -> Request:
@@ -72,3 +72,37 @@ def test_surface_namespacing():
     ):
         r = _req({"cf-connecting-ip": "9.9.9.9"})
         assert resolve_throttle_source(r, surface="stepup") == "stepup:9.9.9.9"
+
+
+@pytest.mark.parametrize(
+    "headers,cfg,expected",
+    [
+        # trusted header shape: RAW header IP recorded, forged XFF ignored
+        (
+            {"cf-connecting-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1"},
+            {"trusted_client_ip_header": "CF-Connecting-IP"},
+            "9.9.9.9",
+        ),
+        # configured header ABSENT -> the direct peer (deliberate divergence
+        # from throttle, which returns None: audit is forensic best-effort)
+        (
+            {"x-forwarded-for": "1.1.1.1"},
+            {"trusted_client_ip_header": "CF-Connecting-IP"},
+            "10.0.0.9",
+        ),
+        # unconfigured -> the direct peer; a spoofed header is never read
+        ({"fly-client-ip": "6.6.6.6"}, {}, "10.0.0.9"),
+        # proxy-count shape works for audit too
+        ({"x-forwarded-for": "evil, 5.5.5.5, 4.4.4.4"}, {"trusted_proxy_count": 2}, "5.5.5.5"),
+        # RAW IPv6 recorded verbatim — audit gets the address, not the /64 key
+        (
+            {"cf-connecting-ip": "2001:db8:1:2:aaaa:bbbb:cccc:dddd"},
+            {"trusted_client_ip_header": "CF-Connecting-IP"},
+            "2001:db8:1:2:aaaa:bbbb:cccc:dddd",
+        ),
+    ],
+)
+def test_audit_client_ip(headers, cfg, expected):
+    """idraa#110: audit-row IP resolution — trusted strategy first, peer fallback."""
+    with patch("idraa.routes.deps.get_settings", return_value=_s(**cfg)):
+        assert audit_client_ip(_req(headers)) == expected

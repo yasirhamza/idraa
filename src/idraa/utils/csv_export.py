@@ -89,7 +89,13 @@ def csv_response(
     return Response(
         content=body,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            # idraa#110: bulk-egress artifacts must not land in shared caches —
+            # match the PDF-report (routes/reports.py) and samples-export
+            # (#109) no-store precedents.
+            "Cache-Control": "private, no-store",
+        },
     )
 
 
