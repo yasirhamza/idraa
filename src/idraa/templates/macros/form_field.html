@@ -17,14 +17,18 @@
   - Single-column default; max-w-md per input.
 #}
 
-{% macro _label(name, label, required) -%}
+{% macro _label(for_id, label, required) -%}
 <div class="flex items-center justify-between">
   {# #59 task 4: explicit mono/uppercase/tracked classes — macro-first, so
      this reads correctly even where app.css's `form fieldset label` net
      doesn't apply (e.g. a form_field call outside a <fieldset>). Values
      match that CSS rule exactly; see the app.css block comment for why
      both layers exist. #}
-  <label for="{{ _id }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
+  {# Parameter is named for_id, not name (review B1): a blanket rename to a
+     form_field-local (_id) once resolved to Undefined here — Jinja macros
+     do NOT close over the caller's scope — silently emptying for= on every
+     label in the app. The distinct name makes that shadowing unrepeatable. #}
+  <label for="{{ for_id }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
   {% if required %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
 </div>
 {%- endmacro %}

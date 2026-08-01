@@ -548,3 +548,32 @@ async def test_create_form_kind_variants_server_state(admin_client: AsyncClient)
     # Mutually-exclusive Alpine bindings on both.
     assert body.count(""":disabled="bandKind !== 'magnitude'\"""") == 1
     assert body.count(""":disabled="bandKind === 'magnitude'\"""") == 1
+
+
+@pytest.mark.asyncio
+async def test_create_form_422_magnitude_flips_server_disabled(
+    admin_client: AsyncClient,
+) -> None:
+    """Review I7 — the OTHER direction of the I3 pin: on a 422 re-render of a
+    magnitude submit, the single server-rendered `disabled` must sit on the
+    RATE fieldset (a hardcoded money-side disabled would re-arm the
+    duplicate-name no-JS path for magnitude round-trips)."""
+    import re as _re
+
+    r = await csrf_post(
+        admin_client,
+        "/qualitative-bands",
+        {
+            "kind": "magnitude",
+            "label": "BAD LABEL",  # fails the snake_case pattern -> 422
+            "low": "1,000",
+            "mode": "2,000",
+            "high": "3,000",
+            "reason": "x",
+        },
+    )
+    assert r.status_code == 422
+    fieldsets = _re.findall(r"<fieldset[^>]*>", r.text)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind !== 'magnitude'\"" in disabled[0]

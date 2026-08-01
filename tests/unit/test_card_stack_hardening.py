@@ -50,7 +50,11 @@ def test_action_menu_flips_up_near_viewport_bottom() -> None:
     # (O(rows) listeners on the window; place() never preventDefaults).
     assert "@scroll.window.capture.passive" in src
     assert "@resize.window.passive" in src
-    # The clipped anchoring must not creep back.
+    # The clipped anchoring must not creep back. NOTE (review B2): Tailwind's
+    # scanner is a raw-bytes extractor that reads Jinja COMMENTS too — any
+    # mention of a class name here or in a template comment keeps the utility
+    # alive in tailwind.css, and removing the last mention requires a
+    # build-css rebuild+commit or the gate fails stale.
     assert "top-full" not in src and "bottom-full" not in src, (
         "class-based absolute anchoring reintroduces overflow-container clipping"
     )

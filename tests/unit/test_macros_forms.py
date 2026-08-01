@@ -306,3 +306,54 @@ def test_kpi_card_renders_delta_with_status_colour_positive() -> None:
 def test_kpi_card_handles_none_value() -> None:
     html = _r("macros/kpi_card.html", "kpi_card", label="Unknown", value=None, format="money")
     assert "—" in html
+
+
+def test_form_field_label_for_matches_control_id_every_branch() -> None:
+    """Review B1/I6: `for=` must be NON-EMPTY and equal the control's id on
+    every input_type — a blanket rename once pointed _label at a caller-local
+    that Jinja macros cannot see, silently emptying for= on all 107 call
+    sites while 4131 tests stayed green. This is the pin that class needed."""
+    import re
+
+    cases = [
+        {"input_type": "text"},
+        {"input_type": "email"},
+        {"input_type": "password"},
+        {"input_type": "number"},
+        {"input_type": "money"},
+        {"input_type": "percent"},
+        {"input_type": "count"},
+        {"input_type": "select", "options": [("a", "A"), ("b", "B")]},
+        {"input_type": "textarea"},
+        {"input_type": "date"},
+    ]
+    for extra in cases:
+        html = _r(
+            "macros/form_field.html",
+            "form_field",
+            name="fld",
+            label="Field",
+            value=None,
+            **extra,
+        )
+        m = re.search(r'<label for="([^"]*)"', html)
+        assert m, f"{extra['input_type']}: no label"
+        assert m.group(1) == "fld", f"{extra['input_type']}: for={m.group(1)!r}"
+        assert 'id="fld"' in html, f"{extra['input_type']}: control id missing"
+
+    # field_id variant: label and control both use the override.
+    html = _r(
+        "macros/form_field.html",
+        "form_field",
+        name="low",
+        field_id="low_money",
+        label="Low",
+        input_type="money",
+        value=None,
+    )
+    import re as _re
+
+    m = _re.search(r'<label for="([^"]*)"', html)
+    assert m and m.group(1) == "low_money"
+    assert 'id="low_money"' in html
+    assert 'name="low"' in html
