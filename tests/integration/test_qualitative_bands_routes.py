@@ -522,3 +522,58 @@ async def test_analyst_cannot_create_band(analyst_client: AsyncClient) -> None:
 async def test_reviewer_cannot_create_band(reviewer_client: AsyncClient) -> None:
     r = await csrf_post(reviewer_client, "/qualitative-bands", data=DEFAULT_CREATE_PAYLOAD)
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_form_kind_variants_server_state(admin_client: AsyncClient) -> None:
+    """Owner UAT 2026-08-01 (review I3/T2): the create form renders BOTH
+    duplicate-named value-field variants; exactly ONE fieldset must carry a
+    server-rendered `disabled` (matching the server-known kind) so a
+    pre-hydration/no-JS submit can never post both sets — FormData last-wins
+    made the /yr fields silently win a magnitude submit before this."""
+    import re as _re
+
+    r = await admin_client.get("/qualitative-bands/new")
+    assert r.status_code == 200
+    body = r.text
+    # Both variants present, all six ids unique.
+    for fid in ("low_money", "mode_money", "high_money", "low_rate", "mode_rate", "high_rate"):
+        assert body.count(f'id="{fid}"') == 1, fid
+    # Exactly one fieldset carries server-rendered disabled — the MONEY one
+    # on a fresh form (default kind is frequency).
+    fieldsets = _re.findall(r"<fieldset[^>]*>", body)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind === 'magnitude'\"" in disabled[0]
+    # Mutually-exclusive Alpine bindings on both.
+    assert body.count(""":disabled="bandKind !== 'magnitude'\"""") == 1
+    assert body.count(""":disabled="bandKind === 'magnitude'\"""") == 1
+
+
+@pytest.mark.asyncio
+async def test_create_form_422_magnitude_flips_server_disabled(
+    admin_client: AsyncClient,
+) -> None:
+    """Review I7 — the OTHER direction of the I3 pin: on a 422 re-render of a
+    magnitude submit, the single server-rendered `disabled` must sit on the
+    RATE fieldset (a hardcoded money-side disabled would re-arm the
+    duplicate-name no-JS path for magnitude round-trips)."""
+    import re as _re
+
+    r = await csrf_post(
+        admin_client,
+        "/qualitative-bands",
+        {
+            "kind": "magnitude",
+            "label": "BAD LABEL",  # fails the snake_case pattern -> 422
+            "low": "1,000",
+            "mode": "2,000",
+            "high": "3,000",
+            "reason": "x",
+        },
+    )
+    assert r.status_code == 422
+    fieldsets = _re.findall(r"<fieldset[^>]*>", r.text)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind !== 'magnitude'\"" in disabled[0]

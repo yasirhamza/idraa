@@ -21,30 +21,63 @@
   BEFORE trailing scripts run, so global-dependent components capture stale
   values. Inlining eliminates the race.
 
-  Plan-gate Arch-13 (mitigated): the absolute-positioned dropdown opens downward
-  by default, which clipped below the viewport on the last card of the mobile
-  card-stack and below the last row inside data_table's overflow-x-auto desktop
-  wrapper. `flipUp` now measures the button's distance to the viewport bottom on
-  open and anchors the menu above the button (`bottom-full`) when there isn't
-  room below — fixing both the mobile last-card and the desktop last-row clip.
-  (A full Alpine x-anchor/popper port remains a post-MVP nicety.)
+  Positioning (supersedes the Arch-13 note): the menu is FIXED-positioned
+  from the trigger's rect via place() — escaping BOTH viewport clipping
+  (the original Arch-13 flipUp fix) and ancestor overflow clipping
+  (data_table's overflow-x-auto wrapper rendered the old absolute menu as
+  an empty sliver — owner UAT 2026-08-01). flipUp still selects above-vs-
+  below anchoring; capture-phase passive window scroll/resize listeners
+  re-anchor an open menu (scroll does not bubble — capture sees nested
+  containers; close-on-scroll fought the browser's scroll-into-view).
 #}
 {% macro action_menu(items, align='end') -%}
-<div x-data="{ open: false, flipUp: false, busy: false }"
+{#- Owner UAT 2026-08-01: the menu now positions itself FIXED from the
+    trigger's rect. The previous absolute-in-relative placement was clipped
+    by data_table's overflow-x-auto wrapper (overflow-x != visible forces
+    overflow-y clipping too), so on short tables the menu rendered as an
+    empty sliver — the Arch-13 flipUp only handled VIEWPORT clipping, not
+    CONTAINER clipping. position:fixed escapes every ancestor overflow;
+    window scroll/resize RE-ANCHORS the open menu to the trigger's current
+    rect (closing on scroll fought the browser's own scroll-into-view —
+    e2e-caught: the run-detail journey's menu closed mid-click). -#}
+<div x-data="{ open: false, busy: false, menuStyle: '',
+               place() {
+                 const r = this.$refs.trigger.getBoundingClientRect();
+                 /* documentElement.clientWidth/Height, NOT window.inner*:
+                    fixed positioning anchors to the ICB, which excludes
+                    classic scrollbars; inner* includes them (review I5). */
+                 const vw = document.documentElement.clientWidth;
+                 const vh = document.documentElement.clientHeight;
+                 const flipUp = (vh - r.bottom) < 180;
+                 this.menuStyle = 'position: fixed; z-index: 50;'
+                   + (flipUp ? 'bottom:' + (vh - r.top + 4) + 'px;'
+                             : 'top:' + (r.bottom + 4) + 'px;')
+                   {% if align == 'end' %}+ 'right:' + (vw - r.right) + 'px;'
+                   {% else %}+ 'left:' + r.left + 'px;'{% endif %};
+               } }"
      @keydown.escape.window="open = false"
      @click.outside="open = false"
+     {#- .capture: scroll does not bubble, so a plain window listener misses
+         nested scroll containers (the overflow-x-auto table wrapper — the
+         menu drifted off its trigger, review I1); capture-phase receives
+         descendant scrolls. .passive: one action_menu per row+card means
+         O(rows) window listeners — never preventDefault, so passive keeps
+         scrolling off the main-thread hot path (review I2). -#}
+     @scroll.window.capture.passive="if (open) place()"
+     @resize.window.passive="if (open) place()"
      class="relative inline-block">
   <button type="button"
+          x-ref="trigger"
           class="btn btn-xs btn-ghost px-2"
           aria-haspopup="menu"
           :aria-expanded="open ? 'true' : 'false'"
-          @click="open = !open; flipUp = open && (window.innerHeight - $el.getBoundingClientRect().bottom) < 180">
+          @click="open = !open; if (open) place()">
     <span aria-hidden="true">⋯</span>
     <span class="sr-only">Actions</span>
   </button>
   <div x-show="open" x-cloak
-       class="absolute z-20 min-w-[10rem] bg-surface-1 border border-border-strong rounded-card shadow-sm{% if align == 'end' %} right-0{% else %} left-0{% endif %}"
-       :class="flipUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+       :style="menuStyle"
+       class="min-w-[10rem] bg-surface-1 border border-border-strong rounded-card shadow-sm"
        role="menu">
     <ul class="py-1">
       {%- for item in items %}

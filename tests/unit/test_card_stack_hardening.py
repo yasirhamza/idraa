@@ -5,9 +5,10 @@ scaffolding; this pass validated them on real data and fixed two rough edges:
 
 1. The card `<dl>` used a fixed ``grid-cols-2`` (50/50), wasting half the width
    on short labels and forcing long values to wrap early. Now ``auto_1fr``.
-2. The ``action_menu`` dropdown always opened downward (``mt-1``), clipping
-   below the viewport on the last card / last table row. It now flips above the
-   button (``bottom-full``) when there isn't room below (``flipUp``).
+2. The ``action_menu`` dropdown positions FIXED from its trigger's rect
+   (owner UAT 2026-08-01: absolute-in-relative was clipped by data_table's
+   overflow-x-auto wrapper), flipping above the button when there isn't
+   room below and re-anchoring on capture-phase window scroll/resize.
 """
 
 from __future__ import annotations
@@ -28,10 +29,32 @@ def test_card_stack_dl_uses_auto_value_columns() -> None:
 def test_action_menu_flips_up_near_viewport_bottom() -> None:
     src = (_MACROS / "action_menu.html").read_text(encoding="utf-8")
     # flipUp state, the boundary measurement on open, and the conditional anchor.
-    assert "flipUp" in src, "action_menu must track a flipUp state"
-    assert "innerHeight" in src and "getBoundingClientRect" in src, (
+    assert "flipUp" in src, "action_menu must compute a flip-up decision on open"
+    # documentElement.clientHeight, not window.innerHeight (review I5: fixed
+    # positioning anchors to the ICB, which excludes classic scrollbars).
+    assert "clientHeight" in src and "getBoundingClientRect" in src, (
         "action_menu must measure the button's distance to the viewport bottom on open"
     )
-    assert "bottom-full" in src and "top-full" in src, (
-        "action_menu must anchor above (bottom-full) when flipping up, below (top-full) otherwise"
+    # Owner UAT 2026-08-01: the menu now anchors via an inline FIXED style
+    # computed from the trigger rect — escaping BOTH viewport clipping (the
+    # original Arch-13 fix) and overflow-container clipping (data_table's
+    # overflow-x-auto wrapper rendered the menu as an empty sliver). flipUp
+    # switches the fixed anchor between top: and bottom:.
+    assert "position: fixed" in src, "menu must use fixed positioning (escapes overflow clipping)"
+    assert "'bottom:'" in src and "'top:'" in src, (
+        "action_menu must anchor above (bottom:) when flipping up, below (top:) otherwise"
+    )
+    # Review I1/I2 pins: scroll does not bubble — the window listener must be
+    # capture-phase to see nested scroll containers (else the fixed menu
+    # drifts off its trigger when the table wrapper scrolls) — and passive
+    # (O(rows) listeners on the window; place() never preventDefaults).
+    assert "@scroll.window.capture.passive" in src
+    assert "@resize.window.passive" in src
+    # The clipped anchoring must not creep back. NOTE (review B2): Tailwind's
+    # scanner is a raw-bytes extractor that reads Jinja COMMENTS too — any
+    # mention of a class name here or in a template comment keeps the utility
+    # alive in tailwind.css, and removing the last mention requires a
+    # build-css rebuild+commit or the gate fails stale.
+    assert "top-full" not in src and "bottom-full" not in src, (
+        "class-based absolute anchoring reintroduces overflow-container clipping"
     )

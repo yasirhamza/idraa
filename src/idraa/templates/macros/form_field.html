@@ -17,14 +17,18 @@
   - Single-column default; max-w-md per input.
 #}
 
-{% macro _label(name, label, required) -%}
+{% macro _label(for_id, label, required) -%}
 <div class="flex items-center justify-between">
   {# #59 task 4: explicit mono/uppercase/tracked classes — macro-first, so
      this reads correctly even where app.css's `form fieldset label` net
      doesn't apply (e.g. a form_field call outside a <fieldset>). Values
      match that CSS rule exactly; see the app.css block comment for why
      both layers exist. #}
-  <label for="{{ name }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
+  {# Parameter is named for_id, not name (review B1): a blanket rename to a
+     form_field-local (_id) once resolved to Undefined here — Jinja macros
+     do NOT close over the caller's scope — silently emptying for= on every
+     label in the app. The distinct name makes that shadowing unrepeatable. #}
+  <label for="{{ for_id }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
   {% if required %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
 </div>
 {%- endmacro %}
@@ -45,7 +49,8 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
                     help=none, error=none, required=False,
                     prefix=none, suffix=none, options=none,
                     disabled=False, mode='edit', placeholder=none,
-                    autocomplete=none, rows=4, step=none) -%}
+                    autocomplete=none, rows=4, step=none, field_id=none) -%}
+{%- set _id = field_id or name -%}
 
 {% if mode == 'display' %}
 <div class="space-y-1 max-w-md">
@@ -61,10 +66,10 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
    (h-10, set in `_input_classes` below) was already uniform across every
    form_field text/number/select/date consumer and needed no change. #}
 <div class="max-w-md space-y-1">
-  {{ _label(name, label, required) }}
+  {{ _label(_id, label, required) }}
 
   {% if input_type in ('text','email','password','url') %}
-    <input id="{{ name }}" name="{{ name }}" type="{{ input_type }}"
+    <input id="{{ _id }}" name="{{ name }}" type="{{ input_type }}"
            value="{{ value if value is not none else '' }}"
            {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
            {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
@@ -82,7 +87,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
        (utils/money.py, the server mirror of the client allowlist). #}
     <div class="relative" x-data='moneyField({{ (value | format_money_attr) | tojson }})'>
       <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix or '$' }}</span>
-      <input id="{{ name }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
+      <input id="{{ _id }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
              pattern="[0-9,]+(\.[0-9]+)?"
              value="{{ value | format_money_attr }}"
              x-model="display"
@@ -103,7 +108,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
       {% if prefix %}
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix }}</span>
       {% endif %}
-      <input id="{{ name }}" name="{{ name }}" type="number"
+      <input id="{{ _id }}" name="{{ name }}" type="number"
              inputmode="decimal" step="{{ step }}"
              {% if input_type == 'percent' %}min="0" max="100"{% endif %}
              value="{{ value if value is not none else '' }}"
@@ -117,7 +122,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
     </div>
 
   {% elif input_type == 'select' %}
-    <select id="{{ name }}" name="{{ name }}"
+    <select id="{{ _id }}" name="{{ name }}"
             {% if required %}required aria-required="true"{% endif %}
             {% if disabled %}disabled{% endif %}
             class="{{ _input_classes(error, disabled) }}">
@@ -127,7 +132,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
     </select>
 
   {% elif input_type == 'textarea' %}
-    <textarea id="{{ name }}" name="{{ name }}"
+    <textarea id="{{ _id }}" name="{{ name }}"
               rows="{{ rows }}"
               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
               {% if required %}required aria-required="true"{% endif %}
@@ -135,7 +140,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
               class="{{ _input_classes(error, disabled) }} h-auto py-2 min-h-24 max-h-64 resize-y">{{ value if value is not none else '' }}</textarea>
 
   {% elif input_type == 'date' %}
-    <input id="{{ name }}" name="{{ name }}" type="date"
+    <input id="{{ _id }}" name="{{ name }}" type="date"
            value="{{ value if value is not none else '' }}"
            {% if required %}required aria-required="true"{% endif %}
            {% if disabled %}disabled{% endif %}
@@ -143,7 +148,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
 
   {% elif input_type == 'toggle' %}
     <label class="inline-flex items-center gap-2">
-      <input id="{{ name }}" name="{{ name }}" type="checkbox"
+      <input id="{{ _id }}" name="{{ name }}" type="checkbox"
              value="true"
              {% if value %}checked{% endif %}
              {% if disabled %}disabled{% endif %}
