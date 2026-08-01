@@ -551,6 +551,120 @@ async def test_create_form_kind_variants_server_state(admin_client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_canonical_rows_offer_override_action(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Owner UAT 2026-08-01: canonical rows carry an "Override" action linking
+    to the create form PRE-FILLED with that band's kind/label/values. Before
+    this, canonical rows had an EMPTY actions list — PR #147's empty-menu
+    guard then (correctly) rendered no trigger at all, leaving zero per-row
+    affordance to calibrate a canonical band ("the 3 dots are gone")."""
+    await _seed_canonical(
+        db_session, kind="frequency", label="low", low=0.1, mode=0.32, high=1.0, sort_order=1
+    )
+    await _seed_canonical(
+        db_session,
+        kind="magnitude",
+        label="low",
+        low=10_000.0,
+        mode=32_000.0,
+        high=100_000.0,
+        sort_order=1,
+    )
+    # Override the frequency/low band; magnitude/low stays canonical-source.
+    create = await csrf_post(
+        admin_client,
+        "/qualitative-bands",
+        data={
+            "kind": "frequency",
+            "label": "low",
+            "low": "0.2",
+            "mode": "0.6",
+            "high": "2.0",
+            "reason": "org-specific calibration",
+        },
+    )
+    assert create.status_code in (200, 303)
+
+    r = await admin_client.get("/qualitative-bands")
+    assert r.status_code == 200
+    # The canonical magnitude row links to a fully-prefilled create form
+    # (& autoescapes to &amp; inside the href attribute).
+    assert (
+        "/qualitative-bands/new?kind=magnitude&amp;label=low"
+        "&amp;low=10000.0&amp;mode=32000.0&amp;high=100000.0"
+    ) in r.text
+    assert "Override" in r.text
+    # The org-overridden frequency row must NOT offer Override (it has
+    # Edit/Delete) — no frequency-kind prefill link anywhere on the page.
+    assert "kind=frequency" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_new_band_form_prefills_from_query(admin_client: AsyncClient) -> None:
+    """The Override link's query params prefill the create form: kind select
+    pre-selected, label filled, magnitude values rendered comma-grouped by
+    the money inputs, and the server-rendered `disabled` on the RATE
+    fieldset (mirroring the I7 pin's magnitude direction)."""
+    import re as _re
+
+    r = await admin_client.get(
+        "/qualitative-bands/new?kind=magnitude&label=low&low=10000.0&mode=32000.0&high=100000.0"
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert '<option value="magnitude" selected>' in body
+    assert 'value="low"' in body
+    for grouped in ('value="10,000"', 'value="32,000"', 'value="100,000"'):
+        assert grouped in body, grouped
+    fieldsets = _re.findall(r"<fieldset[^>]*>", body)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind !== 'magnitude'\"" in disabled[0]
+
+
+@pytest.mark.asyncio
+async def test_new_band_form_prefills_frequency_rates_raw(
+    admin_client: AsyncClient,
+) -> None:
+    """Frequency prefill: rate inputs carry the raw values (rates NEVER get
+    money formatting) and the money fieldset stays server-disabled."""
+    import re as _re
+
+    r = await admin_client.get(
+        "/qualitative-bands/new?kind=frequency&label=low&low=0.1&mode=0.32&high=1.0"
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert '<option value="frequency" selected>' in body
+    for raw in ('value="0.1"', 'value="0.32"', 'value="1.0"'):
+        assert raw in body, raw
+    fieldsets = _re.findall(r"<fieldset[^>]*>", body)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind === 'magnitude'\"" in disabled[0]
+
+
+@pytest.mark.asyncio
+async def test_new_band_form_invalid_kind_prefill_falls_back(
+    admin_client: AsyncClient,
+) -> None:
+    """A tampered ?kind=bogus must not crash or select anything — the form
+    falls back to the default frequency layout (money fieldset disabled)."""
+    import re as _re
+
+    r = await admin_client.get("/qualitative-bands/new?kind=bogus&label=x&low=1.0")
+    assert r.status_code == 200
+    body = r.text
+    assert "bogus" not in body
+    fieldsets = _re.findall(r"<fieldset[^>]*>", body)
+    disabled = [f for f in fieldsets if " disabled" in f]
+    assert len(disabled) == 1, fieldsets
+    assert "x-show=\"bandKind === 'magnitude'\"" in disabled[0]
+
+
+@pytest.mark.asyncio
 async def test_create_form_422_magnitude_flips_server_disabled(
     admin_client: AsyncClient,
 ) -> None:

@@ -25,6 +25,11 @@
 ] %}
 
 {% set rows = [] %}
+{# Canonical rows are immutable — their single action is "Override": open the
+   create form PRE-FILLED with this band's kind/label/values so calibrating
+   starts from the canonical numbers (owner UAT 2026-08-01: an empty actions
+   list plus PR 147's empty-menu guard left canonical rows with no per-row
+   affordance at all). Org rows keep Edit/Delete. #}
 {% for b in bands %}
 {%- set _ = rows.append({
   "kind_label":    b.kind | humanize_slug,
@@ -43,7 +48,11 @@
       "danger": True,
       "confirm": "Delete this org band override? Reverts to the canonical band.",
     },
-  ] if b.band_id else []),
+  ] if b.band_id else [
+    {"label": "Override", "href": "/qualitative-bands/new?kind=" ~ b.kind
+       ~ "&label=" ~ (b.label | urlencode) ~ "&low=" ~ b.low
+       ~ "&mode=" ~ b.mode ~ "&high=" ~ b.high},
+  ]),
 }) -%}
 {% endfor %}
 
