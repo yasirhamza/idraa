@@ -24,7 +24,7 @@
      doesn't apply (e.g. a form_field call outside a <fieldset>). Values
      match that CSS rule exactly; see the app.css block comment for why
      both layers exist. #}
-  <label for="{{ name }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
+  <label for="{{ _id }}" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">{{ label }}</label>
   {% if required %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
 </div>
 {%- endmacro %}
@@ -65,7 +65,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
   {{ _label(_id, label, required) }}
 
   {% if input_type in ('text','email','password','url') %}
-    <input id="{{ name }}" name="{{ name }}" type="{{ input_type }}"
+    <input id="{{ _id }}" name="{{ name }}" type="{{ input_type }}"
            value="{{ value if value is not none else '' }}"
            {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
            {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
@@ -118,7 +118,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
     </div>
 
   {% elif input_type == 'select' %}
-    <select id="{{ name }}" name="{{ name }}"
+    <select id="{{ _id }}" name="{{ name }}"
             {% if required %}required aria-required="true"{% endif %}
             {% if disabled %}disabled{% endif %}
             class="{{ _input_classes(error, disabled) }}">
@@ -128,7 +128,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
     </select>
 
   {% elif input_type == 'textarea' %}
-    <textarea id="{{ name }}" name="{{ name }}"
+    <textarea id="{{ _id }}" name="{{ name }}"
               rows="{{ rows }}"
               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
               {% if required %}required aria-required="true"{% endif %}
@@ -136,7 +136,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
               class="{{ _input_classes(error, disabled) }} h-auto py-2 min-h-24 max-h-64 resize-y">{{ value if value is not none else '' }}</textarea>
 
   {% elif input_type == 'date' %}
-    <input id="{{ name }}" name="{{ name }}" type="date"
+    <input id="{{ _id }}" name="{{ name }}" type="date"
            value="{{ value if value is not none else '' }}"
            {% if required %}required aria-required="true"{% endif %}
            {% if disabled %}disabled{% endif %}
@@ -144,7 +144,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
 
   {% elif input_type == 'toggle' %}
     <label class="inline-flex items-center gap-2">
-      <input id="{{ name }}" name="{{ name }}" type="checkbox"
+      <input id="{{ _id }}" name="{{ name }}" type="checkbox"
              value="true"
              {% if value %}checked{% endif %}
              {% if disabled %}disabled{% endif %}

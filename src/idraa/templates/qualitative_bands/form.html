@@ -65,7 +65,13 @@
          x-data="{ bandKind: 'frequency' }"
          x-init="bandKind = document.getElementById('kind')?.value || 'frequency'"
          @change.window="if ($event.target.id === 'kind') bandKind = $event.target.value">
+      {# Server-rendered disabled + x-cloak mirror the server-known kind
+         (review I3: the Alpine :disabled binding alone left BOTH duplicate-
+         named sets enabled pre-hydration/no-JS — and FormData last-wins
+         meant the /yr fields silently won a magnitude submit; N3: the
+         static x-cloak also kills the both-variants first-paint flash). #}
       <fieldset class="contents" x-show="bandKind === 'magnitude'"
+                {% if effective_kind != 'magnitude' %}disabled x-cloak{% endif %}
                 :disabled="bandKind !== 'magnitude'">
         {{ form_field(name="low", field_id="low_money", label="Low", input_type="money",
                       value=(form.low if form else none), required=True) }}
@@ -75,6 +81,7 @@
                       value=(form.high if form else none), required=True) }}
       </fieldset>
       <fieldset class="contents" x-show="bandKind !== 'magnitude'"
+                {% if effective_kind == 'magnitude' %}disabled x-cloak{% endif %}
                 :disabled="bandKind === 'magnitude'">
         {{ form_field(name="low", field_id="low_rate", label="Low", input_type="number",
                       value=(form.low if form else none), step="any", suffix="/yr", required=True) }}
