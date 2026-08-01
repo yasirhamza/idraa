@@ -118,8 +118,27 @@ async def list_bands(
 @router.get("/qualitative-bands/new", response_class=HTMLResponse)
 async def new_band_form(
     request: Request,
+    kind: str | None = None,
+    label: str | None = None,
+    low: str | None = None,
+    mode: str | None = None,
+    high: str | None = None,
     user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> HTMLResponse:
+    """Blank create form, or a PREFILLED one via query params.
+
+    Canonical rows' "Override" action links here with the band's
+    kind/label/values so calibration starts from the canonical numbers
+    (owner UAT 2026-08-01). Values stay strings end-to-end — the template's
+    money/rate inputs format for display; parsing happens only on POST.
+    A kind outside KIND_OPTIONS (tampered URL) is dropped, falling back to
+    the default frequency layout.
+    """
+    if kind is not None and kind not in {k for k, _ in KIND_OPTIONS}:
+        kind = None
+    prefill: dict[str, str | None] | None = None
+    if any(v is not None for v in (kind, label, low, mode, high)):
+        prefill = {"kind": kind, "label": label, "low": low, "mode": mode, "high": high}
     return templates.TemplateResponse(
         request,
         "qualitative_bands/form.html",
@@ -127,7 +146,7 @@ async def new_band_form(
             "current_user": user,
             "flash": None,
             "band": None,
-            "form": None,
+            "form": prefill,
             "kind_options": KIND_OPTIONS,
         },
     )
