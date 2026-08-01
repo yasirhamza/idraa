@@ -32,6 +32,12 @@ def test_action_menu_flips_up_near_viewport_bottom() -> None:
     assert "innerHeight" in src and "getBoundingClientRect" in src, (
         "action_menu must measure the button's distance to the viewport bottom on open"
     )
-    assert "bottom-full" in src and "top-full" in src, (
-        "action_menu must anchor above (bottom-full) when flipping up, below (top-full) otherwise"
+    # Owner UAT 2026-08-01: the menu now anchors via an inline FIXED style
+    # computed from the trigger rect — escaping BOTH viewport clipping (the
+    # original Arch-13 fix) and overflow-container clipping (data_table's
+    # overflow-x-auto wrapper rendered the menu as an empty sliver). flipUp
+    # switches the fixed anchor between top: and bottom:.
+    assert "position: fixed" in src, "menu must use fixed positioning (escapes overflow clipping)"
+    assert "'bottom:'" in src and "'top:'" in src, (
+        "action_menu must anchor above (bottom:) when flipping up, below (top:) otherwise"
     )

@@ -45,7 +45,8 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
                     help=none, error=none, required=False,
                     prefix=none, suffix=none, options=none,
                     disabled=False, mode='edit', placeholder=none,
-                    autocomplete=none, rows=4, step=none) -%}
+                    autocomplete=none, rows=4, step=none, field_id=none) -%}
+{%- set _id = field_id or name -%}
 
 {% if mode == 'display' %}
 <div class="space-y-1 max-w-md">
@@ -61,7 +62,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
    (h-10, set in `_input_classes` below) was already uniform across every
    form_field text/number/select/date consumer and needed no change. #}
 <div class="max-w-md space-y-1">
-  {{ _label(name, label, required) }}
+  {{ _label(_id, label, required) }}
 
   {% if input_type in ('text','email','password','url') %}
     <input id="{{ name }}" name="{{ name }}" type="{{ input_type }}"
@@ -82,7 +83,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
        (utils/money.py, the server mirror of the client allowlist). #}
     <div class="relative" x-data='moneyField({{ (value | format_money_attr) | tojson }})'>
       <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix or '$' }}</span>
-      <input id="{{ name }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
+      <input id="{{ _id }}" name="{{ name }}" type="text" inputmode="numeric" autocomplete="off"
              pattern="[0-9,]+(\.[0-9]+)?"
              value="{{ value | format_money_attr }}"
              x-model="display"
@@ -103,7 +104,7 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
       {% if prefix %}
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-2" aria-hidden="true">{{ prefix }}</span>
       {% endif %}
-      <input id="{{ name }}" name="{{ name }}" type="number"
+      <input id="{{ _id }}" name="{{ name }}" type="number"
              inputmode="decimal" step="{{ step }}"
              {% if input_type == 'percent' %}min="0" max="100"{% endif %}
              value="{{ value if value is not none else '' }}"

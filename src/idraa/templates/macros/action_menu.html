@@ -30,21 +30,42 @@
   (A full Alpine x-anchor/popper port remains a post-MVP nicety.)
 #}
 {% macro action_menu(items, align='end') -%}
-<div x-data="{ open: false, flipUp: false, busy: false }"
+{#- Owner UAT 2026-08-01: the menu now positions itself FIXED from the
+    trigger's rect. The previous absolute-in-relative placement was clipped
+    by data_table's overflow-x-auto wrapper (overflow-x != visible forces
+    overflow-y clipping too), so on short tables the menu rendered as an
+    empty sliver — the Arch-13 flipUp only handled VIEWPORT clipping, not
+    CONTAINER clipping. position:fixed escapes every ancestor overflow;
+    window scroll/resize RE-ANCHORS the open menu to the trigger's current
+    rect (closing on scroll fought the browser's own scroll-into-view —
+    e2e-caught: the run-detail journey's menu closed mid-click). -#}
+<div x-data="{ open: false, busy: false, menuStyle: '',
+               place() {
+                 const r = this.$refs.trigger.getBoundingClientRect();
+                 const flipUp = (window.innerHeight - r.bottom) < 180;
+                 this.menuStyle = 'position: fixed; z-index: 50;'
+                   + (flipUp ? 'bottom:' + (window.innerHeight - r.top + 4) + 'px;'
+                             : 'top:' + (r.bottom + 4) + 'px;')
+                   {% if align == 'end' %}+ 'right:' + (window.innerWidth - r.right) + 'px;'
+                   {% else %}+ 'left:' + r.left + 'px;'{% endif %};
+               } }"
      @keydown.escape.window="open = false"
      @click.outside="open = false"
+     @scroll.window="if (open) place()"
+     @resize.window="if (open) place()"
      class="relative inline-block">
   <button type="button"
+          x-ref="trigger"
           class="btn btn-xs btn-ghost px-2"
           aria-haspopup="menu"
           :aria-expanded="open ? 'true' : 'false'"
-          @click="open = !open; flipUp = open && (window.innerHeight - $el.getBoundingClientRect().bottom) < 180">
+          @click="open = !open; if (open) place()">
     <span aria-hidden="true">⋯</span>
     <span class="sr-only">Actions</span>
   </button>
   <div x-show="open" x-cloak
-       class="absolute z-20 min-w-[10rem] bg-surface-1 border border-border-strong rounded-card shadow-sm{% if align == 'end' %} right-0{% else %} left-0{% endif %}"
-       :class="flipUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+       :style="menuStyle"
+       class="min-w-[10rem] bg-surface-1 border border-border-strong rounded-card shadow-sm"
        role="menu">
     <ul class="py-1">
       {%- for item in items %}

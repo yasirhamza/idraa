@@ -42,15 +42,49 @@
                   required=True) }}
     {% endif %}
 
+    {% if band %}
+    {# Edit: kind is immutable, so the server-decided input type is correct. #}
     {{ form_field(name="low", label="Low", input_type=value_input_type,
-                  value=(band.low if band else (form.low if form else none)),
-                  step="any", suffix=value_suffix, required=True) }}
+                  value=band.low, step="any", suffix=value_suffix, required=True) }}
     {{ form_field(name="mode", label="Mode", input_type=value_input_type,
-                  value=(band.mode if band else (form.mode if form else none)),
-                  step="any", suffix=value_suffix, required=True) }}
+                  value=band.mode, step="any", suffix=value_suffix, required=True) }}
     {{ form_field(name="high", label="High", input_type=value_input_type,
-                  value=(band.high if band else (form.high if form else none)),
-                  step="any", suffix=value_suffix, required=True) }}
+                  value=band.high, step="any", suffix=value_suffix, required=True) }}
+    {% else %}
+    {# Create (owner UAT 2026-08-01): kind is a LIVE select, but the input
+       type used to be frozen at render time — picking "Magnitude (USD)"
+       left plain number inputs with a wrong "/yr" suffix and no money
+       entry. Both variants render; the kind select toggles which is
+       visible, and the INACTIVE fieldset is disabled so it neither posts
+       nor validates. Distinct field_ids keep ids/labels unique; names
+       stay low/mode/high on both (only one set submits). #}
+    {# @change.window: the kind select is a SIBLING subtree (rendered above),
+       so its change event never bubbles through this wrapper — listen at the
+       window, where bubbling does arrive (browser-probe finding). #}
+    <div class="contents"
+         x-data="{ bandKind: 'frequency' }"
+         x-init="bandKind = document.getElementById('kind')?.value || 'frequency'"
+         @change.window="if ($event.target.id === 'kind') bandKind = $event.target.value">
+      <fieldset class="contents" x-show="bandKind === 'magnitude'"
+                :disabled="bandKind !== 'magnitude'">
+        {{ form_field(name="low", field_id="low_money", label="Low", input_type="money",
+                      value=(form.low if form else none), required=True) }}
+        {{ form_field(name="mode", field_id="mode_money", label="Mode", input_type="money",
+                      value=(form.mode if form else none), required=True) }}
+        {{ form_field(name="high", field_id="high_money", label="High", input_type="money",
+                      value=(form.high if form else none), required=True) }}
+      </fieldset>
+      <fieldset class="contents" x-show="bandKind !== 'magnitude'"
+                :disabled="bandKind === 'magnitude'">
+        {{ form_field(name="low", field_id="low_rate", label="Low", input_type="number",
+                      value=(form.low if form else none), step="any", suffix="/yr", required=True) }}
+        {{ form_field(name="mode", field_id="mode_rate", label="Mode", input_type="number",
+                      value=(form.mode if form else none), step="any", suffix="/yr", required=True) }}
+        {{ form_field(name="high", field_id="high_rate", label="High", input_type="number",
+                      value=(form.high if form else none), step="any", suffix="/yr", required=True) }}
+      </fieldset>
+    </div>
+    {% endif %}
 
     {{ form_field(name="reason", label="Reason", input_type="textarea",
                   value=(band.reason if band else (form.reason if form else none)),
