@@ -221,11 +221,13 @@
             {% endfor %}
           </dl>
           {%- set action_col = (columns|selectattr('kind', 'equalto', 'action_menu')|list|first) -%}
-          {%- if action_col -%}
+          {%- set _action_items = (row[action_col.key] if row is mapping else row|attr(action_col.key)) if action_col else none -%}
+          {%- if _action_items -%}
+          {# Footer only when there ARE actions (review nice-to-have: the
+             empty wrapper left 8px of dead space on every action-less card;
+             the macro itself also guards on empty items). #}
           <div class="mt-2 flex justify-end">
-            {# action_menu wants the raw list-of-dicts, not stringified. Re-extract here. #}
-            {% if row is mapping %}{{ action_menu(row[action_col.key], align='end') }}
-            {% else %}{{ action_menu(row|attr(action_col.key), align='end') }}{% endif %}
+            {{ action_menu(_action_items, align='end') }}
           </div>
           {%- endif -%}
         </article>

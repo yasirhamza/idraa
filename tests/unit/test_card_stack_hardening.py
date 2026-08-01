@@ -58,3 +58,16 @@ def test_action_menu_flips_up_near_viewport_bottom() -> None:
     assert "top-full" not in src and "bottom-full" not in src, (
         "class-based absolute anchoring reintroduces overflow-container clipping"
     )
+
+
+def test_action_menu_empty_items_renders_nothing() -> None:
+    """Owner UAT 2026-08-01 (iPhone): canonical read-only rows pass
+    _actions=[] — the macro must emit NO trigger and NO menu, not a ⋯ that
+    opens an empty white pill."""
+    from idraa.app import templates
+
+    src = "{% from 'macros/action_menu.html' import action_menu %}{{ action_menu(items) }}"
+    empty = templates.env.from_string(src).render(items=[])
+    assert empty.strip() == "", f"empty items must render nothing, got: {empty[:120]!r}"
+    populated = templates.env.from_string(src).render(items=[{"label": "Edit", "href": "/x"}])
+    assert "aria-haspopup" in populated and "Edit" in populated
