@@ -31,6 +31,11 @@
   containers; close-on-scroll fought the browser's scroll-into-view).
 #}
 {% macro action_menu(items, align='end') -%}
+{#- Empty-items guard (owner UAT 2026-08-01, iPhone screenshot): rows with no
+    permitted actions (canonical read-only bands pass _actions=[]) used to
+    render the ⋯ trigger anyway — tapping it opened an EMPTY white pill.
+    No actions -> no trigger, no menu, nothing. -#}
+{%- if items %}
 {#- Owner UAT 2026-08-01: the menu now positions itself FIXED from the
     trigger's rect. The previous absolute-in-relative placement was clipped
     by data_table's overflow-x-auto wrapper (overflow-x != visible forces
@@ -140,4 +145,5 @@
     </ul>
   </div>
 </div>
+{%- endif %}
 {%- endmacro %}
