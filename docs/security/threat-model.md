@@ -11,10 +11,13 @@ characterize threats in their own risk scenarios (MITRE ATT&CK crosswalk,
 Threat/Asset/Method/Effect scenario taxonomy). That's a product feature, not
 an app-security artifact, and isn't covered here.
 
-**Status.** First version, drafted 2026-08-05 from a live code sweep (not
-carried forward from an earlier doc — none existed). Every claim below cites
-a file:line as of that sweep; re-verify before trusting an old citation, per
-the project's own "point-in-time observation" convention.
+**Status.** Drafted 2026-08-05 from a live code sweep (not carried forward
+from an earlier doc — none existed). **Fully re-audited 2026-08-05** — every
+file:line citation re-opened and every counting claim re-derived against the
+tree by three parallel reviewers; findings applied in one consolidated pass
+(see §13 for what that caught and why the periodic pass exists). Every claim
+below cites a file:line as of that re-audit; re-verify before trusting an old
+citation, per the project's own "point-in-time observation" convention.
 
 ## 1. System overview
 
@@ -26,9 +29,12 @@ Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XF
    │  HTTP, port 8000 only — no other port published
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │
-   ├─ SessionMiddleware (ASGI-wide, before routing) ──(B2)── unauth ↔ authenticated
+   │  Middleware is LIFO-registered; wire order below is outermost-first
+   │  (app.py:1110-1112) — B0 and B3 run BEFORE B2 (session lookup hits the
+   │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
+   ├─ uat_basic_auth (outermost; UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
    ├─ CSRFMiddleware ──(B3)── state-changing request ↔ verified-origin request
+   ├─ SessionMiddleware (ASGI-wide, before routing) ──(B2)── unauth ↔ authenticated
    ├─ EnrollmentGuardMiddleware ──(B4)── authenticated ↔ MFA-enrolled
    ├─ require_step_up dependency ──(B5)── authenticated ↔ freshly-reauthenticated
    ├─ require_role dependency ──(B6)── role tier (viewer/analyst/reviewer/admin)
@@ -41,12 +47,12 @@ Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
 SQLite (Fly volume, /data/riskflow.db) — local to the VM, not network-reachable
 ```
 
-Ten labeled boundaries (B1–B10), each taken in turn below under a STRIDE pass.
-**S**poofing / **T**ampering / **R**epudiation / **I**nformation disclosure /
-**D**enial of service / **E**levation of privilege — only the rows with a real
-control or a real residual risk are listed per boundary; blank categories
-means "not a meaningfully distinct risk at this boundary; covered by another
-boundary's row."
+Eleven labeled boundaries (B0–B10), each taken in turn below under a STRIDE
+pass. **S**poofing / **T**ampering / **R**epudiation / **I**nformation
+disclosure / **D**enial of service / **E**levation of privilege — only the
+rows with a real control or a real residual risk are listed per boundary;
+blank categories means "not a meaningfully distinct risk at this boundary;
+covered by another boundary's row."
 
 ## 2. B1 — Public internet ↔ Fly edge
 
@@ -54,7 +60,7 @@ boundary's row."
   trusted directly (`routes/deps.py:59-66,95-96`). Two opt-in trust
   strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
   `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
-  `config.py:329-342`). Both unset → the per-IP throttle no-ops rather than
+  `config.py:331-342`). Both unset → the per-IP throttle no-ops rather than
   trusting a spoofable value (`deps.py:117-127`); audit logging falls back to
   best-effort `request.client` instead (`deps.py:130-151`) — a deliberate
   forensic-vs-security-critical asymmetry.
@@ -66,6 +72,44 @@ boundary's row."
   `.github/workflows/` (only `ci.yml`, `dependency-review.yml`). Deploys
   actually run through `./scripts/fly` per project convention; the comment is
   stale. Low severity (comment, not behavior) — worth a follow-up cleanup.
+
+## 2a. B0 — UAT basic-auth pre-gate (hosted UAT only)
+
+**Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
+full-doc re-audit. This is the app's actual **outermost** request-path layer
+(`middleware/uat_basic_auth.py`, wired at `app.py:1174`; confirmed order
+`app.py:1110-1112`) — outside even `setup_guard` (which carries no boundary
+letter of its own; see §6), B3's CSRF, and B2's session auth. A single
+shared HTTP Basic credential gating the hosted UAT
+deployment, layered ON TOP of the app's normal `/login` session auth (compromising
+the edge credential does not equal compromising the app, per the module
+docstring).
+
+- **S/E**: when `UAT_BASIC_AUTH_PASSWORD` is unset (dev/test/local docker),
+  the middleware is a pure no-op (`uat_basic_auth.py:74-75`) — this boundary
+  doesn't exist outside the hosted UAT runtime. When set, every request
+  without a valid `Authorization: Basic` header 401s
+  (`_check_auth`, `uat_basic_auth.py:100-134`), except the exact paths in
+  `EXEMPT_PATHS` (`:32-47` — `/healthz` plus enumerated PWA install assets),
+  and only for `GET`/`HEAD` on those paths (`:71`) — a guard against a future
+  POST handler on one of those paths silently inheriting an unauthenticated
+  write.
+- **T (misconfiguration)**: an empty-string `user` with a real password set
+  fails closed rather than matching any caller (`uat_basic_auth.py:79-80`,
+  explicit trap comment).
+- **S (timing)**: `secrets.compare_digest` on both user and password,
+  assigned to locals and AND-ed at the end rather than short-circuited
+  (`uat_basic_auth.py:132-134`) — the docstring explains the short-circuit
+  form would leak "wrong user" vs. "wrong password" via response timing.
+- **Residual risk**: single shared credential (not per-user), by design for
+  a UAT gate — compromise of that one credential exposes the whole hosted
+  instance to the inner (still-intact) session-auth boundary, not to a
+  specific account. The middleware's *presence and position* ARE pinned by
+  `tests/unit/test_app_middleware_order.py::test_middleware_wire_order`,
+  which asserts the exact 7-element `app.user_middleware` list with
+  `uat_basic_auth` outermost — removing or reordering it fails that test.
+  What nothing checks is whether THIS DOCUMENT still enumerates the real
+  middleware stack (see §12 item 6).
 
 ## 3. B2 — Unauthenticated ↔ authenticated (session)
 
@@ -87,8 +131,8 @@ boundary's row."
   `/login` and step-up re-verification (`routes/step_up.py:211,239`).
 - **E**: MFA — TOTP (pyotp, single-use-per-step replay guard,
   `services/totp.py:21-55`) and WebAuthn/passkeys
-  (`services/webauthn_service.py:66-160`) both live; `user_has_strong_factor`
-  (`services/mfa_enrollment.py:18-28`) accepts either.
+  (`services/webauthn_service.py:66-142`) both live; `user_has_strong_factor`
+  (`services/mfa_enrollment.py:18-29`) accepts either.
   `EnrollmentGuardMiddleware` (`middleware/enrollment_guard.py:36-54`)
   force-redirects unenrolled users to `/account/security` when the effective
   MFA policy is `required`.
@@ -114,10 +158,14 @@ boundary's row."
   (`routes/deps.py:214-235`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:329`; per-category admin override,
-  `services/security_settings.py:141-160`). ~40 call sites: 16 exports, 9
+  `services/security_settings.py:141-160`). 37 real call sites
+  (re-derived 2026-08-05; the first sweep said "~40 / 16 exports" by counting
+  a docstring example at `routes/deps.py:218` and a prose mention at
+  `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
   destructive deletes, 8 admin/user-mgmt (7 in
   `routes/users.py:110,160,253,373,464,507,554`, 1 in
-  `routes/settings.py:162`), 6 credential changes (`routes/mfa.py`). Re-verification
+  `routes/settings.py:162`), 6 credential changes
+  (`routes/mfa.py:89,129,183,221,248,301`). Re-verification
   (`routes/step_up.py:87-239`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`auth.py:238`).
 
@@ -129,19 +177,22 @@ boundary's row."
   `APIRouter(dependencies=...)` blanket gate found) — every
   `POST/PUT/PATCH/DELETE` handler across `routes/*.py` was diffed against
   presence of an auth dependency; the only unguarded hits are the
-  pre-authentication login routes (`routes/auth.py:116,240,325,333`) plus
-  `POST /logout` (`routes/auth.py:402-403`, takes `user: User | None =
+  pre-authentication login routes (`routes/auth.py:116,240,326,334`) plus
+  `POST /logout` (`routes/auth.py:404-405`, takes `user: User | None =
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
   `app.py:1144-1167`).
-- **Doc-drift flag**: `CLAUDE.md`'s scope-discipline section names three
-  roles ("analyst / reviewer / admin"); the code has four
-  (`VIEWER` also exists, used in 2 admin-adjacent read-only routes plus a
-  4-role allowlist in `scenario_export_routes.py:51`, which deliberately uses
-  bare `require_user` — a strict VIEWER-inclusive allowlist would 403 admins
-  and analysts, per its inline comment). Not a security defect; CLAUDE.md's
-  role list is stale and should be corrected in a separate pass.
+- **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
+  section named three roles ("analyst / reviewer / admin"); the code has
+  four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
+  the first sweep said "2", an undercount): 4 inline in
+  `routes/library.py:96,140,260,382` and 3 via the `_VIEWER_PLUS` allowlist
+  (`routes/control_library.py:45`, applied at `:154,210,242`). Separately,
+  `scenario_export_routes.py:51` deliberately uses bare `require_user` — a
+  strict VIEWER-inclusive allowlist would 403 admins and analysts, per its
+  inline comment. Never a security defect, only a doc-accuracy one; CLAUDE.md
+  now names all four roles with an inline "Corrected 2026-08-05" note.
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
@@ -151,7 +202,7 @@ boundary's row."
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:456`, `routes/scenarios.py:713,748`,
-  `routes/qualitative_bands.py:224,262`). `routes/controls.py:696`'s check
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
   (`:693`).
@@ -246,9 +297,10 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 ## 9. B9 — File import / export
 
-**Import** — two parser modules, both size/row-capped and zip-bomb-guarded.
+**Import** — two parser modules, both size- and row-capped; zip-bomb-guarded
+only where it applies (the XLSX-capable module — the other has no zip path).
 `services/register_import_parsers.py` accepts CSV and XLSX, sniffed by
-extension/content-type/zip-magic (`register_import_parsers.py:103-135`).
+extension/content-type/zip-magic (`register_import_parsers.py:103-136`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
 `Content-Length` (`routes/deps.py:20`; enforced in
@@ -296,16 +348,17 @@ new export format must re-implement, not assume is "someone else's problem."
   each paired with an explicit `gc.collect()` (`:2344`, `:2512`) — breaks
   numpy reference cycles before SQLite serialization; comments tie this
   directly to a prior OOM incident (issue #211).
-- **CLAUDE.md drift flag**: the "Production deploy + operational envelope"
-  section states `VM size: shared-cpu-1x / memory_mb = 2048`. Actual current
-  `fly.toml:91-94` (verified this sweep): `performance / 2 cpus / 4096mb`.
-  `config.py:66-75` ties the 1,000,000-iteration cap directly to the 4GB
-  headroom (~700MB peak RSS at N=1M/M=30) — if the VM shape were ever
-  downgraded toward CLAUDE.md's stated 2048mb without re-benchmarking, the
-  iteration cap would no longer be safely calibrated to the running VM.
-  CLAUDE.md's operational-envelope section should be corrected in a separate
-  pass (this document defers to `fly.toml` as ground truth going forward, per
-  its own "Source of truth is `fly.toml`" convention).
+- **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
+  CLAUDE.md's "Production deploy + operational envelope" section claiming
+  `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
+  actually read `performance / 2 cpus / 4096mb` since 2026-06-29 (PR #428/
+  #429) — a ~5-week drift. **CLAUDE.md now carries the corrected figures**
+  plus its own inline "Corrected 2026-08-05" note. Kept here (rather than
+  deleted) because the underlying coupling still matters: `config.py:66-75`
+  ties the 1,000,000-iteration cap directly to the 4GB headroom (~700MB peak
+  RSS at N=1M/M=30), so if the VM shape is ever downgraded, that cap must be
+  re-benchmarked, not just inherited. This document defers to `fly.toml` as
+  ground truth, per its own "Source of truth is `fly.toml`" convention.
 
 ## 11. Audit logging (repudiation coverage)
 
@@ -313,7 +366,9 @@ new export format must re-implement, not assume is "someone else's problem."
 `(entity_type, entity_id)`) is written via `AuditWriter.log`
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
 datetime/Enum. Confirmed call sites at login/lockout
-(`routes/auth.py:160-168`), role change (`routes/users.py:314`), and the
+(`routes/auth.py:160-168`), role change (dict built at `routes/users.py:314`,
+logged at `:359` under the generic `"update"` action — not a role-specific
+action string), and the
 full run lifecycle — create (`services/runs.py:328`), cancel (`:382`),
 delete (`:442`), sample-purge (`:475`) — plus bulk export via its
 own rate-limit-then-audit choke point
@@ -337,19 +392,56 @@ watching:
    `.get(Model, id)`); still convention-only for any other shape a future
    lookup might take, and for keeping the checker's model allowlist current.
 2. Audit-logging coverage (§11) is spot-checked, not exhaustively matrixed.
-3. `CLAUDE.md`'s role list (§6) and VM-envelope figures (§10) are stale
-   against the live code/config — correct in a separate, non-security PR.
+3. ~~`CLAUDE.md`'s role list (§6) and VM-envelope figures (§10) are stale~~ —
+   **CLOSED 2026-08-05**: both corrected in CLAUDE.md the same day, each with
+   an inline "Corrected 2026-08-05" note recording the stale value (the VM
+   note dates the drift to ~5 weeks; the role note records the duration as
+   unknown). See §10's and §6's resolved drift flags. Note the first closure
+   attempt carried the pre-audit VIEWER undercount ("2 routes") into
+   CLAUDE.md's own correction note — fixed to 7 in the same re-audit, which
+   is the kind of thing only a cross-document check catches.
 4. `fly.toml:4`'s `uat-deploy.yml` comment (§2) references a workflow file
-   that doesn't exist — cosmetic, low severity.
+   that doesn't exist — cosmetic, low severity. Still open (re-confirmed by
+   the 2026-08-05 re-audit).
 5. `REVIEWER` (§6) functions almost entirely as a read-only allowlist member
    rather than a fully distinct write-permission tier — confirm this matches
    intended RBAC design; not treated as a defect here.
+6. The `uat_basic_auth` boundary (§2a) was **entirely absent** from this
+   document's first version — found only by the 2026-08-05 full re-audit, not
+   by any per-PR review. Nothing automated enumerates the middleware stack
+   against this doc's boundary list, so a future middleware could go
+   undocumented the same way. §13's cadence is the only control.
 
 ## 13. Keeping this document current
 
-This is a living document. `CLAUDE.md` → Review ceremony → Security-auditor
+This is a living document, kept current two ways.
+
+**Reactive (per-PR).** `CLAUDE.md` → Review ceremony → Security-auditor
 persona requires the security-auditor role to check, at every milestone
 PR-gate and whenever a PR touches a boundary listed in §2–§11, whether this
 document needs updating — and to include that update in the same PR rather
 than deferring it. A boundary section whose file:line citations no longer
 match the code is itself a finding.
+
+**Periodic (full re-audit).** The reactive pass alone is provably
+insufficient — the **first** full re-audit (2026-08-05, same day the doc
+was written) found: an entire boundary missing (§2a, `uat_basic_auth`, the
+outermost layer in the request path); the §1 diagram ordering B2 before B3
+when the wire order is the reverse; a citation pointing 18 lines past a
+file's EOF; two independently miscounted claims (step-up call sites, VIEWER
+routes); and several citations silently invalidated by a *later, unrelated* PR
+that inserted comment lines earlier in a cited file. None of those were the
+kind of thing a per-PR review would surface, because none of them were "a
+PR touched this boundary."
+
+Cadence: **a full re-audit at least quarterly, and after any PR that adds or
+removes middleware, an auth mechanism, or a route-gating dependency.** The
+method that works (used for the 2026-08-05 pass): three parallel reviewers
+split §1–§5 / §6–§8 / §9–§13, each instructed to open every cited file:line
+and independently re-derive every counting claim, rather than confirming the
+doc's own prose. Findings are then applied as one consolidated pass.
+
+Practical note for re-auditors: the highest-yield check is not "is this
+mechanism still correct" (they usually are) but "did an unrelated edit to a
+cited file shift the line numbers." Insertions early in a long file
+invalidate every later citation into it silently and en masse.
