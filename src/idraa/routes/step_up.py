@@ -97,7 +97,7 @@ async def step_up_verify(
     target = safe_next(next)
     # Rebind BOTH state objects into THIS handler's db session before any
     # mutation (P1 detached-instance convention — see routes/mfa.py).
-    user = await db.get(User, user.id) or user
+    user = await db.get(User, user.id) or user  # org-scope: ok — own session's user.id
     live_sess = await db.get(AuthSession, sess.id) if sess is not None else None
     if live_sess is None:
         return RedirectResponse("/login", status_code=303)
@@ -277,7 +277,9 @@ async def step_up_passkey_verify(
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
 
-    user = await db.get(User, user.id) or user  # rebind before throttle reset
+    user = (
+        await db.get(User, user.id) or user
+    )  # org-scope: ok — own user.id (rebind before throttle reset)
     live_sess = await db.get(AuthSession, sess.id) if sess is not None else None
     if live_sess is None:
         return _json_err("no session")

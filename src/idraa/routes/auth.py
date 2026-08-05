@@ -263,7 +263,8 @@ async def login_mfa_post(
         )
     if user_id is None:
         return RedirectResponse("/login", status_code=303)
-    user = await db.get(User, user_id)
+    # user_id came from the server-signed rf_mfa_pending cookie, not raw input.
+    user = await db.get(User, user_id)  # org-scope: ok — signed-cookie user_id
     if user is None or not user.is_active or is_locked(user):
         return RedirectResponse("/login", status_code=303)
 
@@ -377,7 +378,8 @@ async def login_passkey_verify(
         return _json_err("counter")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
-    user = await db.get(User, cred.user_id)
+    # cred.user_id is the owner of an already-verified WebAuthn assertion.
+    user = await db.get(User, cred.user_id)  # org-scope: ok — verified-cred owner
     if user is None or not user.is_active:
         await register_failed_source(db, source)
         return _json_err("inactive")

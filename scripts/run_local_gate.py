@@ -13,10 +13,16 @@ venv that runs the tools):
 
 1. ruff check src tests scripts
 2. ruff format --check src tests scripts
-3. mypy src/idraa (pyproject-configured, strict)
-4. css staleness — ``python -m idraa.tasks.build_css --check`` (fails if
+3. org-scoped lookups (scripts/lint_org_scoped_lookups.py --all) — flags a
+   bare ``<expr>.get(Model, id)`` on an org-scoped model with no
+   organization_id check anywhere in its enclosing function (IDOR guard,
+   docs/security/threat-model.md §7). AST-based, full src/idraa/{routes,
+   services,repositories} sweep; negligible runtime (pure-Python parse of
+   a few hundred files).
+4. mypy src/idraa (pyproject-configured, strict)
+5. css staleness — ``python -m idraa.tasks.build_css --check`` (fails if
    the committed ``tailwind.css`` output is stale relative to its inputs)
-5. pytest fast suite (default addopts markers: not e2e / not slow /
+6. pytest fast suite (default addopts markers: not e2e / not slow /
    not ci_only) with coverage disabled for speed — this collects
    ``fair_cam/tests`` too (``pyproject.toml``'s ``testpaths`` lists both
    ``tests`` and ``fair_cam/tests``; see
@@ -24,7 +30,7 @@ venv that runs the tools):
    that guards the merge-path collection hole from reopening — PR2 Task 1b).
    Measured: ``fair_cam/tests`` alone runs in ~3.2-4.5s (605 tests), negligible
    against the ~3-4 min gate budget.
-6. equivalence harness, LABELED (PR2 Task 9) — the native-engine equivalence
+7. equivalence harness, LABELED (PR2 Task 9) — the native-engine equivalence
    goldens (``tests/equivalence/test_engine_equivalence_harness.py``) are
    ``@pytest.mark.slow``, so step 5's default ``not slow`` addopts deselect
    them — they would otherwise NEVER run in the merge path even though they
@@ -43,14 +49,14 @@ venv that runs the tools):
    hedge is needed here either.
 
 Escape hatches:
-- ``IDRAA_GATE_SKIP_TESTS=1`` skips step 5 only (lints + css check still
+- ``IDRAA_GATE_SKIP_TESTS=1`` skips step 6 only (lints + css check still
   run) — for emergency pushes; document the reason in the next commit.
-- ``IDRAA_GATE_SKIP_CSS=1`` skips step 4 only (css staleness check) —
+- ``IDRAA_GATE_SKIP_CSS=1`` skips step 5 only (css staleness check) —
   for emergency pushes when the Tailwind binary is unavailable; document
   the reason in the next commit.
 - ``git push --no-verify`` skips the whole pre-push stage (rare; document).
 
-Runtime: steps 1-3 ~30s; step 4 ~1s; step 5 ~3min on the reference machine.
+Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 ~3min on the reference machine.
 That cost is the point — it is the only automated gate this repo has.
 """
 
@@ -71,6 +77,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "ruff format --check",
         ("-m", "ruff", "format", "--check", "src", "tests", "scripts", "fair_cam"),
     ),
+    ("org-scoped lookups", ("-m", "scripts.lint_org_scoped_lookups", "--all")),
     # mypy scope is src/idraa + fair_cam SOURCE. tests/ and fair_cam/tests/
     # are EXCLUDED: tests/ carries ~409 pre-existing errors (issue #359) and
     # fair_cam/tests/ is untyped (relaxed in pyproject). fair_cam source was
