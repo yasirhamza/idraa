@@ -88,8 +88,22 @@ async def list_controls(
     return list(rows.scalars().all())
 
 
-async def get_control(db: AsyncSession, control_id: uuid.UUID) -> Control | None:
-    return await db.get(Control, control_id)
+async def get_control_for_org(
+    db: AsyncSession, *, organization_id: uuid.UUID, control_id: uuid.UUID
+) -> Control | None:
+    """Org-scoped lookup. Returns None if the row exists in another org or is missing.
+
+    Replaces the former bare ``get_control(db, control_id)`` (issue #260 root
+    cause — a plain ``db.get`` with no org filter, caught by
+    ``scripts/lint_org_scoped_lookups.py``). All 8 former callers in
+    routes/controls.py duplicated this same check inline; the check now lives
+    here once, matching the ``get_for_org`` convention used elsewhere
+    (``repositories/scenario_repo.py``, ``services/runs.py``).
+    """
+    control = await db.get(Control, control_id)
+    if control is None or control.organization_id != organization_id:
+        return None
+    return control
 
 
 async def create_control(

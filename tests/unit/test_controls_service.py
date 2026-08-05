@@ -3,7 +3,7 @@
 Verifies `create_control` + `list_controls` + `soft_delete_control` form
 a coherent CRUD shape: creation round-trips via the list (active only by
 default), and soft-delete hides the row from the active list while still
-being retrievable via direct `get_control` lookup.
+being retrievable via direct `get_control_for_org` lookup.
 """
 
 from __future__ import annotations
@@ -70,8 +70,34 @@ async def test_soft_delete_hides_from_list(db_session: AsyncSession) -> None:
     await db_session.commit()
     assert await svc.list_controls(db_session, org_id=org.id) == []
     # But still retrievable with include_deleted=True
-    found = await svc.get_control(db_session, c.id)
+    found = await svc.get_control_for_org(db_session, organization_id=org.id, control_id=c.id)
     assert found is not None and found.status is EntityStatus.DELETED
+
+
+async def test_get_control_for_org_returns_none_cross_org(db_session: AsyncSession) -> None:
+    """The org check now lives IN the service (issue #260 root cause), not just at
+    each of routes/controls.py's 8 call sites — a control owned by org B must be
+    invisible through org A's organization_id, at the service layer directly."""
+    org_a = await _seed_org(db_session)
+    org_b = await _seed_org(db_session)
+    c = await svc.create_control(db_session, org_id=org_b.id, user_id=None, form=_form())
+    await db_session.commit()
+
+    cross_org = await svc.get_control_for_org(db_session, organization_id=org_a.id, control_id=c.id)
+    assert cross_org is None
+
+    same_org = await svc.get_control_for_org(db_session, organization_id=org_b.id, control_id=c.id)
+    assert same_org is not None and same_org.id == c.id
+
+
+async def test_get_control_for_org_returns_none_when_missing(db_session: AsyncSession) -> None:
+    import uuid
+
+    org = await _seed_org(db_session)
+    result = await svc.get_control_for_org(
+        db_session, organization_id=org.id, control_id=uuid.uuid4()
+    )
+    assert result is None
 
 
 # ---------------------------------------------------------------------------

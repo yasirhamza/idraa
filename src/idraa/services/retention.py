@@ -191,7 +191,8 @@ async def sweep_retention(
                     "run_age_days": _age_days(anchor, now),
                 },
             )
-            samples = await db.get(RunSamples, run_id)
+            # System-wide sweep, all orgs by design; run_id is from the query above.
+            samples = await db.get(RunSamples, run_id)  # org-scope: ok — sweep, not per-request
             if samples is not None:
                 await db.delete(samples)
             purged += 1
@@ -232,7 +233,8 @@ async def sweep_retention(
                     "run_age_days": _age_days(anchor, now),
                 },
             )
-            run = await db.get(RiskAnalysisRun, run_id)
+            # System-wide sweep, all orgs by design; run_id is from the query above.
+            run = await db.get(RiskAnalysisRun, run_id)  # org-scope: ok — sweep, not per-request
             if run is not None:
                 # cascade="all, delete-orphan" removes the run_samples child.
                 await db.delete(run)

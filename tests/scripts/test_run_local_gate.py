@@ -19,15 +19,19 @@ run_local_gate = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(run_local_gate)
 
 
-def test_gate_includes_all_six_tools() -> None:
+def test_gate_includes_all_seven_tools() -> None:
     # PR2 Task 9: added a labeled equivalence-harness step (see run_local_gate.py
-    # module docstring step 6) — fair_cam/tests collection was already folded
+    # module docstring step 7) — fair_cam/tests collection was already folded
     # into the "pytest (fast suite)" step by Task 1b (testpaths), so it needed
     # no new step of its own.
+    # org-scope-lint PR: added "org-scoped lookups" (scripts/lint_org_scoped_lookups.py),
+    # a fast AST-based IDOR guard check — placed after ruff (cheap) and before
+    # mypy (expensive), matching the cheap-to-expensive ordering rule.
     labels = [label for label, _ in run_local_gate.GATE_STEPS]
     assert labels == [
         "ruff check",
         "ruff format --check",
+        "org-scoped lookups",
         "mypy",
         "css staleness",
         "pytest (fast suite)",
@@ -49,7 +53,13 @@ def test_skip_tests_env_drops_only_pytest() -> None:
     # while claiming tests were skipped.
     steps = run_local_gate.steps_to_run(env={run_local_gate.SKIP_TESTS_ENV: "1"})
     labels = [label for label, _ in steps]
-    assert labels == ["ruff check", "ruff format --check", "mypy", "css staleness"]
+    assert labels == [
+        "ruff check",
+        "ruff format --check",
+        "org-scoped lookups",
+        "mypy",
+        "css staleness",
+    ]
 
 
 def test_no_skip_env_keeps_pytest() -> None:

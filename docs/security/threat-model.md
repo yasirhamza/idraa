@@ -151,33 +151,61 @@ boundary's row."
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:456`, `routes/scenarios.py:713,748`,
-  `routes/qualitative_bands.py:224,262`). Spot-checked across
-  `qualitative_bands.py`, `library_overrides.py`, `scenarios.py`, `runs.py`,
-  `organization.py` — all org-scoped. `routes/scenario_export_routes.py:110`'s
-  `db.get(Scenario, scenario_id)` is immediately followed on the next line by
-  an explicit `organization_id` equality check, and
-  `services/runs.py:473,517` documents one such exemption explicitly
-  ("run_id was just org-verified above"). Two spots are weaker than a first
-  read suggests, and matter more precisely because of that:
-  `services/controls.py:92`'s `get_control()` performs **no org check at
-  all** at that line — the guarantee instead lives entirely at its 8 call
-  sites in `routes/controls.py` (lines 591, 692, 870, 891, 914, 935, 969,
-  1039), each of which checks `control.organization_id != org.id`
-  immediately after calling it; `routes/controls.py:696`'s check
-  (`assignment.control_id != control_id`) is not an org check either — it's
-  transitively safe only because `control` itself was org-verified two lines
-  earlier (`:693`). Both are correct **today**, entirely by caller
-  discipline.
-- **Residual risk**: this discipline is convention-enforced (comments,
-  in-repo precedent — see the "Raw-text seed UUID foot-gun" and IDOR-guard
-  patterns already recurring in commit history), not type- or ORM-enforced —
-  `get_control()` above is the concrete example: a 9th caller that forgot the
-  `organization_id` check would be a live IDOR with nothing automated to
-  catch it. A new PK lookup that skips the `get_for_org` pattern (or adds a
-  bare `db.get` without an inline check) would not be caught by any
-  automated check — only by review. The security-auditor persona
-  (`CLAUDE.md` → Review ceremony) exists specifically to catch this class at
-  the point a new PK lookup is introduced.
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:696`'s check
+  (`assignment.control_id != control_id`) is not itself an org check — it's
+  transitively safe because `control` was org-verified two lines earlier
+  (`:693`).
+- **Gate-enforced, not just convention (2026-08-05):** `scripts/
+  lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
+  every file under `src/idraa/{routes,services,repositories}` and flags any
+  bare `<expr>.get(Model, id)` on an org-scoped model with no
+  `organization_id` check (or `*_for_org*` delegated-safety call) anywhere
+  in the enclosing function. Its first real run found exactly one live gap
+  and ten correct-but-undocumented exemptions:
+  - **Fixed**: `services/controls.py`'s `get_control()` — the concrete
+    example this section used to cite as "no org check at all at that
+    line, safe only by caller discipline" — is now `get_control_for_org(db,
+    organization_id=..., control_id=...)`, checking internally like every
+    other `*_for_org` method. All 8 former call sites in `routes/
+    controls.py` dropped their now-redundant duplicate check.
+  - **Suppressed with a recorded reason** (`# org-scope: ok — <reason>`,
+    same line as the call — the checker enforces a non-empty reason):
+    6 sites rebinding the *current session's own* `user.id` across a
+    detached-instance boundary (`routes/mfa.py:141,191,259,312`,
+    `routes/step_up.py:100,282`); 2 sites resolving a user id from a
+    source that's already unforgeable — a server-signed pending-MFA
+    cookie (`routes/auth.py:267`) and an already-verified WebAuthn
+    credential's owner (`routes/auth.py:382`); 2 sites in
+    `services/retention.py:195,237` that are a system-wide background
+    sweep by design (iterates every org's rows on a schedule, not a
+    per-request handler with an attacker-suppliable id).
+- **Residual risk, narrowed but real (fact-checked 2026-08-05):** the
+  checker's org-verification search is **function-wide, not bound to the
+  flagged call** — it accepts *any* `organization_id` Compare or
+  `*_for_org*`-named call anywhere in the enclosing function, without
+  requiring either to reference the same variable/id as the flagged
+  lookup. Concretely, this passes the checker today (a live blind spot, not
+  a hypothetical):
+  ```python
+  async def get_two(db, control_id, run_id, org):
+      control = await db.get(Control, control_id)
+      if control is None or control.organization_id != org.id:
+          raise NotFound()
+      run = await db.get(RiskAnalysisRun, run_id)  # different id, NEVER
+      return control, run                            # checked — not flagged
+  ```
+  A parent-fetch-then-child-fetch handler with two related ids is an
+  ordinary shape, so this is the more exploitable gap versus the allowlist-
+  staleness one below — tracked as issue #151 (bind the check to the
+  specific assigned variable / the flagged call's id argument, not just
+  "some check exists in this function"). Additionally: a new PK lookup
+  that skips both the `get_for_org` pattern AND ends up naming its model
+  outside the checker's maintained `ORG_SCOPED_MODELS` allowlist (new
+  model, allowlist not updated) would slip through silently, and a
+  suppression comment's *reason* is human-asserted, never verified — the
+  security-auditor persona (`CLAUDE.md` → Review ceremony) is the actual
+  backstop for both: keeping the allowlist current and reading each
+  suppression's reason for whether it's really true, not just present.
 
 ## 8. B8 — Templating (XSS and template injection)
 
@@ -304,7 +332,10 @@ automated gate, which is exactly what the security-auditor persona (§13, and
 `CLAUDE.md` → Review ceremony → Security-auditor persona) exists to keep
 watching:
 
-1. Org-scoping discipline (§7) is convention-enforced, not type/ORM-enforced.
+1. Org-scoping discipline (§7) is **gate-enforced as of 2026-08-05**
+   (`scripts/lint_org_scoped_lookups.py`) for its one specific shape (bare
+   `.get(Model, id)`); still convention-only for any other shape a future
+   lookup might take, and for keeping the checker's model allowlist current.
 2. Audit-logging coverage (§11) is spot-checked, not exhaustively matrixed.
 3. `CLAUDE.md`'s role list (§6) and VM-envelope figures (§10) are stale
    against the live code/config — correct in a separate, non-security PR.

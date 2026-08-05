@@ -588,8 +588,8 @@ async def control_duplicate(
     so the user can rename and adjust the copy. (spec §F10 Step 1)
     """
     org = await require_sole_org(db)
-    source = await svc.get_control(db, control_id)
-    if source is None or source.organization_id != org.id or source.status == EntityStatus.DELETED:
+    source = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if source is None or source.status == EntityStatus.DELETED:
         raise HTTPException(status_code=404)
 
     clone = await svc.duplicate_control(
@@ -689,8 +689,8 @@ async def confirm_assignment_route(
     from idraa.models.control_function_assignment import ControlFunctionAssignment
 
     org = await require_sole_org(db)
-    control = await svc.get_control(db, control_id)
-    if control is None or control.organization_id != org.id:
+    control = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if control is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     assignment = await db.get(ControlFunctionAssignment, assignment_id)
@@ -867,8 +867,8 @@ async def control_detail(
     user: User = Depends(require_user),
 ) -> HTMLResponse:
     org = await require_sole_org(db)
-    c = await svc.get_control(db, control_id)
-    if c is None or c.organization_id != org.id or c.status is EntityStatus.DELETED:
+    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     resync = await resync_info(db, c)  # #438: None for custom controls
     return templates.TemplateResponse(
@@ -888,8 +888,8 @@ async def control_resync_review(
     """#438 — the re-sync review page: what changed in the library entry vs
     what the analyst changed locally, BEFORE the destructive apply."""
     org = await require_sole_org(db)
-    c = await svc.get_control(db, control_id)
-    if c is None or c.organization_id != org.id or c.status is EntityStatus.DELETED:
+    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     info = await resync_info(db, c)
     if info is None or not info.stale:
@@ -911,8 +911,8 @@ async def control_resync_apply(
 ) -> Response:
     """#438 — apply the re-sync (the review page is the consent step)."""
     org = await require_sole_org(db)
-    c = await svc.get_control(db, control_id)
-    if c is None or c.organization_id != org.id or c.status is EntityStatus.DELETED:
+    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     try:
         flagged = await apply_resync(db, c, user_id=user.id, ip_address=client_ip(request))
@@ -932,12 +932,8 @@ async def control_edit_get(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     org = await require_sole_org(db)
-    control = await svc.get_control(db, control_id)
-    if (
-        control is None
-        or control.organization_id != org.id
-        or control.status == EntityStatus.DELETED
-    ):
+    control = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if control is None or control.status == EntityStatus.DELETED:
         raise HTTPException(status_code=404)
 
     return templates.TemplateResponse(
@@ -966,12 +962,8 @@ async def control_edit_post(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     org = await require_sole_org(db)
-    control = await svc.get_control(db, control_id)
-    if (
-        control is None
-        or control.organization_id != org.id
-        or control.status == EntityStatus.DELETED
-    ):
+    control = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if control is None or control.status == EntityStatus.DELETED:
         raise HTTPException(status_code=404)
 
     form_dict = await _parse_control_form_dict(request)
@@ -1036,8 +1028,8 @@ async def control_delete(
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
 ) -> Response:
     org = await require_sole_org(db)
-    c = await svc.get_control(db, control_id)
-    if c is None or c.organization_id != org.id or c.status is EntityStatus.DELETED:
+    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     await svc.soft_delete_control(
         db,

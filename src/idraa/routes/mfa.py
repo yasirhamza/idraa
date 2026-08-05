@@ -138,7 +138,7 @@ async def totp_enroll_post(
     # session — mutating it and committing THIS handler's `db` session (a
     # different AsyncSession instance) would silently no-op the write. Rebind
     # to a `db`-tracked instance before any mutation reaches maybe_stamp_enrolled.
-    user = await db.get(User, user.id) or user
+    user = await db.get(User, user.id) or user  # org-scope: ok — own session's user.id
     signed = request.cookies.get("rf_totp_pending")
     secret = load_totp_pending(signed) if signed else None
     if secret is None:
@@ -188,7 +188,7 @@ async def recovery_codes_generate(
     # See the identical rebind in totp_enroll_post — `user` from require_user
     # is detached from this handler's `db` session; mutating it directly would
     # not be persisted by this session's commit.
-    user = await db.get(User, user.id) or user
+    user = await db.get(User, user.id) or user  # org-scope: ok — own session's user.id
     # Replace any prior codes (regenerate invalidates the old set).
     for old in (
         (await db.execute(select(RecoveryCode).where(RecoveryCode.user_id == user.id)))
@@ -256,7 +256,7 @@ async def passkey_register_verify(
     # See the rebind comment on totp_enroll_post — `user` from require_user is
     # detached from this handler's `db` session; maybe_stamp_enrolled below
     # mutates user.mfa_enrolled_at, which would silently no-op without this.
-    user = await db.get(User, user.id) or user
+    user = await db.get(User, user.id) or user  # org-scope: ok — own session's user.id
     signed = request.cookies.get("rf_webauthn_challenge")
     challenge = load_webauthn_challenge(signed) if signed else None
     if challenge is None:
@@ -309,7 +309,7 @@ async def passkey_delete(
     # See the rebind comment on totp_enroll_post — `user` from require_user is
     # detached from this handler's `db` session; maybe_unstamp_enrolled below
     # mutates user.mfa_enrolled_at, which would silently no-op without this.
-    user = await db.get(User, user.id) or user
+    user = await db.get(User, user.id) or user  # org-scope: ok — own session's user.id
     cred = (
         (
             await db.execute(
