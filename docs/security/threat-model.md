@@ -300,21 +300,43 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 **Import** — two parser modules, both size- and row-capped; zip-bomb-guarded
 only where it applies (the XLSX-capable module — the other has no zip path).
 `services/register_import_parsers.py` accepts CSV and XLSX, sniffed by
-extension/content-type/zip-magic (`register_import_parsers.py:103-136`).
+extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
 `Content-Length` (`routes/deps.py:20`; enforced in
 `register_import.py:253-257`, `scenario_import.py:123-127`,
 `library_import.py:79-83`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
-per member (`register_import_parsers.py:57-58,76-100`); a single
+per member / 500x per-member compression ratio above a 1 MB floor
+(`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
+declared `file_size` (verified: a 210 MB member yields exactly 210 MB), so
+declared sizes ARE the extraction bound. The residual, characterised 2026-08-08
+and consciously accepted: openpyxl (`read_only`) STREAMS worksheet sheet-data
+(a 120k-row sheet costs ~1 MB RSS) and never reads media, so a large SHEET is
+cheap — the only memory amplifier is the fully-buffered parts (`sharedStrings`/
+`styles`, ~7.6x RSS), and each is already bounded to 50 MB by the per-member cap
+(~380 MB RSS per part, ~760 MB if both are maxed). No metadata-only cap tightens
+this without either false-rejecting legit files or being bypassed: openpyxl
+resolves `sharedStrings` by manifest `PartName` (attacker-controlled), not by
+path, so a path-based buffered cap is trivially evaded; a value cap false-rejects
+legit Excel workbooks (workbook-global `sharedStrings` compresses ~10x); the
+ratio cap only denies degenerate/accidental bombs since valid XML maxes ~412x
+and 5 MB of wire reaches 50 MB at any ratio. This is tolerated because the whole
+surface is ADMIN-only (every `register-import` route is `require_role(ADMIN)` —
+`register_import.py:234,248,322,358,402,436,519,578,662,736,775,837`; the
+`delete_profile` route additionally requires step-up, `:831`) and ~760 MB
+transient is
+survivable on the 4 GB VM. The non-bypassable tightening (parse
+`[Content_Types].xml` to bound buffered parts by role) is deferred as
+disproportionate for an admin-only surface; revisit if import ever becomes
+non-admin. There is also a single
 `MAX_ROWS = 500` constant (`scenario_import_parsers.py:78`) enforced at
 every entry point that accepts row data — CSV (`scenario_import_parsers.py:
 243`) and JSON (`:293`) in that module, and re-imported and enforced again
-for XLSX (`register_import_parsers.py:174-175`) and CSV
-(`register_import_parsers.py:203-204`) in the other; `defusedxml`
+for XLSX (`register_import_parsers.py:221-222`) and CSV
+(`register_import_parsers.py:250-251`) in the other; `defusedxml`
 auto-substitution blocking XML entity expansion (billion-laughs class,
-`register_import_parsers.py:22-30`). Parsed cells are coerced to
+`register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any

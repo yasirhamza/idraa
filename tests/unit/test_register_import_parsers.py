@@ -60,6 +60,55 @@ def _forge_zip_member_size(data: bytes, fake_size: int) -> bytes:
     return bytes(buf)
 
 
+def _forge_member_sizes(
+    data: bytes,
+    *,
+    name_contains: str | None,
+    uncompressed: int,
+    compressed: int | None = None,
+) -> bytes:
+    """Patch declared sizes (LFH + CDH) for members whose filename contains
+    ``name_contains`` (or every member when ``None``), leaving real payload
+    untouched — the guard reads only this metadata and must never decompress.
+
+    The central directory is located via the End-Of-Central-Directory record and
+    walked record-by-record, matching each CDH by its embedded filename, so a
+    ``PK\\x01\\x02`` byte run inside compressed data is never mistaken for a
+    header. ``compressed`` is patched too when given, so a large member can be
+    forged to a benign compression ratio (to isolate the buffered-parts cap from
+    the ratio cap).
+    """
+    buf = bytearray(data)
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        infos = zf.infolist()
+
+    def _match(fn: str) -> bool:
+        return name_contains is None or name_contains in fn
+
+    # Local file headers: uncompressed size @ +22, compressed size @ +18.
+    for info in infos:
+        if _match(info.filename):
+            struct.pack_into("<I", buf, info.header_offset + 22, uncompressed)
+            if compressed is not None:
+                struct.pack_into("<I", buf, info.header_offset + 18, compressed)
+
+    # Central directory: start offset lives at EOCD+16 (fixtures carry no zip
+    # comment). Each CDH: uncompressed @ +24, compressed @ +20, filename @ +46.
+    eocd = buf.rindex(b"PK\x05\x06")
+    cd = struct.unpack_from("<I", buf, eocd + 16)[0]
+    while cd < eocd and bytes(buf[cd : cd + 4]) == b"PK\x01\x02":
+        fn_len = struct.unpack_from("<H", buf, cd + 28)[0]
+        extra_len = struct.unpack_from("<H", buf, cd + 30)[0]
+        comment_len = struct.unpack_from("<H", buf, cd + 32)[0]
+        fn = bytes(buf[cd + 46 : cd + 46 + fn_len]).decode("utf-8", "replace")
+        if _match(fn):
+            struct.pack_into("<I", buf, cd + 24, uncompressed)
+            if compressed is not None:
+                struct.pack_into("<I", buf, cd + 20, compressed)
+        cd += 46 + fn_len + extra_len + comment_len
+    return bytes(buf)
+
+
 # ---------------------------------------------------------------------------
 # sniff_register_format
 # ---------------------------------------------------------------------------
@@ -239,6 +288,32 @@ def test_zip_guard_rejects_too_many_members() -> None:
 def test_zip_guard_rejects_not_a_zip() -> None:
     with pytest.raises(ValueError, match="workbook rejected"):
         _zip_guard(b"not a zip file at all")
+
+
+def test_zip_guard_rejects_high_compression_ratio_member() -> None:
+    # One member declares 10 MB uncompressed from a few-hundred-byte compressed
+    # payload — under the per-member cap, but a ratio far beyond any legitimate
+    # xlsx part (~20x). The classic zip-bomb signature: a few-KB upload inflating
+    # a member to tens of MB.
+    data = _xlsx_bytes({"Sheet1": [["a"]]})
+    forged = _forge_zip_member_size(data, 10 * 1024 * 1024)
+    with pytest.raises(ValueError, match="ratio"):
+        _zip_guard(forged)
+
+
+def test_zip_guard_allows_large_member_with_benign_ratio() -> None:
+    # A 40 MB member at an honest ~10x ratio must PASS: under the per-member cap
+    # and far under the 500x ratio cap. Guards the ratio check against
+    # false-positives on large-but-legit parts (real xlsx XML compresses ~5-23x)
+    # — the cap must fire on adversarial ratios only, not on size.
+    data = _xlsx_bytes({"Sheet1": [["a"]]})
+    forged = _forge_member_sizes(
+        data,
+        name_contains="worksheets/sheet1",
+        uncompressed=40 * 1024 * 1024,
+        compressed=4 * 1024 * 1024,
+    )
+    _zip_guard(forged)  # must not raise
 
 
 def test_parse_xlsx_entity_declaration_never_expands(tmp_path) -> None:

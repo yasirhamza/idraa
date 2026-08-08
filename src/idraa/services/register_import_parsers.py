@@ -18,7 +18,14 @@ real attack surface (zip bombs, XML entity expansion):
   ``list_sheet_names`` AND ``parse_register`` are both independently
   reachable from the route layer, so both must guard (Sec-N plan-gate
   amendment). The guard reads only zip central-directory metadata
-  (``ZipInfo.file_size`` / member count) and never decompresses to check it.
+  (``ZipInfo.file_size`` / ``compress_size`` / member count) and never
+  decompresses to check it. It caps member count, per-member declared size, and
+  per-member compression ratio (the zip-bomb signature). ``zipfile`` bounds
+  every read to the declared ``file_size``, so those declared sizes are a safe
+  upper bound on actual extraction; worksheet sheet-data is streamed and media
+  is never read, so the only memory amplifier — the fully-buffered parts
+  (sharedStrings / styles) — is bounded per-part by the per-member cap. See the
+  constant block below and docs/security/threat-model.md B9 for the residual.
 - Entity expansion (e.g. "billion laughs") is a SEPARATE attack from a zip
   bomb — a tiny, valid zip member can still carry a malicious XML entity
   declaration. openpyxl auto-detects ``defusedxml`` (an explicit runtime
@@ -52,10 +59,39 @@ __all__ = [
 
 _XLSX_MAGIC = b"PK\x03\x04"
 
-# Global Constraints bounds: reject a zip/xlsx payload shaped like a zip bomb
-# before any expansion — checked purely from zip central-directory metadata.
+# Reject a zip/xlsx payload shaped like a zip bomb before ``load_workbook`` —
+# checked purely from zip central-directory metadata, never decompressing.
+# ``zipfile`` bounds every ``read()`` to the member's declared ``file_size``
+# (verified: a 210 MB member yields exactly 210 MB, never more), so declared
+# sizes ARE the extraction bound. What that bound protects:
+#   * openpyxl (read_only) STREAMS worksheet sheet-data (a 120k-row sheet costs
+#     ~1 MB RSS) and never reads media, so a large SHEET is cheap — an aggregate
+#     size cap would only false-reject legit sheet-heavy workbooks.
+#   * The one memory amplifier is the fully-buffered parts openpyxl loads whole
+#     (sharedStrings / styles; ~7.6x RSS), and each is already bounded to 50 MB
+#     by the per-member cap (~380 MB RSS per part). A tighter, non-bypassable
+#     bound would have to identify those parts by ROLE — their PATH is
+#     attacker-controlled via ``[Content_Types].xml`` (openpyxl resolves
+#     sharedStrings by manifest PartName, not filename), so any path-based
+#     heuristic is trivially bypassed. Parsing the manifest to do that is
+#     deferred as disproportionate for an ADMIN-only import surface whose
+#     residual (~380 MB, up to ~760 MB if both sharedStrings and styles are
+#     maxed) is survivable on the 4 GB VM. See docs/security/threat-model.md B9.
 _ZIP_BOMB_MAX_MEMBER_BYTES = 50 * 1024 * 1024
 _ZIP_BOMB_MAX_MEMBERS = 200
+# Per-member compression-ratio ceiling — a tripwire for degenerate/accidental
+# bombs, not a bound on a determined attacker. Real xlsx XML compresses ~5-23x;
+# valid structured XML maxes ~412x for realistic repeated XML tokens (deflate
+# reaches its ~1032x ceiling only on all-same-byte runs), so 500x is
+# reached only by all-same-byte members (which openpyxl would anyway reject as
+# invalid XML, or never read). It is kept because it is the one clean,
+# non-bypassable, false-positive-free check available, and it fails an accidental
+# all-zeros upload cleanly. It does NOT bound the real residual — 5 MB of wire
+# reaches the 50 MB per-member limit at any ratio (see the note above and B9).
+# Applied above an absolute floor so tiny high-ratio members (harmless in
+# absolute terms) don't false-positive.
+_ZIP_BOMB_MAX_RATIO = 500
+_ZIP_BOMB_RATIO_FLOOR_BYTES = 1 * 1024 * 1024
 
 
 @dataclass
@@ -98,6 +134,17 @@ def _zip_guard(data: bytes) -> None:
             f"workbook rejected: zip member(s) declare more than "
             f"{_ZIP_BOMB_MAX_MEMBER_BYTES} uncompressed bytes: {oversize}"
         )
+    for i in infos:
+        if (
+            i.compress_size > 0
+            and i.file_size > _ZIP_BOMB_RATIO_FLOOR_BYTES
+            and i.file_size / i.compress_size > _ZIP_BOMB_MAX_RATIO
+        ):
+            raise ValueError(
+                f"workbook rejected: zip member {i.filename!r} compression "
+                f"ratio {i.file_size / i.compress_size:.0f}x exceeds the "
+                f"{_ZIP_BOMB_MAX_RATIO}x cap"
+            )
 
 
 def sniff_register_format(filename: str, content_type: str | None, data: bytes) -> str:
