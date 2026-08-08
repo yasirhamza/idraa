@@ -264,6 +264,33 @@ class Settings(BaseSettings):
     # from ~50 to ~4-5 concurrent max-N runs). 2 x ~700 MB = ~1.4 GB, well under
     # the VM; a 3rd is rejected at dispatch. Counted GLOBALLY (not org-scoped) —
     # the VM RAM is shared across orgs. Env: MAX_CONCURRENT_HIGH_FIDELITY_RUNS.
+    max_concurrent_standard_runs: int = Field(default=8, ge=1)
+    # Issue #508 (A1 / pool-exhaustion): max simultaneous IN-FLIGHT (RUNNING +
+    # QUEUED, plus registry-live) STANDARD (sub-high-fidelity, NxM < the
+    # high_fidelity_iterations_threshold) runs, applied ONLY on the BACKGROUND
+    # dispatch path (mc_iterations >= _SYNC_THRESHOLD). Bounds concurrent
+    # standard runs so a burst can't exhaust the 15-connection pool + VM RAM.
+    #
+    # (a) SIZING — worst case is a standard run whose NxM sits JUST UNDER the
+    #     250k threshold, whose peak RSS is ~100 MB (NOT the ~70 MB 100k-iteration
+    #     figure — a standard run's effective work can approach the threshold).
+    #     8 x ~100 MB + 2 x ~700 MB (the high-fidelity cap) ≈ 2.2 GB < 4 GB VM
+    #     (fly.toml:91-94 performance / 2 cpu / 4096 mb). Value 8 survives.
+    # (b) GUARD INVARIANT — the two caps together must fit RAM:
+    #       max_concurrent_standard_runs · RAM(threshold)
+    #         + max_concurrent_high_fidelity_runs · RAM(max_iters x max_M)
+    #         < VM_RAM
+    #     Stated explicitly so a future HIGH_FIDELITY_ITERATIONS_THRESHOLD bump
+    #     (which raises RAM(threshold), the standard-run worst case) can't
+    #     silently break the OOM guard — re-derive both caps against it.
+    # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no
+    #     durable queue exists), matching the high-fidelity cap. So a 9th
+    #     concurrent standard run is REJECTED even when it is one org's analysts
+    #     driving all 8 — fail-closed and precedent-matching, but far likelier to
+    #     be hit in normal use than the high-fidelity cap of 2. Raise via
+    #     MAX_CONCURRENT_STANDARD_RUNS if a deployment's VM has more headroom.
+    # No ``alias=`` (same rationale as min_free_disk_bytes /
+    # max_concurrent_high_fidelity_runs). Env: MAX_CONCURRENT_STANDARD_RUNS.
 
     # Weight-robustness ensemble (issue #419) — logit-normal band sampler.
     # These are draw-budget / sampler-shape knobs, not FAIR calibration constants.

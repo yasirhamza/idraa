@@ -356,20 +356,46 @@ new export format must re-implement, not assume is "someone else's problem."
 
 ## 10. B10 — Run execution / Monte Carlo (resource exhaustion)
 
-- **D**: `mc_iterations_max` (`config.py:63-74`, default 1,000,000, env
-  `MC_ITERATIONS_MAX`) is enforced server-side at `POST /analyses`
-  (`routes/runs.py:1185-1196`) — the HTML form's `max=` attribute
-  (`templates/analyses/new.html:149`) is explicitly documented in-code as
-  client-side sugar only. A global (not per-org) concurrency cap limits
-  simultaneous high-fidelity (≥250k-iteration) runs to 2
-  (`config.py:252-265`), since RAM is shared across all orgs on one VM.
-  Memory-cleanup pattern in `services/run_executor.py` — staged deletes
-  across the run pipeline (`del enhanced` at `:2166`; `del calculator,
-  fc_controls` at `:2329` and again at `:2502`; `del per_scenario_inputs` at
-  `:2503`; `del aggregate` at `:2343`; `del results_payload` at `:2526`)
-  each paired with an explicit `gc.collect()` (`:2344`, `:2512`) — breaks
-  numpy reference cycles before SQLite serialization; comments tie this
-  directly to a prior OOM incident (issue #211).
+- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:63-74`, default
+  1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
+  `POST /analyses` (`routes/runs.py:1185-1196`) — the HTML form's `max=`
+  attribute (`templates/analyses/new.html:149`) is explicitly documented
+  in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
+  bound simultaneous in-flight runs, since RAM and the DB connection pool are
+  shared across all orgs on one VM (`config.py:252-294`): high-fidelity
+  (≥250k effective-iteration, i.e. iterations × scenarios) runs to
+  `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
+  BACKGROUND runs to `max_concurrent_standard_runs` (default 8). The
+  sub-1000-iteration INLINE dispatch path is intentionally UNGATED — such runs
+  are sub-second / few-MB and self-limiting, and gating them would put the
+  unindexed candidate-count query on the latency-sensitive inline path.
+  Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
+  the run pipeline (`del enhanced` at `:2224`; `del calculator, fc_controls`
+  at `:2392` and again at `:2578`; `del per_scenario_inputs` at `:2579`;
+  `del aggregate` at `:2406`; `del results_payload` at `:2611`) each paired
+  with an explicit `gc.collect()` (`:2407`, `:2597`) — breaks numpy reference
+  cycles before SQLite serialization; comments tie this directly to a prior
+  OOM incident (issue #211).
+- **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
+  compute runs inside `asyncio.to_thread`, and the executor's cancel-checks
+  plus scenario/control loads autobegin an uncommitted transaction — so absent
+  a release a run would PIN its pooled DB connection for the whole compute
+  window. A burst of concurrent runs would then drain the 15-slot pool (size 5
+  + overflow 10, `db.py`), and every other request — INCLUDING `/login` — 500s
+  after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
+  reports.py production outage (`routes/reports.py:219-228,332-346`). Control
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1844`) runs
+  `session.expunge_all()` + `await session.close()` to return the connection to
+  the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
+  on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
+  next DB op autobegins a fresh transaction. `expire_on_commit=False` (`db.py`) keeps
+  already-loaded scalar columns readable on the now-detached ORM objects, so no
+  run holds a pooled connection across heavy off-loop work. The
+  `max_concurrent_*` caps above additionally bound how many runs can be
+  mid-compute at once. Note the standard cap is a GLOBAL reject-not-queue gate,
+  so it can 503 a run from an org whose own analysts are driving all 8 in-flight
+  standard runs (fail-closed, far likelier to hit in normal use than the
+  high-fidelity cap of 2).
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
