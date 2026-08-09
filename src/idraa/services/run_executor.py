@@ -1841,6 +1841,41 @@ async def _check_cancelled_or_continue(
     return status == RunStatus.RUNNING
 
 
+async def _release_conn_for_compute(session: AsyncSession) -> None:
+    """Return the pooled DB connection to the pool for a CPU-bound compute phase.
+
+    A1 / #508: ``_check_cancelled_or_continue`` (and the earlier scenario/control
+    loads) autobegin a transaction that is never committed, so the pooled
+    connection is HELD across each subsequent ``asyncio.to_thread`` Monte-Carlo /
+    Shapley / ensemble call. A burst of concurrent runs therefore pins the whole
+    15-slot pool (size 5 + overflow 10) for the compute duration and 500s every
+    other request — including login. This helper (a mirror of
+    ``routes/reports.py``'s pre-``to_thread`` release) frees the connection for
+    the compute window.
+
+    ``expunge_all()`` DETACHES every loaded ORM object (run / scenarios /
+    controls) from the session WITHOUT expiring it — the sessionmaker sets
+    ``expire_on_commit=False`` (db.py), so already-loaded SCALAR columns stay
+    readable on the now-detached instances. ``close()`` returns the connection to
+    the pool; the next DB op on this session autobegins a fresh transaction and
+    re-acquires a connection (a fresh WAL read snapshot, which also makes an
+    external CANCELLED commit reliably visible to the next cancel-check).
+
+    Idempotent: safe to call again on an already-closed session (no DB op has run
+    since the last release), so consecutive to_threads with no intervening DB
+    access need no special-casing.
+
+    INVARIANT (do NOT break): every ORM attribute read reachable AFTER a release
+    — inline to_thread args AND closure bodies running in the worker thread — must
+    be an already-loaded scalar column on the detached instance. A relationship /
+    collection / expired read raises ``DetachedInstanceError`` (on the event loop)
+    or ``MissingGreenlet`` (in the worker thread) and crashes the run. Every
+    current post-release read is a verified-safe loaded scalar; keep it that way.
+    """
+    session.expunge_all()  # detach WITHOUT expiring — loaded scalars stay readable
+    await session.close()  # return connection to pool; next DB op re-acquires
+
+
 async def execute_run(run_id: uuid.UUID) -> None:
     """BackgroundTask entry point — registry bookkeeping around the body.
 
@@ -1934,20 +1969,33 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
         # P3 (currency): pre-declare alongside _snapshot_local, same reason.
         _fx_snapshot_local: dict[str, Any] | None = None
 
-        async def _log_terminal_audit(action: str, changes: dict[str, Any]) -> None:
-            # Capture AFTER the log flush succeeds (review I1): if the flush
-            # itself is the exception source (locked DB, disk-full), a
-            # captured-but-never-flushed row would be replayed in the except
-            # branch, hit the same failing condition there, and re-strand the
-            # run — the exact class this fix removes.
-            await AuditWriter(session).log(
-                organization_id=org_id_local,
-                user_id=created_by_local,
-                action=action,
-                entity_type="risk_analysis_run",
-                entity_id=run_id_local,
-                changes=changes,
-            )
+        def _log_terminal_audit(action: str, changes: dict[str, Any]) -> None:
+            # Append-only (A1 / #508): NO session I/O here — just append the
+            # (action, changes) pair. The pooled DB connection is released
+            # (expunge_all()+close(), _release_conn_for_compute) around every
+            # compute-phase to_thread, so a flush here would BOTH (a) re-acquire
+            # and hold a connection across heavy compute — the pool-exhaustion
+            # this fix removes — and (b) be discarded by the next release's
+            # close() anyway. The actual AuditWriter.log() calls are deferred to
+            # the terminal transaction and driven from two replay points, both
+            # defensively handled:
+            #   * matched-COMPLETED branch: replayed into the SAME guarded-UPDATE
+            #     transaction, so audit + status + results + RunSamples land
+            #     atomically (the #272 intent). On a lost race (rowcount==0) the
+            #     branch returns BEFORE the replay, so these rows are simply never
+            #     written — correct, they must never land without OUR terminal flip.
+            #   * exception path: replayed after the leading rollback (#131),
+            #     inside a try that fails the run WITHOUT the flip if audit I/O
+            #     itself errors — the flip is never hostage to audit I/O.
+            #
+            # Precondition (holds by construction): every ``changes`` dict passed
+            # here contains only JSON-serializable strings — scenario_id / reason
+            # / basis are ``str | None`` — so the deferred strict_json_dumps at
+            # replay time cannot reject them. There is no non-finite float or
+            # non-serializable value on this path, so append-now/flush-later
+            # introduces no new serialization-failure surface (the old
+            # "capture AFTER flush succeeds" ordering guarded a flush that no
+            # longer happens here).
             _terminal_audit_rows.append((action, changes))
 
         try:
@@ -2074,6 +2122,11 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # fmt: off
                 _single_scenario_name = scenarios[0].name  # adapter-iter: ok — SINGLE branch; scenarios has length 1 by RunType.SINGLE discriminator
                 # fmt: on
+                # A1 / #508: hold NO pooled connection across the MC compute.
+                # Every post-release read below is a loaded scalar on a detached
+                # instance: controls[].id (loaded UUID) and scenario.effect (loaded
+                # Enum, read by _scenario_availability_self_detects) — both safe.
+                await _release_conn_for_compute(session)
                 enhanced = await asyncio.to_thread(
                     calculator.calculate_control_enhanced_risk,
                     risk_params=fair_params,  # FAIRParameters directly — no bridge
@@ -2119,6 +2172,11 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 per_scenario_availability = {
                     str(sc.id): _scenario_availability_self_detects(sc) for sc in scenarios
                 }
+                # A1 / #508: hold NO pooled connection across the MC compute.
+                # per_scenario_availability + per_scenario_dict are already-built
+                # locals; the only inline post-release ORM read is controls[].id
+                # (loaded UUID scalar on the detached instances) — safe.
+                await _release_conn_for_compute(session)
                 aggregate = await asyncio.to_thread(
                     calculator.calculate_aggregate_enhanced_risk,
                     per_scenario_risk_params=per_scenario_inputs,
@@ -2288,6 +2346,11 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
 
                 # Arch-N5: the WHOLE ensemble (canonical pass + K draws) runs under
                 # ONE outer to_thread (GIL-bound, responsiveness-only).
+                # A1 / #508: release before the ensemble. The closure reads only
+                # loaded scalars on detached instances (controls[].id/.name,
+                # run.scenario_id/.weight_robustness/.random_seed) — safe in the
+                # worker thread.
+                await _release_conn_for_compute(session)
                 _robustness_local, _single_loo, _single_degradations = await asyncio.to_thread(
                     _single_weight_robustness
                 )
@@ -2300,7 +2363,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         ("loo_skipped", "run.loo_skipped"),
                     ):
                         for _sid, _reason in _single_degradations[_action_key]:
-                            await _log_terminal_audit(
+                            _log_terminal_audit(
                                 _action, {"scenario_id": [None, _sid], "reason": [None, _reason]}
                             )
                     for _action_key, _action, _basis in (
@@ -2313,7 +2376,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                             _changes: dict[str, Any] = {"scenario_id": [None, _sid]}
                             if _basis is not None:
                                 _changes["basis"] = [None, _basis]
-                            await _log_terminal_audit(_action, _changes)
+                            _log_terminal_audit(_action, _changes)
                 # Inject "if removed" into the SINGLE payload's flat adjustments
                 # (absent map -> no key -> "—", the absent≠0.0 convention).
                 for _basis_key, _adj_key in (
@@ -2355,6 +2418,12 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # and the leave-one-out pass: exact Shapley (n ≤ 12) evaluates
                 # every leave-one-out subset anyway, so LOO afterwards is ~free.
                 _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
+                # A1 / #508: release before the Shapley/LOO compute block. The only
+                # post-release ORM read across these four to_threads is
+                # [str(c.id) for c in controls] (loaded UUID scalars, evaluated on
+                # the loop as a to_thread arg). Subsequent releases in this block are
+                # idempotent no-ops (no DB op runs between them).
+                await _release_conn_for_compute(session)
                 shapley_raw, shapley_skipped = await asyncio.to_thread(
                     _compute_shapley_by_scenario,
                     calculator,
@@ -2376,6 +2445,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # structurally identical to the typical pass (cost/caps depend
                 # only on control counts); basis-specific non-finite drops are
                 # audited below via the set difference.
+                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
                 shapley_mean_raw, shapley_mean_skipped = await asyncio.to_thread(
                     _compute_shapley_by_scenario,
                     calculator,
@@ -2393,6 +2463,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
 
                 # "If removed" (leave-one-out): drop-cost counterfactual per control
                 # — linear in n, so it also covers over_cap scenarios Shapley skips.
+                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
                 loo_raw, loo_skipped = await asyncio.to_thread(
                     _compute_loo_by_scenario,
                     calculator,
@@ -2410,6 +2481,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 _inject_loo(results_payload["per_scenario"], clean_loo)
 
                 # MEAN-basis LOO (side-by-side "If removed"): shared cache, mean chain.
+                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
                 loo_mean_raw, loo_mean_skipped = await asyncio.to_thread(
                     _compute_loo_by_scenario,
                     calculator,
@@ -2436,23 +2508,21 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # calls ride the terminal guarded-UPDATE transaction below so audit +
                 # status + results land atomically (the #272 design intent).
                 for _sid, _reason in shapley_skipped:  # {"over_cap","over_budget","error"}
-                    await _log_terminal_audit(
+                    _log_terminal_audit(
                         "run.shapley_skipped",
                         {"scenario_id": [None, _sid], "reason": [None, _reason]},
                     )
                 for _sid in shapley_dropped:  # non-finite (post-compute)
-                    await _log_terminal_audit(
-                        "run.non_finite_shapley", {"scenario_id": [None, _sid]}
-                    )
+                    _log_terminal_audit("run.non_finite_shapley", {"scenario_id": [None, _sid]})
                 # LOO-Meth-2: leave-one-out degradations get the same first-class
                 # audit as Shapley's — a "—" cell (or a partial aggregate sum) must
                 # have a durable record of why, not just a log line.
                 for _sid, _reason in loo_skipped:  # {"over_budget","error"}
-                    await _log_terminal_audit(
+                    _log_terminal_audit(
                         "run.loo_skipped", {"scenario_id": [None, _sid], "reason": [None, _reason]}
                     )
                 for _sid in loo_dropped:  # non-finite (post-compute)
-                    await _log_terminal_audit("run.non_finite_loo", {"scenario_id": [None, _sid]})
+                    _log_terminal_audit("run.non_finite_loo", {"scenario_id": [None, _sid]})
                 # Mean-basis passes share the typical passes' structural skip sets
                 # (cost/caps depend only on control counts), so only basis-specific
                 # NEW degradations get extra rows — tagged with the basis so a
@@ -2470,7 +2540,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     ("run.non_finite_loo", _mean_only_loo),
                 ):
                     for _sid in sorted(_sids):
-                        await _log_terminal_audit(
+                        _log_terminal_audit(
                             _action, {"scenario_id": [None, _sid], "basis": [None, "mean"]}
                         )
 
@@ -2485,6 +2555,12 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # compare like against like (typical canonical stays in
                 # shapley_value for the matrix's paired display).
                 _canon_vals_agg = _aggregate_clean(clean_shapley_mean)
+                # A1 / #508: release before the ensemble to_thread. The to_thread
+                # args run.weight_robustness (JSON) + run.random_seed (Int) are
+                # loaded scalars on the detached run; inside the thread
+                # _build_weight_robustness reads only controls[].id/.name (loaded
+                # scalars) — all safe post-detach.
+                await _release_conn_for_compute(session)
                 _robustness_local = await asyncio.to_thread(
                     _build_weight_robustness,
                     calculator=calculator,
@@ -2503,6 +2579,15 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 del per_scenario_inputs  # AGGREGATE always binds it
                 if not await _check_cancelled_or_continue(session, run_id):
                     return
+                # A1 / #508 accepted NICE-TO-HAVE (Arch-N/Rel-N5): everything from
+                # here to the guarded COMPLETED UPDATE (:~2670) is pure/DTO/local
+                # — gc.collect, split_simulation_payload, and encode_sample_arrays
+                # touch no ORM object — so release the connection re-acquired by the
+                # cancel-check above rather than hold it across the on-loop
+                # split/encode. Completes the "hold no pooled connection across heavy
+                # work" invariant for AGGREGATE. (The on-loop encode itself is a
+                # pre-existing event-loop concern, out of scope here.)
+                await _release_conn_for_compute(session)
 
             # Cyclic GC pass: numpy arrays held inside fair_cam dataclasses can
             # form reference cycles via back-references; explicit gc.collect()
@@ -2579,12 +2664,15 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 )
                 # A terminal state was set by another actor — do NOT insert a
                 # run_samples row (it would orphan against a row whose status we
-                # refused to flip). Roll back the pending transaction: this
-                # discards the flushed attribution audit rows (run.shapley_skipped /
-                # run.non_finite_shapley / run.loo_skipped / run.non_finite_loo,
-                # written above on BOTH the AGGREGATE and SINGLE paths) as
-                # well as the no-match UPDATE — both must be discarded atomically
-                # so audit rows never land without the matching COMPLETED flip.
+                # refused to flip). Roll back the pending transaction: under
+                # Enabler 1 (A1 / #508) the attribution rows (run.shapley_skipped /
+                # run.non_finite_shapley / run.loo_skipped / run.non_finite_loo) are
+                # NOT flushed during compute — they are deferred to
+                # _terminal_audit_rows and replayed only in the matched branch
+                # below — so on this lost-race path they were never written and
+                # this rollback discards ONLY the no-match UPDATE. Returning before
+                # the replay is exactly what keeps those audit rows from ever
+                # landing without the matching COMPLETED flip.
                 await session.rollback()
                 return
             # The flip matched our RUNNING row: persist the heavy arrays in the
@@ -2607,6 +2695,23 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         arrays_codec=arrays_codec_local,
                         derived_seed_keys=derived_seed_keys,
                     )
+                )
+            # A1 / #508 Enabler 1: replay the deferred attribution-degradation rows
+            # into THIS transaction so audit + status + results + RunSamples land
+            # atomically (the #272 intent). Under append-only _log_terminal_audit
+            # these are the FIRST writes of these rows on the success path; they
+            # commit together with the guarded flip below. The changes dicts hold
+            # only JSON-serializable strings, so strict_json_dumps cannot reject
+            # them here. On the exception path the except branch (unchanged) does
+            # the symmetric replay after its leading rollback.
+            for _action, _changes in _terminal_audit_rows:
+                await AuditWriter(session).log(
+                    organization_id=org_id_local,
+                    user_id=created_by_local,
+                    action=_action,
+                    entity_type="risk_analysis_run",
+                    entity_id=run_id_local,
+                    changes=_changes,
                 )
             await AuditWriter(session).log(
                 organization_id=org_id_local,

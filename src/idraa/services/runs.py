@@ -192,7 +192,21 @@ class RunService:
         #     any single large aggregate — hundreds-of-scenario runs remain valid.)
         settings = get_settings()
         threshold = settings.high_fidelity_iterations_threshold
-        if effective_iterations * len(scenario_ids) >= threshold:
+        incoming_high = effective_iterations * len(scenario_ids) >= threshold
+        # A1 / #508 Part 2: below the high-fidelity threshold there is a SECOND,
+        # looser concurrency cap on STANDARD runs (max_concurrent_standard_runs,
+        # default 8). A burst of ordinary background runs would otherwise drain
+        # the process-wide 15-connection pool + VM RAM even though no single run
+        # is high-fidelity — the same DoS shape as the 2026-06-15 reports.py
+        # outage that blocked /login. The candidate query below feeds BOTH caps,
+        # so it is computed ONCE. It runs only when a cap can actually fire: an
+        # incoming high-fidelity run (either dispatch path), OR a standard run on
+        # the BACKGROUND path. A standard INLINE run (< _SYNC_THRESHOLD iters) is
+        # sub-second / few-MB and self-limiting, so it stays UNGATED [Arch-I3] —
+        # which also keeps this unindexed full-table-scan count OFF the
+        # latency-sensitive inline path.
+        will_background = effective_iterations >= _SYNC_THRESHOLD
+        if incoming_high or will_background:
             active = active_run_ids()
             status_pred = RiskAnalysisRun.status.in_((RunStatus.RUNNING, RunStatus.QUEUED))
             where_pred = (
@@ -212,13 +226,29 @@ class RunService:
                 for mc, rtype, agg_ids in candidates
                 if mc * (len(agg_ids) if rtype == RunType.AGGREGATE and agg_ids else 1) >= threshold
             )
-            if inflight_high_n >= settings.max_concurrent_high_fidelity_runs:
+            # DISJOINT partition (verified by plan-gate): `candidates` is unique
+            # by PK, so every in-flight run is in exactly ONE bucket by effective
+            # work (NxM) vs threshold — the standard count is just the complement,
+            # no double-count possible.
+            inflight_standard = len(candidates) - inflight_high_n
+            if incoming_high:
+                if inflight_high_n >= settings.max_concurrent_high_fidelity_runs:
+                    raise RunValidationError(
+                        "High-fidelity capacity is busy: at most "
+                        f"{settings.max_concurrent_high_fidelity_runs} runs of "
+                        f"{threshold:,}+ effective iterations (iterations x scenarios) can "
+                        "run at once (memory limit). Wait for one to finish, or lower the "
+                        "iteration count."
+                    )
+            elif inflight_standard >= settings.max_concurrent_standard_runs:
+                # Reached only when the incoming run is standard (NxM < threshold)
+                # AND background-dispatched (the outer `if` guarantees
+                # will_background here). `>=` is the correct off-by-one: the
+                # incoming run is not persisted until RunRepo.create below.
                 raise RunValidationError(
-                    "High-fidelity capacity is busy: at most "
-                    f"{settings.max_concurrent_high_fidelity_runs} runs of "
-                    f"{threshold:,}+ effective iterations (iterations x scenarios) can "
-                    "run at once (memory limit). Wait for one to finish, or lower the "
-                    "iteration count."
+                    "Analysis capacity is busy: at most "
+                    f"{settings.max_concurrent_standard_runs} standard analyses can "
+                    "run at once; wait for one to finish and retry."
                 )
 
         if not isinstance(random_seed, int) or not (0 <= random_seed <= _SEED_MAX):
