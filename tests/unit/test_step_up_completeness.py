@@ -10,6 +10,14 @@ OR is named in an explicit exemption allowlist. A new admin route therefore
 fails this test until someone consciously decides: gate it, or allowlist it
 with a rationale.
 
+Coverage boundary (deliberate): this checks routes gated by
+``require_role(ADMIN)`` *alone*. A route admin-restricted some OTHER way — a
+broader allowlist that includes non-admins (``require_role(ANALYST, ADMIN)``),
+``require_step_up`` with no ``require_role``, or an inline ``if user.role``
+check inside the handler — is NOT seen here. That is acceptable because the
+codebase gates 100% per-route via ``require_role`` (§6 threat-model), but it is
+a scope, not a universal "every admin route is covered" guarantee.
+
 The allowlist is the routine reference-data-authoring / multi-step-import
 surface, where a per-request re-auth would be disruptive with little security
 benefit. Sensitive config (org profile, FX rates, security settings, SME
@@ -32,12 +40,17 @@ from idraa.models.enums import UserRole
 
 _STATE_CHANGING = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Admin-only state-changing routes intentionally WITHOUT step-up: routine
-# reference-data authoring and the multi-step import wizards. None of these
-# feeds a stale-session-exploitable org-wide computation the way /organization
-# and /fx-rates do, and gating each step of an import wizard would be
-# disruptive for negligible benefit. A NEW admin route lands here only with a
-# deliberate rationale — never by default.
+# Admin-only state-changing routes intentionally WITHOUT step-up. Two reasons
+# they are exempt where /organization and /fx-rates are not:
+#   - imports are multi-step wizards where a per-step re-auth is disruptive for
+#     negligible benefit, and their state is staged, not yet live;
+#   - the layered-override / overlay / qualitative-band edits DO feed FAIR
+#     computation, but are VERSION-PINNED — a scenario pins specific override /
+#     overlay versions at calc time, so a stale-session edit only affects FUTURE
+#     runs that adopt the new version, a materially smaller blast radius than
+#     /fx-rates' immediate, unversioned currency effect. Their DESTRUCTIVE ops
+#     (overlay deactivate, qualitative-band delete) are step-up-gated already.
+# A NEW admin route lands here only with a deliberate rationale — never by default.
 _STEP_UP_EXEMPT: frozenset[str] = frozenset(
     {
         "/controls/import",
@@ -64,9 +77,10 @@ _STEP_UP_EXEMPT: frozenset[str] = frozenset(
 
 # Non-vacuous floor. If the route-walk or closure inspection ever silently
 # breaks (router internals change, closure shape changes), enumeration must
-# FAIL rather than pass by finding nothing. The real count is ~37; this floor
-# sits comfortably below it.
-_MIN_ADMIN_STATE_CHANGING = 20
+# FAIL rather than pass by finding nothing. The live count is 37 (18 gated + 19
+# allowlisted); 30 leaves headroom for ordinary route churn while still
+# catching a partial-enumeration breakage that drops a whole subrouter.
+_MIN_ADMIN_STATE_CHANGING = 30
 
 
 def _flatten(routes):

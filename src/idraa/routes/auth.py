@@ -87,6 +87,16 @@ from idraa.services.second_factor import verify_totp_or_recovery
 
 router = APIRouter()
 
+# C2 audit ceiling. The per-attempt failed-login audit (below) is normally
+# bounded by the per-account lockout (auth_max_failed_logins, default 5) and
+# the per-source IP throttle. But a self-hosted deployment can disable BOTH
+# (auth_max_failed_logins=0 AND auth_ip_max_failed_logins=0), which would let a
+# known email mint unbounded user.login_failed rows. This CONFIG-INDEPENDENT
+# cap bounds that: the first N misses ARE the detection signal an operator
+# needs; beyond N, more rows add only disk cost, so stop. Deliberately a plain
+# constant, not a Setting — the whole point is that it can't be turned off.
+_FAILED_LOGIN_AUDIT_CAP = 50
+
 
 def _json_err(msg: str) -> Response:
     return Response(
@@ -161,17 +171,22 @@ async def login_post(
             # campaign staying under auth_max_failed_logins is otherwise
             # invisible until the lockout fires (and with lockout disabled,
             # auth_max_failed_logins=0, never). Mirrors the /login/mfa path's
-            # per-attempt audit; bounded by the per-source throttle
-            # (register_failed_source) rather than by the lockout alone.
-            await AuditWriter(db).log(
-                organization_id=user.organization_id,
-                entity_type="user",
-                entity_id=user.id,
-                action="user.login_failed",
-                changes={},
-                user_id=user.id,
-                ip_address=client_ip(request),
-            )
+            # per-attempt audit. Bounds on row count, strongest first:
+            # the per-account lockout when enabled, the per-source IP throttle
+            # when enabled, and — independent of BOTH, so it holds even on a
+            # self-hosted deploy that disables them — the _FAILED_LOGIN_AUDIT_CAP
+            # per-account ceiling. failed_login_count is the post-increment
+            # miss count; it resets to 0 on a successful login.
+            if user.failed_login_count <= _FAILED_LOGIN_AUDIT_CAP:
+                await AuditWriter(db).log(
+                    organization_id=user.organization_id,
+                    entity_type="user",
+                    entity_id=user.id,
+                    action="user.login_failed",
+                    changes={},
+                    user_id=user.id,
+                    ip_address=client_ip(request),
+                )
             if is_locked(user):  # this miss just tripped the lock -> audit
                 await AuditWriter(db).log(
                     organization_id=user.organization_id,

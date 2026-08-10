@@ -28,15 +28,22 @@ Middleware order (set in ``app.py``):
     FastAPI runs middleware in reverse-add order (LIFO), so ``app.py`` adds
     ``CSRFMiddleware`` BEFORE ``SecurityHeadersMiddleware``.
 
-Body-stream replay (Task 1.1.0.a):
+Body-stream replay + size cap (Task 1.1.0.a; A4 cap 2026-08-09):
 
-    ``BaseHTTPMiddleware`` exposes ``request.form()`` / ``request.body()``,
-    but consuming either one-way-drains the ASGI receive stream — downstream
-    ``Form(...)`` handlers then see an empty dict. We cache the body with
-    ``await request.body()`` BEFORE parsing the form, then reinject a fresh
-    ``receive`` coroutine into ``request._receive`` so the route handler
-    re-reads the same bytes. Regression test:
-    ``test_downstream_form_handler_reads_body``.
+    ``BaseHTTPMiddleware`` wraps every request in a ``_CachedRequest`` whose
+    ``wrapped_receive`` — the receive the DOWNSTREAM app reads — replays the
+    body from ``request._body`` once that attribute is populated. So to let
+    downstream ``Form(...)`` handlers see the body (consuming the stream
+    naively would leave them an empty dict), we buffer it here BEFORE parsing
+    the form and cache it on ``request._body``. ``_read_body_capped`` does
+    exactly what ``await request.body()`` did — iterate ``request.stream()``
+    and set ``request._body`` — but under a running-total size cap
+    (``settings.max_request_body_bytes``): an oversize body returns a 413
+    before it is fully buffered, instead of pinning RSS to the body size.
+    (No ``request._receive`` reinjection is involved — the ``_body`` cache is
+    what drives replay.) Regression test:
+    ``test_downstream_form_handler_reads_body``; cap tests:
+    ``tests/unit/test_csrf_body_cap.py``.
 """
 
 from __future__ import annotations
@@ -149,9 +156,9 @@ async def _extract_submitted_token(request: Request) -> str | None:
     no reason.
 
     Note on body consumption: the caller (``CSRFMiddleware.dispatch``) has
-    ALREADY cached ``await request.body()`` and reinjected ``request._receive``
-    before calling us, so ``request.form()`` here re-reads from the cached
-    buffer and downstream ``Form(...)`` handlers still see the fields.
+    ALREADY buffered the body onto ``request._body`` (via
+    ``_read_body_capped``), so ``request.form()`` here re-reads from that cache
+    and downstream ``Form(...)`` handlers still see the fields.
     """
     header_value = request.headers.get(CSRF_HEADER_NAME)
     if header_value:

@@ -112,8 +112,16 @@ async def test_login_writes_audit_row(client: AsyncClient, db_session: AsyncSess
 async def test_failed_login_writes_no_audit_row(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """Bad credentials must NOT write a login audit row (no anon-writable
-    append-only amplification — same rationale as the stale-cookie logout)."""
+    """Bad credentials must NOT write a SUCCESS ``login`` audit row — a failure
+    is not a login (``_login_audit_rows`` filters ``action == "login"``).
+
+    NOTE: since C2 (2026-08-09) a bad password for a KNOWN, unlocked user DOES
+    write a distinct ``user.login_failed`` DETECTION row (bounded — see
+    ``tests/integration/test_failed_login_audit.py`` and the
+    ``_FAILED_LOGIN_AUDIT_CAP`` ceiling in ``routes/auth.py``). That is a
+    deliberate reversal of the original "no failed-login row at all" stance,
+    which was the C2 blind spot. This test still holds: no *success* row is
+    fabricated on failure."""
     await _seed_setup(client)
     before = len(await _login_audit_rows(db_session))
 

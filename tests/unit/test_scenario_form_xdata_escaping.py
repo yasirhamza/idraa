@@ -17,6 +17,12 @@ from __future__ import annotations
 import pathlib
 import re
 
+# Scope note: this guard covers the `dist:` x-data selectors specifically. The
+# `@input` (Alpine x-on) handlers in the same file (dispatch_fieldset / field_key)
+# use the same raw-single-quote idiom but interpolate server-FIXED macro literals
+# ("pl"/"sl", a hardcoded loop tuple), never request-derived data — so they are
+# not a live XSS surface and are intentionally out of this guard's scope. If
+# either ever becomes request-derived, widen this guard.
 _FORM = pathlib.Path("src/idraa/templates/scenarios/form.html")
 
 

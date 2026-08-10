@@ -457,8 +457,8 @@ new export format must re-implement, not assume is "someone else's problem."
 `AuditLog` (`models/audit_log.py:36-64`, indexed on `(org, timestamp)` and
 `(entity_type, entity_id)`) is written via `AuditWriter.log`
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
-datetime/Enum. Confirmed call sites at login success (`auth.py:240`), failed
-login and lockout (`auth.py:170` `user.login_failed`, `auth.py:180`
+datetime/Enum. Confirmed call sites at login success (`auth.py:259`), failed
+login and lockout (`auth.py:185` `user.login_failed`, `auth.py:195`
 `user.login_locked_out`), role change (dict built at `routes/users.py:314`,
 logged at `:359` under the generic `"update"` action — not a role-specific
 action string), and the
@@ -474,12 +474,18 @@ gap, not a finding of an actual miss.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
-  a `user.login_failed` row (`auth.py:170`), not only the attempt that trips
+  a `user.login_failed` row (`auth.py:185`), not only the attempt that trips
   the lockout. A low-and-slow campaign staying under the threshold (or running
   with lockout disabled, `auth_max_failed_logins=0`) is no longer invisible.
-  This mirrors the `/login/mfa` path's per-attempt audit and is bounded by the
-  per-source throttle. Unknown emails still write nothing (no user to attribute
-  to; no enumeration oracle).
+  Mirrors the `/login/mfa` path's per-attempt audit. **Row-count bounds, in
+  order:** the per-account lockout when enabled (`auth_max_failed_logins`,
+  default 5); the per-source IP throttle when enabled
+  (`auth_ip_max_failed_logins`, default 20); and — independent of BOTH, so it
+  still holds on a self-hosted deploy that disables them — a hard per-account
+  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `auth.py:98,180`). The ceiling matters
+  because the first N misses ARE the detection signal; past N, more rows add
+  only disk cost. Unknown emails still write nothing (no user to attribute to;
+  no enumeration oracle).
 - **C1** — RBAC denials now emit a `rbac_denied` WARNING at the `require_role`
   chokepoint (§6, `deps.py:180-186`). Deliberately a log line, not an
   `AuditLog` row: an unauthenticated/cross-org prober must not be able to drive
