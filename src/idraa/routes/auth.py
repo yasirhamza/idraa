@@ -156,6 +156,22 @@ async def login_post(
             # user's repeated wrong guesses shouldn't keep extending the
             # lockout window past auth_lockout_seconds.
             register_failed_login(user)
+            # C2: audit EVERY failed password attempt for a known, unlocked
+            # user — not just the one that trips the lockout. A low-and-slow
+            # campaign staying under auth_max_failed_logins is otherwise
+            # invisible until the lockout fires (and with lockout disabled,
+            # auth_max_failed_logins=0, never). Mirrors the /login/mfa path's
+            # per-attempt audit; bounded by the per-source throttle
+            # (register_failed_source) rather than by the lockout alone.
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.login_failed",
+                changes={},
+                user_id=user.id,
+                ip_address=client_ip(request),
+            )
             if is_locked(user):  # this miss just tripped the lock -> audit
                 await AuditWriter(db).log(
                     organization_id=user.organization_id,

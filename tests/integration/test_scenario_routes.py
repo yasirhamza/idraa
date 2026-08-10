@@ -618,7 +618,10 @@ async def test_edit_form_lognormal_primary_loss_round_trips(
     # The lognormal <option> is the selected one on the pl selector.
     assert 'value="lognormal" selected' in r.text
     # The Alpine x-data initialiser is inlined (PR #205), not read from a global.
-    assert "{ dist: 'lognormal' }" in r.text
+    # B3: the reflected dist value is now JSON-encoded via | tojson into a
+    # single-quoted attribute (double-quoted JS string), not raw-interpolated
+    # into a single-quoted one — so the round-trip renders `dist: "lognormal"`.
+    assert '{ dist: "lognormal" }' in r.text
 
 
 async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(

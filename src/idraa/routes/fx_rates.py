@@ -15,10 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.currency import SELECTABLE_CURRENCIES
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.fx_rate import FxRate
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role
+from idraa.routes.deps import client_ip, get_db, require_role, require_step_up
 from idraa.schemas.fx_rate import FxRateForm
 from idraa.services.fx_rates import FxRateService, InvalidRateError
 from idraa.services.org import require_sole_org
@@ -53,7 +53,12 @@ async def fx_rates_list(
     )
 
 
-@router.post("/fx-rates")
+@router.post(
+    "/fx-rates",
+    # B2: FX rates sit behind every ALE/loss figure in the app — step-up
+    # gated like /organization so a stale admin session can't move them.
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],
+)
 async def fx_rates_post(
     request: Request,
     db: AsyncSession = Depends(get_db),

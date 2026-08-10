@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 from collections.abc import AsyncIterator, Callable
 from urllib.parse import urlsplit
 
@@ -16,6 +17,8 @@ from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.session import AuthSession
 from idraa.models.user import User
 from idraa.services.auth import is_step_up_fresh
+
+logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB — caps bulk-import uploads across all endpoints
 
@@ -157,7 +160,7 @@ def require_user(user: User | None = Depends(current_user)) -> User:
     return user
 
 
-def require_role(*roles: UserRole) -> Callable[[User], User]:
+def require_role(*roles: UserRole) -> Callable[[Request, User], User]:
     """Build a FastAPI dependency that enforces a role allowlist.
 
     Usage::
@@ -166,8 +169,21 @@ def require_role(*roles: UserRole) -> Callable[[User], User]:
         async def list_users(...): ...
     """
 
-    def _checker(user: User = Depends(require_user)) -> User:
+    def _checker(request: Request, user: User = Depends(require_user)) -> User:
         if user.role not in roles:
+            # C1: an RBAC denial otherwise leaves zero trace — log the actor,
+            # the roles required, and the path so privilege probing / id
+            # enumeration is visible to operators. WARNING (not a DB AuditLog
+            # row) keeps this bounded by log rotation rather than an
+            # attacker-driven write amplifier. user.id is a UUID (never the
+            # raw email — audit redaction invariant).
+            logger.warning(
+                "rbac_denied user=%s role=%s required=%s path=%s",
+                user.id,
+                user.role.value,
+                sorted(r.value for r in roles),
+                request.url.path,
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 

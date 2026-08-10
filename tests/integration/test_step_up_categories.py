@@ -54,6 +54,39 @@ async def test_category_on_and_stale_gates(authed_admin, db_session, url, catego
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/organization",  # B2: org profile feeds org-wide FAIR/financial computation
+        "/fx-rates",  # B2: FX rates sit behind every ALE/loss figure
+        "/sme-directory/new",  # B2: admin-only SME-directory mutation (ADMIN category)
+    ],
+)
+async def test_b2_admin_config_routes_gate_stale_session(authed_admin, db_session, url):
+    """B2: the newly-gated admin-config writes bounce a STALE admin session to
+    step-up (ADMIN category), same as /settings/security. The gate runs before
+    the handler, so an empty body 303s at the gate."""
+    client, org_id = authed_admin
+    await _apply(db_session, org_id, step_up_admin=True)
+    await _make_stale(db_session, client)
+    r = await csrf_post(client, url, {}, follow_redirects=False)
+    assert r.status_code == 303 and "/auth/step-up" in r.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_b2_admin_config_route_fresh_session_not_gated(authed_admin, db_session):
+    """B2 no-regression: a FRESH admin session is NOT bounced — the gate is a
+    no-op while the session is step-up-fresh, so ordinary admin config edits
+    are unaffected. (The gate reaches the handler, which 422s on the empty
+    body — anything that is NOT the step-up 303 proves the gate passed.)"""
+    client, org_id = authed_admin
+    await _apply(db_session, org_id, step_up_admin=True)
+    # No _make_stale — session stays fresh.
+    r = await csrf_post(client, "/fx-rates", {}, follow_redirects=False)
+    assert r.status_code != 303 or "/auth/step-up" not in r.headers.get("location", "")
+
+
+@pytest.mark.asyncio
 async def test_destructive_off_does_NOT_drop_passkey_delete(authed_admin, db_session):
     # cross-category isolation: passkey/{id}/delete is CREDENTIALS, not DESTRUCTIVE
     import uuid

@@ -59,6 +59,41 @@ CSRF_FORM_FIELD = "_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
+# Fallback body cap when a caller constructs the middleware without one
+# (direct construction in tests/scripts). app.py wires the configured
+# ``settings.max_request_body_bytes`` explicitly. Keep this >= MAX_UPLOAD_BYTES
+# (routes/deps.py, 5 MB) + multipart framing so legitimate imports never 413.
+_DEFAULT_MAX_BODY_BYTES = 8 * 1024 * 1024
+
+
+async def _read_body_capped(request: Request, cap: int) -> bytes | None:
+    """Buffer the request body via ``request.stream()``, bounded to ``cap``.
+
+    Returns the full body, or ``None`` if it exceeds ``cap`` (caller emits a
+    413). This mirrors what ``await request.body()`` does — iterate
+    ``request.stream()`` and cache the result on ``request._body`` — because
+    ``BaseHTTPMiddleware`` wraps every request in a ``_CachedRequest`` whose
+    ``wrapped_receive`` (the receive the DOWNSTREAM app reads) replays from
+    exactly that ``_body`` cache. The ONLY difference from ``body()`` is the
+    running-total check: a chunk that would push past ``cap`` is dropped and
+    ``None`` returned, so peak buffering is ``cap`` + one transport chunk
+    rather than the whole (possibly huge) body. Reading the raw ``_receive``
+    directly instead would leave ``_body`` unset and hand the downstream app an
+    empty body.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > cap:
+            return None
+        if chunk:
+            chunks.append(chunk)
+    body = b"".join(chunks)
+    # Populate the cache _CachedRequest.wrapped_receive replays downstream.
+    request._body = body
+    return body
+
 
 def generate_csrf_token(secret: str) -> str:
     """Return a fresh ``<nonce_hex>.<sig_hex>`` token.
@@ -159,10 +194,18 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     a free oracle on which half of the double-submit failed.
     """
 
-    def __init__(self, app: ASGIApp, secret: str, *, secure_cookie: bool) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        secret: str,
+        *,
+        secure_cookie: bool,
+        max_body_bytes: int = _DEFAULT_MAX_BODY_BYTES,
+    ) -> None:
         super().__init__(app)
         self._secret = secret
         self._secure_cookie = secure_cookie
+        self._max_body_bytes = max_body_bytes
 
     async def dispatch(
         self,
@@ -176,14 +219,23 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         #    422. We only need to do this for methods that might carry a
         #    body — safe methods skip the whole path.
         if request.method in _UNSAFE_METHODS:
-            body = await request.body()
-
-            async def _replay_receive() -> dict[str, object]:
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            # Starlette's Request exposes `_receive` specifically so middleware
-            # can splice in a new source — see starlette.requests.Request.
-            request._receive = _replay_receive
+            # A4: buffer the body under a size cap. ``_read_body_capped`` caches
+            # it on ``request._body``, which _CachedRequest.wrapped_receive
+            # replays to the downstream handler — so this both bounds the buffer
+            # AND preserves the double-submit body replay the old
+            # ``await request.body()`` provided.
+            body = await _read_body_capped(request, self._max_body_bytes)
+            if body is None:
+                # Reject oversize bodies here — before the route, and before the
+                # whole body is buffered — so an unauthenticated POST can't pin
+                # RSS to an arbitrary body size.
+                logger.warning(
+                    "csrf: request body over %d-byte cap on %s %s — 413",
+                    self._max_body_bytes,
+                    request.method,
+                    request.url.path,
+                )
+                return PlainTextResponse("Payload too large", status_code=413)
 
         # 1. Resolve the token for THIS request. Prefer a valid inbound
         #    cookie; mint a new one only if absent or tampered. This keeps

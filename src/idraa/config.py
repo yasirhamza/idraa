@@ -355,6 +355,18 @@ class Settings(BaseSettings):
     # auth_max_failed_logins' 0-disables convention).
     auth_step_up_max_age_seconds: int = Field(default=600, ge=0)
 
+    # Global request-body cap (A4 hardening). CSRFMiddleware buffers the FULL
+    # body of every unsafe-method request BEFORE the route runs (double-submit
+    # replay), so without a ceiling a single unauthenticated POST pins process
+    # RSS to the body size (measured: a 50MB POST /login grew RSS ~50MB before
+    # its guaranteed 403). This bounds that buffer; oversize requests get a
+    # 413 in the middleware, before any handler. MUST exceed MAX_UPLOAD_BYTES
+    # (routes/deps.py — 5MB) plus multipart framing overhead, or legitimate
+    # register/library/scenario imports would 413. Enforced in
+    # middleware/csrf.py; regression + the >MAX_UPLOAD_BYTES invariant live in
+    # tests/unit/test_csrf_body_cap.py.
+    max_request_body_bytes: int = Field(default=8 * 1024 * 1024, ge=1)
+
     # Per-source login throttle client-IP resolution (idraa#81). Deployment-
     # agnostic — pick ONE strategy in the gitignored deployment config (see
     # .env.example for the per-platform header/count table; no vendor header

@@ -12,10 +12,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.models.enums import UserRole
+from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
-from idraa.routes.deps import get_db, require_role
+from idraa.routes.deps import get_db, require_role, require_step_up
 from idraa.schemas.sme import SMECreate, SMEDirectoryEntry, SMERequest, SMEUpdate
 from idraa.services import sme_directory as svc
 from idraa.services.audit import AuditWriter
@@ -35,6 +35,9 @@ async def list_smes(
     "/sme-directory/new",
     status_code=status.HTTP_201_CREATED,
     response_model=None,
+    # B2: admin-only SME-directory mutations step-up gated for consistency
+    # with the other admin-config writes (lower blast radius than org/fx).
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],
 )
 async def admin_create(
     data: SMECreate,
@@ -98,7 +101,11 @@ async def get_sme(
         raise HTTPException(404, "SME not found") from e
 
 
-@router.post("/sme-directory/{sme_id}/edit", response_model=None)
+@router.post(
+    "/sme-directory/{sme_id}/edit",
+    response_model=None,
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],  # B2
+)
 async def edit_sme(
     sme_id: UUID,
     data: SMEUpdate,
@@ -122,6 +129,7 @@ async def edit_sme(
 @router.post(
     "/sme-directory/{sme_id}/archive",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],  # B2
 )
 async def archive_sme(
     sme_id: UUID,
@@ -141,7 +149,11 @@ async def archive_sme(
         raise HTTPException(422, str(e)) from e
 
 
-@router.post("/sme-directory/{sme_id}/unarchive", response_model=None)
+@router.post(
+    "/sme-directory/{sme_id}/unarchive",
+    response_model=None,
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],  # B2
+)
 async def unarchive_sme(
     sme_id: UUID,
     db: AsyncSession = Depends(get_db),
