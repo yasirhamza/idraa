@@ -32,11 +32,18 @@ from idraa.models.enums import (
     OrganizationSize,
     RiskAppetite,
     SecurityMaturity,
+    StepUpCategory,
     UserRole,
 )
 from idraa.models.organization import Organization
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_role, require_user
+from idraa.routes.deps import (
+    client_ip,
+    get_db,
+    require_role,
+    require_step_up,
+    require_user,
+)
 from idraa.schemas.organization import OrganizationForm
 from idraa.services.audit import AuditWriter
 from idraa.services.flash import build_flash
@@ -125,7 +132,13 @@ async def org_get(
     )
 
 
-@router.post("/organization")
+@router.post(
+    "/organization",
+    # B2: org profile feeds org-wide FAIR/financial computation (industry,
+    # risk_appetite, security_maturity, preferred_currency) — step-up gated
+    # like /settings/security, so a stale admin session can't mutate it.
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))],
+)
 async def org_post(
     request: Request,
     db: AsyncSession = Depends(get_db),

@@ -141,39 +141,70 @@ docstring).
 
 - **T**: stateless double-submit HMAC pattern (`middleware/csrf.py`). Cookie
   `csrf_token` = `<nonce>.<HMAC-SHA256(session_secret, nonce)>`
-  (`csrf.py:57,63-81`), `HttpOnly=False` (must be JS/Jinja-readable),
+  (`csrf.py:57,98-116`), `HttpOnly=False` (must be JS/Jinja-readable),
   `SameSite=Strict`. Validation requires cookie present+valid **and**
-  header-or-form token to `hmac.compare_digest`-match it (`csrf.py:205-218`);
-  mismatch is a generic opaque 403 (`csrf.py:233-244`) — no oracle. **No
+  header-or-form token to `hmac.compare_digest`-match it (`csrf.py:255-270`);
+  mismatch is a generic opaque 403 (`_forbid`, `csrf.py:286`) — no oracle. **No
   exemption list** — module docstring and inline comments
   (`routes/register_import.py:46`, `routes/library.py:340`) state nothing is
   exempted; fail-closed by design. Non-form JS (WebAuthn) reads a
   `<meta name="csrf-token">` (`templates/base.html:7`) into an
   `X-CSRF-Token` header instead of a hidden form field.
+- **DoS ceiling (A4, 2026-08-09)**: this middleware buffers the FULL body of
+  every unsafe-method request before the route runs (to replay it for
+  downstream form parsing — `_CachedRequest.wrapped_receive`). That buffer is
+  now size-capped: `_read_body_capped` (`csrf.py:69-95`) reads via
+  `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
+  `config.py:368`) and returns a 413 before the whole body is buffered
+  (`csrf.py:221-238`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
+  `routes/deps.py:22`) + multipart framing so legitimate imports pass; a test
+  pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
+  unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
+  403. Not attacker-authenticated; a single-machine availability hardening.
 
 ## 5. B4/B5 — Step-up & elevated-action freshness
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
-  (`routes/deps.py:214-235`) 401s if unauthenticated, else requires
+  (`routes/deps.py:230-251`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
-  600s, `config.py:329`; per-category admin override,
-  `services/security_settings.py:141-160`). 37 real call sites
-  (re-derived 2026-08-05; the first sweep said "~40 / 16 exports" by counting
-  a docstring example at `routes/deps.py:218` and a prose mention at
+  600s, `config.py:356`; per-category admin override,
+  `services/security_settings.py:141-160`). **43** real call sites (37 as of
+  the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
+  said "~40 / 16 exports" by counting a docstring example at
+  `routes/deps.py:234` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
-  destructive deletes, 8 admin/user-mgmt (7 in
+  destructive deletes, **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,253,373,464,507,554`, 1 in
-  `routes/settings.py:162`), 6 credential changes
+  `routes/settings.py:162`, and the **6 B2 additions** — `POST /organization`,
+  `POST /fx-rates`, and the four admin-only SME-directory mutations
+  new/edit/archive/unarchive), 6 credential changes
   (`routes/mfa.py:89,129,183,221,248,301`). Re-verification
   (`routes/step_up.py:87-239`) has its own throttle and stamps
-  `reauthenticated_at`; login itself counts as a re-auth (`auth.py:238`).
+  `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
+  `auth.py:234`).
+- **B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
+  that feed org-wide FAIR/financial computation (industry, risk_appetite,
+  security_maturity, preferred_currency; the FX rates behind every ALE), so a
+  stale admin session could previously change them freely while being bounced
+  from `/settings/security`. All six are now `StepUpCategory.ADMIN`-gated. The
+  count-regression tripwire (`tests/unit/test_step_up_call_sites.py`, now 43)
+  is joined by a COMPLETENESS guard (`tests/unit/test_step_up_completeness.py`):
+  it introspects the live route table and fails if any admin-only
+  state-changing route is neither step-up-gated nor on an explicit exemption
+  allowlist (the routine reference-data / multi-step-import surface) — so a NEW
+  admin route can no longer ship ungated unnoticed, the exact hole a count
+  cannot see.
 
 ## 6. B6 — RBAC (role tier)
 
 - **E**: `UserRole` = `ADMIN | ANALYST | REVIEWER | VIEWER`
-  (`models/enums.py:8-12`). `require_role(*roles)` (`routes/deps.py:160-174`)
-  403s outside the allowlist; gating is 100% per-route (no
+  (`models/enums.py:8-12`). `require_role(*roles)` (`routes/deps.py:163-190`)
+  403s outside the allowlist; the 403 path now also emits a structured
+  `rbac_denied` WARNING (actor UUID, role, required roles, path —
+  `deps.py:180-186`) so privilege-probing leaves a trace (C1, 2026-08-09; a
+  WARNING not a DB `AuditLog` row, to keep it bounded by log rotation rather
+  than an attacker-driven write amplifier). Gating is 100% per-route (no
   `APIRouter(dependencies=...)` blanket gate found) — every
   `POST/PUT/PATCH/DELETE` handler across `routes/*.py` was diffed against
   presence of an auth dependency; the only unguarded hits are the
@@ -270,10 +301,23 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — every file under `src/idraa/templates/` is `.html` (zero
   non-html templates exist), so autoescape covers 100% of rendered output,
-  not a subset. `tojson`-in-single-quoted-attribute and
-  verbatim-echo-then-autoescape paths were independently fuzzed with
-  breakout payloads during the PR #148 review (quote, angle-bracket, and
-  attribute-injection strings) — all neutralized.
+  not a subset. **Alpine `x-data` is the sharp edge**: an attribute the browser
+  HTML-decodes before Alpine evaluates it as a JS expression, so autoescape is
+  no defense there — the value must be JSON-encoded via `| tojson` inside a
+  single-quoted attribute. The money-field / loss-readout `x-data` sites do
+  this and were fuzzed with breakout payloads (quote / angle-bracket /
+  attribute-injection) during the PR #148 review — neutralized. **Correction
+  (B3, 2026-08-09)**: the earlier "all `x-data` neutralized" reading was WRONG —
+  three distribution selectors in `scenarios/form.html` (tef/pl/sl) interpolated
+  the reflected POST value RAW into a single-quoted `x-data` string with no
+  `| tojson`. Arbitrary JS executed against the app's own vendored Alpine in a
+  headless-Chromium PoC (self-XSS: `form_raw` reflects only the requester's own
+  submission, and CSRF blocks cross-site forging, so not remotely weaponizable
+  today — but any future feature reflecting ANOTHER user's data through this
+  pattern makes it cross-user). Now fixed: all three adopt the single-quoted +
+  `| tojson` idiom, `data_table.html`'s `page_size` x-data gets a defensive
+  `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
+  fails if any dist selector regresses to the raw shape.
 - **Template injection (SSTI)** — the distinct, more severe class: attacker
   text becoming the template *source* (`Environment.from_string()`,
   `Template(user_text)`, `render_template_string`), not just a substituted
@@ -413,8 +457,9 @@ new export format must re-implement, not assume is "someone else's problem."
 `AuditLog` (`models/audit_log.py:36-64`, indexed on `(org, timestamp)` and
 `(entity_type, entity_id)`) is written via `AuditWriter.log`
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
-datetime/Enum. Confirmed call sites at login/lockout
-(`routes/auth.py:160-168`), role change (dict built at `routes/users.py:314`,
+datetime/Enum. Confirmed call sites at login success (`auth.py:259`), failed
+login and lockout (`auth.py:185` `user.login_failed`, `auth.py:195`
+`user.login_locked_out`), role change (dict built at `routes/users.py:314`,
 logged at `:359` under the generic `"update"` action — not a role-specific
 action string), and the
 full run lifecycle — create (`services/runs.py:328`), cancel (`:382`),
@@ -426,6 +471,29 @@ own rate-limit-then-audit choke point
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known
 gap, not a finding of an actual miss.
+
+**Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
+- **C2** — every failed password attempt by a known, unlocked user now writes
+  a `user.login_failed` row (`auth.py:185`), not only the attempt that trips
+  the lockout. A low-and-slow campaign staying under the threshold (or running
+  with lockout disabled, `auth_max_failed_logins=0`) is no longer invisible.
+  Mirrors the `/login/mfa` path's per-attempt audit. **Row-count bounds, in
+  order:** the per-account lockout when enabled (`auth_max_failed_logins`,
+  default 5); the per-source IP throttle when enabled
+  (`auth_ip_max_failed_logins`, default 20); and — independent of BOTH, so it
+  still holds on a self-hosted deploy that disables them — a hard per-account
+  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `auth.py:98,180`). The ceiling matters
+  because the first N misses ARE the detection signal; past N, more rows add
+  only disk cost. Unknown emails still write nothing (no user to attribute to;
+  no enumeration oracle).
+- **C1** — RBAC denials now emit a `rbac_denied` WARNING at the `require_role`
+  chokepoint (§6, `deps.py:180-186`). Deliberately a log line, not an
+  `AuditLog` row: an unauthenticated/cross-org prober must not be able to drive
+  unbounded DB writes (that would compound §10 / the disk-guard). The
+  complementary gap — a request-level access log carrying user identity on
+  cross-org `*_for_org` **404s** — is NOT closed here (those 404s are raised at
+  many scattered call sites with no shared user-carrying chokepoint); it is
+  tracked as a follow-up (§12).
 
 ## 12. Known gaps / follow-ups
 
@@ -459,6 +527,12 @@ watching:
    by any per-PR review. Nothing automated enumerates the middleware stack
    against this doc's boundary list, so a future middleware could go
    undocumented the same way. §13's cadence is the only control.
+7. **Cross-org 404 access logging (C1 partial, 2026-08-09).** RBAC 403s now log
+   (§6/§11), but a cross-org `*_for_org` **404** — the IDOR-probe signal — still
+   leaves no request-level trace carrying user identity. A proper fix is a
+   request-access-log middleware (bounded, authenticated-only, to avoid
+   amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
+   because it changes the middleware stack. Tracked as a follow-up.
 
 ## 13. Keeping this document current
 

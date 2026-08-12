@@ -238,7 +238,12 @@
     {% if page_size and page_size_key %}
     <div class="hidden md:flex justify-end items-center gap-4 mt-2 px-1 text-meta text-ink-2"
          x-data="{
-           size: parseInt('{{ page_size }}', 10),
+           {# B3 defensive: `| int` forces a bare integer into the JS context so
+              this x-data can never carry a breakout even if page_size stopped
+              being Query(ge=1,le=100)-typed. page_size_key is a fixed macro
+              literal at every call site (never request-derived), so it needs
+              no filter. #}
+           size: parseInt('{{ page_size | int }}', 10),
            key: 'idraa.pageSize.{{ page_size_key }}',
            init() {
              try {

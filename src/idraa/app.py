@@ -1127,6 +1127,8 @@ def create_app() -> FastAPI:
         # Only set the Secure cookie flag in prod — dev/test use http://
         # test clients that would otherwise silently drop the cookie.
         secure_cookie=(settings.environment == "prod"),
+        # A4: bound the body this middleware buffers for double-submit replay.
+        max_body_bytes=settings.max_request_body_bytes,
     )
     app.add_middleware(SecurityHeadersMiddleware, enable_hsts=(settings.environment == "prod"))
 

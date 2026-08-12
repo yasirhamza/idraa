@@ -428,7 +428,7 @@
     {%- endmacro -%}
 
     {# TEF — frequency. #}
-    <div x-data="{ dist: '{{ form.tef_dist or "pert" }}' }" class="space-y-3">
+    <div x-data='{ dist: {{ (form.tef_dist or "pert") | tojson }} }' class="space-y-3">
       {{ dist_select("tef", form.tef_dist) }}
       {% if form.tef_from_mixture %}{{ mixture_replace_warning(form.tef_from_mixture, "threat event frequency") }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -476,7 +476,7 @@
     {%- endmacro -%}
 
     {# Primary loss — dollar magnitude. #}
-    <div x-data="{ dist: '{{ form.pl_dist or "pert" }}' }" class="space-y-3">
+    <div x-data='{ dist: {{ (form.pl_dist or "pert") | tojson }} }' class="space-y-3">
       {{ dist_select("pl", form.pl_dist) }}
       {% if form.pl_from_mixture %}{{ mixture_replace_warning(form.pl_from_mixture, "primary loss estimate") }}{% endif %}
       {% if pin_panels and pin_panels.pl.pinned %}{{ pinned_field_advisory("primary loss estimate") }}{% endif %}
@@ -507,7 +507,7 @@
     </div>
 
     {# Secondary loss — optional. #}
-    <div x-data="{ dist: '{{ form.sl_dist or "pert" }}' }" class="space-y-3">
+    <div x-data='{ dist: {{ (form.sl_dist or "pert") | tojson }} }' class="space-y-3">
       {{ dist_select("sl", form.sl_dist) }}
       {% if form.sl_from_mixture %}{{ mixture_replace_warning(form.sl_from_mixture, "secondary loss estimate") }}{% endif %}
       {% if pin_panels and pin_panels.sl.pinned %}{{ pinned_field_advisory("secondary loss estimate") }}{% endif %}
