@@ -10,6 +10,7 @@
 - The DAST target is a **small, ephemeral instance CI spins up internally** — `uvicorn` bound to `127.0.0.1` inside the job runner, backed by a **throwaway SQLite DB** migrated + seeded fresh, and torn down at job end.
 - Phase-2 dynamic scanning (Nuclei, deferred) follows the same rule: **ephemeral CI instances only, never prod/Fly.**
 - The seed admin exists only in that throwaway DB (non-routable `@ci.local` email, runtime-generated password). No real credential is committed or used.
+- **This is enforced in code, not just intent.** the `run.py` orchestrator (§5.2) constructs its *own* temp `sqlite+aiosqlite` `DATABASE_URL`, passes `ENVIRONMENT=test` + that URL + `PYTHONHASHSEED=0` **explicitly** into every subprocess env (an override — never inheriting an ambient `DATABASE_URL`), and **asserts** the resolved URL is a local temp `sqlite` path and the target host is `127.0.0.1` **before** it seeds or serves. A misconfigured local run aborts rather than touching anything real.
 
 ## 1. Goal
 
@@ -97,7 +98,7 @@ idraa is server-rendered HTML, so **`not_a_server_error` is the SOLE gating chec
 
 - **Fixed-corpus, not evolving fuzzing.** `--generation-deterministic` + `--seed 0` + `--generation-database none` make this a *fixed* set of `MAX_EXAMPLES` deterministically-generated cases per operation that changes only when the schema changes. A bug in an unexplored input region passes and keeps passing until the schema changes — an accepted Phase-1 tradeoff. **`MAX_EXAMPLES` is a CI-budget floor** and should be set as high as the ~5-min budget allows (it is the real coverage lever). Phase-2 scheduled Nuclei recovers breadth.
 - **CSRF-overwrite** (§5.2 hook): state-changing requests reach handlers only because a valid `_csrf` is injected — the correct way to fuzz handler logic (CSRF is origin-verification, not input validation). The `_csrf` field is not fuzzed here; its class is covered by the D1 fix + regression (§5.1).
-- **Excluded surface = named blind spot.** `EXCLUDED_PATH_REGEX` drops the Monte-Carlo/report/analysis routes (CI budget) **and destructive verbs** (a fuzzed `DELETE`/purge could nuke the seed session/org and poison the run — the seed is step-up-fresh for the run window). This is the resource-heavy surface most relevant to the threat-model's resource-exhaustion boundary; the README names it as a Phase-1 blind spot covered later by scheduled Nuclei.
+- **Excluded surface = named blind spot.** `EXCLUDED_PATH_REGEX` drops (a) the Monte-Carlo/report/analysis routes (CI budget), and (b) the **session/account-mutating surface** — `^/(account|users|mfa|settings|auth)(/|$)` plus the `/…/delete|deactivate|purge-samples` and `/logout|/setup` routes. This matters because idraa is a **form-POST** app: destructive/session-killing operations are almost all `POST` (not the `DELETE` verb), so excluding by path is required — a fuzzed hit that logs out, rotates the seed admin, or flips `effective_mfa_policy` would not `500` (so the gate stays correctly green) but would **silently** kill the run session and collapse coverage. Because a mid-run session death is silent, `run.py` adds a **post-fuzz session-liveness re-check** (repeat the admin-only GET after the run; a dead session fails the job as a self-inflicted coverage hole). This excluded surface (esp. the resource-heavy routes, relevant to the threat-model's resource-exhaustion boundary) is a named Phase-1 blind spot covered later by scheduled Nuclei; the README lists it.
 
 ## 8. Failure semantics (advisory-first)
 
@@ -110,13 +111,15 @@ The `dast` job runs on every PR and shows a visible pass/fail check, but is **NO
 ## 10. Testing / verification
 
 - D1 regression tests (§5.1, three inputs).
-- A non-vacuous pre-fuzz smoke in `run.py`: assert `/healthz` up, the login session reaches an admin-only GET (`/organization` → 200, not a redirect), the extracted schema has > 50 operations, **and one known POST reaches its handler through the injection path (non-403)** — so a silently-empty or auth-broken run fails loudly.
+- **Pre-fuzz smoke** in `run.py` (fail loudly): `/healthz` up; the login session reaches an admin-only GET (`/organization` → 200, not a redirect); the *extracted* schema (the same artifact fed to `schemathesis run`) has > 50 operations; and one known **non-step-up** admin POST reaches its handler when `_csrf` is injected **manually** (a `400`/`422`, not `403`). NB the smoke is an httpx call, so it proves the CSRF *mechanism*, not that the Schemathesis `before_call` *hook* fires — hence the canary below.
+- **Post-run canary** (closes the pivot's main false-green path): parse the JUnit report and assert **≥ 1 state-changing operation returned a non-`403` status**. If the `SCHEMATHESIS_HOOKS` hook silently fails to fire (wrong module path, 4.24 API drift, env not propagated to the subprocess), every POST is `403`, `not_a_server_error` passes on all of them, and the whole state-changing surface is silently unexercised — the canary turns that into a loud failure.
+- **Server lifecycle:** on a `/healthz`-timeout or non-zero uvicorn exit, capture and surface uvicorn stdout/stderr (a bare `/healthz` is DB-free and would 200 even on a mis-migrated server — the login smoke and the captured stderr are the real diagnostics). Teardown is **terminate → wait → kill-after-timeout** in a `finally`, guarded so a login/schema exception cannot skip it.
 - Demonstrate the gate works: reverting *either* D1 guard makes `schemathesis run` report a `not_a_server_error` failure (do not commit the revert).
 - Two separate-process determinism runs; confirm identical result within the CI budget.
 
 ## 11. Review ceremony
 
-4-reviewer **plan-gate** applied (this revision). For the **final PR-gate**, a **3-reviewer** pass — architect / security-auditor / spec-compliance — is appropriate (no FAIR-math/statistical surface remains once the approach is settled; methodology's plan-gate findings are folded in), unless implementation surfaces a statistical concern. Iterate to zero; PR, stop for owner sign-off before merge.
+4-reviewer **plan-gate** applied (this revision, iterated across two rounds to 0 blocker/important). The **final PR-gate is also 4-reviewer** (architect / security-auditor / spec-compliance / **methodology**), iterated to zero — this is a cross-cutting-security-infra milestone, and per CLAUDE.md the 4-reviewer floor applies at BOTH gates and cannot be waived by this spec (PR #306 precedent: a lighter final review missed a methodology blocker). Methodology's surface is small here, but the floor is non-negotiable. Then PR, stop for owner sign-off before merge.
 
 ## 12. Risks / open questions
 
