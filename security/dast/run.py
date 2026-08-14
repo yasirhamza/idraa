@@ -377,7 +377,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[dast] schemathesis exited {schemathesis_rc}", flush=True)
 
             print("[dast] post-run canary check (HAR)", flush=True)
-            canary_count = _parse_har_canary(har_path)
+            try:
+                canary_count = _parse_har_canary(har_path)
+            except (OSError, json.JSONDecodeError) as exc:
+                # If schemathesis died before writing (or mid-write) the HAR,
+                # a raw traceback here would mask the real signal (the
+                # schemathesis exit code above) behind a confusing crash.
+                # Fail closed the same way a canary_count < 1 does, but with
+                # a clean one-line diagnostic instead of a traceback.
+                print(f"[dast] CANARY FAILED: could not read the HAR ({exc})", file=sys.stderr)
+                return 1
             if canary_count < 1:
                 print(
                     "[dast] CANARY FAILED: no non-403 state-changing (POST/PUT/PATCH) "
@@ -405,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
             print("[dast] session-liveness OK", flush=True)
 
-            return schemathesis_rc if schemathesis_rc != 0 else 0
+            return schemathesis_rc
         finally:
             proc.terminate()
             try:

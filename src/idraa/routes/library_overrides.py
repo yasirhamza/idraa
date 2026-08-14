@@ -201,10 +201,10 @@ async def create_override(
         )
     except LibraryEntryNotFoundError:
         # DAST T5 finding (Class B): a syntactically-valid but nonexistent
-        # entry_id previously propagated unhandled -> 500. Mirror the
-        # IDORError handler below: missing -> 404, never 403 or a distinct
-        # status, so a caller can't distinguish "not found" from "not yours"
-        # (no existence oracle).
+        # entry_id previously propagated unhandled -> 500. Same 404-no-oracle
+        # shape as update_override's IDORError handler (below in this file):
+        # missing -> 404, never 403 or a distinct status, so a caller can't
+        # distinguish "not found" from "not yours" (no existence oracle).
         await db.rollback()
         raise HTTPException(status_code=404) from None
     except FAIRCAMValidationError as exc:
