@@ -168,7 +168,15 @@ def _login(client: httpx.Client, password: str) -> tuple[str, str] | None:
 def _check_get_ok(client: httpx.Client, path: str) -> bool:
     resp = client.get(path)
     if resp.status_code != 200:
-        print(f"[dast] GET {path} returned {resp.status_code}, expected 200", file=sys.stderr)
+        # Print the redirect target on a 3xx — it pinpoints WHY an authenticated
+        # GET didn't reach its handler (e.g. /login = no valid session,
+        # /account/security = MFA-enrollment guard) without another round-trip.
+        location = resp.headers.get("location", "")
+        suffix = f" -> {location}" if location else ""
+        print(
+            f"[dast] GET {path} returned {resp.status_code}{suffix}, expected 200",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -313,11 +321,13 @@ def main(argv: list[str] | None = None) -> int:
                 print("[dast] logging in as seeded admin", flush=True)
                 creds = _login(client, password)
                 if creds is None:
+                    _print_log(uvicorn_log)  # login/session failure — server log has the why
                     return 1
                 session_cookie, csrf = creds
 
                 print("[dast] pre-fuzz smoke checks", flush=True)
                 if not _check_get_ok(client, "/organization"):
+                    _print_log(uvicorn_log)  # e.g. SessionMiddleware "rejected session cookie"
                     return 1
                 if n_ops <= 50:
                     print(
@@ -326,6 +336,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     return 1
                 if not _smoke_admin_post_reaches_handler(client, csrf):
+                    _print_log(uvicorn_log)
                     return 1
 
             print(
