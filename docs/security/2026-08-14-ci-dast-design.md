@@ -1,123 +1,125 @@
-# CI DAST — Phase 1 design (Schemathesis per-PR)
+# CI DAST — Phase 1 design (Schemathesis per-PR, spun-up ephemeral instance)
 
-- **Date:** 2026-08-14
-- **Status:** design, pending plan-gate
-- **Author:** security-tooling initiative (follows the 2026-08-13 DAST campaign)
-- **Related:** draft advisory GHSA-46jj-823j-mjj9 (findings), `docs/security/threat-model.md`, local baseline store `~/idraa-security-scans/2026-08-13-baseline/`
+- **Date:** 2026-08-14 (rev 2 — applies 4-reviewer plan-gate findings + the spin-up pivot)
+- **Status:** design, re-gating after plan-gate fixes
+- **Related:** draft advisory GHSA-46jj-823j-mjj9 (findings), `docs/security/threat-model.md`, local baseline `~/idraa-security-scans/2026-08-13-baseline/`
+
+## 0. Non-goals / safety (read first)
+
+- **This gate NEVER targets a deployed environment.** It does not scan `idraa.fly.dev`, any Fly instance, or any shared/staging host. Ever.
+- The DAST target is a **small, ephemeral instance CI spins up internally** — `uvicorn` bound to `127.0.0.1` inside the job runner, backed by a **throwaway SQLite DB** migrated + seeded fresh, and torn down at job end.
+- Phase-2 dynamic scanning (Nuclei, deferred) follows the same rule: **ephemeral CI instances only, never prod/Fly.**
+- The seed admin exists only in that throwaway DB (non-routable `@ci.local` email, runtime-generated password). No real credential is committed or used.
 
 ## 1. Goal
 
-Add a **dynamic** security layer to CI. Today CI has SAST (CodeQL, ruff-security, zizmor), dependency review, and secret scanning, but no DAST — so a bug like **D1** (an unhandled `500` in the CSRF middleware on a non-ASCII token, found by Wapiti) ships uncaught. Phase 1 adds a **deterministic, per-PR API-fuzzing gate** that would have caught D1 on the PR that introduced it.
+Add a **dynamic** security layer to CI. Today CI has SAST (CodeQL, ruff-security, zizmor), dependency review, and secret scanning, but no DAST — so a class of bug like **D1** (an unhandled `500` in the CSRF middleware on a non-ASCII token, found by Wapiti) can ship uncaught. Phase 1 adds a **per-PR API-fuzzing job** that fails on any **handler `500`** across the authenticated OpenAPI surface.
+
+> **Scope of the "catch."** The fuzzer catches the *class* of unhandled-exception→`500` in **handlers reachable by authenticated fuzzing**. It does **not** catch D1 itself: D1 lives in CSRF *middleware* on the `_csrf` field, which is not a route parameter and which this suite deliberately supplies with a valid token. **D1 is closed in this PR by a dedicated fix + regression test (§5.1), not by the fuzzer.** The gate is green from day one because that fix lands alongside it.
 
 ## 2. Scope
 
-**In scope (Phase 1, this cycle):**
-- A Schemathesis-based API fuzzing suite run **in-process (ASGI)**, authenticated as a seeded admin with valid CSRF, over the app's own OpenAPI surface.
-- A new `dast` CI job wired into `ci-success` (so a regression blocks merge).
-- A committed, reusable `security/dast/` harness (schema extraction + config + README).
-- The **D1 fix** bundled in the same PR, so the new gate is green from day one.
+**In scope (Phase 1):**
+- A `schemathesis run` fuzzing pass over the app's OpenAPI surface against a **CI-spun-up ephemeral uvicorn instance**, authenticated as a seeded admin, with a hook that injects a valid `_csrf` into state-changing bodies.
+- A new **advisory-first** `dast` CI job (visible, NOT yet in `ci-success` — see §8).
+- A committed, reusable `security/dast/` harness (schema extractor, seed, auth/CSRF hook, config, orchestrator, README).
+- The **D1 fix** (both `compare_digest` sites) bundled so the gate is green from day one.
+- `docs/security/threat-model.md` §4 updated for the CSRF-middleware change.
 
-**Out of scope (Phase 2+, tracked, not built here):**
-- Scheduled/nightly **Nuclei** DAST against a spun-up instance.
-- **Baseline-diff gating** (a committed baseline + "fail only on new findings"). Phase 1 is deterministic pass/fail and needs no baseline.
-- Server (uvicorn) lifecycle in CI.
-- ZAP/Dastardly deep release scans.
+**Out of scope (Phase 2+, tracked):** scheduled Nuclei; baseline-diff gating; promoting `dast` into `ci-success` (a follow-up PR after burn-in); ZAP/Dastardly deep scans.
 
-## 3. Decisions (locked at brainstorm)
+## 3. Decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Phase-1 deliverable | Schemathesis per-PR + committed harness | Highest value/PR, deterministic, reuses the pytest infra |
-| Integration style | In-process ASGI via pytest (not CLI-against-uvicorn) | Deterministic, reuses test DB/seed, locally runnable, no server orchestration |
-| Auth | Authenticated admin + CSRF injection hooks | Covers the full authenticated surface (~139 paths), not just pre-auth |
-| D1 | Fix bundled in this cycle | Gate green from day 1; closes a confirmed unauth 500 |
+| Phase-1 deliverable | Schemathesis per-PR + committed harness | Highest value/PR; deterministic; reuses CI infra |
+| **Target** | **CI spins up a small ephemeral uvicorn instance** (127.0.0.1, throwaway DB) | Owner steer; and it dissolves the in-process coupling hazards the plan-gate found (schema-load 307, cached-singleton DB, cross-event-loop) — the server owns its own settings/engine/loop |
+| Auth | Authenticated admin + `_csrf`-injecting hook | Covers the authenticated surface, not just pre-auth |
+| D1 | Fixed (both sites) in this cycle | Gate green from day 1; closes a confirmed unauth 500 |
+| **Gate wiring** | **Advisory-first**, promote after green burn-in | A flaky fuzzing job in `ci-success` would wedge all merges (the team already removed Playwright e2e for exactly this) |
 
 ## 4. Architecture
 
-A new **`dast` CI job** runs a Schemathesis suite (`tests/dast/`) that:
-1. builds the app in-process (`create_app()`, test env, temp SQLite),
-2. seeds an MFA-enrolled admin and logs in (captures `idraa_session` + `csrf_token`),
-3. loads the OpenAPI schema from the app (`/api/openapi.json`, served in non-prod),
-4. for each in-scope operation, generates fuzzed cases, **injects the session cookie and overwrites `_csrf` with the valid token** so state-changing requests reach handlers, and
-5. asserts **no server errors** (and status/response conformance where applicable).
+The `dast` CI job (advisory-visible) runs an orchestrator that:
+1. migrates a throwaway SQLite DB (`alembic upgrade head`),
+2. seeds one org + one MFA-enrolled admin (runtime-generated password),
+3. starts `uvicorn idraa.app:app --host 127.0.0.1` in the background (test env),
+4. waits for `/healthz`,
+5. logs in (httpx) → captures `idraa_session` + `csrf_token`,
+6. runs `schemathesis run <extracted-schema.json> --url http://127.0.0.1:8000 -c not_a_server_error` with the session cookie header and `SCHEMATHESIS_HOOKS=security.dast.hooks` (injects a valid `_csrf` into state-changing form bodies),
+7. tears down uvicorn; emits a JUnit report.
 
-Any check failure fails the job → `ci-success` fails → merge blocked. The reusable, non-secret pieces live committed under `security/dast/`; the runnable suite lives under `tests/dast/`.
+The schema is **extracted offline** from `app.openapi()` (no HTTP, no `/setup` redirect) so schema source and call target are decoupled. The same orchestration runs locally via `python -m idraa.tasks dast`.
 
 ```
-PR ──> CI ──> dast job ──> pytest tests/dast/
-                              │  app = create_app() [test env, temp DB]
-                              │  seed admin (mfa_enrolled_at) + login
-                              │  schema = from_asgi("/api/openapi.json", app)
-                              │  per op: fuzz params, inject session cookie + valid _csrf
-                              └─ check: not_a_server_error (+ status/response conformance)
-                                   any failure → job red → ci-success red → merge blocked
+dast job (advisory) ─ alembic upgrade head (temp sqlite)
+                    ─ seed org + admin (mfa_enrolled_at, runtime pw)
+                    ─ uvicorn 127.0.0.1:8000 &  ── wait /healthz
+                    ─ login (httpx) → idraa_session + csrf_token
+                    ─ schemathesis run extracted-schema.json --url 127.0.0.1
+                        -c not_a_server_error  --exclude-path-regex <heavy/destructive>
+                        -H "Cookie: idraa_session=…; csrf_token=…"
+                        SCHEMATHESIS_HOOKS=security.dast.hooks  (inject valid _csrf)
+                    ─ kill uvicorn ; JUnit report
+                    (RED = visible failed check; does NOT block merge yet)
 ```
 
 ## 5. Components
 
-### 5.1 D1 fix — `src/idraa/middleware/csrf.py`
-Before `hmac.compare_digest(submitted, inbound)` (currently ~line 276), reject a non-ASCII submitted token as a `403`:
-```python
-if not submitted.isascii():
-    return self._forbid("token not ascii", request)
-```
-A valid token is always ASCII (hex + `.`), so non-ASCII can only be a malformed/forged token. This turns the current unhandled `TypeError → 500` into a clean `403`. Add a regression test (`tests/unit/test_csrf_*` or `tests/integration/test_csrf_*`) asserting a non-ASCII `_csrf` form field and `X-CSRF-Token` header both return `403`, not `500`.
+### 5.1 D1 fix — `src/idraa/middleware/csrf.py` (BOTH compare sites)
+The plan-gate found the fix must cover **two** `hmac.compare_digest` calls, since a non-ASCII str raises `TypeError`:
+- **Submitted token** (`dispatch`, ~`:276`): add `if not submitted.isascii(): return self._forbid("token not ascii", request)` before the compare. Covers the form `_csrf` and `X-CSRF-Token` header (both converge through `_extract_submitted_token`).
+- **Inbound cookie** (`verify_csrf_token`, `:147`): `sig_hex` is never ASCII/hex-validated before `hmac.compare_digest(expected, sig_hex)` — and this runs on the cookie for **every request incl. safe GETs**, so `GET /anything` with `Cookie: csrf_token=<hex>.<non-ASCII>` is an unauth `500` on all endpoints. Add `if not sig_hex.isascii(): return False` before the compare (a non-ASCII sig can never be a valid hexdigest; not a timing oracle on the secret).
+- **Regression tests** for all three inputs: form `_csrf`, `X-CSRF-Token` header, and the cookie path — each asserts `403`/rejection, not `500`.
 
-### 5.2 `security/dast/` (committed harness — no secrets, no findings)
-- `extract_openapi.py` — dumps `app.openapi()` with an injected `servers` entry and heavy/destructive paths filtered, for reuse (Phase-1 pytest reads the schema in-process; the extractor is the reusable artifact Phase-2 Nuclei will consume via `-im openapi`).
-- `config.py` (or `constants.py`) — the **single source of truth** for `EXCLUDED_OPERATIONS` (path/method patterns) and the enabled checks, imported by the pytest suite so scope isn't duplicated.
-- `README.md` — what this is, how the per-PR gate works, how to run it locally, the Phase-2 Nuclei/baseline plan, and a pointer to the local baseline store. Explicitly documents the coverage caveat (below).
+### 5.2 `security/dast/` (committed harness — no secrets)
+- `config.py` — single source of truth: `EXCLUDED_PATH_REGEX` (heavy + **destructive verbs**, see §7), `MAX_EXAMPLES`, `SEED_EMAIL`, `SEED_ORG`. The seed **password is generated at runtime** (`secrets.token_urlsafe`), never committed — sidesteps gitleaks/ruff-S.
+- `extract_openapi.py` — `build_schema(base_url) -> dict` from `app.openapi()` (servers-injected, excluded paths filtered), CLI-dumpable. Reused by Phase-2 Nuclei.
+- `seed.py` — create org + MFA-enrolled admin into the env DB; return/emit the generated password to the orchestrator (never to stdout logs).
+- `hooks.py` — a Schemathesis `before_call` hook that injects the valid `_csrf` into state-changing form bodies (the session cookie is a static `-H` header). Loaded via `SCHEMATHESIS_HOOKS`.
+- `run.py` — the orchestrator (migrate → seed → start uvicorn → wait healthz → login → `schemathesis run` → teardown), used by both CI and the tasks runner.
+- `README.md` — purpose, local run, the checks nuance, the coverage/false-negative honesty (§7), the excluded surface as a named Phase-1 blind spot, and the Phase-2 plan.
 
-### 5.3 `tests/dast/test_api_fuzz.py` (the Schemathesis suite)
-- Module-level: `app = create_app()` (test env), `schema = schemathesis.openapi.from_asgi("/api/openapi.json", app)`.
-- Session-scoped fixture: create the temp DB schema, seed one org + one **MFA-enrolled admin** (`mfa_enrolled_at` set so the enrollment guard passes), log in (capture `idraa_session` + `csrf_token`).
-- `@schema.parametrize()` test with a **before-call hook** that, for every request: attaches the session cookie, and for state-changing methods **sets `_csrf` (form field) and `X-CSRF-Token` (header) to the valid token** — so the fuzzer explores business params instead of bouncing off CSRF.
-- `case.call_and_validate(checks=(not_a_server_error, status_code_conformance))`.
-- Operation filtering: exclude `EXCLUDED_OPERATIONS`.
-- **Determinism:** a pinned Hypothesis profile — fixed seed / `derandomize=True`, `database=None` (no example DB), a per-operation `max_examples` cap, and a `deadline`. Combined with the repo's pinned `PYTHONHASHSEED`, the gate is reproducible run-to-run.
-- **Non-vacuous meta-check:** a separate assertion that the schema loaded (>0 operations), the login actually authenticated (a known admin-only GET returns 200, not a login redirect), and a known-good operation passes — so a broken harness fails loudly rather than passing empty.
+### 5.3 CI — `.github/workflows/ci.yml`
+A new **advisory** `dast` job (`ubuntu-latest`) mirroring the existing jobs' full step blocks — `actions/checkout` **with `persist-credentials: false`**, `astral-sh/setup-uv` **with the pinned `env.UV_VERSION` + cache**, `uv sync --extra dev --frozen` — then `PYTHONHASHSEED=0 python -m idraa.tasks dast`. **Not** added to `ci-success` `needs` (advisory-first). **Not** in the fast local gate.
 
-### 5.4 CI — `.github/workflows/ci.yml`
-- New `dast` job (`ubuntu-latest`): checkout → `uv sync` (dev extras, frozen) → run the suite (`uv run pytest tests/dast/`). Time-boxed.
-- Add `dast` to the `ci-success` job's `needs`.
-- **Not** added to the fast local pre-push gate (`scripts/run_local_gate.py`) — it's CI-only + on-demand, like e2e, to keep the local gate fast.
+### 5.4 Task runner — `python -m idraa.tasks dast`
+Calls `security.dast.run` (Python-authoritative; identical on all platforms).
 
-### 5.5 Task runner — `python -m idraa.tasks dast`
-A thin wrapper that runs `pytest tests/dast/` (Python-authoritative task-runner rule), so it's runnable identically on Windows/Linux/macOS.
+### 5.5 Dependency
+`schemathesis~=4.24` pinned in **dev** extras; lockfile updated.
 
-### 5.6 Dependency
-`schemathesis` pinned in the dev extras (`pyproject.toml`), lockfile updated. The exact hook API is version-specific; the implementation pins a version and adapts the hooks to it.
+## 6. Checks — what gates
 
-## 6. Checks — what actually gates (important nuance)
+idraa is server-rendered HTML, so **`not_a_server_error` is the SOLE gating check** (maps `5xx` → defect cleanly). `status_code_conformance` is **NOT** gated (FastAPI auto-declares only `200`/`422`, but the app legitimately returns `303`/`403`/`404`/`413`/`429` — gating on it would false-RED); it may be run **report-only**. `response_schema_conformance` is not used (HTML bodies).
 
-idraa is a **server-rendered HTML app**, so most routes return `text/html`, not schema'd JSON. Therefore:
-- **Primary check: `not_a_server_error`** — catches the D1 class (unhandled exceptions → 500). This is the load-bearing gate.
-- **Secondary: `status_code_conformance`** — flags responses whose status isn't declared in the operation's OpenAPI responses (catches undocumented error paths).
-- **`response_schema_conformance`** has limited applicability (HTML bodies aren't schema-validated) and is **not** relied on as a primary gate; enabled only where a JSON response schema exists.
+## 7. Coverage — honest characterization
 
-The README documents this so no one mistakes "few conformance checks" for "weak coverage" — the 500-detection over the authenticated fuzzing surface is the value.
+- **Fixed-corpus, not evolving fuzzing.** `--generation-deterministic` + `--seed 0` + `--generation-database none` make this a *fixed* set of `MAX_EXAMPLES` deterministically-generated cases per operation that changes only when the schema changes. A bug in an unexplored input region passes and keeps passing until the schema changes — an accepted Phase-1 tradeoff. **`MAX_EXAMPLES` is a CI-budget floor** and should be set as high as the ~5-min budget allows (it is the real coverage lever). Phase-2 scheduled Nuclei recovers breadth.
+- **CSRF-overwrite** (§5.2 hook): state-changing requests reach handlers only because a valid `_csrf` is injected — the correct way to fuzz handler logic (CSRF is origin-verification, not input validation). The `_csrf` field is not fuzzed here; its class is covered by the D1 fix + regression (§5.1).
+- **Excluded surface = named blind spot.** `EXCLUDED_PATH_REGEX` drops the Monte-Carlo/report/analysis routes (CI budget) **and destructive verbs** (a fuzzed `DELETE`/purge could nuke the seed session/org and poison the run — the seed is step-up-fresh for the run window). This is the resource-heavy surface most relevant to the threat-model's resource-exhaustion boundary; the README names it as a Phase-1 blind spot covered later by scheduled Nuclei.
 
-## 7. Coverage caveat (documented, not hidden)
+## 8. Failure semantics (advisory-first)
 
-POST/PUT/PATCH/DELETE reach handlers **only because** the hook injects a valid `_csrf`; fuzzing then explores the business params. This is intentional and correct for finding handler bugs. The `_csrf` field itself is not fuzzed by this suite (D1 covers that class, with its own regression test). The suite is deterministic and in-process, so it exercises the app logic, not the network/proxy layer — that's Phase-2 Nuclei's job.
+The `dast` job runs on every PR and shows a visible pass/fail check, but is **NOT in `ci-success` `needs`** — a failure does not block merge. After a burn-in of consecutive green runs across CI runners proves determinism, a **follow-up PR** promotes `dast` into `ci-success` (merge-blocking). This mirrors the repo's own lesson (Playwright e2e was removed for a login-bootstrap flake that red-X'd otherwise-green runs).
 
-## 8. Failure semantics
+## 9. Determinism / reproducibility
 
-A check failure is a pytest failure → the `dast` job is red → `ci-success` is red → merge blocked. Deterministic seeding + the D1 fix mean the gate is green on `main` from day one; a new handler 500 or undocumented status on any PR turns it red.
+`--generation-deterministic` + `--seed 0` fix Hypothesis's draw; `--generation-database none` removes the example DB; **`PYTHONHASHSEED=0` is set in the `dast` job `env` and the tasks runner** (the repo pins it only in the prod image/`fly.toml`, so it must be set here explicitly) to neutralize hash-seed-dependent set ordering in schema→strategy construction. The gating check (`not_a_server_error`) is order-independent, so pass/fail is stable regardless; the pin additionally stabilizes *which* examples run. Verified by two **separate-process** runs (not two calls in one process).
 
-## 9. Testing / verification
+## 10. Testing / verification
 
-- The suite is the test. Plus the §5.3 non-vacuous meta-check.
-- The D1 regression test (§5.1).
-- A one-time full local run demonstrating the gate is green post-D1-fix, and (as evidence the gate works) a demonstration that reverting the D1 fix turns it red.
+- D1 regression tests (§5.1, three inputs).
+- A non-vacuous pre-fuzz smoke in `run.py`: assert `/healthz` up, the login session reaches an admin-only GET (`/organization` → 200, not a redirect), the extracted schema has > 50 operations, **and one known POST reaches its handler through the injection path (non-403)** — so a silently-empty or auth-broken run fails loudly.
+- Demonstrate the gate works: reverting *either* D1 guard makes `schemathesis run` report a `not_a_server_error` failure (do not commit the revert).
+- Two separate-process determinism runs; confirm identical result within the CI budget.
 
-## 10. Review ceremony
+## 11. Review ceremony
 
-Per CLAUDE.md (cross-cutting security infra): **4-reviewer plan-gate** (architect / security-auditor / spec-compliance / methodology) on this spec + the implementation plan, iterated to zero; implementation with per-task review; **4-reviewer final PR-gate** iterated to zero; then PR, stop for owner sign-off before merge. (Methodology's surface is small — no FAIR math — but included per the cross-cutting-infra trigger.)
+4-reviewer **plan-gate** applied (this revision). For the **final PR-gate**, a **3-reviewer** pass — architect / security-auditor / spec-compliance — is appropriate (no FAIR-math/statistical surface remains once the approach is settled; methodology's plan-gate findings are folded in), unless implementation surfaces a statistical concern. Iterate to zero; PR, stop for owner sign-off before merge.
 
-## 11. Risks / open questions
+## 12. Risks / open questions
 
-- **Schemathesis API drift:** hook/auth API differs across Schemathesis 3.x/4.x. Mitigation: pin a version; the plan adapts hooks to it.
-- **Schema fidelity for Form routes:** FastAPI describes `Form(...)` params in the schema; verify the generated cases actually populate form bodies (not just JSON). If a route's params aren't well-described, the fuzzer may under-cover it — acceptable for Phase 1 (500-detection still fires on what it does send).
-- **Runtime:** cap `max_examples` so the `dast` job stays within a reasonable CI budget (target: a few minutes). Tune during implementation.
-- **State-mutating GETs (C7):** the wizard-draft GET creates rows; the temp DB is disposable, so acceptable, but exclude if it slows the run.
+- **Schemathesis CLI drift:** exact `--max-examples` flag name + the `before_call` hook signature are pinned + smoke-verified in the first implementation task.
+- **Server startup flakiness in CI:** mitigated by the `/healthz` retry-wait and advisory-first wiring; burn-in gates promotion.
+- **Schema fidelity for `Form(...)` routes:** verify the generated cases populate form bodies; 500-detection still fires on what is sent.
