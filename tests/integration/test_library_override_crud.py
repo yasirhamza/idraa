@@ -5,6 +5,7 @@ Spec §8.1 §8.2.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -317,3 +318,48 @@ async def test_update_override_rejects_infinite_value_422(
     await db_session.refresh(o)
     assert o.version == 1
     assert o.threat_event_frequency["high"] == 3.0
+
+
+@pytest.mark.asyncio
+async def test_create_override_unknown_entry_id_is_404(
+    admin_client: AsyncClient,
+) -> None:
+    """DAST T5 finding (Class B): a syntactically-valid but nonexistent
+    ``entry_id`` crashed with an unhandled ``LibraryEntryNotFoundError``
+    (500) — the route caught only ``LibraryOverrideAlreadyExistsError`` and
+    ``FAIRCAMValidationError``. Must 404, matching the adjacent
+    ``IDORError`` handler's "missing -> 404, no existence oracle" shape.
+    """
+    r = await csrf_post(
+        admin_client,
+        "/library/overrides",
+        data={
+            "entry_id": str(uuid.uuid4()),
+            "tef_low": "1.0",
+            "tef_mode": "2.0",
+            "tef_high": "3.0",
+            "reason": "targets a nonexistent library entry",
+        },
+    )
+    assert r.status_code == 404, f"expected 404, got {r.status_code}"
+
+
+@pytest.mark.asyncio
+async def test_update_override_unknown_override_id_is_404(
+    admin_client: AsyncClient,
+) -> None:
+    """DAST T5 finding (Class B): same bug on the update path — a
+    syntactically-valid but nonexistent ``override_id`` crashed with an
+    unhandled 500 instead of 404."""
+    r = await csrf_post(
+        admin_client,
+        f"/library/overrides/{uuid.uuid4()}",
+        data={
+            "tef_low": "1.0",
+            "tef_mode": "2.0",
+            "tef_high": "3.0",
+            "reason": "targets a nonexistent override",
+            "expected_version": "1",
+        },
+    )
+    assert r.status_code == 404, f"expected 404, got {r.status_code}"

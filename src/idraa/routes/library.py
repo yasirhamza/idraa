@@ -99,7 +99,12 @@ async def get_library(
             UserRole.ADMIN,
         )
     ),
-    page: int = Query(default=1, ge=1),
+    # DAST T5 finding (Class A): unbounded `page` overflowed the
+    # `offset = (page - 1) * page_size` computation past SQLite's 64-bit
+    # OFFSET range (OverflowError, unhandled -> 500). No realistic page
+    # count approaches 100k at list_page_size defaults; FastAPI turns an
+    # out-of-range value into a clean 422 before the handler ever runs.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """Browse the scenario library — viewer+ per §8.2."""
     organization = await db.get(Organization, user.organization_id)
@@ -385,7 +390,12 @@ async def get_library_partial(
             UserRole.ADMIN,
         )
     ),
-    page: int = Query(default=1, ge=1),
+    # DAST T5 finding (Class A): unbounded `page` overflowed the
+    # `offset = (page - 1) * page_size` computation past SQLite's 64-bit
+    # OFFSET range (OverflowError, unhandled -> 500). No realistic page
+    # count approaches 100k at list_page_size defaults; FastAPI turns an
+    # out-of-range value into a clean 422 before the handler ever runs.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """HTMX hx-get target: returns the cards-only partial for filter changes."""
     organization = await db.get(Organization, user.organization_id)

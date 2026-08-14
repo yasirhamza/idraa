@@ -425,6 +425,23 @@ async def test_wizard_back_button_preserves_state(
 
 
 @pytest.mark.asyncio
+async def test_post_wizard_step_1_malformed_library_entry_id_is_404(
+    analyst_client: AsyncClient,
+) -> None:
+    """DAST T5 finding (Class C): a non-UUID ``library_entry_id`` crashed
+    with an unhandled ``ValueError`` from ``uuid.UUID(...)`` (500). The
+    existence-oracle comment right above this call site already mandates
+    identical handling for not-found vs. malformed input — both must 404.
+    """
+    r = await csrf_post(
+        analyst_client,
+        "/scenarios/new/wizard/step/1",
+        data={"library_entry_id": "not-a-uuid"},
+    )
+    assert r.status_code == 404, f"expected 404, got {r.status_code}"
+
+
+@pytest.mark.asyncio
 async def test_reviewer_403_on_wizard(reviewer_client: AsyncClient) -> None:
     r = await reviewer_client.get("/scenarios/new/wizard")
     assert r.status_code == 403

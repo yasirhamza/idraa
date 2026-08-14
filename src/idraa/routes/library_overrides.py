@@ -21,6 +21,7 @@ from idraa.app import templates
 from idraa.errors import (
     FAIRCAMValidationError,
     IDORError,
+    LibraryEntryNotFoundError,
     LibraryOverrideAlreadyExistsError,
     LibraryOverrideVersionConflictError,
 )
@@ -198,6 +199,14 @@ async def create_override(
             },
             status_code=409,
         )
+    except LibraryEntryNotFoundError:
+        # DAST T5 finding (Class B): a syntactically-valid but nonexistent
+        # entry_id previously propagated unhandled -> 500. Mirror the
+        # IDORError handler below: missing -> 404, never 403 or a distinct
+        # status, so a caller can't distinguish "not found" from "not yours"
+        # (no existence oracle).
+        await db.rollback()
+        raise HTTPException(status_code=404) from None
     except FAIRCAMValidationError as exc:
         # #333: service-level distribution gate (non-finite legs, sigma bound,
         # vuln ∈ [0,1]). Validation raises before any row write; rollback
@@ -307,6 +316,11 @@ async def update_override(
         await db.commit()
     except IDORError:
         # Cross-org write: surface as 404 to avoid leaking existence.
+        raise HTTPException(status_code=404) from None
+    except LibraryEntryNotFoundError:
+        # DAST T5 finding (Class B): a syntactically-valid but nonexistent
+        # override_id previously propagated unhandled -> 500. Same shape as
+        # the IDORError case above: missing -> 404, no existence oracle.
         raise HTTPException(status_code=404) from None
     except FAIRCAMValidationError as exc:
         # #333: service-level distribution gate — validation runs before any

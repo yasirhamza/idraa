@@ -146,7 +146,7 @@ docstring).
   header-or-form token to `hmac.compare_digest`-match it (`csrf.py:271-291`);
   mismatch is a generic opaque 403 (`_forbid`, `csrf.py:306-317`) — no oracle. **No
   exemption list** — module docstring and inline comments
-  (`routes/register_import.py:45`, `routes/library.py:339`) state nothing is
+  (`routes/register_import.py:45`, `routes/library.py:344`) state nothing is
   exempted; fail-closed by design. Non-form JS (WebAuthn) reads a
   `<meta name="csrf-token">` (`templates/base.html:7`) into an
   `X-CSRF-Token` header instead of a hidden form field.
@@ -231,7 +231,7 @@ docstring).
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
   the first sweep said "2", an undercount): 4 inline in
-  `routes/library.py:96,140,260,382` and 3 via the `_VIEWER_PLUS` allowlist
+  `routes/library.py:96,145,265,387` and 3 via the `_VIEWER_PLUS` allowlist
   (`routes/control_library.py:45`, applied at `:154,210,242`). Separately,
   `scenario_export_routes.py:51` deliberately uses bare `require_user` — a
   strict VIEWER-inclusive allowlist would 403 admins and analysts, per its
@@ -340,9 +340,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2246`, the wizard step template) that
+  one exception (`routes/scenarios.py:2249`, the wizard step template) that
   indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`scenarios.py:2236`) — not attacker-controlled text, so it's path
+  `1..6` (`scenarios.py:2239`) — not attacker-controlled text, so it's path
   *selection* among a fixed set, not path or template *construction*.
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /

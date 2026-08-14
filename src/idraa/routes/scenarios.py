@@ -2118,11 +2118,14 @@ async def post_wizard_step_1(
             entry_name = await _seed_state_from_library_entry(
                 db, state, uuid.UUID(library_entry_id), org_row
             )
-        except (LibraryEntryNotFoundError, LibraryEntryStatusError) as exc:
+        except (LibraryEntryNotFoundError, LibraryEntryStatusError, ValueError) as exc:
             # Existence-oracle protection: respond identically to "not found"
-            # for unknown UUIDs AND draft/deprecated entries — the 500-vs-404
-            # differential would itself leak existence. Constant detail string;
-            # do NOT use str(exc) (would embed the status name).
+            # for unknown UUIDs, draft/deprecated entries, AND malformed
+            # library_entry_id strings (DAST T5 finding, Class C:
+            # uuid.UUID() raises ValueError on a non-UUID string, previously
+            # unhandled -> 500) — the 500-vs-404 differential would itself
+            # leak existence. Constant detail string; do NOT use str(exc)
+            # (would embed the status name / parse-error detail).
             raise HTTPException(status_code=404, detail="Library entry not available") from exc
 
         # UAT 2026-05-21: regenerate the auto-default scenario name with the
