@@ -220,7 +220,12 @@ async def list_scenarios(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
     status: EntityStatus | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
+    # DAST T5.5b sweep (Class-A sibling): unbounded `page` overflowed the
+    # `offset = (page - 1) * page_size` computation past SQLite's 64-bit
+    # OFFSET range (OverflowError, unhandled -> 500). No realistic page
+    # count approaches 100k at list_page_size defaults; FastAPI turns an
+    # out-of-range value into a clean 422 before the handler ever runs.
+    page: int = Query(default=1, ge=1, le=100_000),
     deleted: int | None = Query(
         default=None,
         ge=0,

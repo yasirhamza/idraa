@@ -208,7 +208,12 @@ async def control_library_browse(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_VIEWER_PLUS),
-    page: int = Query(default=1, ge=1),
+    # DAST T5.5b sweep (Class-A sibling): unbounded `page` overflowed the
+    # `offset = (page - 1) * page_size` computation past SQLite's 64-bit
+    # OFFSET range (OverflowError, unhandled -> 500). No realistic page
+    # count approaches 100k at list_page_size defaults; FastAPI turns an
+    # out-of-range value into a clean 422 before the handler ever runs.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """Browse the control library catalog — viewer+."""
     filters = _parse_filters(request)
@@ -240,7 +245,12 @@ async def control_library_cards(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_VIEWER_PLUS),
-    page: int = Query(default=1, ge=1),
+    # DAST T5.5b sweep (Class-A sibling): unbounded `page` overflowed the
+    # `offset = (page - 1) * page_size` computation past SQLite's 64-bit
+    # OFFSET range (OverflowError, unhandled -> 500). No realistic page
+    # count approaches 100k at list_page_size defaults; FastAPI turns an
+    # out-of-range value into a clean 422 before the handler ever runs.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """HTMX hx-get target: cards-only partial for filter/search changes."""
     filters = _parse_filters(request)
