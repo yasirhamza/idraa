@@ -77,4 +77,6 @@ async def test_nonascii_cookie_sig_is_not_500(client: AsyncClient) -> None:
         headers={b"Cookie": b"csrf_token=aabbccdd.\xc2\xbf"},
         follow_redirects=False,
     )
-    assert r.status_code != 500
+    # A non-ASCII cookie sig is rejected as a mismatch -> the cookie is
+    # reissued -> the plain GET /login still renders normally: 200, not 500.
+    assert r.status_code == 200

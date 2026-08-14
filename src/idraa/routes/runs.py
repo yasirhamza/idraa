@@ -954,7 +954,7 @@ async def get_scenario_run_history(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
-    page: int = 1,
+    page: int = Query(default=1, ge=1, le=100_000),
     page_size: int = Query(default=10, ge=1, le=100),
 ) -> HTMLResponse:
     """Paginated run history fragment for a scenario.
@@ -1006,7 +1006,7 @@ async def list_analyses(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
-    page: int = 1,
+    page: int = Query(default=1, ge=1, le=100_000),
     page_size: int = Query(default=20, ge=1, le=100),
     deleted: int | None = Query(
         default=None,

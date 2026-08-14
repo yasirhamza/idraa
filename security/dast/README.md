@@ -55,7 +55,8 @@ The harness runs with `--seed 0 --generation-deterministic` and a bounded
 cases per operation, not an evolving/property-based fuzz campaign. This is a
 deliberate CI-budget tradeoff, not a claim of completeness: **a bug in an
 input region the fixed corpus never draws will pass, and keep passing, until
-the OpenAPI schema itself changes.** The first run's 5 findings were what
+the OpenAPI schema, the example budget (`MAX_EXAMPLES`), or the pinned
+schemathesis/Hypothesis version changes.** The first run's 5 findings were what
 that corpus happened to reach; the sibling issues in the same code-paths were
 found afterward by manual pattern-sweep, not by the fuzzer re-running with a
 different seed. `MAX_EXAMPLES` is a CI-budget floor, not a ceiling — raise it

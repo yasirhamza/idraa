@@ -232,7 +232,7 @@ docstring).
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
   the first sweep said "2", an undercount): 4 inline in
   `routes/library.py:96,145,265,387` and 3 via the `_VIEWER_PLUS` allowlist
-  (`routes/control_library.py:45`, applied at `:154,210,247`). Separately,
+  (`routes/control_library.py:45`, applied at `:154,210,249`). Separately,
   `scenario_export_routes.py:51` deliberately uses bare `require_user` — a
   strict VIEWER-inclusive allowlist would 403 admins and analysts, per its
   inline comment. Never a security defect, only a doc-accuracy one; CLAUDE.md
