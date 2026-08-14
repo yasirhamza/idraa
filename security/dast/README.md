@@ -25,6 +25,11 @@ dependent ordering in schema-to-strategy construction (the repo otherwise
 pins this only in the prod image / `fly.toml`, not for local/dev use). The CI
 `dast` job sets it explicitly in its step `env:` for the same reason.
 
+A full run takes **~30 s on the reference machine** (95 fuzzed paths / ~3,900
+generated cases at the current `MAX_EXAMPLES`), comfortably inside the
+workflow's ~5-minute budget. Two separate-process runs at `--seed 0
+--generation-deterministic` reach an identical pass/fail verdict.
+
 ## Gating rationale: `not_a_server_error` only
 
 idraa is server-rendered HTML, not a JSON API with a declared response
@@ -75,6 +80,23 @@ claim** — it is not fuzzed by this harness at all. Phase-2 scheduled Nuclei
 scanning is the planned follow-up specifically for this surface (see
 `docs/security/2026-08-14-ci-dast-design.md`, "Out of scope (Phase 2+,
 tracked)").
+
+## Authenticated-hook coverage boundary (CSRF token-validation surface)
+
+Because the `before_call` hook injects a *valid* CSRF token into every
+state-changing body, and the session + CSRF cookies are passed as static `-H`
+headers, this authenticated pass **cannot exercise the CSRF token-validation
+path itself**: Schemathesis never delivers a malformed or non-ASCII token to
+the double-submit compare. Concretely, the D1 non-ASCII-token `500` (fixed at
+both compare sites in `middleware/csrf.py`) is **structurally unreachable** by
+this harness — it was originally caught by an *unauthenticated* scanner
+(Wapiti), and reverting either D1 guard does **not** turn a `dast` run red
+(verified). Treat token-validation / auth-mechanism bugs as **outside this
+harness's coverage**; they need an unauthenticated or hook-disabled pass (a
+Phase-2 Nuclei or dedicated-regression-test concern), not this gate. This is
+why the design doc's gating self-test (§10) proves non-vacuousness by
+reverting a *fuzzer-reachable* fix (an unbounded-`page` `500`), not a
+CSRF-guard fix.
 
 ## Advisory-first in CI
 
