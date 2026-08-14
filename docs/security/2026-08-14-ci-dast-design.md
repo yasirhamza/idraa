@@ -48,7 +48,7 @@ The `dast` CI job (advisory-visible) runs an orchestrator that:
 4. waits for `/healthz`,
 5. logs in (httpx) → captures `idraa_session` + `csrf_token`,
 6. runs `schemathesis run <extracted-schema.json> --url http://127.0.0.1:8000 -c not_a_server_error` with the session cookie header and `SCHEMATHESIS_HOOKS=security.dast.hooks` (injects a valid `_csrf` into state-changing form bodies),
-7. tears down uvicorn; emits a JUnit report.
+7. runs a post-run **canary** (HAR cassette shows ≥1 state-changing request returned non-`403` — proves the CSRF hook fired) and a **session-liveness** re-check; tears down uvicorn; emits a JUnit report (CI display) + a HAR cassette (the canary's source).
 
 The schema is **extracted offline** from `app.openapi()` (no HTTP, no `/setup` redirect) so schema source and call target are decoupled. The same orchestration runs locally via `python -m idraa.tasks dast`.
 
@@ -61,7 +61,8 @@ dast job (advisory) ─ alembic upgrade head (temp sqlite)
                         -c not_a_server_error  --exclude-path-regex <heavy/destructive>
                         -H "Cookie: idraa_session=…; csrf_token=…"
                         SCHEMATHESIS_HOOKS=security.dast.hooks  (inject valid _csrf)
-                    ─ kill uvicorn ; JUnit report
+                    ─ canary (HAR: >=1 state-changing req non-403) + session-liveness
+                    ─ kill uvicorn ; JUnit (display) + HAR (canary) reports
                     (RED = visible failed check; does NOT block merge yet)
 ```
 
