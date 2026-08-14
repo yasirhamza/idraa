@@ -96,6 +96,20 @@ def main(argv: list[str] | None = None) -> None:
         print("DATABASE_URL must be set to seed the DAST target DB.", file=sys.stderr)
         raise SystemExit(1)
 
+    # Fail fast + owner-only perms: prove --out is creatable/writable BEFORE
+    # seeding. A seeded admin whose password write then fails (missing
+    # parent dir, unwritable path) is irrecoverable, so the path must be
+    # validated first. touch()'s mode= only applies on first creation
+    # (POSIX: opening an existing file never changes its mode), so chmod
+    # explicitly afterward to guarantee 0600 even if --out points at a
+    # pre-existing, more-permissive file.
+    try:
+        args.out.touch(mode=0o600, exist_ok=True)
+        args.out.chmod(0o600)
+    except OSError as exc:
+        print(f"Cannot create --out path {args.out}: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+
     password = asyncio.run(seed(db_url))
     args.out.write_text(password, encoding="utf-8")
 
