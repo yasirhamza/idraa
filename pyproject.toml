@@ -347,3 +347,9 @@ allowlist = [
 [[tool.mypy.overrides]]
 module = ["pyotp", "segno"]
 ignore_missing_imports = true
+
+# schemathesis (security/dast/ harness dep) ships no type stubs. httpx (also
+# used by the harness) DOES ship stubs, so it needs no override.
+[[tool.mypy.overrides]]
+module = ["schemathesis.*"]
+ignore_missing_imports = true

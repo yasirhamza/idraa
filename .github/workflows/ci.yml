@@ -58,9 +58,34 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --extra dev
       - name: ruff security rules (same config as the gate — zero drift)
-        run: uv run ruff check --select S src fair_cam scripts
+        run: uv run ruff check --select S src fair_cam scripts security
       - name: zizmor (GitHub-workflow SAST; locked dev dep)
         run: uv run zizmor .github/workflows/
+
+  # Advisory-first: schemathesis-based DAST fuzzing against an ephemeral
+  # local uvicorn (throwaway migrated/seeded SQLite — never a deployed
+  # target, see security/dast/README.md). Deliberately NOT in ci-success's
+  # `needs` below — this job is new and needs a burn-in period to prove it
+  # doesn't flake before it can block merges. Promotion into ci-success is a
+  # tracked follow-up PR once burn-in is clean (docs/security/2026-08-14-ci-dast-design.md
+  # "Out of scope (Phase 2+, tracked)").
+  dast:
+    name: dast (schemathesis, advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Sync (dev extras, frozen)
+        run: uv sync --frozen --extra dev
+      - name: Run the DAST harness
+        env:
+          PYTHONHASHSEED: "0"
+        run: uv run python -m idraa.tasks dast
 
   secrets:
     name: secrets (gitleaks, full history)

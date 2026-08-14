@@ -72,17 +72,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # (label, argv-after-sys.executable) — order is cheap-to-expensive so the
 # fast failures fire first.
 GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("ruff check", ("-m", "ruff", "check", "src", "tests", "scripts", "fair_cam")),
+    ("ruff check", ("-m", "ruff", "check", "src", "tests", "scripts", "fair_cam", "security")),
     (
         "ruff format --check",
-        ("-m", "ruff", "format", "--check", "src", "tests", "scripts", "fair_cam"),
+        ("-m", "ruff", "format", "--check", "src", "tests", "scripts", "fair_cam", "security"),
     ),
     ("org-scoped lookups", ("-m", "scripts.lint_org_scoped_lookups", "--all")),
-    # mypy scope is src/idraa + fair_cam SOURCE. tests/ and fair_cam/tests/
+    # mypy scope is src/idraa + fair_cam SOURCE + security (the committed
+    # DAST harness, first-class-gated per arch-I4). tests/ and fair_cam/tests/
     # are EXCLUDED: tests/ carries ~409 pre-existing errors (issue #359) and
     # fair_cam/tests/ is untyped (relaxed in pyproject). fair_cam source was
-    # burned down to 0 errors when it became first-party. Once tests/ burns
-    # down, drop the explicit paths so the pyproject `files` key drives scope.
+    # burned down to 0 errors when it became first-party; security has no
+    # tests/ subtree of its own. Once tests/ burns down, drop the explicit
+    # paths so the pyproject `files` key drives scope.
     (
         "mypy",
         (
@@ -91,6 +93,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "--config-file=pyproject.toml",
             "src/idraa",
             "fair_cam",
+            "security",
             "--exclude",
             "fair_cam/tests",
         ),
