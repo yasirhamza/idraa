@@ -74,6 +74,7 @@ dev = [
   # instance. dev-only — the committed security/dast/ harness is invoked via
   # `python -m idraa.tasks dast`, never imported by src/idraa/ at runtime.
   "schemathesis~=4.24",
+  "pytest-xdist>=3.6",
 ]
 
 [project.scripts]

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -11,7 +10,13 @@ from idraa.models.session import AuthSession
 from idraa.services.auth import SESSION_COOKIE, unsign_session_id
 from tests.conftest import csrf_post
 
-_UUID = str(uuid.uuid4())
+# FIXED placeholder entity id — must be a compile-time constant, NOT uuid4():
+# it is embedded in the parametrize URL ids below, and pytest-xdist requires
+# every worker process to collect an identical test-id list. A per-import
+# uuid4() makes each worker collect different ids -> "Different tests were
+# collected between gw..." collection error. The value is irrelevant (the
+# step-up dependency fires before any 404, see comment below).
+_UUID = "00000000-0000-4000-8000-000000000000"
 
 # Route inventory under step-up. The dependency fires BEFORE handler-level
 # 404s, so nonexistent entity ids are fine — a stale session must be

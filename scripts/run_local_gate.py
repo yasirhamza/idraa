@@ -56,7 +56,10 @@ Escape hatches:
   the reason in the next commit.
 - ``git push --no-verify`` skips the whole pre-push stage (rare; document).
 
-Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 ~3min on the reference machine.
+Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 (pytest) runs under
+``pytest-xdist -n auto`` — wall-clock scales with core count (the ~5.9k-test
+merge-path suite was the serial bottleneck; parallel it is a few minutes on a
+multi-core machine and ~a quarter of that on CI's 4-core runner).
 That cost is the point — it is the only automated gate this repo has.
 """
 
@@ -99,7 +102,12 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("css staleness", ("-m", "idraa.tasks.build_css", "--check")),
-    ("pytest (fast suite)", ("-m", "pytest", "-q", "--no-cov")),
+    # `-n auto` (pytest-xdist) parallelizes across the machine's cores — the
+    # merge-path suite is ~5.9k tests and was the gate's dominant wall-clock
+    # cost when run serially. Safe here because every test gets its own tmp
+    # sqlite DB (tests/conftest.py db_url fixture) and singletons are reset
+    # per-test in a per-worker process, so workers never share DB/engine state.
+    ("pytest (fast suite)", ("-m", "pytest", "-q", "--no-cov", "-n", "auto")),
     # PR2 Task 9: labeled, scoped equivalence-harness step — see module
     # docstring step 6 for why this is scoped to one file with an explicit
     # marker override rather than a bare `-m slow`.
