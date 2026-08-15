@@ -159,7 +159,7 @@ async def login_post(
     # No min_length on password here: /setup enforces min_length=8 at
     # creation, and defense-in-depth should not reject on login what the
     # system already accepted on creation.
-    password_ok = verify_user_password(user, password)
+    password_ok = await verify_user_password(user, password)
     if user is None or not password_ok:
         if user is not None and not is_locked(user):
             # Count only a real, unlocked user's miss — an already-locked

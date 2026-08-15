@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from itsdangerous import BadData, URLSafeSerializer, URLSafeTimedSerializer
 from passlib.context import CryptContext
@@ -23,6 +26,37 @@ _pwd_ctx = CryptContext(schemes=["argon2"], deprecated="auto")
 SESSION_COOKIE = "idraa_session"
 SESSION_TTL = timedelta(days=14)
 
+_T = TypeVar("_T")
+
+# A3: dedicated Argon2 pool. Argon2 must NOT share the default event-loop
+# executor that run_executor's Monte-Carlo computes (up to ~10 concurrent) +
+# report renderers use — a login must never queue behind a ~36s run compute, and
+# an auth flood must never starve runs. Sized by config against the actual VM
+# (Settings.argon2_max_threads). LAZY singleton (mirrors db.py's
+# get_engine/_get_sessionmaker) so importing this module carries no settings
+# dependency and the configured size is read after the app/test env is set.
+_HASH_POOL: ThreadPoolExecutor | None = None
+
+
+def _get_hash_pool() -> ThreadPoolExecutor:
+    global _HASH_POOL
+    if _HASH_POOL is None:
+        _HASH_POOL = ThreadPoolExecutor(
+            max_workers=get_settings().argon2_max_threads, thread_name_prefix="argon2"
+        )
+    return _HASH_POOL
+
+
+async def _hash_offload(fn: Callable[..., _T], *args: object) -> _T:
+    """Run a CPU-bound Argon2 callable on the dedicated pool, off the event loop.
+
+    NB: run_in_executor does NOT copy contextvars (unlike asyncio.to_thread).
+    Harmless for the current callables (verify_password / _match_recovery_code /
+    hash_recovery_code read no contextvars); a future offloaded fn that needs a
+    request-scoped contextvar (e.g. a correlation id) must copy it in explicitly.
+    """
+    return await asyncio.get_running_loop().run_in_executor(_get_hash_pool(), fn, *args)
+
 
 def hash_password(plain: str) -> str:
     return _pwd_ctx.hash(plain)
@@ -40,17 +74,18 @@ def verify_password(plain: str, hashed: str) -> bool:
 _DUMMY_PW_HASH = hash_password("unused-enumeration-blocker")
 
 
-def verify_user_password(user: User | None, plain: str) -> bool:
-    """Timing-safe password check.
+async def verify_user_password(user: User | None, plain: str) -> bool:
+    """Timing-safe password check, Argon2 offloaded to the dedicated pool.
 
-    Always runs exactly one Argon2 verify so that "user does not exist" and
-    "wrong password" take the same wall-clock time. Return False for a
-    missing, inactive, or wrong-password user.
+    Always runs exactly one Argon2 verify — offloaded in BOTH branches so
+    "user does not exist" and "wrong password" take the same wall-clock time
+    (anti-enumeration) AND the CPU-bound hash never blocks the single uvicorn
+    event loop (A3). Return False for a missing, inactive, or wrong-password user.
     """
     if user is None or not user.is_active:
-        verify_password(plain, _DUMMY_PW_HASH)
+        await _hash_offload(verify_password, plain, _DUMMY_PW_HASH)
         return False
-    return verify_password(plain, user.password_hash)
+    return await _hash_offload(verify_password, plain, user.password_hash)
 
 
 # Salt convention: every signed-payload type MUST use a distinct salt. Reusing

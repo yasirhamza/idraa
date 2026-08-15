@@ -23,6 +23,7 @@ from idraa.models.mfa import RecoveryCode, UserTotp
 from idraa.models.user import User
 from idraa.services import totp as totp_service
 from idraa.services.audit import AuditWriter
+from idraa.services.auth import _hash_offload
 from idraa.services.mfa_crypto import decrypt_totp_secret, verify_recovery_code
 
 logger = logging.getLogger(__name__)
@@ -136,7 +137,12 @@ async def verify_totp_or_recovery(
             .scalars()
             .all()
         )
-        matched_id = _match_recovery_code(code, [(rc.id, rc.code_hash) for rc in rows])
+        # ONE offloaded thread hop over all candidate hashes (bounded pool),
+        # not one per code — keeps the up-to-10 Argon2 verifies off the event
+        # loop and cuts 10 pool round-trips to 1.
+        matched_id = await _hash_offload(
+            _match_recovery_code, code, [(rc.id, rc.code_hash) for rc in rows]
+        )
         if matched_id is not None:
             now = now_utc()
             if await _claim_recovery_code(db, matched_id, now):
