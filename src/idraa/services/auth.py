@@ -12,9 +12,10 @@ from typing import Any, TypeVar
 from itsdangerous import BadData, URLSafeSerializer, URLSafeTimedSerializer
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 from starlette.responses import Response
 
 from idraa.config import get_settings
@@ -348,14 +349,47 @@ def is_locked(user: User) -> bool:
     return lu > datetime.now(UTC)
 
 
-def register_failed_login(user: User) -> None:
+async def register_failed_login(db: AsyncSession, user: User) -> None:
+    """Atomically count a failed attempt and lock the account at the threshold.
+
+    DB-side ``failed_login_count + 1`` (never a Python-computed value) so N
+    concurrent misses each count — the same lost-update fix as the recovery-code
+    burn (B6). Correctness comes from the atomic increment under the row/write
+    lock, NOT from the reflect mechanic. ``RETURNING`` + ``set_committed_value``
+    (under ``synchronize_session=False``) reflects the authoritative values onto
+    ``user`` as COMMITTED (clean) state, so callers' immediate reads
+    (``_FAILED_LOGIN_AUDIT_CAP``, ``is_locked``) are correct without a redundant
+    blind ``UPDATE`` at flush and without leaving a dirty-state landmine.
+    """
     settings = get_settings()
-    user.failed_login_count += 1
-    if (
-        settings.auth_max_failed_logins
-        and user.failed_login_count >= settings.auth_max_failed_logins
-    ):
-        user.locked_until = datetime.now(UTC) + timedelta(seconds=settings.auth_lockout_seconds)
+    max_failed = settings.auth_max_failed_logins
+    new_count = User.failed_login_count + 1  # SQL expression
+    values: dict[str, object] = {"failed_login_count": new_count}
+    if max_failed:  # 0 disables lockout (existing convention)
+        lock_at = datetime.now(UTC) + timedelta(seconds=settings.auth_lockout_seconds)
+        # Set the lock only when the NEW count crosses the threshold; otherwise
+        # keep whatever is there (a no-op self-write on sub-threshold misses).
+        # Re-locking on a past-threshold miss matches the prior behavior; callers
+        # gate on `not is_locked`, so it only recurs within one concurrent burst.
+        values["locked_until"] = case((new_count >= max_failed, lock_at), else_=User.locked_until)
+    row = (
+        await db.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(**values)
+            .returning(User.failed_login_count, User.locked_until)
+            .execution_options(synchronize_session=False)
+        )
+    ).one_or_none()
+    if row is None:
+        # User row deleted concurrently (admin delete mid-failed-login). The
+        # attempt simply doesn't count — don't turn a failed login into a 500.
+        return
+    set_committed_value(user, "failed_login_count", row.failed_login_count)
+    # NB: on SQLite, RETURNING hands back a tz-NAIVE locked_until. Only is_locked()
+    # consumes user.locked_until (it re-attaches UTC) — do NOT add a naive-vs-aware
+    # comparison elsewhere without re-attaching, or it raises TypeError.
+    set_committed_value(user, "locked_until", row.locked_until)
 
 
 def reset_login_throttle(user: User) -> None:

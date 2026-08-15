@@ -114,37 +114,39 @@ docstring).
 ## 3. B2 — Unauthenticated ↔ authenticated (session)
 
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
-  signed (`services/auth.py:26,95-100`); cookie attributes — `httponly`,
+  signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:279-297`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:280-298`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:27,260-276,320-336`).
+  Absolute 14-day TTL, does not slide (`auth.py:28,261-277,321-337`).
 - **S** (credential stuffing): Argon2 password hashing with a precomputed
   dummy-hash timing-safe check for nonexistent/inactive users
-  (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:74-88`) — prevents a
+  (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:75-89`) — prevents a
   login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
   verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
   a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
-  `auth.py:38-58`; `Settings.argon2_max_threads`, `config.py:362`), isolated
+  `auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:362`), isolated
   from the default executor that Monte-Carlo run computes saturate (§10). This
   keeps the single event loop non-blocking (was a measured 13.7× head-of-line
   block) while preserving the timing-equal anti-enumeration property (both
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
   store errors — per-account lockout (5 attempts/900s, `config.py:350-351`;
-  `auth.py:342-358`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `auth.py:343-393`) and per-source `LoginAttempt` throttle (20/900s/900s,
   `config.py:396-398`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:211,239`).
-  **Known gap (§12):** the per-account counter (`register_failed_login`) is a
-  non-atomic read-modify-write, so concurrent misses lose increments
-  (pre-existing, not introduced by A3's parallelism). The per-source
-  `LoginAttempt` throttle IS atomic (`ON CONFLICT ... failed_count + 1`) and is
-  the load-bearing bound per source; the Argon2 pool (`argon2_max_threads`)
-  caps miss parallelism. A distributed (multi-IP) attacker is bounded by the
-  lossy per-account counter + code entropy + the pool cap, not by the per-source
-  throttle — deferred, tracked.
+  **Both counters are now atomic (2026-08-15).** The per-account counter
+  (`register_failed_login`) was a non-atomic read-modify-write that lost
+  increments under concurrency (~1 of 5 retained); it now does a guarded
+  `UPDATE users SET failed_login_count = failed_login_count + 1` with a `CASE`
+  lock and `RETURNING` (reflected via `set_committed_value`), so N concurrent
+  misses each count and the lock trips at the true threshold — matching the
+  per-source throttle's `ON CONFLICT ... failed_count + 1` atomicity. Closes §12
+  gap #8. Side benefit: the `user.login_locked_out` audit, which the lossy
+  counter could silently suppress (threshold never crossed under a burst), now
+  fires reliably.
 - **E**: MFA — TOTP (pyotp, single-use-per-step replay guard,
   `services/totp.py:21-55`) and WebAuthn/passkeys
   (`services/webauthn_service.py:66-142`) both live; `user_has_strong_factor`
@@ -219,7 +221,7 @@ docstring).
   (`routes/mfa.py:95,135,189,231,258,311`). Re-verification
   (`routes/step_up.py:87-239`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `auth.py:273`).
+  `auth.py:274`).
 - **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
   (`routes/step_up.py:145,147`), so it inherits both the atomic recovery-code
@@ -484,7 +486,7 @@ new export format must re-implement, not assume is "someone else's problem."
   high-fidelity cap of 2).
 - **D (Argon2 executor isolation, A3, 2026-08-15).** Argon2 password/recovery
   hashing runs on a DEDICATED `ThreadPoolExecutor` (`_HASH_POOL`,
-  `services/auth.py:38-58`, size `argon2_max_threads` default 4), NOT the
+  `services/auth.py:39-59`, size `argon2_max_threads` default 4), NOT the
   default event-loop executor that the Monte-Carlo `to_thread` computes above
   saturate. Without this isolation, offloading Argon2 (A3) would have made a
   login queue behind up to ~10 concurrent multi-second run computes on the
@@ -602,18 +604,17 @@ watching:
    request-access-log middleware (bounded, authenticated-only, to avoid
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
    because it changes the middleware stack. Tracked as a follow-up.
-8. **Non-atomic per-account lockout counter (§3 D/brute-force, 2026-08-15).**
-   `register_failed_login` (`services/auth.py:351-358`) is a plain
-   read-modify-write (`user.failed_login_count += 1`), so concurrent misses lose
-   increments (measured: ~1 of 5 retained). Pre-existing — present under the
-   old synchronous Argon2 too, so NOT introduced by A3's offload — and
-   backstopped by the atomic per-source `LoginAttempt` throttle. A multi-IP
-   (distributed) attacker is bounded only by the lossy per-account counter plus
-   code entropy (10⁶ TOTP window / 2⁴⁰ recovery) and the `argon2_max_threads`
-   parallelism cap. Deferred from the A3/B6 PR (fixing it means an async DB-guarded
-   increment across three call sites + throttle-test changes); **tracked in
-   advisory GHSA-46jj-823j-mjj9's remediation roadmap** ("atomic per-account
-   lockout counter"), not left in prose alone.
+8. ~~**Non-atomic per-account lockout counter**~~ — **CLOSED 2026-08-15.**
+   `register_failed_login` (`services/auth.py:352-393`) was a plain
+   read-modify-write (`user.failed_login_count += 1`) that lost increments under
+   concurrency (~1 of 5 retained). It now does a guarded
+   `UPDATE users SET failed_login_count = failed_login_count + 1` with a `CASE`
+   lock and `RETURNING` (reflected via `set_committed_value` under
+   `synchronize_session=False`), so N concurrent misses each count and the lock
+   trips at the true threshold (verified 5-of-5 vs the old 1-of-5). See §3
+   D/brute-force. `reset_login_throttle` stays a blind set (not a
+   read-modify-write, mutually exclusive with the failure path). The deferred
+   follow-up that this document previously named is done.
 
 ## 13. Keeping this document current
 
