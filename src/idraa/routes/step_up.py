@@ -118,7 +118,7 @@ async def step_up_verify(
             user_id=user.id,
             ip_address=client_ip(request),
         )
-        register_failed_login(user)
+        await register_failed_login(db, user)
         if is_locked(user):  # this miss just tripped the lock -> audit
             await AuditWriter(db).log(
                 organization_id=user.organization_id,
