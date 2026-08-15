@@ -68,6 +68,17 @@ def _vendor_sync() -> int:
     return vendor_sync.main([])
 
 
+def _dast() -> int:
+    # Lazy: `security/` is not part of the shipped wheel (packages=["src/idraa"]),
+    # so a top-level import would make a bare `python -m idraa.tasks` (listing,
+    # or any other task) hard-fail in an environment where `security/` isn't on
+    # the path. Only importing inside this function keeps that failure scoped to
+    # actually running the `dast` task.
+    import security.dast.run
+
+    return security.dast.run.main([])
+
+
 def _ci() -> int:
     """Full CI pipeline — matches .github/workflows/ci.yml."""
     for step in (_lint, _typecheck, _test, _notebook_smoke, _docker_build):
@@ -88,6 +99,11 @@ _TASKS: dict[str, Task] = {
         Task("e2e", "Run Playwright E2E tests", _e2e),
         Task("build-css", "Build the purged static tailwind.css (standalone CLI)", _build_css),
         Task("vendor-sync", "Re-vendor front-end assets to package.json versions", _vendor_sync),
+        Task(
+            "dast",
+            "Run the schemathesis-based DAST harness against an ephemeral local instance",
+            _dast,
+        ),
         Task("ci", "Full CI pipeline (lint -> type -> test -> notebook -> docker)", _ci),
     ]
 }

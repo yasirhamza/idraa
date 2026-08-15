@@ -69,6 +69,11 @@ dev = [
   "zizmor>=1.27.0",
   "cyclonedx-bom>=7.3.0",
   "pip-audit>=2.10.1",
+  # CI DAST Phase 1 (docs/security/2026-08-14-ci-dast-design.md): per-PR
+  # Schemathesis API-fuzzing gate against a CI-spun-up ephemeral uvicorn
+  # instance. dev-only — the committed security/dast/ harness is invoked via
+  # `python -m idraa.tasks dast`, never imported by src/idraa/ at runtime.
+  "schemathesis~=4.24",
 ]
 
 [project.scripts]
@@ -341,4 +346,10 @@ allowlist = [
 
 [[tool.mypy.overrides]]
 module = ["pyotp", "segno"]
+ignore_missing_imports = true
+
+# schemathesis (security/dast/ harness dep) ships no type stubs. httpx (also
+# used by the harness) DOES ship stubs, so it needs no override.
+[[tool.mypy.overrides]]
+module = ["schemathesis.*"]
 ignore_missing_imports = true

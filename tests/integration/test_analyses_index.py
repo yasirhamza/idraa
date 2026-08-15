@@ -137,3 +137,24 @@ async def test_analyses_index_paginates(
     assert r.status_code == 200
     # Pagination control points back at the org-wide index, not a scenario URL.
     assert "/analyses?page=2" in r.text
+
+
+@pytest.mark.asyncio
+async def test_analyses_index_rejects_page_above_upper_bound(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """PR-gate regate finding (security-auditor, IMPORTANT): the sweep that
+    added ``Query(ge=1, le=100_000)`` to the ``page: int = Query(...)`` shape
+    across library.py / scenarios.py / control_library.py missed two BARE
+    ``page: int = 1`` sites in routes/runs.py. This one (``/analyses`` ->
+    ``RunService.list_history_for_org`` -> ``RunRepo.list_for_org``) computes
+    ``offset = (page - 1) * page_size`` and hits a real SQL ``.offset()`` --
+    an unbounded page overflows SQLite's 64-bit OFFSET range and 500s instead
+    of failing FastAPI's ``Query`` validation. ``page`` now has an explicit
+    upper bound -- this must 422, not 500. Same reproducer value as the
+    original Class-A finding (tests/integration/test_library_routes.py).
+    """
+    client, _ = authed_analyst
+    huge = "25791705130216883804446916608"
+    r = await client.get(f"/analyses?page={huge}")
+    assert r.status_code == 422, f"page={huge} expected 422, got {r.status_code}"

@@ -104,6 +104,24 @@ async def test_get_library_rejects_non_positive_page(
 
 
 @pytest.mark.asyncio
+async def test_get_library_rejects_page_above_upper_bound(
+    analyst_client: AsyncClient,
+) -> None:
+    """DAST T5 finding (Class A): an unbounded ``page`` overflowed the
+    ``offset = (page - 1) * page_size`` computation (services/scenario_
+    library.py) past SQLite's 64-bit OFFSET range and 500'd instead of
+    failing FastAPI's ``Query`` validation. ``page`` now has an explicit
+    upper bound — this must 422, not 500. Exact reproducer from the first
+    real DAST run.
+    """
+    huge = "25791705130216883804446916608"
+    r = await analyst_client.get(f"/library?page={huge}")
+    rp = await analyst_client.get(f"/library/_partials/cards?page={huge}")
+    assert r.status_code == 422, f"page={huge} expected 422, got {r.status_code}"
+    assert rp.status_code == 422, f"partial page={huge} expected 422, got {rp.status_code}"
+
+
+@pytest.mark.asyncio
 async def test_get_library_entry_detail(
     analyst_client: AsyncClient,
     seed_library_entry: Any,

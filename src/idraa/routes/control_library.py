@@ -208,7 +208,14 @@ async def control_library_browse(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_VIEWER_PLUS),
-    page: int = Query(default=1, ge=1),
+    # DAST T5.5b sweep (Class-A sibling, bounded for consistency /
+    # defense-in-depth): ControlLibraryService.list_browseable paginates via
+    # an in-Python list slice (services/control_library.py), which silently
+    # clamps on an out-of-range offset rather than raising -- unlike the
+    # SQL-OFFSET sibling sites (library.py, scenarios.py), this route does
+    # NOT crash on an unbounded page today. No realistic page count
+    # approaches 100k at list_page_size defaults.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """Browse the control library catalog — viewer+."""
     filters = _parse_filters(request)
@@ -240,7 +247,14 @@ async def control_library_cards(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_VIEWER_PLUS),
-    page: int = Query(default=1, ge=1),
+    # DAST T5.5b sweep (Class-A sibling, bounded for consistency /
+    # defense-in-depth): ControlLibraryService.list_browseable paginates via
+    # an in-Python list slice (services/control_library.py), which silently
+    # clamps on an out-of-range offset rather than raising -- unlike the
+    # SQL-OFFSET sibling sites (library.py, scenarios.py), this route does
+    # NOT crash on an unbounded page today. No realistic page count
+    # approaches 100k at list_page_size defaults.
+    page: int = Query(default=1, ge=1, le=100_000),
 ) -> HTMLResponse:
     """HTMX hx-get target: cards-only partial for filter/search changes."""
     filters = _parse_filters(request)

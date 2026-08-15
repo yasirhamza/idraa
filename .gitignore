@@ -13,6 +13,10 @@ dist/
 .mypy_cache/
 .coverage
 htmlcov/
+# schemathesis's own crash/example cache — written at repo root because the
+# DAST orchestrator (security/dast/run.py) runs it with cwd=<repo root> so
+# SCHEMATHESIS_HOOKS=security.dast.hooks resolves as a dotted module import.
+.schemathesis/
 .tailwind-bin/
 
 # Environments

@@ -105,6 +105,23 @@ async def test_list_scenarios_renders_for_analyst(
     assert "RW" in r.text
 
 
+async def test_list_scenarios_rejects_page_above_upper_bound(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """DAST T5.5b sweep (Class-A sibling): unbounded ``page`` overflowed the
+    same ``offset = (page - 1) * page_size`` -> SQL ``OFFSET`` computation
+    as ``routes/library.py`` (``ScenarioRepo.list_for_org`` -> ``.offset()``
+    at ``repositories/scenario_repo.py:99``) -- 500 instead of 422. ``page``
+    now has an explicit upper bound. No scenario rows need seeding: the
+    bound is enforced by FastAPI's ``Query`` validation before the handler
+    (and any DB query) ever runs.
+    """
+    client, _ = authed_analyst
+    huge = "25791705130216883804446916608"
+    r = await client.get(f"/scenarios?page={huge}")
+    assert r.status_code == 422, f"page={huge} expected 422, got {r.status_code}"
+
+
 async def test_scenario_crud_entry_points_not_mobile_gated(
     authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:

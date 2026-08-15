@@ -141,23 +141,36 @@ docstring).
 
 - **T**: stateless double-submit HMAC pattern (`middleware/csrf.py`). Cookie
   `csrf_token` = `<nonce>.<HMAC-SHA256(session_secret, nonce)>`
-  (`csrf.py:57,98-116`), `HttpOnly=False` (must be JS/Jinja-readable),
+  (`csrf.py:64,105-123`), `HttpOnly=False` (must be JS/Jinja-readable),
   `SameSite=Strict`. Validation requires cookie present+valid **and**
-  header-or-form token to `hmac.compare_digest`-match it (`csrf.py:255-270`);
-  mismatch is a generic opaque 403 (`_forbid`, `csrf.py:286`) — no oracle. **No
+  header-or-form token to `hmac.compare_digest`-match it (`csrf.py:271-291`);
+  mismatch is a generic opaque 403 (`_forbid`, `csrf.py:306-317`) — no oracle. **No
   exemption list** — module docstring and inline comments
-  (`routes/register_import.py:46`, `routes/library.py:340`) state nothing is
+  (`routes/register_import.py:45`, `routes/library.py:344`) state nothing is
   exempted; fail-closed by design. Non-form JS (WebAuthn) reads a
   `<meta name="csrf-token">` (`templates/base.html:7`) into an
   `X-CSRF-Token` header instead of a hidden form field.
+- **Non-ASCII-token hardening (D1, 2026-08-14)**: `hmac.compare_digest` raises
+  `TypeError` (not a clean non-match) when either operand carries a
+  non-ASCII character, so an attacker-crafted non-ASCII token used to escape
+  as an unhandled 500 rather than the intended 403. Both `compare_digest`
+  call sites now guard with `.isascii()` first, rejecting as a normal
+  verification failure instead: `verify_csrf_token`'s `sig_hex` check
+  (`csrf.py:145-151`) covers the cookie-signature compare — this one closes
+  an **unauthenticated 500-on-every-request** class, since `verify_csrf_token`
+  runs unconditionally near the top of `dispatch` (even on safe GETs) and
+  `sig_hex` is never hex-validated before reaching it (unlike `nonce_hex`);
+  `dispatch`'s `submitted` check (`csrf.py:280-286`) covers the double-submit
+  compare against the form-field-or-header token. Regression:
+  `tests/integration/test_csrf_nonascii_token.py`.
 - **DoS ceiling (A4, 2026-08-09)**: this middleware buffers the FULL body of
   every unsafe-method request before the route runs (to replay it for
   downstream form parsing — `_CachedRequest.wrapped_receive`). That buffer is
-  now size-capped: `_read_body_capped` (`csrf.py:69-95`) reads via
+  now size-capped: `_read_body_capped` (`csrf.py:76-102`) reads via
   `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
   `config.py:368`) and returns a 413 before the whole body is buffered
-  (`csrf.py:221-238`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
-  `routes/deps.py:22`) + multipart framing so legitimate imports pass; a test
+  (`csrf.py:235-252`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
+  `routes/deps.py:23`) + multipart framing so legitimate imports pass; a test
   pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
   unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
   403. Not attacker-authenticated; a single-machine availability hardening.
@@ -218,8 +231,8 @@ docstring).
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
   the first sweep said "2", an undercount): 4 inline in
-  `routes/library.py:96,140,260,382` and 3 via the `_VIEWER_PLUS` allowlist
-  (`routes/control_library.py:45`, applied at `:154,210,242`). Separately,
+  `routes/library.py:96,145,265,387` and 3 via the `_VIEWER_PLUS` allowlist
+  (`routes/control_library.py:45`, applied at `:154,210,249`). Separately,
   `scenario_export_routes.py:51` deliberately uses bare `require_user` — a
   strict VIEWER-inclusive allowlist would 403 admins and analysts, per its
   inline comment. Never a security defect, only a doc-accuracy one; CLAUDE.md
@@ -327,9 +340,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2246`, the wizard step template) that
+  one exception (`routes/scenarios.py:2254`, the wizard step template) that
   indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`scenarios.py:2236`) — not attacker-controlled text, so it's path
+  `1..6` (`scenarios.py:2244`) — not attacker-controlled text, so it's path
   *selection* among a fixed set, not path or template *construction*.
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /

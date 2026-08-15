@@ -142,6 +142,13 @@ def verify_csrf_token(token: str, secret: str) -> bool:
         nonce_bytes = bytes.fromhex(nonce_hex)
     except ValueError:
         return False
+    if not sig_hex.isascii():
+        # hmac.compare_digest raises TypeError on non-ASCII str operands
+        # (D1). sig_hex is never hex-validated before this point (unlike
+        # nonce_hex, which goes through bytes.fromhex above), so a crafted
+        # cookie can carry a non-ASCII signature — reject it as invalid
+        # rather than letting the TypeError escape as an unhandled 500.
+        return False
     expected = hmac.new(secret.encode("utf-8"), nonce_bytes, hashlib.sha256).hexdigest()
     # Constant-time compare — see module docstring.
     return hmac.compare_digest(expected, sig_hex)
@@ -270,6 +277,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             submitted = await _extract_submitted_token(request)
             if not submitted:
                 return self._forbid("token missing from request", request)
+            if not submitted.isascii():
+                # hmac.compare_digest raises TypeError on non-ASCII str
+                # operands (D1). A legitimate token is always ascii hex +
+                # "." — reject a non-ASCII submission as a plain mismatch
+                # rather than letting the TypeError escape as an
+                # unhandled 500.
+                return self._forbid("token not ascii", request)
             # Constant-time compare of the two full token strings — we
             # already verified the cookie signature, so this is the
             # double-submit equality check.
