@@ -350,6 +350,17 @@ class Settings(BaseSettings):
     auth_max_failed_logins: int = Field(default=5, ge=0)  # 0 disables lockout
     auth_lockout_seconds: int = Field(default=900, ge=0)
 
+    # A3: size of the DEDICATED Argon2 verify/hash thread pool, isolated from the
+    # default event-loop executor that run_executor's Monte-Carlo computes (up to
+    # ~10 concurrent) + report renderers saturate (min(32, cpu+4) = 6 on the
+    # 2-vCPU prod VM). Sharing that pool would make a login queue behind a ~36s
+    # run compute, and an auth flood starve runs. Each concurrent Argon2 verify
+    # holds ~64 MiB (m=65536) + up to 4 internal lanes; at the default 4 that is
+    # ~256 MiB transient on the 4096 MiB VM (atop the ~2.2 GB MC budget). Also
+    # caps per-account brute-force parallelism (see threat-model §3 D/brute-force).
+    # Re-derive against fly.toml if the VM shape changes.
+    argon2_max_threads: int = Field(default=4, ge=1, le=32)
+
     # Step-up ("sudo mode") freshness window — P2. Sensitive actions require a
     # re-auth within this many seconds. 0 disables step-up entirely (mirrors
     # auth_max_failed_logins' 0-disables convention).

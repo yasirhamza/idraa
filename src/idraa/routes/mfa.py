@@ -23,6 +23,7 @@ from idraa.services import totp as totp_service
 from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
 from idraa.services.auth import (
+    _hash_offload,
     clear_totp_pending_cookie,
     clear_webauthn_challenge_cookie,
     load_totp_pending,
@@ -42,6 +43,11 @@ from idraa.services.mfa_enrollment import (
 )
 
 router = APIRouter()
+
+
+def _hash_recovery_codes(codes: list[str]) -> list[str]:
+    """Argon2-hash a batch of recovery codes (offloaded to the dedicated pool)."""
+    return [hash_recovery_code(c) for c in codes]
 
 
 def _json_error(msg: str, status: int = 400) -> Response:
@@ -197,8 +203,12 @@ async def recovery_codes_generate(
     ):
         await db.delete(old)
     codes = generate_recovery_codes()
-    for c in codes:
-        db.add(RecoveryCode(user_id=user.id, code_hash=hash_recovery_code(c)))
+    # A3: hashing 10 recovery codes is ~10 Argon2 ops (~0.4-1.0 s) — larger than
+    # a single verify. Offload the whole batch to the dedicated pool so it does
+    # not block the event loop.
+    hashes = await _hash_offload(_hash_recovery_codes, codes)
+    for code_hash in hashes:
+        db.add(RecoveryCode(user_id=user.id, code_hash=code_hash))
     await AuditWriter(db).log(
         organization_id=user.organization_id,
         entity_type="user",

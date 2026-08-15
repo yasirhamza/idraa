@@ -144,7 +144,7 @@ async def step_up_verify(
         if code:
             method = await verify_totp_or_recovery(db, user, code, ip_address=client_ip(request))
         # NOTE: password deliberately ignored for strong-factor accounts.
-    elif password and verify_user_password(user, password):
+    elif password and await verify_user_password(user, password):
         method = "password"
 
     if method is None:

@@ -8,10 +8,14 @@ pay the Argon2 cost of the recovery loop), same burn + audit on recovery use.
 
 from __future__ import annotations
 
+import logging
 import re
+import uuid
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy import CursorResult, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models._types import now_utc
@@ -19,9 +23,60 @@ from idraa.models.mfa import RecoveryCode, UserTotp
 from idraa.models.user import User
 from idraa.services import totp as totp_service
 from idraa.services.audit import AuditWriter
+from idraa.services.auth import _hash_offload
 from idraa.services.mfa_crypto import decrypt_totp_secret, verify_recovery_code
 
+logger = logging.getLogger(__name__)
+
 _RECOVERY_SHAPE = re.compile(r"[0-9a-f]{5}-[0-9a-f]{5}")
+
+
+def _match_recovery_code(code: str, pairs: list[tuple[uuid.UUID, str]]) -> uuid.UUID | None:
+    """Return the id of the first recovery code whose hash matches ``code``.
+
+    Argon2-bound (up to one verify per candidate); the caller offloads it off
+    the event loop. A given input hash-matches at most one stored code, so the
+    first match is the only match.
+    """
+    for rc_id, code_hash in pairs:
+        if verify_recovery_code(code, code_hash):
+            return rc_id
+    return None
+
+
+async def _claim_recovery_code(db: AsyncSession, rc_id: uuid.UUID, now: datetime) -> bool:
+    """Atomically flip ``used_at`` NULL->``now`` for one recovery code.
+
+    Returns True iff THIS caller won the single-use claim. Mirrors the atomic
+    TOTP-step claim in verify_totp_or_recovery: two concurrent redemptions of
+    the same code both read it as unused, but only the request whose guarded
+    UPDATE actually flips the row (rowcount == 1) wins; the loser gets rowcount
+    0 and is rejected. The DB evaluates ``used_at IS NULL`` atomically under its
+    write lock (SQLite WAL single-writer / Postgres row lock), so this guarded
+    UPDATE is the atomicity primitive — no schema constraint maps to lost-update
+    prevention (see the design doc's DB-backstop analysis).
+
+    An OperationalError (a Postgres serialization failure at SERIALIZABLE, or a
+    future SQLite isolation change turning the read-then-write into
+    SQLITE_BUSY_SNAPSHOT) fails CLOSED as a loser rather than surfacing a 500 —
+    the UPDATE did not commit, so the code is not burned and the legitimate user
+    can retry. Logged (mirroring login_throttle's swallowed-error posture) so a
+    real DB outage is not a silent stream of "invalid code".
+    """
+    try:
+        res = cast(
+            CursorResult[object],
+            await db.execute(
+                update(RecoveryCode)
+                .where(RecoveryCode.id == rc_id, RecoveryCode.used_at.is_(None))
+                .values(used_at=now)
+                .execution_options(synchronize_session=False)
+            ),
+        )
+    except OperationalError:
+        logger.warning("recovery-code claim failed with OperationalError; rejecting", exc_info=True)
+        return False
+    return res.rowcount == 1
 
 
 async def verify_totp_or_recovery(
@@ -71,7 +126,7 @@ async def verify_totp_or_recovery(
     # — a wrong TOTP guess must NOT cost up to 10 Argon2 verifies (CPU-DoS
     # amplifier).
     if _RECOVERY_SHAPE.fullmatch(code):
-        for rc in (
+        rows = (
             (
                 await db.execute(
                     select(RecoveryCode).where(
@@ -81,9 +136,16 @@ async def verify_totp_or_recovery(
             )
             .scalars()
             .all()
-        ):
-            if verify_recovery_code(code, rc.code_hash):
-                rc.used_at = now_utc()
+        )
+        # ONE offloaded thread hop over all candidate hashes (bounded pool),
+        # not one per code — keeps the up-to-10 Argon2 verifies off the event
+        # loop and cuts 10 pool round-trips to 1.
+        matched_id = await _hash_offload(
+            _match_recovery_code, code, [(rc.id, rc.code_hash) for rc in rows]
+        )
+        if matched_id is not None:
+            now = now_utc()
+            if await _claim_recovery_code(db, matched_id, now):
                 await AuditWriter(db).log(
                     organization_id=user.organization_id,
                     entity_type="user",
@@ -94,4 +156,18 @@ async def verify_totp_or_recovery(
                     ip_address=ip_address,
                 )
                 return "recovery"
+            # Matched a real code but lost the atomic claim -> it was already
+            # burned by a concurrent request. High-signal event (a valid,
+            # already-consumed code was submitted): audit distinctly so the
+            # bypass attempt is not indistinguishable from a typo, then reject.
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.recovery_code_claim_lost",
+                changes={},
+                user_id=user.id,
+                ip_address=ip_address,
+            )
+            return None
     return None
