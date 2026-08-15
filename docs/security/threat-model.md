@@ -114,28 +114,52 @@ docstring).
 ## 3. B2 — Unauthenticated ↔ authenticated (session)
 
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
-  signed (`services/auth.py:23,60-65`); cookie attributes — `httponly`,
+  signed (`services/auth.py:26,95-100`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:244-263`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:279-297`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:24,225-241,285-301`).
+  Absolute 14-day TTL, does not slide (`auth.py:27,260-276,320-336`).
 - **S** (credential stuffing): Argon2 password hashing with a precomputed
   dummy-hash timing-safe check for nonexistent/inactive users
-  (`auth.py:38-53`) — prevents a login-existence oracle via response timing.
+  (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:74-88`) — prevents a
+  login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
+  verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
+  a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
+  `auth.py:38-58`; `Settings.argon2_max_threads`, `config.py:362`), isolated
+  from the default executor that Monte-Carlo run computes saturate (§10). This
+  keeps the single event loop non-blocking (was a measured 13.7× head-of-line
+  block) while preserving the timing-equal anti-enumeration property (both
+  branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
-  store errors — per-account lockout (5 attempts/900s, `config.py:323-324`;
-  `auth.py:307-328`) and per-source `LoginAttempt` throttle (20/900s/900s,
-  `config.py:346-348`; `services/login_throttle.py`), applied to both
+  store errors — per-account lockout (5 attempts/900s, `config.py:350-351`;
+  `auth.py:342-358`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `config.py:396-398`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:211,239`).
+  **Known gap (§12):** the per-account counter (`register_failed_login`) is a
+  non-atomic read-modify-write, so concurrent misses lose increments
+  (pre-existing, not introduced by A3's parallelism). The per-source
+  `LoginAttempt` throttle IS atomic (`ON CONFLICT ... failed_count + 1`) and is
+  the load-bearing bound per source; the Argon2 pool (`argon2_max_threads`)
+  caps miss parallelism. A distributed (multi-IP) attacker is bounded by the
+  lossy per-account counter + code entropy + the pool cap, not by the per-source
+  throttle — deferred, tracked.
 - **E**: MFA — TOTP (pyotp, single-use-per-step replay guard,
   `services/totp.py:21-55`) and WebAuthn/passkeys
   (`services/webauthn_service.py:66-142`) both live; `user_has_strong_factor`
   (`services/mfa_enrollment.py:18-29`) accepts either.
   `EnrollmentGuardMiddleware` (`middleware/enrollment_guard.py:36-54`)
   force-redirects unenrolled users to `/account/security` when the effective
-  MFA policy is `required`.
+  MFA policy is `required`. **Recovery-code single-use (B6, 2026-08-15):** a
+  matched recovery code is burned by an atomic guarded UPDATE
+  (`_claim_recovery_code`, `UPDATE ... WHERE used_at IS NULL` + `rowcount==1`,
+  `services/second_factor.py:47-78`), mirroring the TOTP step claim — replacing
+  a plain attribute set that let two concurrent redemptions of one code both
+  mint a session. The recovery-loop Argon2 (`_match_recovery_code`) is offloaded
+  to the same dedicated pool. A lost claim audits `user.recovery_code_claim_lost`
+  (§11) and rejects; the caller additionally audits `user.login_mfa_failed` /
+  `user.step_up_failed`, so a lost claim emits TWO rows by design.
 
 ## 4. B3 — CSRF (state-changing request ↔ verified-origin request)
 
@@ -168,7 +192,7 @@ docstring).
   downstream form parsing — `_CachedRequest.wrapped_receive`). That buffer is
   now size-capped: `_read_body_capped` (`csrf.py:76-102`) reads via
   `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
-  `config.py:368`) and returns a 413 before the whole body is buffered
+  `config.py:379`) and returns a 413 before the whole body is buffered
   (`csrf.py:235-252`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
   `routes/deps.py:23`) + multipart framing so legitimate imports pass; a test
   pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
@@ -181,7 +205,7 @@ docstring).
   (`models/enums.py:15-19`). `require_step_up(category)`
   (`routes/deps.py:230-251`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
-  600s, `config.py:356`; per-category admin override,
+  600s, `config.py:367`; per-category admin override,
   `services/security_settings.py:141-160`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
@@ -192,10 +216,15 @@ docstring).
   `routes/settings.py:162`, and the **6 B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
-  (`routes/mfa.py:89,129,183,221,248,301`). Re-verification
+  (`routes/mfa.py:95,135,189,231,258,311`). Re-verification
   (`routes/step_up.py:87-239`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `auth.py:234`).
+  `auth.py:273`).
+- **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
+  `verify_totp_or_recovery` and `verify_user_password` with login
+  (`routes/step_up.py:145,147`), so it inherits both the atomic recovery-code
+  burn (§3 E) and the dedicated-pool Argon2 offload (§3 S) with no step-up-
+  specific code.
 - **B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
   that feed org-wide FAIR/financial computation (industry, risk_appetite,
   security_maturity, preferred_currency; the FX rates behind every ALE), so a
@@ -453,6 +482,18 @@ new export format must re-implement, not assume is "someone else's problem."
   so it can 503 a run from an org whose own analysts are driving all 8 in-flight
   standard runs (fail-closed, far likelier to hit in normal use than the
   high-fidelity cap of 2).
+- **D (Argon2 executor isolation, A3, 2026-08-15).** Argon2 password/recovery
+  hashing runs on a DEDICATED `ThreadPoolExecutor` (`_HASH_POOL`,
+  `services/auth.py:38-58`, size `argon2_max_threads` default 4), NOT the
+  default event-loop executor that the Monte-Carlo `to_thread` computes above
+  saturate. Without this isolation, offloading Argon2 (A3) would have made a
+  login queue behind up to ~10 concurrent multi-second run computes on the
+  6-thread (2-vCPU) default pool — and an auth flood starve runs — trading A3's
+  event-loop block for a cross-boundary starvation DoS. New RAM term: each
+  concurrent Argon2 verify holds ~64 MiB (`m=65536`), so the pool adds
+  `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
+  budget (`config.py:66-75`) — fits the 4 GB VM; re-derive with the MC caps if
+  the VM shape changes.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
@@ -508,6 +549,21 @@ gap, not a finding of an actual miss.
   many scattered call sites with no shared user-carrying chokepoint); it is
   tracked as a follow-up (§12).
 
+**New action (B6, 2026-08-15): `user.recovery_code_claim_lost`.** Written by
+`verify_totp_or_recovery` (`services/second_factor.py:159-172`) when a submitted
+recovery code hash-matched an unused row at SELECT time but LOST the atomic
+claim (`rowcount==0`) — i.e. a concurrent request burned it first. This is the
+forensic signal of the exact double-redemption the B6 fix defends against.
+**Write-amplification bound:** it fires ONLY on a hash-match, so it requires
+possession of a valid recovery code (random guesses never match — 2⁴⁰ space);
+per burst it is bounded by `argon2_max_threads` (4) and the per-source
+`LoginAttempt` throttle; and it is self-limiting — once the code is burned, the
+`used_at IS NULL` SELECT filters it, yielding a clean `None` with NO further
+`claim_lost` row (regression-pinned by
+`tests/services/test_recovery_code_atomicity.py::test_already_consumed_code_rejects_cleanly`).
+A lost claim therefore emits this row PLUS the caller's `user.login_mfa_failed` /
+`user.step_up_failed` — two rows by design.
+
 ## 12. Known gaps / follow-ups
 
 None of these are active vulnerabilities as of this sweep — they're the
@@ -546,6 +602,18 @@ watching:
    request-access-log middleware (bounded, authenticated-only, to avoid
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
    because it changes the middleware stack. Tracked as a follow-up.
+8. **Non-atomic per-account lockout counter (§3 D/brute-force, 2026-08-15).**
+   `register_failed_login` (`services/auth.py:351-358`) is a plain
+   read-modify-write (`user.failed_login_count += 1`), so concurrent misses lose
+   increments (measured: ~1 of 5 retained). Pre-existing — present under the
+   old synchronous Argon2 too, so NOT introduced by A3's offload — and
+   backstopped by the atomic per-source `LoginAttempt` throttle. A multi-IP
+   (distributed) attacker is bounded only by the lossy per-account counter plus
+   code entropy (10⁶ TOTP window / 2⁴⁰ recovery) and the `argon2_max_threads`
+   parallelism cap. Deferred from the A3/B6 PR (fixing it means an async DB-guarded
+   increment across three call sites + throttle-test changes); **tracked in
+   advisory GHSA-46jj-823j-mjj9's remediation roadmap** ("atomic per-account
+   lockout counter"), not left in prose alone.
 
 ## 13. Keeping this document current
 
