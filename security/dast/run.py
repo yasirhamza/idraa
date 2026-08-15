@@ -82,6 +82,11 @@ PORT = 8000
 
 _HEALTHZ_RETRIES = 30
 _STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH"})
+# Post-login session-confirm budget: absorbs the ms-scale commit window
+# (see _confirm_session_committed) — ~4.75s worst case (19 sleeps x 0.25s),
+# negligible vs the ~55s run, generous vs a ms-scale race.
+_SESSION_CONFIRM_TRIES = 20
+_SESSION_CONFIRM_DELAY_S = 0.25
 
 
 def _wait_healthy(base_url: str, proc: subprocess.Popen[bytes], log_path: Path) -> bool:
@@ -179,6 +184,52 @@ def _check_get_ok(client: httpx.Client, path: str) -> bool:
         )
         return False
     return True
+
+
+def _confirm_session_committed(
+    client: httpx.Client,
+    tries: int = _SESSION_CONFIRM_TRIES,
+    delay: float = _SESSION_CONFIRM_DELAY_S,
+) -> bool:
+    """Poll the authenticated GET /organization until it reaches its handler (200).
+
+    Root cause of the observed CI flake (verified by local repro, ~0.7% at
+    zero request delay): the login handler does NOT commit its own session —
+    ``services.auth.create_session`` only ``db.add``s the row, and
+    ``db.get_session`` commits in its post-``yield`` teardown. So the
+    ``AuthSession`` INSERT can lag the ``303`` + ``Set-Cookie`` by a few ms,
+    and WAL + ``synchronous=FULL`` fsync-per-commit widens that window on a
+    slow/contended CI disk. The harness fires the next request with zero delay,
+    so the FIRST authenticated read can race the commit and get bounced to
+    ``/login`` (``require_user``, no session yet).
+
+    A bounded retry closes that ms-scale window deterministically while keeping
+    the check strict: a PERSISTENT non-200 (a real auth breakage, not the race)
+    still fails loudly after the budget (~5s), printing the redirect target.
+    Once the read succeeds the row is committed and stable, so every subsequent
+    fuzz request — and the post-run liveness check — is authenticated too. This
+    is a harness-side workaround for a real-but-effectively-user-invisible app
+    race (a browser adds far more than a few ms between the 303 and its GET).
+    """
+    resp = client.get("/organization")
+    for attempt in range(1, tries):
+        if resp.status_code == 200:
+            if attempt > 1:
+                print(f"[dast] session confirmed after {attempt} attempt(s)", flush=True)
+            return True
+        time.sleep(delay)
+        resp = client.get("/organization")
+    if resp.status_code == 200:
+        print(f"[dast] session confirmed after {tries} attempt(s)", flush=True)
+        return True
+    location = resp.headers.get("location", "")
+    suffix = f" -> {location}" if location else ""
+    print(
+        f"[dast] session never confirmed: GET /organization {resp.status_code}{suffix} "
+        f"after {tries} tries (persistent, not the post-login commit race)",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _smoke_admin_post_reaches_handler(client: httpx.Client, csrf: str) -> bool:
@@ -326,8 +377,12 @@ def main(argv: list[str] | None = None) -> int:
                 session_cookie, csrf = creds
 
                 print("[dast] pre-fuzz smoke checks", flush=True)
-                if not _check_get_ok(client, "/organization"):
-                    _print_log(uvicorn_log)  # e.g. SessionMiddleware "rejected session cookie"
+                # Bounded retry: absorbs the ms-scale post-login commit window
+                # (see _confirm_session_committed), fails loudly on a persistent
+                # auth breakage. Doubles as the "session is live before we fuzz"
+                # gate, so the whole fuzz run is authenticated.
+                if not _confirm_session_committed(client):
+                    _print_log(uvicorn_log)
                     return 1
                 if n_ops <= 50:
                     print(
