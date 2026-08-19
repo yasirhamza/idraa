@@ -20,6 +20,8 @@ Full posture document: [`docs/supply-chain.md`](docs/supply-chain.md).
 
 - Dependencies are pinned with hashes in `uv.lock`; Docker builds use
   `uv sync --frozen`.
+- Version bumps wait out a 7-day release-age cooldown (Dependabot `cooldown`);
+  security updates bypass it, so CVE fixes are not delayed.
 - Vendored front-end assets are integrity-pinned (`static/vendor/integrity.json`).
 - Secret scanning (gitleaks) runs at commit and push; a tracked-path denylist
   (`scripts/lint_tracked_paths.py`) guards against committing local state or

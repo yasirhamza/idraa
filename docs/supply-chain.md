@@ -59,6 +59,21 @@ same change. Suppress only when a bump is itself breaking. Offline hatch:
 `IDRAA_GATE_SKIP_AUDIT=1` skips only the audit step; document why in the
 commit that uses it.
 
+**Release-age cooldown (added 2026-08-19).** The `uv` and `docker` Dependabot
+updaters never select a release younger than 7 days (`cooldown:
+default-days: 7` in `.github/dependabot.yml`). Rationale: hash-pinning
+(layer 1) verifies the integrity of whatever version is bumped to — it does
+nothing if the bump lands on a release that is *itself* malicious. The
+March 2026 Trivy → LiteLLM campaign sat exactly in that gap: a poisoned
+build of a *security scanner* was live for days and poisoned LiteLLM wheels
+for ~40 minutes, exfiltrating CI secrets from ~2,500 organizations before
+quarantine. A release-age floor structurally outlasts that
+detection/quarantine window. The cooldown applies to version updates only —
+Dependabot **security** updates bypass it by design, so CVE fixes still
+arrive immediately. The `github-actions` updater does not support cooldown;
+the equivalent control there is SHA-pinned `uses:` plus human-merged monthly
+group PRs.
+
 ## 3. Outbound-leak surface
 
 - **gitleaks**, three points: staged-content at commit; a genuine full-history scan at push (a dedicated pre-push hook running `gitleaks git`); and full-history again in CI as the backstop against a bypassed local hook. False positives are suppressed via the tracked `.gitleaks.toml` allowlist — reason-annotated, so suppressions are reviewable diffs rather than lost knowledge.
@@ -111,6 +126,17 @@ commit that uses it.
    is pinned to one build.
 4. No match in either → the advisory doesn't currently apply. Re-check after
    the next `uv lock --upgrade-package` bump.
+5. **Match found and the release was malicious** (backdoored/typosquatted,
+   not merely vulnerable): treat every credential the build or runtime
+   environment could read as compromised. Enumerate the credential classes
+   *first* — deploy tokens (Fly), database, session-signing secret, mail,
+   any registry publishing tokens — from `.env.example` and `fly secrets
+   list`, rotate **all** of them, then verify the old values are actually
+   revoked (attempt a call with the old credential; expect failure).
+   Rotation is complete when the enumerated list is checked off, not when
+   memory runs out: the March 2026 Trivy incident persisted after
+   remediation precisely because the vendor's credential rotation was
+   incomplete and the attacker retained access through what was missed.
 
 ## 6. Coverage notes
 

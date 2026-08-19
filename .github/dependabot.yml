@@ -10,6 +10,16 @@ updates:
       python-deps:
         patterns: ["*"]
     open-pull-requests-limit: 3
+    # Release-age cooldown: never select a release younger than 7 days.
+    # Malicious-release exposure-window defense (Trivy → LiteLLM, March 2026:
+    # a poisoned *security scanner* build live for days, poisoned LiteLLM
+    # wheels for ~40 minutes — hash pins verify the integrity of whatever we
+    # bump to; a release-age floor keeps us from bumping onto a release
+    # younger than the typical detection/quarantine window). Applies to
+    # VERSION updates only — Dependabot SECURITY updates bypass cooldown, so
+    # CVE fixes still arrive immediately. Rationale: docs/supply-chain.md §2.
+    cooldown:
+      default-days: 7
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -18,8 +28,13 @@ updates:
       actions:
         patterns: ["*"]
     open-pull-requests-limit: 3
+    # No cooldown here: unsupported for the github-actions updater. The
+    # equivalent control is SHA-pinned `uses:` + human-merged monthly PRs.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 2
+    # Same release-age floor as the uv updater (see rationale above).
+    cooldown:
+      default-days: 7
