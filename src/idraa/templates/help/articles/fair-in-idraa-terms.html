@@ -123,6 +123,51 @@
   <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>.
 </p>
 
+<h2 class="text-h3 text-ink-1 mb-3" id="bayesian-or-frequentist">Bayesian or frequentist?</h2>
+<p class="text-body text-ink-2 mb-3">
+  The probabilities in FAIR &mdash; and therefore in Idraa &mdash; are
+  <strong>subjective (Bayesian) probabilities</strong>: statements of how
+  uncertain you are about a specific future outcome given what you know
+  today, not long-run frequencies over repeated trials. That is why the
+  wizard asks for calibrated 90% ranges rather than a single point value.
+  Historical data still informs your ranges as evidence &mdash; incident
+  counts are good grounding for a frequency estimate &mdash; but for a
+  one-off outcome like &ldquo;this organization suffers a major outage next
+  year&rdquo; there is no repeatable experiment, and so no well-defined
+  long-run frequency. The FAIR literature (Jack Freund &amp; Jack Jones,
+  <em>Measuring and Managing Information Risk</em>, 2015) adopts this
+  interpretation, and it is the same stance behind Hubbard &amp;
+  Seiersen&rsquo;s calibrated-estimation method cited above.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  A Bayesian <em>interpretation</em> does not mean Bayesian
+  <em>inference</em>. The engine performs forward Monte Carlo propagation:
+  it samples your input distributions and pushes the samples through the
+  factor tree. There is no prior-times-likelihood step and no posterior
+  &mdash; when new evidence arrives (an incident, a pentest finding, better
+  industry data), you update the model by <strong>re-eliciting the input
+  ranges</strong>, not by feeding observations to the engine. The engine
+  never adjusts your estimates on its own.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  One nuance the FAIR standard is careful about, and Idraa preserves: the
+  model mixes genuine <strong>frequencies</strong> with genuine
+  <strong>probabilities</strong>. Threat Event Frequency and Loss Event
+  Frequency are rates &mdash; events per year, which can exceed 1 &mdash;
+  while Vulnerability is a probability bounded to 0&ndash;100%. The two are
+  kept semantically distinct throughout the engine; neither is converted
+  into the other.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The one-line summary: FAIR uses subjective probabilities, elicited through
+  calibrated estimation and propagated by Monte Carlo simulation &mdash; it
+  does not perform Bayesian updating. Results are statements of belief
+  conditional on your inputs, and they are as defensible as the estimates
+  behind them &mdash; which is why the
+  <a class="text-brand hover:underline" href="/help/raw-samples-export">raw
+  sample export</a> exists, so you can verify the propagation yourself.
+</p>
+
 <h2 class="text-h3 text-ink-1 mb-3" id="glossary">Glossary</h2>
 <p class="text-body text-ink-2 mb-3">Every term and acronym used in Idraa, spelled out.</p>
 <div class="overflow-x-auto">
