@@ -124,7 +124,14 @@ async def test_sweep_exception_does_not_kill_reaper_loop(
     monkeypatch.setattr(run_reaper, "sweep_expired_sessions", _noop_sweep)
 
     task = asyncio.create_task(run_reaper.periodic_reaper_loop(_StubSettings()))  # type: ignore[arg-type]
-    await asyncio.sleep(0.05)  # >= 2 intervals at 0.01s each
+    # Condition-wait, not a fixed sleep: under xdist load the event loop can
+    # be starved past any wall-clock budget (issue #164 — flaked on a main
+    # re-run). The 5s ceiling only bounds the FAILURE case: if the loop dies
+    # after the sweep exception, reap_once stops advancing and TimeoutError
+    # fails the test.
+    async with asyncio.timeout(5):
+        while reap_once_calls < 2:
+            await asyncio.sleep(0.01)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
