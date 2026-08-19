@@ -179,7 +179,11 @@ async def test_new_sweep_exceptions_do_not_kill_reaper_loop(
     monkeypatch.setattr(run_reaper, "sweep_expired_sessions", _raising_session_sweep)
 
     task = asyncio.create_task(run_reaper.periodic_reaper_loop(_StubSettings()))  # type: ignore[arg-type]
-    await asyncio.sleep(0.05)  # >= 2 intervals at 0.01s each
+    # Condition-wait, not a fixed sleep (issue #164 — same shape as the
+    # wizard-draft twin): the 5s ceiling only bounds the failure case.
+    async with asyncio.timeout(5):
+        while reap_once_calls < 2:
+            await asyncio.sleep(0.01)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
