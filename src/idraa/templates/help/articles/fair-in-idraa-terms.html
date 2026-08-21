@@ -36,6 +36,23 @@
   <strong>Threat Capability (TC)</strong> and
   <strong>Control Strength / Resistance Strength (CS)</strong>.
 </p>
+<p class="text-body text-ink-2 mb-3">
+  One terminology warning: this is <em>not</em> the vulnerability-scanner
+  sense of the word. Security practitioners are trained to read
+  &ldquo;vulnerability&rdquo; as a defect &mdash; an unpatched CVE, a weak
+  configuration &mdash; but in FAIR the word names how likely an attempt is
+  to succeed: always a probability, never a finding you can point at. A
+  defect matters because it weakens resistance and so raises the chance an
+  attempt succeeds; in Idraa that effect reaches the analysis through the
+  controls you tick (patch state, for example, is a modelled control), not
+  by folding control state into the inherent figure you author here. Jack Freund &amp; Jack Jones adopt
+  &ldquo;susceptibility&rdquo; as an official synonym for the FAIR sense
+  (<em>Measuring and Managing Information Risk</em>, 2015, p.&nbsp;5
+  n.&nbsp;1) &mdash; partly because FAIR applies to risk domains beyond
+  cyber, where the word is rarely used, and partly to head off exactly this
+  confusion. The scenario wizard uses the same word when it asks for the
+  asset&rsquo;s <em>inherent susceptibility</em>.
+</p>
 
 <h3 class="text-h4 text-ink-1 mb-2">4. LM = Primary Loss + Secondary Loss (per loss event)</h3>
 <p class="text-body text-ink-2 mb-6">
@@ -134,9 +151,8 @@
   counts are good grounding for a frequency estimate &mdash; but for a
   one-off outcome like &ldquo;this organization suffers a major outage next
   year&rdquo; there is no repeatable experiment, and so no well-defined
-  long-run frequency. The FAIR literature (Jack Freund &amp; Jack Jones,
-  <em>Measuring and Managing Information Risk</em>, 2015) adopts this
-  interpretation, and it is the same stance behind Hubbard &amp;
+  long-run frequency. The FAIR literature (Freund &amp; Jones, 2015) adopts
+  this interpretation, and it is the same stance behind Hubbard &amp;
   Seiersen&rsquo;s calibrated-estimation method cited above.
 </p>
 <p class="text-body text-ink-2 mb-3">
@@ -183,7 +199,7 @@
       <tr><td>ALE</td><td>Annualized Loss Expectancy</td><td>Your expected (mean) total loss per year for a scenario.</td></tr>
       <tr><td>Residual ALE</td><td>Residual Annualized Loss Expectancy</td><td>The yearly loss that remains after your controls are applied.</td></tr>
       <tr><td>TEF</td><td>Threat Event Frequency</td><td>How often a threat attempts the event, per year.</td></tr>
-      <tr><td>Vulnerability (Vuln)</td><td>Vulnerability</td><td>The inherent chance an attempt succeeds, before your controls &mdash; the controls you tick reduce it in the analysis.</td></tr>
+      <tr><td>Vulnerability (Vuln)</td><td>Vulnerability</td><td>The inherent chance an attempt succeeds, before your controls &mdash; the controls you tick reduce it in the analysis. A probability, not a scanner finding.</td></tr>
       <tr><td>LEF</td><td>Loss Event Frequency</td><td>How often an attempt actually causes loss (Threat Event Frequency &times; Vulnerability).</td></tr>
       <tr><td>PL</td><td>Primary Loss</td><td>The direct cost of an event (response, repair, ransom).</td></tr>
       <tr><td>SL</td><td>Secondary Loss</td><td>The knock-on cost (fines, reputation, lost business).</td></tr>
