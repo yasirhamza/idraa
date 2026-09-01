@@ -3,7 +3,7 @@
 # --- Stage 1: build dependencies into a venv -----------------------------------
 # Digest-pinned (supply-chain: a mutable tag is the container analog of an
 # unpinned action). Dependabot's docker ecosystem keeps this current.
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS builder
+FROM python:3.11-slim@sha256:d1e9ca7c4e78d1e8ecadb5d44bfc8e956e7a65b659a9950f569f243d72b326d0 AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -59,7 +59,7 @@ RUN --mount=type=cache,target=/app/.tailwind-bin \
 # --- Stage 2: runtime ---------------------------------------------------------
 # Digest-pinned (supply-chain: a mutable tag is the container analog of an
 # unpinned action). Dependabot's docker ecosystem keeps this current.
-FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93 AS runtime
+FROM python:3.11-slim@sha256:d1e9ca7c4e78d1e8ecadb5d44bfc8e956e7a65b659a9950f569f243d72b326d0 AS runtime
 
 # PYTHONHASHSEED=0 (issue #33): set/frozenset iteration order in the scalar
 # compose path (fair_cam group_composition / composition) is hash-seed
