@@ -36,17 +36,18 @@ is not repeated here.
 ## Provenance classes
 
 Every entry carries one primary class, plus a secondary class where a
-numeric sub-part rides on a structural choice. The classes are ordered from
+separable sub-part (a numeric value or a second operator) has its own
+provenance. The classes are ordered from
 most to least consequential.
 
 | Class | Meaning |
 |---|---|
 | **DEPARTURE** | A branch, relationship, or operator differs from what the Standard or the book prescribes. The page-42 case. Needs a rationale, a bound on the error, and a test. |
-| **ADDED RELATIONSHIP** | A relationship the Standard describes only qualitatively is given an explicit functional form. The book's "changed the relationships" case. (Where the Standard is silent and Idraa adopts a neutral assumption such as independence, the entry is IMPLEMENTATION-DEFINED.) |
+| **ADDED RELATIONSHIP** | A relationship the Standard describes only qualitatively, or not at all where Idraa introduces a non-neutral constraint such as the B2 revenue bound, is given an explicit functional form. The book's "changed the relationships" case. (Where the Standard is silent and Idraa adopts a neutral assumption such as independence, the entry is IMPLEMENTATION-DEFINED.) |
 | **CALIBRATION** | A numeric value the Standard does not supply. The book's "added weighted values" case. Must say whether the value is cited, calibrated, or a convention, and whether it is identifiable. |
 | **IMPLEMENTATION-DEFINED** | The Standard gives a semantic but no formula; Idraa chose one. Must be property-tested against the semantic. |
 | **ESTIMATION LEVEL** | Which node of the tree the analyst authors. The book explicitly allows estimating at any level; listed for transparency, not as a deviation. |
-| **VIEW-MODEL DERIVATION** | Not FAIR at all. Lives outside the FAIR math; the attribution table is labelled on screen, the others are documented in this register and the help (CLAUDE.md "No portfolio-finance overclaim"). |
+| **VIEW-MODEL DERIVATION** | Not FAIR at all. Lives outside the FAIR math; the attribution table carries a modelled-estimates disclaimer on screen and its "not FAIR-grounded" note in the help, the others are documented in this register and the help (CLAUDE.md "No portfolio-finance overclaim"). |
 
 Each entry has: what the Standard or book says; what Idraa does; the class;
 the rationale; where it lives; how to evaluate it.
@@ -425,9 +426,9 @@ Everything numeric in this section is therefore Idraa's.
   symmetry, non-identifiable, perturbed by the ensemble as `meta.kappa`).
 - **Where.** `fair_cam/models/composition_topology.py`
   (`KAPPA_META_RELIABILITY`), `group_composition.py` (`finalize_composition`).
-  A stale docstring in `control_aware.py` still describes the pre-#439 direct
+  A stale docstring in `control_aware.py` still describes the pre-riskflow#439 direct
   VMC node target; the topology table, not that docstring, is the source of
-  truth (cleanup folded into issue #177).
+  truth (cleanup tracked on issue #177).
 - **Evaluate.** `test_kappa_meta_reliability_pin`; the max-aggregation fix
   (riskflow#455) and the open attribution investigation (riskflow#434) are the live
   evaluation record.
