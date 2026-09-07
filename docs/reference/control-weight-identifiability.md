@@ -15,10 +15,14 @@ related:
 The four FAIR-axis routing weights and the κ reliability-coupling gain
 (register entries C4 and C7) are **calibrated but not validated**, and they
 **cannot be validated** against a single organisation's loss outcomes. The
-original audit put the shortfall at roughly three to five orders of magnitude
-between the data one organisation can ever observe and the data the
-estimation would need. This document records the argument so it can be
-evaluated in the open; the conclusion drives two standing policies:
+original audit, as recorded in `control-weight-robustness.md`, put the
+shortfall at roughly three to five orders of magnitude between the data one
+organisation can ever observe and the data the estimation would need; the
+reconstruction in §2 supports about three (thousands of organisation-years
+against the five to ten years over which a control estate stays comparable),
+with the upper end resting on the shorter comparability windows and the
+power correction noted there. This document records the argument so it can
+be evaluated in the open; the conclusion drives two standing policies:
 
 1. No per-organisation calibration layer for these parameters. It would
    relocate the guess into a form that looks measured.
@@ -46,15 +50,19 @@ events for one scenario is a handful.
 
 **Illustration (hand-math, not the original audit's computation).** For a
 Poisson count `n`, the relative standard error of the rate estimate is
-`1/√n`. To separate `w = 0.8` from `w = 0.6` on the Vulnerability axis at a
-typical `E` of 0.5, the multipliers are `0.60` vs `0.70`, a relative
+`1/√n`. To separate `w = 0.8` from `w = 0.6` on the Threat Event Frequency
+axis (`prevention.tef`, canonical 0.8) at a typical `E` of 0.5, the
+multipliers are `0.60` vs `0.70`, a relative
 difference of about 15%. The standard error of the difference between two
 independent rate estimates with `n` events each is `√(2/n)` in relative
 terms; resolving a 15% difference at two standard errors needs
 `2·√(2/n) ≤ 0.15`, so `n ≈ 360` loss events **in each arm**, about 720 in
 total. At an LEF of 0.1 per year that is on the order of 3,600
-organisation-years per arm. Nothing about that arithmetic depends on the
-particular weight; it is set by the rarity of loss events.
+organisation-years per arm. Two standard errors is a detection threshold,
+not a power calculation; at 80% power and α = 0.05 the factor is 2.80 and
+the requirement roughly doubles to about 700 events per arm, so the figure
+above is a floor. Nothing about that arithmetic depends on the particular
+weight; it is set by the rarity of loss events.
 
 ### 3. The counterfactual arm does not exist
 

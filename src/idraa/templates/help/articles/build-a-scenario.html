@@ -69,7 +69,11 @@
   after the incident. Like Primary Loss, this is a per-event magnitude. The two
   are added to form Loss Magnitude for each simulated event; annualisation
   happens in the Monte Carlo layer, not in your input. If secondary consequences
-  are negligible or unknown, set both low and high to zero and revisit later.
+  are negligible, set both low and high to zero. If they would follow only some
+  loss events, estimate the range for the case where they do occur and scale it
+  by how often they follow &mdash; Idraa applies Secondary Loss on every
+  simulated event and has no separate probability for it. Do not zero an
+  unknown: estimate it and revisit.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="sme-estimates-and-pooling">SME estimates and pooling</h2>

@@ -58,7 +58,10 @@
   choice).</strong> FAIR does not say how to combine scenarios. Idraa sums
   their annual-loss samples with no correlation between them, which
   understates the tail when several scenarios share a cause. No
-  portfolio-finance correction is applied.
+  portfolio-finance correction is applied. Within a single event, Primary
+  and Secondary Loss are likewise drawn independently and summed, which
+  understates the per-event tail for scenarios whose loss is split across
+  both; the library&rsquo;s share rubric was tuned knowing this.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="distribution-choices">Distribution choices</h2>
@@ -91,6 +94,29 @@
   choice).</strong> FAIR prescribes no pooling arithmetic. Idraa keeps each
   expert&rsquo;s fitted distribution as its own component rather than
   averaging the ranges first, which would erase their disagreement.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Library loss figures are a sector envelope split by forms of loss
+  (calibration).</strong> FAIR names six forms of loss but gives no
+  arithmetic for building a magnitude from them. Each library entry takes a
+  cited sector loss envelope and splits it across the forms it fires, using
+  analyst-judged shares that are not individually cited. The envelope
+  citation survives the split, and the shares themselves are under audit
+  (<a class="text-brand hover:underline" href="https://github.com/yasirhamza/idraa/issues/175">issue #175</a>).
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Qualitative bands map to ranges by convention (calibration).</strong>
+  When you convert a qualitative risk register, each likelihood band becomes
+  a frequency range and each impact band a loss range. Open FAIR publishes
+  no such scale; Idraa&rsquo;s is a convention, labelled as such, and every
+  converted scenario is flagged for review. A register likelihood is read as
+  the loss-event frequency directly, skipping the attempt-and-success split.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Overlays only pre-fill the wizard (calibration).</strong> Named
+  overlays such as critical infrastructure carry multiplicative adjustments
+  to the FAIR inputs. They apply when you press the button, editing values
+  you then own; nothing multiplies at run time.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="the-control-model">The control model (FAIR-CAM)</h2>
@@ -130,8 +156,10 @@
   <strong>Decision-support prevention is not an all-or-nothing AND
   (departure).</strong> FAIR-CAM prescribes AND across nine decision-support
   functions, which would score any organisation missing one of them at zero.
-  Idraa scores the strongest coherent subset of the functions present. A
-  weaker extra function neither helps nor hurts.
+  Idraa scores the group at the level of its <strong>single strongest</strong>
+  present function (formally the best-coherent-subset mean, which reduces to
+  the maximum). A weaker extra function neither helps nor hurts, and one
+  strong function carries the whole group.
 </p>
 <p class="text-body text-ink-2 mb-3">
   <strong>Correction needs implementation (departure).</strong> FAIR-CAM
@@ -148,18 +176,31 @@
   &ldquo;weak AND&rdquo; the standard describes for response functions is an
   equal-weighted average. The two variance-identification functions
   (threat intelligence, control monitoring) combine with OR, since the
-  standard names both but prescribes no operator between them. Detection on
-  its own applies nothing; it enables response, which acts on loss size
-  only. A loss-reduction control valued in currency subtracts a fixed amount
-  per event from Secondary Loss only. Each of these is tested against the
-  meaning the standard gives.
+  standard names both but prescribes no operator between them; so do
+  several controls serving the same sub-function, assuming they fail
+  independently. Detection on its own applies nothing; it enables response,
+  which acts on loss size only. A loss-reduction control valued in currency
+  subtracts a fixed amount per event from Secondary Loss only. Each of these
+  is tested against the meaning the standard gives.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Availability scenarios skip the detection gate (added
+  relationship).</strong> FAIR-CAM notes that availability events manifest
+  themselves. Idraa turns that into a rule: for a scenario whose effect is
+  availability, response controls are credited in full with no detection
+  control present. The direction is the standard&rsquo;s; the rule is
+  Idraa&rsquo;s.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="outside-fair">Outside FAIR</h2>
 <p class="text-body text-ink-2 mb-6">
   Control attribution (the fair-share and if-removed figures), the
-  robustness ranges, and the mean-based ALE headline are reporting
-  derivations, not FAIR nodes. They are computed outside the FAIR maths;
+  robustness ranges, the mean-based ALE headline, the run-level return on
+  investment ratio, the ATT&amp;CK coverage percentages, the dashboard
+  appetite verdict, and the simulation convergence read-out are reporting
+  derivations, not FAIR nodes. The return-on-investment figure in particular
+  is shown as a single number while resting on the same uncertain weights
+  that give control value its range. They are computed outside the FAIR maths;
   the attribution table carries an explicit &ldquo;not FAIR-grounded&rdquo;
   methodology note, and the rest are documented as derivations here and in
   the public register rather than on every screen that shows them. The

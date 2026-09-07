@@ -2,14 +2,14 @@
 title: "Register of departures from FAIR and FAIR-CAM"
 status: living — every entry must stay in sync with the code it cites
 last_reviewed: 2026-09-07
-governs: Jones & Freund, *Measuring and Managing Information Risk* (2015), ch. 3 p. 42 — "be extremely careful and prepared to defend your decision" on any change to the model's branches, relationships, or weights
+governs: Freund & Jones, *Measuring and Managing Information Risk* (2015), ch. 3 p. 42 — "be extremely careful and prepared to defend your decision" on any change to the model's branches, relationships, or weights
 ---
 
 # Register of departures from FAIR and FAIR-CAM
 
 ## Why this register exists
 
-Jones & Freund close their description of the FAIR model with a warning
+Freund & Jones close their description of the FAIR model with a warning
 (ch. 3, p. 42): teams that added a branch, deleted a branch, changed a
 relationship, or added weighted values usually broke the model, so anyone
 who changes it must be "extremely careful and prepared to defend" the change,
@@ -20,13 +20,14 @@ in the code where it happens, but until this register the labels were
 scattered across docstrings, topology tables, and a dozen reference docs, so
 nobody could answer "where does Idraa differ from the book and the Standard?"
 in one place. This document is that place. The repository is public, which
-covers the "open forum" half of the requirement; this register covers the
-"prepared to defend" half.
+makes evaluation in an open forum possible (publication is not itself
+evaluation); this register covers the "prepared to defend" half.
 
 **Scope rule.** An entry belongs here when Idraa's engine or authoring model
 does something the FAIR Standard (Open FAIR risk taxonomy / analysis
-standards), the FAIR-CAM Standard V1.0, or the Jones & Freund text either
+standards), the FAIR-CAM Standard V1.0, or the Freund & Jones text either
 prescribes differently, leaves unspecified, or does not contain at all.
+Citations use the published author order, Freund & Jones (2015).
 Things the Standard prescribes and Idraa follows are not listed (the code
 labels those `PRESCRIBED` with a section citation). Removed contamination is
 recorded in `fair-cam-methodology.md` ("What is NOT in FAIR / FAIR-CAM") and
@@ -64,14 +65,17 @@ the rationale; where it lives; how to evaluate it.
   There is no secondary-loss probability field anywhere in the scenario
   model, the wizard, or the engine.
 - **Class.** DEPARTURE (deleted branch).
-- **Rationale, as it stands.** The wizard tells the analyst to fold the
-  conditional probability into the Secondary Loss range and to author zero
-  when secondary consequences are negligible. That keeps the mean roughly
-  right when the analyst does it, but it replaces a two-point mixture
-  (nothing, or a secondary loss) with a smoothed range, which understates
-  dispersion, and it silently assumes `P(secondary) = 1` whenever the analyst
-  does not discount. This entry was **unlabelled until this register was
-  written**; it is the one item here whose defence is incomplete.
+- **Rationale, as it stands.** Until this register, nothing in the product
+  told the analyst to discount for a conditional probability: the wizard
+  only said to zero the range when secondary consequences are "negligible or
+  unknown" (zeroing an unknown is the anti-conservative direction). The
+  scenario-building help now says to scale the range by how often a loss
+  event triggers secondary reactions and never to zero an unknown. Even with
+  that guidance the model replaces a two-point mixture (nothing, or a
+  secondary loss) with a smoothed range, which understates dispersion, and it
+  assumes `P(secondary) = 1` whenever the analyst does not scale. This entry
+  was **unlabelled until this register was written**; it is the item here
+  whose defence is least complete.
 - **Where.** `fair_cam/risk_engine/fair_core.py`; scenario form and
   `templates/help/articles/build-a-scenario.html` ("Secondary Loss").
 - **Evaluate.** Compare a scenario authored with a discounted SL range
@@ -83,8 +87,9 @@ the rationale; where it lives; how to evaluate it.
 ### A2. Vulnerability is authored directly; Threat Capability vs Resistance Strength is not elicited
 
 - **Standard / book.** `Vulnerability = P(Threat Capability > Resistance
-  Strength)`; the book allows the analyst to estimate at the Vulnerability
-  level directly and skip the sub-branch.
+  Strength)` (older Open FAIR text says Control Strength; the help uses that
+  name); the book allows the analyst to estimate at the Vulnerability level
+  directly and skip the sub-branch.
 - **Idraa.** The wizard authors the **inherent, control-naive** Vulnerability
   as a bounded probability; the `threat_capability` / `resistance_strength`
   fields exist on the engine's parameter dataclass but are never populated by
@@ -117,10 +122,29 @@ the rationale; where it lives; how to evaluate it.
   share a driver (one ransomware campaign hitting several assets), which the
   help article states plainly. No portfolio-finance correction is applied,
   by policy.
-- **Where.** `services/run_executor.py` aggregate path;
+- **Where.** `fair_cam/risk_engine/native_control_aware.py` (the aggregate
+  rollup sums independent scenario streams); `services/run_executor.py`;
   `templates/help/articles/run-and-read-analyses.html`.
 - **Evaluate.** Raw-sample export lets a reader re-sum with any correlation
   they prefer.
+
+### A5. Primary and Secondary Loss are sampled independently within one event
+
+- **Standard / book.** FAIR sums the forms of loss per event; it does not
+  say whether primary and secondary magnitudes co-vary.
+- **Idraa.** Per iteration, Primary Loss and Secondary Loss are drawn
+  independently and summed.
+- **Class.** IMPLEMENTATION-DEFINED (independence assumption), and
+  **anti-conservative**: for an archetype whose loss is split across both
+  sides, the sum's variance is roughly half what perfect co-variation would
+  give (`loss-form-share-rubric.md` §1 records the direction), so the
+  per-event tail is understated.
+- **Rationale.** Same as A4: independence adds nothing the analyst did not
+  author. The library's share rubric was tuned knowing this.
+- **Where.** `fair_cam/risk_engine/fair_core.py` (`loss_magnitude = primary +
+  secondary`); `loss-form-share-rubric.md` §1.
+- **Evaluate.** Compare the sampled per-event p95 against a comonotone
+  (rank-correlated) re-sum from the raw-sample export.
 
 ---
 
@@ -137,7 +161,13 @@ the rationale; where it lives; how to evaluate it.
   a hard ceiling of the sampled values. For the library the analytic
   lognormal mode falls below `low` for every capped entry, so the PERT is
   `Beta(2/3, 10/3)` with density rising toward `low`.
-- **Class.** CALIBRATION (convention).
+- **Class.** IMPLEMENTATION-DEFINED (a change of sampling family with a
+  hard ceiling), with a CALIBRATION sub-part (reading low/high as the 5th
+  and 95th percentiles, `Z = 1.6449`). The library's TEF path is a slightly
+  different convention: the curator's p5/p95 are promoted directly to the
+  PERT's hard bounds (`tef-representation.md`). Whether the collapse lands
+  in the `Beta(2/3, 10/3)` regime depends on σ exceeding `Z`, which is why
+  the σ default (B3) carries a precondition tied to this entry.
 - **Rationale.** A runtime clip of a lognormal dumps its tail mass into a
   spike at the cap; a bounded family avoids the artefact. The cost is a
   documented drop in expected loss relative to the uncapped lognormal
@@ -171,7 +201,10 @@ the rationale; where it lives; how to evaluate it.
   σ = 1.7 in log space: a round number above the IRIS event-type-conditioned
   reads and below every size-conditioned read.
 - **Class.** CALIBRATION (convention, not a measurement). IRIS never
-  publishes the single-firm × single-scenario joint distribution.
+  publishes the single-firm × single-scenario joint distribution. The value
+  must stay above `Z = 1.6449` because B1's PERT collapse relies on the
+  lognormal mode clamping to `low` (precondition noted in
+  `services/calibration.py`).
 - **Where.** `services/calibration.py` (`WITHIN_SCENARIO_SIGMA_DEFAULT`);
   `within-scenario-sigma-calibration.md`.
 - **Evaluate.** The derivation table in that doc; the σ-recalibration
@@ -190,6 +223,60 @@ the rationale; where it lives; how to evaluate it.
 - **Where.** `fair_cam/quantile_pooling/`.
 - **Evaluate.** Fixture parity against the pinned upstream commit in
   `fair_cam/tests/quantile_pooling/`.
+
+### B5. Library loss magnitudes = sector envelope × per-archetype form shares
+
+- **Standard / book.** The six forms of loss are FAIR's; the book gives no
+  arithmetic for building a magnitude from them.
+- **Idraa.** Each library entry's `primary_loss` and `secondary_loss` are
+  `E_sector × Σ(active primary-form shares)` and `E_sector × Σ(active
+  secondary-form shares)`, with shares per (form, kind) assigned by an
+  analyst-judged rubric under a `Σ(all shares) ≤ 1` coherence bound. The
+  shares are self-described as "analyst judgment, vulnerability-grade, no
+  per-value citation."
+- **Class.** CALIBRATION (added weighted values), applied on top of the
+  cited sector envelope.
+- **Rationale.** Differentiates archetypes within a sector by which forms
+  of loss they fire, instead of flattening every archetype to the sector
+  envelope. The envelope citation survives the split (guarded).
+- **Where.** `loss-form-share-rubric.md`, `loss-magnitude-forms.md`,
+  `data/seed_library_entries*.json` (`loss_form_profile`).
+- **Evaluate.** `tests/integration/test_library_loss_differentiation.py`
+  pins reconstruction from envelope × shares; the stakeholder-test audit of
+  the shares is tracked in issue #175.
+
+### B6. Qualitative likelihood and impact bands map to FAIR ranges
+
+- **Standard / book.** Open FAIR's risk-analysis standard gives estimation
+  guidance for converting qualitative registers but publishes no frequency
+  example scale.
+- **Idraa.** The qualitative-register converter maps each likelihood band to
+  a frequency range (for example, very low = 0.01 to 0.1 events per year)
+  and each impact band to a loss range, with the mode at the band's
+  geometric midpoint. Structurally, a register likelihood is read as the
+  **loss-event frequency**, bypassing the TEF × Vulnerability split.
+- **Class.** CALIBRATION (the band tables are a v3 convention, labelled so
+  in the seed data) plus ESTIMATION LEVEL (authoring at LEF).
+- **Rationale.** The bands are priors for calibrated review, not empirical
+  claims; every converted scenario is flagged for analyst confirmation.
+- **Where.** `data/seed_qualitative_bands.json`; the converter service.
+- **Evaluate.** The seed file records the scale's provenance; converted
+  scenarios carry their origin so a reviewer can re-elicit.
+
+### B7. Overlays pre-fill the wizard with multiplicative adjustments
+
+- **Standard / book.** Not a FAIR concept.
+- **Idraa.** Named overlays (for example, critical infrastructure) carry
+  multiplicative deltas on FAIR parameters. Since the 2026-05 cleanup they
+  are **wizard-time pre-fill only**: applying one edits the form values the
+  analyst then owns; nothing multiplies at run time.
+- **Class.** CALIBRATION (the deltas), confined to authoring.
+- **Rationale.** Keeps the stored scenario the single source of truth, so a
+  run never depends on a calibration layer that could change under it.
+- **Where.** `services/overlays.py`, `_starter_overlays_seed_data.py`;
+  `fair-cam-methodology.md` ("What was excised in PR π").
+- **Evaluate.** Every overlay row carries a methodology note (fail-loud on
+  missing); runtime independence is guarded by the PR π deletion record.
 
 ---
 
@@ -219,6 +306,14 @@ Everything numeric in this section is therefore Idraa's.
 - **Idraa.** `opeff = exp(−elapsed_time / τ_sf)` with a per-sub-function τ
   table, each τ traced to a primary citation under a cite-or-drop rule.
 - **Class.** IMPLEMENTATION-DEFINED (the form) + CALIBRATION (the τ table).
+- **Distribution assumption.** Two of the three canonical τ values are
+  anchored on a published **mean** (`τ = mean`), which equals the decay
+  constant only under an exponential (constant-hazard) time-to-detect or
+  time-to-contain distribution. Cyber dwell times are better described as
+  lognormal or Weibull, so those two τ values carry a shape assumption the
+  citation does not itself support; the third is median-anchored
+  (`τ = median / ln 2`), which needs no shape assumption for the half-life
+  point. The table records which anchor each value uses.
 - **Where.** `elapsed-time-tau-calibration.md`,
   `fair_cam/calibration/elapsed_time_taus.py`.
 - **Evaluate.** The #131 precedent (means plugged into a median-half-life
@@ -238,8 +333,8 @@ Everything numeric in this section is therefore Idraa's.
 
 ### C4. FAIR-axis routing weights (the page-42 "added weighted values")
 
-- **Standard.** Says Prevention reduces loss-event likelihood (§3.1) and
-  Response limits loss magnitude (§3.3); gives no magnitudes.
+- **Standard.** Says Prevention reduces loss-event likelihood (§3.1 p. 9)
+  and Response limits loss magnitude (§3.3 p. 18); gives no magnitudes.
 - **Idraa.** Group effectiveness `E` reaches a FAIR node as the multiplier
   `1 − E·w`, with canonical weights:
 
@@ -260,7 +355,14 @@ Everything numeric in this section is therefore Idraa's.
   with a **stability verdict**. Per-organisation calibration of these weights
   is refused by policy because it would relocate the guess, not remove it.
 - **Where.** `fair_cam/models/composition_topology.py` (`GROUP_NODE_MAPPING`);
-  `services/weight_robustness.py`; `control-weight-robustness.md`.
+  `services/weight_robustness.py`; `control-weight-robustness.md`. If two
+  groups ever target the same node their multipliers are applied as a
+  product (currently inert: only Prevention and Response carry targets, on
+  disjoint nodes).
+- **Dead code warning.** `fair_cam/models/control.py` still carries a
+  deprecated `get_fair_impact_factor` method with a second, contradictory,
+  unlabelled weight table (0.8 / 0.7 / 0.6 / 0.5 / 0.4 / 0.9). It has zero
+  callers and is not the engine's table; removal is tracked in issue #177.
 - **Evaluate.** `fair_cam/tests/test_composition_topology.py` pins the
   values; the ensemble's σ-sensitivity fixture shows how verdicts move.
 
@@ -276,26 +378,32 @@ Everything numeric in this section is therefore Idraa's.
 
 ### C6. DSC Prevention composed by best-coherent-subset mean, not Boolean AND
 
-- **Standard.** §5.1.x prescribes AND across the nine Decision Support
-  prevention sub-functions.
+- **Standard.** §5.1.x (pp. 36–45) prescribes AND across the nine Decision
+  Support prevention sub-functions.
 - **Idraa.** First relaxed to weak-AND (a strict AND makes any organisation
   without all nine functions score zero decision support), then to the
   **best-coherent-subset mean** (max over k of the top-k mean) because the
   plain mean is non-monotone in coalition membership and produced negative
-  Shapley values on a production run (#453).
+  Shapley values on a production run (#453). Because prefix means of a
+  descending sequence never increase, this is **identically `max` of the
+  present member effectivenesses**: one strong decision-support function
+  scores the whole group at its own level. The code says so; the register
+  says so here.
 - **Class.** DEPARTURE (changed relationship), labelled at the site.
 - **Rationale.** Decision-support quality is read as the strongest coherent
   subset of present functions; a weaker extra function neither helps nor
-  dilutes. Known cost: overstates `E_dsc` for sparse authoring, bounded by
-  `κ · (1 − r0)` (C7).
+  dilutes. Known cost: a max-aggregator overstates `E_dsc` whenever the
+  other present functions are weaker, most of all for sparse authoring; the
+  overstatement's effect on risk is bounded by `κ · (1 − r0)` (C7).
 - **Where.** `fair_cam/risk_engine/group_composition.py` (`precompose_parts`).
 - **Evaluate.** Monotonicity is the property the change exists to restore;
   the negative-Shapley regression from #453 is the test case.
 
 ### C7. Meta-controls act through a reliability coupling, `r_eff = r0 + (1 − r0)·κ·E_meta`, κ = 0.5
 
-- **Standard.** §2.2, §2.3, §4: VMC and DSC affect risk *indirectly*, by
-  changing the reliability of other controls; no functional form.
+- **Standard.** §2.2 p. 5, §2.3 pp. 5–6, §4 p. 21: VMC and DSC affect risk
+  *indirectly*, by changing the reliability of other controls; no
+  functional form.
 - **Idraa.** VMC/DSC groups carry **no direct FAIR-node targets** (retired in
   #439 on §2.2 "indirectly affect risk" grounds). Their composed strength
   `E_meta` recovers a fraction κ of every co-present Loss Event Control's
@@ -313,9 +421,9 @@ Everything numeric in this section is therefore Idraa's.
 
 ### C8. VMC Correction is gated on Implementation; VMC Identification pair uses OR
 
-- **Standard.** §4.3 prescribes AND(Treatment Selection, Implementation);
-  §4.2 names Threat Intelligence and Controls Monitoring but prescribes no
-  operator between them.
+- **Standard.** §4.3.1–4.3.2 (p. 28) prescribes AND(Treatment Selection,
+  Implementation); §4.2 (p. 25) names Threat Intelligence and Controls
+  Monitoring but prescribes no operator between them.
 - **Idraa.** Absent Implementation → no correction regardless of selection;
   present → AND over present members (replaces zero-padding of an absent
   selection). Identification pair → OR, since the two members cover
@@ -330,15 +438,26 @@ Everything numeric in this section is therefore Idraa's.
 
 ### C9. Detection has no standalone node; Response acts on magnitude only
 
-- **Standard.** §3.2: Detection enables Response; §3.3: Response limits loss.
+- **Standard.** §3.2 (pp. 15–17): Detection enables Response; §3.3 (p. 18):
+  Response limits loss; §3.3.2 (p. 19): availability events manifest
+  themselves.
 - **Idraa.** Detection alone applies no multiplier (it gates the
   Detection∧Response pair); the pair's effect is routed to Primary and
   Secondary Loss only, not to frequency (#130 D4 re-route, fixing a
-  double-count).
-- **Class.** IMPLEMENTATION-DEFINED, grounded in §3.2–3.3.
-- **Where.** `composition_topology.py` (`LEC_DETECTION`, `LEC_RESPONSE`).
+  double-count). **Availability bypass:** when the scenario's effect is
+  Availability, the Detection gate is treated as intrinsically satisfied and
+  the raw Response effectiveness is credited with no Detection control
+  present. The §3.3.2 text grounds the direction; the mapping from the
+  scenario's `effect = AVAILABILITY` to "self-detecting" is Idraa's.
+- **Class.** IMPLEMENTATION-DEFINED (gate and routing), grounded in
+  §3.2–3.3; ADDED RELATIONSHIP (the availability bypass).
+- **Where.** `composition_topology.py` (`LEC_DETECTION`, `LEC_RESPONSE`);
+  `fair_cam/risk_engine/control_aware.py` (`availability_self_detection`),
+  wired from `services/run_executor.py` on `ScenarioEffect.AVAILABILITY`.
 - **Evaluate.** `tests/contracts/test_weight_robustness_covariation.py::test_drpair_weights_are_inert`
-  (the pair entry's weights are never read) and the #130 double-count regression.
+  (the pair entry's weights are never read) and the #130 double-count
+  regression; the availability path is exercised in
+  `fair_cam/tests/risk_engine/` and the verification workbook mirrors it.
 
 ### C10. Currency-valued Loss Reduction is a per-event subtractor on Secondary Loss
 
@@ -352,6 +471,22 @@ Everything numeric in this section is therefore Idraa's.
   engine boundary; the partial-floor and full-collapse regimes are described
   in `fair-cam-standard-alignment.md` (§ on per-event dollar reduction).
 
+### C11. Several controls on one sub-function combine as independent OR
+
+- **Standard.** Silent on how two controls fulfilling the same sub-function
+  combine, and on how a single control's several assignments combine.
+- **Idraa.** Both use `1 − Π(1 − x_i)`, the probability that at least one
+  succeeds under independence (the same operator the Standard prescribes for
+  the Prevention trio, but applied here without a prescription).
+- **Class.** IMPLEMENTATION-DEFINED (independence across controls).
+- **Rationale.** Independence is the neutral choice; correlated failure
+  (two controls sharing a dependency) would make the OR optimistic. The
+  Standard's own dependency statement (§2.3) is what the κ coupling (C7)
+  models instead.
+- **Where.** `fair_cam/composition.py` (`or_compose`, "within-sub-function
+  across controls" and "per-control Layer-2 squash").
+- **Evaluate.** `fair_cam/tests/test_composition_operators.py`.
+
 ---
 
 ## D. Outside FAIR (view-model derivations)
@@ -363,11 +498,15 @@ help articles rather than labelled on every screen that shows them.
 
 | Item | What it is | Unvalidated conventions inside it | Where |
 |---|---|---|---|
-| **D1. Shapley attribution** | Cooperative-game split of total modelled risk reduction across controls (Shapley 1953; Castro et al. 2009 sampling). | Permutation-sampling budget; the value function is the engine's closed-form composition, evaluated on representative values. | `services/shapley.py` (no FAIR math), `fair_cam/risk_engine/control_attribution.py` (the `v(S)` evaluator) |
+| **D1. Shapley attribution** | Cooperative-game split of total modelled risk reduction across controls (Shapley 1953; Castro et al. 2009 and Maleki et al. 2013 for the sampling estimator and its bound). | Permutation-sampling budget; the value function is the engine's closed-form composition, evaluated on representative values. | `services/shapley.py` (no FAIR math), `fair_cam/risk_engine/control_attribution.py` (the `v(S)` evaluator) |
 | **D2. If-removed (leave-one-out) value** | Drop in modelled reduction when one control is removed. Never totalled. | none | same |
 | **D3. Weight-robustness ensemble** | Logit-normal perturbation of C4 + C7 parameters; rank-stability verdicts. | σ = 0.6, K = 256, ±1-rank stability, 10% flip threshold, 0.90 stable fraction. All conventions; widening σ only makes verdicts more pessimistic. | `services/weight_robustness.py`, `control-weight-robustness.md` |
 | **D4. ALE as the mean** | Mean of the annual-loss distribution. The book's headline quantity, but not a named Open FAIR node. | none | `services/run_view_model.py` |
 | **D5. VaR, expected shortfall, loss-exceedance curve** | Standard tail statistics read off the sampled distribution. | Subject to the A3 tail approximation. | same |
+| **D6. Aggregate ROI** | `total_risk_reduction / total_control_cost` for a run, shown as a bare point figure. A financial ratio, not a FAIR node; inherits every caveat of D1 and D3 without showing a range. | none beyond its inputs | `services/run_executor.py` (`aggregate_roi`), `templates/runs/detail.html` |
+| **D7. ATT&CK coverage ratios** | Share of a scenario's mapped techniques covered by present controls. Labelled "not FAIR-grounded" in code. | none | `services/attack_coverage.py` |
+| **D8. Appetite verdict and headroom** | Dashboard comparison of the loss-exceedance curve against a stated appetite. Labelled "not FAIR-grounded" in code. | interpolation on the LEC | `services/dashboard_view_model.py` |
+| **D9. Monte Carlo convergence diagnostic** | Standard-error read on the sampled mean, shown so a reader can judge iteration count. A property of the simulation, not of FAIR. | 95% level | `services/run_executor.py` |
 
 ---
 
@@ -379,8 +518,9 @@ Listed so a reviewer can check the framing has not drifted.
   calibrated 90% ranges; Idraa performs **forward Monte Carlo propagation
   only**. There is no prior-times-likelihood step, no posterior, and the
   engine never updates an estimate. New evidence is incorporated by
-  re-eliciting. This matches Jones & Freund p. 42: early FAIR used Bayesian
-  formulas; Monte Carlo "worked just as well and was easier."
+  re-eliciting. This matches Freund & Jones p. 42: the earliest versions of
+  FAIR used Bayesian formulas, but the authors found that Monte Carlo
+  "worked just as well and was easier to work with."
 - The model's structure owes its decomposition-into-factors shape to
   Bayesian-network thinking (p. 42), and Idraa keeps that structure intact.
 - **Frequencies and probabilities stay distinct**: TEF and LEF are rates
