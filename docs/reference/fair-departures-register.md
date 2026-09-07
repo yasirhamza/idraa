@@ -76,7 +76,7 @@ the rationale; where it lives; how to evaluate it.
   `templates/help/articles/build-a-scenario.html` ("Secondary Loss").
 - **Evaluate.** Compare a scenario authored with a discounted SL range
   against the same scenario run with an explicit `P(secondary)` and a
-  Bernoulli gate on SL. Follow-up: tracked as a GitHub issue (an optional
+  Bernoulli gate on SL. Follow-up: **issue #173** (an optional
   secondary-loss probability defaulting to 1.0 would restore the branch
   without changing any existing run).
 
