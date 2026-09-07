@@ -100,7 +100,7 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         "methodology",
         1,
         "The FAIR/FAIR-CAM concepts behind the numbers, plus a glossary.",
-        ("build-a-scenario", "run-and-read-analyses"),
+        ("build-a-scenario", "run-and-read-analyses", "where-idraa-departs-from-fair"),
     ),
     # Meth-I2: the P1 body is still the taxonomy card, which explicitly defers
     # the how-it-changes-the-numbers question — the new title would over-promise.
@@ -112,7 +112,7 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         "methodology",
         2,
         "The LEC / VMC / DSC sub-function taxonomy you assign on a control.",
-        ("controls-overlays", "fair-in-idraa-terms"),
+        ("controls-overlays", "fair-in-idraa-terms", "where-idraa-departs-from-fair"),
     ),
     HelpArticle(
         "why-values-are-ranges",
@@ -121,14 +121,28 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         3,
         "How to read the control-value ranges, the 'too close to call' flag, "
         "and why the typical-case figure sits below the average.",
-        ("reports-and-workbook", "controls-overlays", "fair-in-idraa-terms"),
+        (
+            "reports-and-workbook",
+            "controls-overlays",
+            "fair-in-idraa-terms",
+            "where-idraa-departs-from-fair",
+        ),
+    ),
+    HelpArticle(
+        "where-idraa-departs-from-fair",
+        "Where Idraa departs from FAIR",
+        "methodology",
+        4,
+        "Every place Idraa changes the FAIR / FAIR-CAM model or fills in a "
+        "number the standards leave blank, with the label and the defence.",
+        ("fair-in-idraa-terms", "how-controls-change-the-numbers", "why-values-are-ranges"),
     ),
     # P1-temporary: absorbed by verify-the-numbers-yourself in P2.
     HelpArticle(
         "raw-samples-export",
         "Raw sample export",
         "methodology",
-        4,
+        5,
         "Download per-iteration Monte Carlo samples and recompute tail metrics yourself.",
         ("run-and-read-analyses", "reports-and-workbook"),
     ),

@@ -80,7 +80,7 @@ p95/p50 = **16.383×**, p5–p95 span = **268×**, mean/median = **4.2419×** �
 wider than a typical Hubbard-calibrated 90% credible interval, i.e. the
 choice is conservative. Distribution assumption (loss severity lognormal,
 heavy right tail): Hubbard & Seiersen, *How to Measure Anything in
-Cybersecurity Risk*, 2nd ed. 2023, ch. 6; Jones & Freund, *Measuring and
+Cybersecurity Risk*, 2nd ed. 2023, ch. 6; Freund & Jones, *Measuring and
 Managing Information Risk: A FAIR Approach* — the same anchors carried by
 `fair_cam/quantile_pooling/_lognormal_native.py`.
 

@@ -392,7 +392,7 @@ unanchored regardless of coverage/reliability bounds.
 ### 5.4 Non-identifiability disclaimer (I3)
 
 Both cited and expert-estimate defaults inherit the single-org non-identifiability
-posture (internal design doc 2026-06-25-faircam-control-roi-identifiability).
+posture (`docs/reference/control-weight-identifiability.md`).
 
 > A `cited` effectiveness value is cited to an *external/population* efficacy
 > study (MITRE coverage, a CIS deployment study), not to this organization's
