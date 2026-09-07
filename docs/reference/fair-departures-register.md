@@ -35,13 +35,14 @@ is not repeated here.
 
 ## Provenance classes
 
-Every entry carries exactly one class. The classes are ordered from most to
-least consequential.
+Every entry carries one primary class, plus a secondary class where a
+numeric sub-part rides on a structural choice. The classes are ordered from
+most to least consequential.
 
 | Class | Meaning |
 |---|---|
 | **DEPARTURE** | A branch, relationship, or operator differs from what the Standard or the book prescribes. The page-42 case. Needs a rationale, a bound on the error, and a test. |
-| **ADDED RELATIONSHIP** | A relationship the Standard describes only qualitatively (or not at all) is given an explicit functional form. The book's "changed the relationships" case. |
+| **ADDED RELATIONSHIP** | A relationship the Standard describes only qualitatively is given an explicit functional form. The book's "changed the relationships" case. (Where the Standard is silent and Idraa adopts a neutral assumption such as independence, the entry is IMPLEMENTATION-DEFINED.) |
 | **CALIBRATION** | A numeric value the Standard does not supply. The book's "added weighted values" case. Must say whether the value is cited, calibrated, or a convention, and whether it is identifiable. |
 | **IMPLEMENTATION-DEFINED** | The Standard gives a semantic but no formula; Idraa chose one. Must be property-tested against the semantic. |
 | **ESTIMATION LEVEL** | Which node of the tree the analyst authors. The book explicitly allows estimating at any level; listed for transparency, not as a deviation. |
@@ -135,10 +136,11 @@ the rationale; where it lives; how to evaluate it.
 - **Idraa.** Per iteration, Primary Loss and Secondary Loss are drawn
   independently and summed.
 - **Class.** IMPLEMENTATION-DEFINED (independence assumption), and
-  **anti-conservative**: for an archetype whose loss is split across both
-  sides, the sum's variance is roughly half what perfect co-variation would
-  give (`loss-form-share-rubric.md` §1 records the direction), so the
-  per-event tail is understated.
+  **anti-conservative**: for an archetype whose loss is split comparably
+  across both sides, the sum's variance is roughly half what perfect
+  co-variation would give (the ratio is `(a² + b²)/(a + b)²`, which
+  approaches 1 as one side dominates; `loss-form-share-rubric.md` §1 records
+  the direction), so the per-event tail is understated.
 - **Rationale.** Same as A4: independence adds nothing the analyst did not
   author. The library's share rubric was tuned knowing this.
 - **Where.** `fair_cam/risk_engine/fair_core.py` (`loss_magnitude = primary +
@@ -190,6 +192,9 @@ the rationale; where it lives; how to evaluate it.
 - **Rationale.** A single loss component larger than a year of revenue is
   not a modelled outcome for the owning organisation; a quantile-based cap
   would remove the same tail slice from every scenario regardless of size.
+  The cap bounds the *inherent* component: control multipliers scale the
+  cap along with the distribution, so residual loss is bounded below
+  `k × revenue`, not at it.
 - **Where.** `services/loss_capacity.py`, `fair_cam/risk_engine/_truncation.py`.
 - **Evaluate.** The truncation formula is verified three ways in the module
   docstring; the `max > p95` floor is enforced by the validator, not the minter.
@@ -254,7 +259,11 @@ the rationale; where it lives; how to evaluate it.
   a frequency range (for example, very low = 0.01 to 0.1 events per year)
   and each impact band to a loss range, with the mode at the band's
   geometric midpoint. Structurally, a register likelihood is read as the
-  **loss-event frequency**, bypassing the TEF × Vulnerability split.
+  **loss-event frequency**, bypassing the TEF × Vulnerability split. The
+  band is ordinal and is interpreted as a frequency from the outset (the
+  seed anchors on once-in-X-years matrix semantics); no annual probability
+  is rescaled into a rate, so the frequency/probability separation in §E is
+  preserved.
 - **Class.** CALIBRATION (the band tables are a v3 convention, labelled so
   in the seed data) plus ESTIMATION LEVEL (authoring at LEF).
 - **Rationale.** The bands are priors for calibrated review, not empirical
@@ -416,6 +425,9 @@ Everything numeric in this section is therefore Idraa's.
   symmetry, non-identifiable, perturbed by the ensemble as `meta.kappa`).
 - **Where.** `fair_cam/models/composition_topology.py`
   (`KAPPA_META_RELIABILITY`), `group_composition.py` (`finalize_composition`).
+  A stale docstring in `control_aware.py` still describes the pre-#439 direct
+  VMC node target; the topology table, not that docstring, is the source of
+  truth (cleanup folded into issue #177).
 - **Evaluate.** `test_kappa_meta_reliability_pin`; the max-aggregation fix
   (riskflow#455) and the open attribution investigation (riskflow#434) are the live
   evaluation record.
@@ -507,10 +519,10 @@ help articles rather than labelled on every screen that shows them.
 | **D3. Weight-robustness ensemble** | Logit-normal perturbation of C4 + C7 parameters; rank-stability verdicts. | σ = 0.6, K = 256, ±1-rank stability, 10% flip threshold, 0.90 stable fraction. All conventions; widening σ only makes verdicts more pessimistic. | `services/weight_robustness.py`, `control-weight-robustness.md` |
 | **D4. ALE as the mean** | Mean of the annual-loss distribution. The book's headline quantity, but not a named Open FAIR node. | none | `services/run_view_model.py` |
 | **D5. VaR, expected shortfall, loss-exceedance curve** | Standard tail statistics read off the sampled distribution. | Subject to the A3 tail approximation. | same |
-| **D6. Aggregate ROI** | `total_risk_reduction / total_control_cost` for a run, shown as a bare point figure. A financial ratio, not a FAIR node; inherits every caveat of D1 and D3 without showing a range. | none beyond its inputs | `services/run_executor.py` (`aggregate_roi`), `templates/runs/detail.html` |
+| **D6. Aggregate ROI** | `total_risk_reduction / total_control_cost` for a run, shown as a bare point figure. A financial ratio, not a FAIR node; the numerator is the engine's with-minus-without ALE difference, so it inherits the composition-weight uncertainty of C4/C7 (what D3 propagates) without showing a range. | none beyond its inputs | `services/run_executor.py` (`aggregate_roi`), `templates/runs/detail.html` |
 | **D7. ATT&CK coverage ratios** | Share of a scenario's mapped techniques covered by present controls. Labelled "not FAIR-grounded" in code. | none | `services/attack_coverage.py` |
-| **D8. Appetite verdict and headroom** | Dashboard comparison of the loss-exceedance curve against a stated appetite. Labelled "not FAIR-grounded" in code. | interpolation on the LEC | `services/dashboard_view_model.py` |
-| **D9. Monte Carlo convergence diagnostic** | Standard-error read on the sampled mean, shown so a reader can judge iteration count. A property of the simulation, not of FAIR. | 95% level | `services/run_executor.py` |
+| **D8. Appetite verdict and headroom** | Dashboard comparison of the loss-exceedance curve against a stated appetite. The headroom strip is labelled "not FAIR-grounded" in code; the verdict functions rely on this register. | interpolation on the LEC | `services/dashboard_view_model.py` |
+| **D9. Expected-shortfall sampling error** | Monte Carlo sampling standard error of the sample Expected Shortfall at each tail level (first-order influence-function estimator, Scaillet 2004 / Manistre & Hancock 2005), shown as a 95% interval beside ES so a reader can judge iteration count. A property of the simulation, not of FAIR. | z = 1.96 normal band; reported as unavailable when fewer than two samples lie at or above VaR | `services/run_executor.py` (`_es_standard_error`), `services/_view_model_helpers.py` (`ES_CI_Z_95`) |
 
 ---
 
