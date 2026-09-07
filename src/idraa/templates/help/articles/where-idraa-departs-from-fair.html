@@ -1,0 +1,173 @@
+{# Register of departures from FAIR / FAIR-CAM — plain-English mirror of
+   docs/reference/fair-departures-register.md. Jones & Freund (2015) ch. 3
+   p. 42: any change to the model's branches, relationships, or weights must
+   be defended and evaluated in the open. Keep the two in sync. #}
+<h2 class="text-h3 text-ink-1 mb-3" id="why-this-page-exists">Why this page exists</h2>
+<p class="text-body text-ink-2 mb-3">
+  The authors of FAIR warn that most attempts to change the model &mdash;
+  adding a branch, deleting one, changing a relationship, or adding weighted
+  values &mdash; broke it, and that anyone who changes it must be
+  &ldquo;prepared to defend&rdquo; the change and have it
+  &ldquo;tested and evaluated in an open forum&rdquo; (Jack Freund &amp; Jack
+  Jones, <em>Measuring and Managing Information Risk</em>, 2015, p.&nbsp;42).
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Idraa does change the model in a few places, and fills in numbers the
+  standards leave blank in several more. This page lists every such place in
+  plain language, says which are the standard&rsquo;s and which are
+  Idraa&rsquo;s, and points to the defence. The full technical register, with
+  code locations and tests, is
+  <a class="text-brand hover:underline" href="https://github.com/yasirhamza/idraa/blob/main/docs/reference/fair-departures-register.md">published in the public repository</a>.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="what-counts-as-a-departure">What counts as a departure</h2>
+<p class="text-body text-ink-2 mb-3">
+  Each item below carries one label:
+</p>
+<ul class="list-disc pl-5 text-body text-ink-2 mb-6 space-y-1">
+  <li><strong>Departure</strong> &mdash; a branch or relationship differs from what FAIR or FAIR-CAM prescribes. These are the ones the warning is about.</li>
+  <li><strong>Added relationship</strong> &mdash; the standard describes an effect only in words; Idraa gave it a formula.</li>
+  <li><strong>Calibration</strong> &mdash; a number the standard does not supply. Idraa says whether it is cited, estimated, or a convention.</li>
+  <li><strong>Implementation choice</strong> &mdash; the standard gives the meaning but no formula; Idraa chose one and tests it against the meaning.</li>
+  <li><strong>Not FAIR</strong> &mdash; reporting derivations that are not part of FAIR at all, kept outside the risk maths and labelled wherever they appear.</li>
+</ul>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="the-fair-risk-tree">The FAIR risk tree</h2>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Secondary loss happens on every loss event (departure).</strong>
+  FAIR gives secondary loss its own frequency: the chance that a loss event
+  also triggers fines, lost business, or reputational damage. Idraa has no
+  such probability; the secondary loss range you author is added to every
+  simulated event. If secondary consequences are conditional, discount your
+  range or set it to zero. This is the one item on this page whose defence is
+  incomplete: it keeps the average roughly right when you discount, but it
+  smooths away the &ldquo;nothing, or a lot&rdquo; shape of conditional
+  losses. Restoring the branch as an optional probability is tracked as a
+  follow-up.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>You author Vulnerability directly (estimation level, allowed by
+  FAIR).</strong> FAIR defines Vulnerability as the chance a threat&rsquo;s
+  capability beats the asset&rsquo;s resistance, and lets you estimate at
+  either level. Idraa asks for the inherent, control-naive Vulnerability and
+  applies your controls in the simulation, so control credit is never counted
+  twice.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Aggregate runs add up independent scenarios (implementation
+  choice).</strong> FAIR does not say how to combine scenarios. Idraa sums
+  their annual-loss samples with no correlation between them, which
+  understates the tail when several scenarios share a cause. No
+  portfolio-finance correction is applied.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="distribution-choices">Distribution choices</h2>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Your high estimate is a ceiling (calibration convention).</strong>
+  Idraa reads your low and high as the 5th and 95th percentiles of a
+  right-skewed lognormal, then samples from a bounded PERT whose top is that
+  95th percentile. The alternative, clipping a lognormal at a cap, piles the
+  cut-off tail into a spike at the cap. The cost is a lower expected loss
+  than the unbounded curve would give, accepted because the removed tail was
+  not a plausible outcome for a single organisation.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Catastrophic losses are capped at organisational capacity (added
+  relationship + calibration).</strong> Entries flagged catastrophic keep the
+  heavy-tailed lognormal but are bounded at one year of revenue by default.
+  FAIR has no capacity concept; the multiplier of one is a convention.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>A default loss dispersion of &sigma;&nbsp;=&nbsp;1.7 (calibration
+  convention).</strong> When nobody pins a spread, loss magnitude uses a round
+  number sitting between the published industry reads for narrower and wider
+  conditioning. No published statistic exists at the single-firm,
+  single-scenario level this describes.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Several experts are pooled as a mixture (implementation
+  choice).</strong> FAIR prescribes no pooling arithmetic. Idraa keeps each
+  expert&rsquo;s fitted distribution as its own component rather than
+  averaging the ranges first, which would erase their disagreement.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="the-control-model">The control model (FAIR-CAM)</h2>
+<p class="text-body text-ink-2 mb-3">
+  FAIR-CAM names the control functions, their units, and most of the
+  and/or logic between them. It gives <strong>no numbers</strong> and, for
+  some groups, no formula. Everything numeric in Idraa&rsquo;s control layer
+  is therefore Idraa&rsquo;s, and this is where the warning about
+  &ldquo;added weighted values&rdquo; applies most directly.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>How strongly a control group acts on each FAIR factor
+  (calibration, not identifiable).</strong> A group&rsquo;s effectiveness
+  reaches Threat Event Frequency, Vulnerability, Primary Loss, or Secondary
+  Loss through a fixed weight (0.8, 0.9, 0.2, and 0.5 respectively). These
+  weights are expert-anchored, not measured, and cannot be measured from one
+  organisation&rsquo;s loss history: loss events are too rare and the
+  without-the-control comparison is never observed. Idraa&rsquo;s defence is
+  to vary them and show you the consequences, which is why control value is
+  shown as a range and rankings carry a &ldquo;too close to call&rdquo; flag
+  (see
+  <a class="text-brand hover:underline" href="/help/why-values-are-ranges">Why control value is shown as a range</a>).
+  Idraa refuses to offer per-organisation tuning of these weights, because
+  that would move the guess rather than remove it.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Variance-management and decision-support controls act through the
+  reliability of other controls (added relationship + calibration).</strong>
+  FAIR-CAM says these controls affect risk indirectly. Idraa gives that a
+  formula: their combined strength recovers half (a coupling of 0.5) of the
+  reliability headroom of each loss-event control present. Decision-support
+  controls are included as a proxy; the standard frames them as improving
+  decisions rather than reliability.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Decision-support prevention is not an all-or-nothing AND
+  (departure).</strong> FAIR-CAM prescribes AND across nine decision-support
+  functions, which would score any organisation missing one of them at zero.
+  Idraa scores the strongest coherent subset of the functions present. A
+  weaker extra function neither helps nor hurts.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Correction needs implementation (departure).</strong> FAIR-CAM
+  pairs treatment selection with implementation. Idraa treats implementation
+  as the load-bearing step: without it there is no correction, and with it
+  alone it counts on its own.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Formulas the standard leaves open (implementation choices).</strong>
+  Capability, coverage, and reliability are multiplied together. Elapsed-time
+  functions decay exponentially with a cited half-life per function. A
+  missing capability counts as one half. The &ldquo;weak AND&rdquo; the
+  standard describes for response functions is an equal-weighted average.
+  Detection on its own applies nothing; it enables response, which acts on
+  loss size only. Each of these is tested against the meaning the standard
+  gives.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="outside-fair">Outside FAIR</h2>
+<p class="text-body text-ink-2 mb-6">
+  Control attribution (the fair-share and if-removed figures), the
+  robustness ranges, and the mean-based ALE headline are reporting
+  derivations, not FAIR nodes. They are computed outside the risk maths and
+  labelled &ldquo;not FAIR-grounded&rdquo; wherever they appear. The
+  robustness ranges rest on their own conventions (how far the weights are
+  varied, how many draws, what counts as stable), none of which is validated;
+  widening the variation only makes the verdicts more cautious.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="how-to-evaluate">How to evaluate any of this</h2>
+<p class="text-body text-ink-2 mb-3">
+  Every item above has a code location, a rationale, and a test in the public
+  register. The
+  <a class="text-brand hover:underline" href="/help/raw-samples-export">raw sample export</a>
+  lets you recompute anything from the per-iteration samples yourself. If you
+  believe a departure is wrong, the register says what evidence would settle
+  it. Where Idraa keeps to the standard &mdash; subjective probabilities,
+  forward Monte Carlo with no Bayesian updating, frequencies and probabilities
+  kept distinct &mdash; the
+  <a class="text-brand hover:underline" href="/help/fair-in-idraa-terms">FAIR in Idraa&rsquo;s terms</a>
+  article says so.
+</p>

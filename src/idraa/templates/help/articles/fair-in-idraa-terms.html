@@ -7,6 +7,13 @@
   relationships below. Understanding them tells you exactly what you are
   estimating when you fill in a scenario form.
 </p>
+<p class="text-body text-ink-2 mb-3">
+  One note on the name: &ldquo;factor analysis&rdquo; here is descriptive
+  &mdash; the method analyses the factors that drive risk &mdash; not the
+  statistical technique of the same name. FAIR does not perform statistical
+  factor analysis, and neither does Idraa (Freund &amp; Jones, 2015,
+  p.&nbsp;42).
+</p>
 
 <h3 class="text-h4 text-ink-1 mb-2">1. Risk = Loss Event Frequency &times; Loss Magnitude</h3>
 <p class="text-body text-ink-2 mb-3">
@@ -156,6 +163,15 @@
   Seiersen&rsquo;s calibrated-estimation method cited above.
 </p>
 <p class="text-body text-ink-2 mb-3">
+  FAIR&rsquo;s <em>structure</em> also owes something to Bayesian networks:
+  decomposing risk into factors and their relationships, then starting from
+  expert estimates (&ldquo;priors&rdquo;) that better data can refine. The
+  factor tree above is that structure, and Idraa keeps it intact. The
+  earliest versions of FAIR even used Bayesian formulas to combine the
+  factors; Monte Carlo simulation gave the same results more simply and
+  became the standard approach (Freund &amp; Jones, 2015, p.&nbsp;42).
+</p>
+<p class="text-body text-ink-2 mb-3">
   A Bayesian <em>interpretation</em> does not mean Bayesian
   <em>inference</em>. The engine performs forward Monte Carlo propagation:
   it samples your input distributions and pushes the samples through the
@@ -182,6 +198,11 @@
   behind them &mdash; which is why the
   <a class="text-brand hover:underline" href="/help/raw-samples-export">raw
   sample export</a> exists, so you can verify the propagation yourself.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Everything on this page is the standard FAIR model. The places where Idraa
+  changes it, or fills in a number the standards leave blank, are listed in
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair">Where Idraa departs from FAIR</a>.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="glossary">Glossary</h2>
