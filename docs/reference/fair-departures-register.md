@@ -36,8 +36,8 @@ is not repeated here.
 ## Provenance classes
 
 Every entry carries one primary class, plus a secondary class where a
-separable sub-part (a numeric value or a second operator) has its own
-provenance. The classes are ordered from
+separable sub-part (a numeric value, a second operator, or an authoring
+level) has its own provenance. The classes are ordered from
 most to least consequential.
 
 | Class | Meaning |
