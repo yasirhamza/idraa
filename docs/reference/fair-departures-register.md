@@ -45,7 +45,7 @@ least consequential.
 | **CALIBRATION** | A numeric value the Standard does not supply. The book's "added weighted values" case. Must say whether the value is cited, calibrated, or a convention, and whether it is identifiable. |
 | **IMPLEMENTATION-DEFINED** | The Standard gives a semantic but no formula; Idraa chose one. Must be property-tested against the semantic. |
 | **ESTIMATION LEVEL** | Which node of the tree the analyst authors. The book explicitly allows estimating at any level; listed for transparency, not as a deviation. |
-| **VIEW-MODEL DERIVATION** | Not FAIR at all. Lives outside the FAIR math and is labelled as such on every surface (CLAUDE.md "No portfolio-finance overclaim"). |
+| **VIEW-MODEL DERIVATION** | Not FAIR at all. Lives outside the FAIR math; the attribution table is labelled on screen, the others are documented in this register and the help (CLAUDE.md "No portfolio-finance overclaim"). |
 
 Each entry has: what the Standard or book says; what Idraa does; the class;
 the rationale; where it lives; how to evaluate it.
@@ -101,7 +101,7 @@ the rationale; where it lives; how to evaluate it.
 - **Where.** `fair-cam-methodology.md` ("Vulnerability anchor: control-naive
   inherent"), `vulnerability-semantics.md`.
 - **Evaluate.** Guarded by the library audit heuristic in
-  `vulnerability-semantics.md` and the legacy-residual banner (#343).
+  `vulnerability-semantics.md` and the legacy-residual banner (riskflow#343).
 
 ### A3. Per-iteration product form `risk = LEF × LM`
 
@@ -316,7 +316,7 @@ Everything numeric in this section is therefore Idraa's.
   point. The table records which anchor each value uses.
 - **Where.** `elapsed-time-tau-calibration.md`,
   `fair_cam/calibration/elapsed_time_taus.py`.
-- **Evaluate.** The #131 precedent (means plugged into a median-half-life
+- **Evaluate.** The riskflow#131 precedent (means plugged into a median-half-life
   formula) is exactly the failure this table's methodology section guards.
 
 ### C3. Missing capability defaults to 0.5
@@ -328,8 +328,9 @@ Everything numeric in this section is therefore Idraa's.
 - **Class.** CALIBRATION (safe default).
 - **Where.** `fair_cam/composition.py`.
 - **Evaluate.** The identity `exp(-ln 2) = 0.5` is stated in the docstring;
-  the NULL branch is exercised by the #131 reclassified sub-functions that
-  legitimately store no capability value.
+  `fair_cam/tests/models/test_assignment_optional_capability.py::test_null_capability_value_accepted`
+  covers the NULL branch, which the riskflow#131 reclassified sub-functions
+  exercise by legitimately storing no capability value.
 
 ### C4. FAIR-axis routing weights (the page-42 "added weighted values")
 
@@ -384,7 +385,7 @@ Everything numeric in this section is therefore Idraa's.
   without all nine functions score zero decision support), then to the
   **best-coherent-subset mean** (max over k of the top-k mean) because the
   plain mean is non-monotone in coalition membership and produced negative
-  Shapley values on a production run (#453). Because prefix means of a
+  Shapley values on a production run (riskflow#453). Because prefix means of a
   descending sequence never increase, this is **identically `max` of the
   present member effectivenesses**: one strong decision-support function
   scores the whole group at its own level. The code says so; the register
@@ -397,7 +398,7 @@ Everything numeric in this section is therefore Idraa's.
   overstatement's effect on risk is bounded by `κ · (1 − r0)` (C7).
 - **Where.** `fair_cam/risk_engine/group_composition.py` (`precompose_parts`).
 - **Evaluate.** Monotonicity is the property the change exists to restore;
-  the negative-Shapley regression from #453 is the test case.
+  the negative-Shapley regression from riskflow#453 is the test case.
 
 ### C7. Meta-controls act through a reliability coupling, `r_eff = r0 + (1 − r0)·κ·E_meta`, κ = 0.5
 
@@ -405,7 +406,7 @@ Everything numeric in this section is therefore Idraa's.
   *indirectly*, by changing the reliability of other controls; no
   functional form.
 - **Idraa.** VMC/DSC groups carry **no direct FAIR-node targets** (retired in
-  #439 on §2.2 "indirectly affect risk" grounds). Their composed strength
+  riskflow#439 on §2.2 "indirectly affect risk" grounds). Their composed strength
   `E_meta` recovers a fraction κ of every co-present Loss Event Control's
   reliability headroom. `E_vmc`, `E_dsc`, and `E_meta = OR(E_vmc, E_dsc)`
   are cross-family fusions with no Standard-prescribed operator. The DSC
@@ -416,7 +417,7 @@ Everything numeric in this section is therefore Idraa's.
 - **Where.** `fair_cam/models/composition_topology.py`
   (`KAPPA_META_RELIABILITY`), `group_composition.py` (`finalize_composition`).
 - **Evaluate.** `test_kappa_meta_reliability_pin`; the max-aggregation fix
-  (#455) and the open attribution investigation (#434) are the live
+  (riskflow#455) and the open attribution investigation (riskflow#434) are the live
   evaluation record.
 
 ### C8. VMC Correction is gated on Implementation; VMC Identification pair uses OR
@@ -443,7 +444,7 @@ Everything numeric in this section is therefore Idraa's.
   themselves.
 - **Idraa.** Detection alone applies no multiplier (it gates the
   Detection∧Response pair); the pair's effect is routed to Primary and
-  Secondary Loss only, not to frequency (#130 D4 re-route, fixing a
+  Secondary Loss only, not to frequency (riskflow#130 D4 re-route, fixing a
   double-count). **Availability bypass:** when the scenario's effect is
   Availability, the Detection gate is treated as intrinsically satisfied and
   the raw Response effectiveness is credited with no Detection control
@@ -455,7 +456,7 @@ Everything numeric in this section is therefore Idraa's.
   `fair_cam/risk_engine/control_aware.py` (`availability_self_detection`),
   wired from `services/run_executor.py` on `ScenarioEffect.AVAILABILITY`.
 - **Evaluate.** `tests/contracts/test_weight_robustness_covariation.py::test_drpair_weights_are_inert`
-  (the pair entry's weights are never read) and the #130 double-count
+  (the pair entry's weights are never read) and the riskflow#130 double-count
   regression; the availability path is exercised in
   `fair_cam/tests/risk_engine/` and the verification workbook mirrors it.
 
@@ -465,11 +466,14 @@ Everything numeric in this section is therefore Idraa's.
   application rule.
 - **Idraa.** Subtracted from each secondary-loss sample before flooring at
   zero; Primary Loss untouched.
-- **Class.** IMPLEMENTATION-DEFINED (#130 D3).
+- **Class.** IMPLEMENTATION-DEFINED (riskflow#130 D3).
 - **Where.** `fair_core.py` (`secondary_loss_subtractor`).
-- **Evaluate.** The subtractor is validated finite and non-negative at the
-  engine boundary; the partial-floor and full-collapse regimes are described
-  in `fair-cam-standard-alignment.md` (§ on per-event dollar reduction).
+- **Evaluate.** `fair_cam/tests/risk_engine/test_native_engine_subtractor.py`
+  (`test_subtractor_shifts_then_floors_at_zero`,
+  `test_subtractor_floors_negative_at_zero`); the subtractor is validated
+  finite and non-negative at the engine boundary; the partial-floor and
+  full-collapse regimes are described in `fair-cam-standard-alignment.md`
+  (§ on per-event dollar reduction).
 
 ### C11. Several controls on one sub-function combine as independent OR
 

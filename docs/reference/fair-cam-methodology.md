@@ -230,7 +230,7 @@ composition layers.
 
 ## Known limitations (disclosure)
 
-- **Every departure from FAIR / FAIR-CAM is registered** — branches, relationships, operators, weights, and defaults that differ from or fill gaps in the Standard are listed with a provenance class, rationale, code location, and test in `docs/reference/fair-departures-register.md` (Jones & Freund p. 42 "prepared to defend" rule). A change that adds/removes a branch, changes an operator, or introduces a numeric weight must update that register in the same PR.
+- **Every departure from FAIR / FAIR-CAM is registered** — branches, relationships, operators, weights, and defaults that differ from or fill gaps in the Standard are listed with a provenance class, rationale, code location, and test in `docs/reference/fair-departures-register.md` (Freund & Jones p. 42 "prepared to defend" rule). A change that adds/removes a branch, changes an operator, or introduces a numeric weight must update that register in the same PR.
 - **Product-form LEF×LM tail approximation** — the engine combines LEF and LM per iteration as a product (`risk = lef * loss_magnitude`), the faithful canonical FAIR/pyfair form. The mean is exact, but every tail statistic (VaR, Expected Shortfall, loss-exceedance curve, p2.5/p97.5 band) is an approximation whose error grows once LEF exceeds 1. This is a disclosure, NOT a bug or a Standard deviation. See `docs/reference/product-form-tail-approximation.md`.
 
 ## Naming convention proposal for v3 (when this lands)
