@@ -74,8 +74,10 @@
 <p class="text-body text-ink-2 mb-3">
   <strong>Catastrophic losses are capped at organisational capacity (added
   relationship + calibration).</strong> Entries flagged catastrophic keep the
-  heavy-tailed lognormal but are bounded at one year of revenue by default.
-  FAIR has no capacity concept; the multiplier of one is a convention.
+  heavy-tailed lognormal, but each loss component (primary, secondary) is
+  bounded at one year of revenue by default, when revenue is recorded; with
+  no revenue there is no cap and no substitute. FAIR has no capacity
+  concept; the multiplier of one is a convention.
 </p>
 <p class="text-body text-ink-2 mb-3">
   <strong>A default loss dispersion of &sigma;&nbsp;=&nbsp;1.7 (calibration
@@ -118,8 +120,9 @@
   <strong>Variance-management and decision-support controls act through the
   reliability of other controls (added relationship + calibration).</strong>
   FAIR-CAM says these controls affect risk indirectly. Idraa gives that a
-  formula: their combined strength recovers half (a coupling of 0.5) of the
-  reliability headroom of each loss-event control present. Decision-support
+  formula: their combined strength recovers up to half (a coupling of 0.5,
+  scaled by that combined strength) of the reliability headroom of each
+  loss-event control present. Decision-support
   controls are included as a proxy; the standard frames them as improving
   decisions rather than reliability.
 </p>
@@ -139,23 +142,35 @@
 <p class="text-body text-ink-2 mb-6">
   <strong>Formulas the standard leaves open (implementation choices).</strong>
   Capability, coverage, and reliability are multiplied together. Elapsed-time
-  functions decay exponentially with a cited half-life per function. A
-  missing capability counts as one half. The &ldquo;weak AND&rdquo; the
-  standard describes for response functions is an equal-weighted average.
-  Detection on its own applies nothing; it enables response, which acts on
-  loss size only. Each of these is tested against the meaning the standard
-  gives.
+  functions decay exponentially, with a per-function decay time traced to a
+  primary citation (some anchored on a published mean, some on a median; the
+  table records which). A missing capability counts as one half. The
+  &ldquo;weak AND&rdquo; the standard describes for response functions is an
+  equal-weighted average. The two variance-identification functions
+  (threat intelligence, control monitoring) combine with OR, since the
+  standard names both but prescribes no operator between them. Detection on
+  its own applies nothing; it enables response, which acts on loss size
+  only. A loss-reduction control valued in currency subtracts a fixed amount
+  per event from Secondary Loss only. Each of these is tested against the
+  meaning the standard gives.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="outside-fair">Outside FAIR</h2>
 <p class="text-body text-ink-2 mb-6">
   Control attribution (the fair-share and if-removed figures), the
   robustness ranges, and the mean-based ALE headline are reporting
-  derivations, not FAIR nodes. They are computed outside the risk maths and
-  labelled &ldquo;not FAIR-grounded&rdquo; wherever they appear. The
+  derivations, not FAIR nodes. They are computed outside the FAIR maths;
+  the attribution table carries an explicit &ldquo;not FAIR-grounded&rdquo;
+  methodology note, and the rest are documented as derivations here and in
+  the public register rather than on every screen that shows them. The
   robustness ranges rest on their own conventions (how far the weights are
   varied, how many draws, what counts as stable), none of which is validated;
-  widening the variation only makes the verdicts more cautious.
+  widening the variation only makes the verdicts more cautious. The tail
+  statistics (value at risk, expected shortfall, the exceedance curve) are
+  standard readings of the sampled distribution; because risk is sampled as
+  frequency times magnitude per iteration, FAIR&rsquo;s own form, their
+  tails are an approximation once the loss-event frequency exceeds one per
+  year. That is a disclosure, not a departure.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="how-to-evaluate">How to evaluate any of this</h2>

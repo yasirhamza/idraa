@@ -172,7 +172,8 @@ the rationale; where it lives; how to evaluate it.
   reads and below every size-conditioned read.
 - **Class.** CALIBRATION (convention, not a measurement). IRIS never
   publishes the single-firm × single-scenario joint distribution.
-- **Where.** `within-scenario-sigma-calibration.md`.
+- **Where.** `services/calibration.py` (`WITHIN_SCENARIO_SIGMA_DEFAULT`);
+  `within-scenario-sigma-calibration.md`.
 - **Evaluate.** The derivation table in that doc; the σ-recalibration
   tripwire and pin/readout surfaces (#126).
 
@@ -206,6 +207,9 @@ Everything numeric in this section is therefore Idraa's.
 - **Idraa.** Multiplicative, per assignment.
 - **Class.** IMPLEMENTATION-DEFINED.
 - **Where.** `fair_cam/composition.py`.
+- **Evaluate.** `fair_cam/tests/test_composition_operators.py` and
+  `fair_cam/tests/composition/`; `TIME_UNIT_EXCLUDED` sub-functions take the
+  elapsed-time branch (C2) or the currency path (C10) instead.
 
 ### C2. Elapsed-time sub-functions normalised by `exp(−t/τ)`
 
@@ -228,6 +232,9 @@ Everything numeric in this section is therefore Idraa's.
   half-life point `exp(−ln 2)`.
 - **Class.** CALIBRATION (safe default).
 - **Where.** `fair_cam/composition.py`.
+- **Evaluate.** The identity `exp(-ln 2) = 0.5` is stated in the docstring;
+  the NULL branch is exercised by the #131 reclassified sub-functions that
+  legitimately store no capability value.
 
 ### C4. FAIR-axis routing weights (the page-42 "added weighted values")
 
@@ -316,6 +323,10 @@ Everything numeric in this section is therefore Idraa's.
 - **Class.** DEPARTURE (the gate, labelled "Spec D3 deviation") and
   IMPLEMENTATION-DEFINED (the OR).
 - **Where.** `group_composition.py`, `composition.py` docstrings.
+- **Evaluate.** `fair_cam/tests/risk_engine/test_meta_reliability_coupling.py`
+  covers the gated Correction and the Identification-pair OR through the
+  composed meta effect; `fair_cam/tests/test_composition_topology.py` pins
+  the group operator table.
 
 ### C9. Detection has no standalone node; Response acts on magnitude only
 
@@ -326,6 +337,8 @@ Everything numeric in this section is therefore Idraa's.
   double-count).
 - **Class.** IMPLEMENTATION-DEFINED, grounded in §3.2–3.3.
 - **Where.** `composition_topology.py` (`LEC_DETECTION`, `LEC_RESPONSE`).
+- **Evaluate.** `tests/contracts/test_weight_robustness_covariation.py::test_drpair_weights_are_inert`
+  (the pair entry's weights are never read) and the #130 double-count regression.
 
 ### C10. Currency-valued Loss Reduction is a per-event subtractor on Secondary Loss
 
@@ -335,13 +348,18 @@ Everything numeric in this section is therefore Idraa's.
   zero; Primary Loss untouched.
 - **Class.** IMPLEMENTATION-DEFINED (#130 D3).
 - **Where.** `fair_core.py` (`secondary_loss_subtractor`).
+- **Evaluate.** The subtractor is validated finite and non-negative at the
+  engine boundary; the partial-floor and full-collapse regimes are described
+  in `fair-cam-standard-alignment.md` (§ on per-event dollar reduction).
 
 ---
 
 ## D. Outside FAIR (view-model derivations)
 
-None of these is a FAIR node. Each is labelled "not FAIR-grounded" on every
-surface that shows it and is computed outside the FAIR math path.
+None of these is a FAIR node. Each is computed outside the FAIR math path.
+The attribution table carries an explicit "not FAIR-grounded" methodology
+note in the help; the others are documented as derivations here and in the
+help articles rather than labelled on every screen that shows them.
 
 | Item | What it is | Unvalidated conventions inside it | Where |
 |---|---|---|---|

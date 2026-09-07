@@ -1,7 +1,7 @@
 # Control-Weight Robustness (Rank-Stability)
 
 **Issue:** #419
-**Spec:** internal design doc 2026-06-25-control-weight-robustness-design
+**Spec:** internal design doc 2026-06-25-control-weight-robustness-design (untracked; not public — the public rationale is this file plus `control-weight-identifiability.md`)
 **Identifiability rationale:** `docs/reference/control-weight-identifiability.md` (tracked reconstruction of the 2026-06-25 identifiability audit)
 **Code:** `src/idraa/services/weight_robustness.py`
 

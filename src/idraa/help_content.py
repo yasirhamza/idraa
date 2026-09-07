@@ -121,7 +121,12 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         3,
         "How to read the control-value ranges, the 'too close to call' flag, "
         "and why the typical-case figure sits below the average.",
-        ("reports-and-workbook", "controls-overlays", "fair-in-idraa-terms"),
+        (
+            "reports-and-workbook",
+            "controls-overlays",
+            "fair-in-idraa-terms",
+            "where-idraa-departs-from-fair",
+        ),
     ),
     HelpArticle(
         "where-idraa-departs-from-fair",
