@@ -2,14 +2,14 @@
 title: "Register of departures from FAIR and FAIR-CAM"
 status: living — every entry must stay in sync with the code it cites
 last_reviewed: 2026-09-07
-governs: Freund & Jones, *Measuring and Managing Information Risk* (2015), ch. 3 p. 42 — "be extremely careful and prepared to defend your decision" on any change to the model's branches, relationships, or weights
+governs: Jones & Freund, *Measuring and Managing Information Risk*, 2nd ed. (Butterworth-Heinemann/Elsevier, 2026, ISBN 978-0-443-13484-5), ch. 3 p. 42 — "be extremely careful and prepared to defend your decision" on any change to the model's branches, relationships, or weights
 ---
 
 # Register of departures from FAIR and FAIR-CAM
 
 ## Why this register exists
 
-Freund & Jones close their description of the FAIR model with a warning
+Jones & Freund close their description of the FAIR model with a warning
 (ch. 3, p. 42): teams that added a branch, deleted a branch, changed a
 relationship, or added weighted values usually broke the model, so anyone
 who changes it must be "extremely careful and prepared to defend" the change,
@@ -25,9 +25,11 @@ evaluation); this register covers the "prepared to defend" half.
 
 **Scope rule.** An entry belongs here when Idraa's engine or authoring model
 does something the FAIR Standard (Open FAIR risk taxonomy / analysis
-standards), the FAIR-CAM Standard V1.0, or the Freund & Jones text either
+standards), the FAIR-CAM Standard V1.0, or the Jones & Freund text either
 prescribes differently, leaves unspecified, or does not contain at all.
-Citations use the published author order, Freund & Jones (2015).
+Citations refer to the Second Edition (Jones & Freund, Butterworth-Heinemann/
+Elsevier, 2026, ISBN 978-0-443-13484-5), whose cover lists Jones first; page
+numbers are from that edition, not the 2015 first edition.
 Things the Standard prescribes and Idraa follows are not listed (the code
 labels those `PRESCRIBED` with a section citation). Removed contamination is
 recorded in `fair-cam-methodology.md` ("What is NOT in FAIR / FAIR-CAM") and
@@ -535,7 +537,7 @@ Listed so a reviewer can check the framing has not drifted.
   calibrated 90% ranges; Idraa performs **forward Monte Carlo propagation
   only**. There is no prior-times-likelihood step, no posterior, and the
   engine never updates an estimate. New evidence is incorporated by
-  re-eliciting. This matches Freund & Jones p. 42: the earliest versions of
+  re-eliciting. This matches Jones & Freund p. 42: the earliest versions of
   FAIR used Bayesian formulas, but the authors found that Monte Carlo
   "worked just as well and was easier to work with."
 - The model's structure owes its decomposition-into-factors shape to

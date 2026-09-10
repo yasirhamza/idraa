@@ -7,8 +7,8 @@ gate a lognormal entry. Consumed by the D-i `loss_form_profile` data model, the
 D-ii research sweep, and the D-iii recalibration.
 
 > **Primary-cite note.** The six-forms taxonomy and the Primary/Secondary
-> stakeholder classification below trace to **Freund, J. & Jones, J. (2015),
-> *Measuring and Managing Information Risk: A FAIR Approach*, Butterworth-Heinemann,
+> stakeholder classification below trace to **Jones, J. & Freund, J. (2026),
+> *Measuring and Managing Information Risk*, 2nd ed., Butterworth-Heinemann/Elsevier (ISBN 978-0-443-13484-5),
 > Ch. 3 "The FAIR Risk Ontology" — "The Six Forms of Loss"** and are
 > cross-confirmed by **The Open Group, *Risk Taxonomy (O-RT), Version 3.0.1*
 > (C20B), §"Loss Magnitude / Forms of Loss."** The exact page/section is pinned

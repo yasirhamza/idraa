@@ -40,7 +40,7 @@ That's a Postgres + app stack: the `app` container runs `alembic upgrade head` b
 
 **Verification discipline:** every run ships an independent in-Excel verification workbook (LET/RANDARRAY dynamic-array Monte Carlo) that reproduces sampling and ALE from the same inputs, hand-derived math anchors pin the engine's statistical assumptions in tests, and a pre-push local gate (ruff + mypy + pytest) mirrors what CI would run.
 
-**Methodology, in the open:** Freund & Jones warn that anyone who changes the FAIR model's branches, relationships, or weights must be prepared to defend the change and have it evaluated in an open forum (*Measuring and Managing Information Risk*, 2015, p. 42). The documents below are that defence; open an issue against a specific entry to challenge one.
+**Methodology, in the open:** Jones & Freund warn that anyone who changes the FAIR model's branches, relationships, or weights must be prepared to defend the change and have it evaluated in an open forum (*Measuring and Managing Information Risk*, 2nd ed., Elsevier, 2026, p. 42). The documents below are that defence; open an issue against a specific entry to challenge one.
 
 - [Register of departures from FAIR and FAIR-CAM](docs/reference/fair-departures-register.md) — every branch, operator, weight, and default where Idraa differs from or fills a gap in the standards, each with a provenance class, rationale, code location, and how to evaluate it. Mirrored in plain English in the in-app Help ("Where Idraa departs from FAIR").
 - [Why composition weights are not identifiable from one organisation's data](docs/reference/control-weight-identifiability.md) — the argument behind reporting control value as a range instead of a point.
