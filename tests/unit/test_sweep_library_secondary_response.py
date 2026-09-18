@@ -215,8 +215,36 @@ def test_deleted_row_with_corrupt_pin_does_not_drive_the_gate(tmp_path: Path) ->
     )
     c.commit()
     c.close()
-    assert mod.sweep(db)["skipped_unparsable"] == 0
+    summary = mod.sweep(db)
+    assert summary["skipped_unparsable"] == 0 and summary["skipped_deleted"] == 1
     assert mod.main(["--gate", str(db)]) == 0
+
+
+def test_override_absent_never_raises_on_hostile_blobs() -> None:
+    assert mod._override_absent(None) is True
+    assert mod._override_absent("null") is True
+    assert mod._override_absent(b"null") is True
+    assert mod._override_absent("{}") is False
+    assert mod._override_leg(b"\xff") == "unparsable"  # non-UTF-8 BLOB: UnicodeDecodeError
+    assert mod._override_leg("[" * 200_000) == "unparsable"  # RecursionError
+    assert mod._override_leg(3) == "present"
+
+
+def test_corrupt_override_leg_is_unclassified_not_clean(tmp_path: Path) -> None:
+    slug = sorted(mod.OLD_PAIRS)[0]
+    db = tmp_path / "corrupt_override.db"
+    c = _empty_db(db)
+    eid = uuid.uuid4().hex
+    c.execute("INSERT INTO scenario_library_entries VALUES (?, ?, 1)", (eid, slug))
+    c.execute(
+        "INSERT INTO scenario_library_overrides VALUES (?, ?, 1, ?, ?, NULL)",
+        (uuid.uuid4().hex, eid, "{not json", "null"),
+    )
+    c.commit()
+    c.close()
+    summary = mod.sweep(db)
+    assert summary["skipped_unparsable"] == 1 and summary["override_one_sided"] == 0
+    assert mod.main(["--gate", str(db)]) == 1
 
 
 def test_scenario_class_copy_stale_is_total() -> None:

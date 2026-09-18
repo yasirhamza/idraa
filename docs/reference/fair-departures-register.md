@@ -332,7 +332,8 @@ the rationale; where it lives; how to evaluate it.
   `third-party-processor-breach`'s node on the shared envelope) and one new
   within-sector coincidence on Secondary Loss (`healthcare-record-alteration`
   and `ransomware-on-ehr` both land on Σs = 0.33 — 0.26 + 0.22/3 and 0.25 +
-  0.25/3 each evaluate to exactly 1/3 of their budgets — so their SL nodes
+  0.25/3 each evaluate to exactly 1/3 (3·Σs₀ + t = 1.00 for both entries, a
+  coincidence of the pre-split numbers, not a rule) — so their SL nodes
   coincide on the healthcare envelope; allowlisted in `_SL_ALLOWLIST` rather
   than nudged, since nudging either off the uniform rule would be a hidden
   per-entry adjustment, and PL (Σp 0.40 vs 0.64), TEF and vulnerability still

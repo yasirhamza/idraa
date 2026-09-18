@@ -128,6 +128,9 @@ canonical side moved and the overridden side did not, so that org's adoptions
 and refreshes are not mean-neutral (register B5); such overrides must be
 re-authored -- this sweep only counts them.
 Soft-deleted scenarios are skipped: a deleted row must not drive the repair gate.
+``skipped_deleted`` counts soft-deleted rows pinned to a renumbered entry, plus
+soft-deleted rows whose ``library_pin`` does not parse (entry unknown); neither
+drives the gate.
 Scenarios whose pin names an entry version other than 1 (or none at all) are
 skipped too: the
 OLD/NEW tables are derived from the version-1 snapshot only, and the migration's
@@ -1010,18 +1013,24 @@ def _matches(pair: tuple[float, float], ref: list[float] | tuple[float, float]) 
     return abs(pair[0] - round(ref[0], 2)) <= CENT and abs(pair[1] - round(ref[1], 2)) <= CENT
 
 
-def _override_absent(raw: object) -> bool:
-    """True when an override leg is unset. SQLAlchemy's plain JSON type persists Python
-    None as the JSON text 'null' (none_as_null defaults to False), so an ORM-written
-    unset leg is the string 'null', not SQL NULL; both shapes count as absent."""
+def _override_leg(raw: object) -> str:
+    """Tri-state for an override leg: 'absent', 'present' or 'unparsable'. SQLAlchemy's
+    plain JSON type persists Python None as the JSON text 'null' (none_as_null defaults
+    to False), so an ORM-written unset leg is the string 'null', not SQL NULL; both
+    shapes are 'absent'. A leg that does not decode is 'unparsable' (unclassified, not
+    clean -- same stance as the scenario loop)."""
     if raw is None:
-        return True
+        return "absent"
     if isinstance(raw, (str, bytes)):
         try:
-            return json.loads(raw) is None
-        except json.JSONDecodeError:
-            return False
-    return False
+            return "absent" if json.loads(raw) is None else "present"
+        except (ValueError, RecursionError):  # JSONDecodeError + UnicodeDecodeError on a BLOB
+            return "unparsable"
+    return "present"
+
+
+def _override_absent(raw: object) -> bool:
+    return _override_leg(raw) == "absent"
 
 
 def has_pre_change_identity(
@@ -1139,7 +1148,10 @@ def sweep(db_path: Path) -> dict[str, int]:
         ):
             if str(eid).replace("-", "").lower() not in renumbered_entry_ids:
                 continue
-            if _override_absent(pl_raw) != _override_absent(sl_raw):
+            legs = (_override_leg(pl_raw), _override_leg(sl_raw))
+            if "unparsable" in legs:
+                summary["skipped_unparsable"] += 1  # unclassified, not clean
+            elif legs[0] != legs[1]:
                 summary["override_one_sided"] += 1
         print("scenario_id | slug | pl | sl | class")
         for sid, pin, status, pl_raw, sl_raw in conn.execute(
@@ -1147,9 +1159,10 @@ def sweep(db_path: Path) -> dict[str, int]:
         ):
             try:
                 p = (json.loads(pin) if pin else None) or {}
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
                 if status == "deleted":
-                    continue  # a deleted row must not drive the gate, parsable or not
+                    summary["skipped_deleted"] += 1  # visible, but never drives the gate
+                    continue
                 summary["skipped_unparsable"] += 1  # unclassified, not clean
                 continue
             entry_hex = str(p.get("entry_id", "")).replace("-", "").lower()
@@ -1168,7 +1181,7 @@ def sweep(db_path: Path) -> dict[str, int]:
                     fs: (json.loads(raw) if isinstance(raw, str) else raw)
                     for fs, raw in (("pl", pl_raw), ("sl", sl_raw))
                 }
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
                 summary["skipped_unparsable"] += 1  # unclassified, not clean
                 continue
             classes: dict[str, str] = {}

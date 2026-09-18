@@ -27,7 +27,11 @@ read-only diagnostic ``scripts/sweep_library_secondary_response.py`` classifies
 adoptions per loss fieldset (copy-stale / copy-current / pristine / current /
 stale / modified / pinned) and counts one-sided org overrides on the 24 entries
 (``override_one_sided``: re-author the override, not a migration); ``--gate``
-exits 1 on any non-clean counter. Repair trigger:
+exits 1 on any counter that means the deployment is not clean (``pristine``,
+``copy_stale``, ``override_one_sided``, ``pinned_stale_side``,
+``copy_current_stale_rows``, ``skipped_pin_version``, ``skipped_unparsable``);
+``stale`` / ``modified`` / ``pinned`` / ``skipped_deleted`` are reported but are
+not repair triggers. Repair trigger:
 if a deployment's sweep reports ANY ``pristine`` or ``copy-stale`` scenario, land
 a separate repair migration (pristine: SME pair → new pair + node re-fit;
 copy-stale: the entry's new node written into the matching fieldset only,
