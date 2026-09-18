@@ -311,6 +311,26 @@ def test_renumbered_set_matches_script_constant() -> None:
     assert len(carrying) == 24
 
 
+def _side_sums(entry: dict) -> tuple[float, float]:
+    sp = sum(p["share"] for p in entry["loss_form_profile"] if p["kind"] == "primary")
+    ss = sum(p["share"] for p in entry["loss_form_profile"] if p["kind"] == "secondary")
+    return sp, ss
+
+
+def test_register_a5_b5_descriptive_statistics_hold() -> None:
+    """Tripwire for the register's A5/B5 consequence figures (T5c-Meth N-4): re-tuning a
+    renumbered entry's shares must fail here, not silently invalidate the register."""
+    by_slug = {e["slug"]: e for e in _load()}
+    telecom = _side_sums(by_slug["telecom-lawful-intercept-nationstate-compromise"])
+    assert tuple(round(v, 9) for v in telecom) == (0.32, 0.25)  # register A5: 0.668 -> 0.508
+    near_floor = 0
+    for slug in reclass.RENUMBERED_SLUGS:
+        sp, ss = _side_sums(by_slug[slug])
+        ratio = (sp**2 + ss**2) / (sp + ss) ** 2  # A5 variance ratio, floor 0.5 at sp == ss
+        near_floor += ratio < 0.51
+    assert near_floor == 5  # register A5: "five entries now sit within 0.01 of the 0.5 floor"
+
+
 def test_ind2sec_matches_guard_copy() -> None:
     # tests/ and tests/integration/ are packages, so the repo root is on sys.path.
     from tests.integration.test_library_loss_differentiation import _IND2SEC
