@@ -85,7 +85,13 @@ the rationale; where it lives; how to evaluate it.
   under a standard SLEF branch the reclassification would lower inherent ALE
   by a further 2.2%–14.9% at q = 0.5. Tracked with #173.
 - **Where.** `fair_cam/risk_engine/fair_core.py`; scenario form and
-  `templates/help/articles/build-a-scenario.html` ("Secondary Loss").
+  `templates/help/articles/build-a-scenario.html` ("Secondary Loss"). Since
+  #174 the scaling instruction is also visible copy on the Secondary loss
+  footer of `templates/scenarios/form.html` and on the wizard's SL fieldset
+  (`templates/scenarios/wizard/_fair_params_form_inner.html`), pinned by
+  `tests/services/test_wizard_questions.py`; the node-teaching article
+  `templates/help/articles/fair-in-idraa-terms.html` (§4, Loss Magnitude)
+  states the missing secondary frequency inline and links here.
 - **Evaluate.** Compare a scenario authored with a discounted SL range
   against the same scenario run with an explicit `P(secondary)` and a
   Bernoulli gate on SL. Follow-up: **issue #173** (an optional
@@ -286,8 +292,8 @@ the rationale; where it lives; how to evaluate it.
   is inferred from its `fines` share rather than a named statute; neither
   affects the numbers (the fraction is selected by threat type). The fractions
   are conventions of the same grade as the shares, not identifiable from the
-  corpus (no observable separates internal-IR cost from forced-response cost
-  per entry), selected by threat type: 3/7 for `data_disclosure` (whose
+  corpus (no observable separates IR-of-the-event cost from forced-response
+  cost per entry), selected by threat type: 3/7 for `data_disclosure` (whose
   default already splits response 0.20 P : 0.15 S) and for
   `social_engineering` phishing→breach entries (routed to that default by the
   rubric), 1/3 for every other type (whose default carries response as

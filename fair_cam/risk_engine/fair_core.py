@@ -238,10 +238,13 @@ class FAIRParameters:
     # Vulnerability - probability of successful threat action
     vulnerability: FAIRDistribution
 
-    # Primary Loss (PL) - direct financial impact
+    # Primary Loss (PL) - losses the primary stakeholder incurs from the event
+    # itself (productivity, response, replacement)
     primary_loss: FAIRDistribution
 
-    # Secondary Loss (SL) - indirect costs (response, reputation, etc.)
+    # Secondary Loss (SL) - losses the primary stakeholder incurs from secondary
+    # stakeholders' reactions (fines and judgments, reputation, notification and
+    # third-party-claim legal response)
     secondary_loss: FAIRDistribution
 
     # Optional: Contact frequency for threat community modeling

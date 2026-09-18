@@ -117,6 +117,8 @@ async def test_methodology_primer_glossary_and_nodes(authed_analyst):
     # catastrophic-flagged Loss Magnitude is the documented exception
     assert "bounded pert" in body.lower() or "capped-pert" in body.lower()
     assert "catastrophic" in body.lower()
+    # #174 / register A1: the node-teaching page discloses the missing SLEF inline.
+    assert "FAIR gives Secondary Loss its own frequency" in body
 
 
 @pytest.mark.asyncio

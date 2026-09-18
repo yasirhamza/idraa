@@ -87,7 +87,10 @@ def test_render_question_vuln_is_inherent_not_residual():
 def test_render_question_pl_is_context_free():
     ctx = ScenarioContext(None, None, None)
     q = render_question("pl", ctx)
-    assert q == "If the attack succeeds, what's the direct financial loss?"
+    assert (
+        q
+        == "If the attack succeeds, what does the event itself cost you: response, recovery, downtime, replacement?"
+    )
     assert "(" not in q
 
 
@@ -96,7 +99,10 @@ def test_render_question_sl_is_event_conditional():
     # FAIR Secondary Loss is a Loss-Magnitude component per loss event.
     ctx = ScenarioContext(None, None, None)
     q = render_question("sl", ctx)
-    assert q == "If the attack succeeds, what's the indirect or downstream loss?"
+    assert (
+        q
+        == "If the attack succeeds, what do other stakeholders' reactions cost you: fines, lost business, and the response they force?"
+    )
     assert "(" not in q
     assert "12 months" not in q
 
@@ -105,3 +111,19 @@ def test_render_question_unknown_fieldset_raises():
     ctx = ScenarioContext(None, None, None)
     with pytest.raises(KeyError):
         render_question("unknown", ctx)
+
+
+def test_secondary_loss_scaling_guardrail_is_present():
+    """Register A1's stated defence is product copy — pin it on both authoring surfaces
+    (#174, T6b-Meth IMPORTANT-2)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    form = (root / "src/idraa/templates/scenarios/form.html").read_text(encoding="utf-8")
+    wiz = (root / "src/idraa/templates/scenarios/wizard/_fair_params_form_inner.html").read_text(
+        encoding="utf-8"
+    )
+    for text in (form, wiz):
+        flat = " ".join(text.split())  # the copy wraps mid-sentence in both templates
+        assert "applies secondary loss to every simulated loss event" in flat.lower()
+        assert "scale it by the fraction of loss events" in flat

@@ -20,9 +20,9 @@ QUESTION_TEMPLATES = {
         "If the attempt happens, how likely is the attacker to succeed against "
         "the asset's inherent weaknesses, before any of your mitigating controls?"
     ),
-    "pl": "If the attack succeeds, what's the direct financial loss?",
+    "pl": "If the attack succeeds, what does the event itself cost you: response, recovery, downtime, replacement?",
     # Plan-gate M-N2: event-conditional (matches PL), not annualized.
-    "sl": "If the attack succeeds, what's the indirect or downstream loss?",
+    "sl": "If the attack succeeds, what do other stakeholders' reactions cost you: fines, lost business, and the response they force?",
 }
 
 
@@ -117,12 +117,16 @@ QUESTION_TOOLTIPS = {
         "threat action essentially never succeeds, 1 = always."
     ),
     "pl": (
-        "What you'd spend responding — incident response, forensics, customer "
-        "notification, legal counsel, replacement hardware."
+        "What the event itself costs you: incident response and forensics, legal "
+        "counsel on containment (in-house or retained), recovery, ransom, lost "
+        "productivity, replacement hardware."
     ),
     "sl": (
-        "Regulatory fines, lost revenue, customer churn, reputational damage, "
-        "increased insurance premiums."
+        "What regulators', customers' and partners' reactions cost you: fines and "
+        "judgments, lost business and churn, reputational damage, and the response "
+        "those reactions force — notification, credit monitoring, cooperation with a "
+        "regulatory investigation, counterparty claims, and legal defence against "
+        "third-party claims."
     ),
 }
 

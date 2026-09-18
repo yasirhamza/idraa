@@ -67,7 +67,7 @@ reference "full incident" (Σ≈1.0); everything else is scaled relative to it.
 | **ot_integrity** | productivity 0.40 P · response 0.15 P · replacement 0.05 P | 0.60 / 0.00 / **0.60** | corrupted process → bad output/rework + investigation |
 
 Notes on the table:
-- **`response` appears twice for `data_disclosure`** (internal-IR primary + notification/legal secondary) — these are two `loss_form_profile` entries with the same machine key `form=response` but distinct `kind` (the (form,kind)-uniqueness guard permits this); NOT a new "response-notification" key.
+- **`response` appears twice for `data_disclosure`** (IR-of-the-event primary + notification/legal secondary) — these are two `loss_form_profile` entries with the same machine key `form=response` but distinct `kind` (the (form,kind)-uniqueness guard permits this); NOT a new "response-notification" key.
 - **`response` is split on every reaction-firing entry, not only `data_disclosure`.**
   The §4 Regulator-and-judgment reaction rule applies to any entry whose profile
   carries a `fines` secondary share; for every threat type except
@@ -89,11 +89,12 @@ Notes on the table:
   named in the script's `EXTRA_RENUMBERED` set because its exfiltrated third-party
   data carries a statutory notification duty with no fines share authored (one
   entry today, `telecom-lawful-intercept-nationstate-compromise`) — splits its
-  `response` budget into `response/primary` (internal IR, forensics, recovery)
+  `response` budget into `response/primary` (IR, forensics and recovery of the event itself)
   and `response/secondary` (the response that reaction forces: for a
-  personal-data breach, notification, credit monitoring and third-party legal
-  defence; for a safety, product or contract proceeding, regulatory-investigation
-  cooperation, counterparty claims handling and third-party legal defence). The
+  personal-data breach, notification, credit monitoring and legal defence
+  against third-party claims; for a safety, product or contract proceeding,
+  regulatory-investigation cooperation, counterparty claims handling and legal
+  defence against third-party claims). The
   secondary fraction of the response budget is **3/7 where the threat type
   resolves to the `data_disclosure` default** (`data_disclosure` itself, and
   `social_engineering` phishing→breach entries) and **1/3 for every other threat
@@ -111,7 +112,7 @@ Notes on the table:
   splits response 0.20 P : 0.15 S, and for `social_engineering` phishing→breach
   entries, which §3 routes to that default (BEC entries are beyond-envelope and
   never fire `fines`); 1/3 for every other type, whose §3 default
-  carries response as primary-only, as a convention keeping internal IR,
+  carries response as primary-only, as a convention keeping IR,
   forensics and recovery the dominant cost of an IR-dominant budget (FAIR-CAM
   §3.3.3 calls Response's examples predominantly secondary but sets no
   per-entry split). Entries of other types that carry a notification duty still

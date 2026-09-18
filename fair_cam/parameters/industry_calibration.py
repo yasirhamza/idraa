@@ -18,9 +18,10 @@ granularity — they are FAIR-modeled from a lognormal-ish prior centered on
 the IRIS 2025 median. Document any future re-tuning of those shapes against
 its source in a comment on the BenchmarkData entry.
 
-Loss-magnitude benchmarks similarly anchor on IRIS 2025 (overall median /
-per-revenue-tier values from Table 1) via per-industry multipliers documented
-in ``_iris_2025_calibration.py``. The pre-IRIS-2025 hard-coded loss percentiles
+Loss-magnitude BenchmarkData rows anchor on IRIS 2025's overall median times
+legacy per-industry factors (only the healthcare row's notes name its factor);
+the live per-industry priors are the Figure A3 sector medians in
+``_iris_2025_calibration.py``. The pre-IRIS-2025 hard-coded loss percentiles
 preserved in the BenchmarkData library were never traceable to a published
 source; they are kept for backward compatibility but flagged as priors in the
 data_source string.
@@ -387,39 +388,53 @@ class IndustryParameterLibrary:
 
         self.benchmarks["primary_loss_magnitude"] = ParameterBenchmark(
             parameter_name="Primary Loss Magnitude",
-            description="Direct financial impact of a successful attack",
+            description="What the event itself costs the organization",
             industry_data=[loss_healthcare, loss_financial, loss_manufacturing],
             estimation_guidance="""
-            Include all direct costs:
-            1. Incident response and investigation
+            Include the costs the event itself imposes on the organization:
+            1. Incident response and forensic investigation (your staff or a firm you retain)
             2. System recovery and remediation
             3. Data recovery and reconstruction
-            4. Legal and forensic costs
-            5. Regulatory fines and penalties
-            6. Customer notification costs
+            4. Legal counsel on containment and recovery, in-house or retained (counsel work driven
+               by a regulator's, court's or counterparty's reaction — including
+               legal defense against third-party claims — is Secondary Loss)
+            5. Productivity loss during downtime and replacement of damaged assets
+            Regulatory fines and judgments, customer and regulator notification / credit
+            monitoring, cooperation with a regulator's or court's investigation, and counterparty
+            claims handling are Secondary Loss (a regulator's, court's or counterparty's
+            reaction) — estimate them under Secondary Loss Magnitude, not here.
 
-            Use bottom-up estimation when possible, validated against industry data.
+            Use bottom-up estimation when possible. These industry_data rows are FAIR
+            priors anchored on IRIS 2025's overall incident-loss median, not PL-only
+            measurements (the healthcare row's own notes include regulatory fines and
+            compliance costs); treat them as total-incident figures, not PL benchmarks.
+            Idraa's current per-industry loss anchors are the IRIS 2025 Figure A3
+            (p. 35) sector priors in _iris_2025_calibration.py (healthcare p50 $557K),
+            which supersede the OVERALL_LOSS_MEDIAN × multiplier derivation these rows
+            carry — those are sector total-incident medians too, assigned to the PL node
+            with Secondary Loss modeled at 0.3× on top, so the same total-vs-PL caveat
+            applies (tracked in #181 §3).
             """,
             common_mistakes=[
                 "Underestimating incident response costs",
-                "Not including regulatory penalties",
-                "Forgetting legal and PR costs",
+                "Booking regulatory penalties or notification costs under Primary Loss (they are Secondary Loss)",
+                "Forgetting legal counsel costs on containment (customer-facing crisis communications are Secondary Loss)",
                 "Using outdated cost estimates",
                 "Not scaling for organization size",
             ],
             calibration_tips=[
                 "Use multiple estimation methods and triangulate",
-                "Consider worst-case regulatory penalty scenarios",
-                "Factor in cyber insurance deductibles and coverage gaps",
-                "Validate against recent similar incidents in your industry",
+                "Bound the response and downtime legs separately; regulatory penalties belong to Secondary Loss Magnitude",
+                "Estimate gross of insurance: recoveries are modeled as a Secondary-Loss reduction (register C10 in docs/reference/fair-departures-register.md), not netted out of the estimate — a scenario carrying no Secondary Loss has nowhere to carry the recovery; record it as an assumption rather than netting it into PL",
+                "Validate against recent similar incidents in your industry (incident totals include the secondary forms — net them out first)",
             ],
             influencing_factors=[
                 "Data sensitivity and volume",
-                "Regulatory environment",
-                "Customer base size",
+                "Regulatory environment (drives investigation effort on the event itself; fines, mandated breach reporting and regulator cooperation are Secondary Loss)",
+                "Customer base size (drives service-desk load on the event itself; notification, credit-monitoring and breach-driven inbound volume are Secondary Loss — the customer-reaction boundary is tracked for audit in #181 §1)",
                 "Revenue dependency on systems",
-                "Insurance coverage",
-                "Legal jurisdiction",
+                "Insurance coverage (a Secondary-Loss reduction under register C10 in docs/reference/fair-departures-register.md, not a PL driver)",
+                "Legal jurisdiction (drives counsel effort on containment; judgments, third-party defense and regulator/court liaison are Secondary Loss)",
             ],
             trend_direction="increasing",
         )
