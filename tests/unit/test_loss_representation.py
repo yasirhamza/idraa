@@ -47,7 +47,7 @@ _CATASTROPHIC = frozenset(
 # curve, the documented shared-curve consequence of the mean-anchor, D11'),
 # sigma -> WITHIN_SCENARIO_SIGMA_DEFAULT (1.7): (pl_low, pl_high).
 _SPOT_PERT = {
-    "ransomware-on-ehr": (24478.8629170978, 6570284.009215002),
+    "ransomware-on-ehr": (21758.9892608694, 5840252.452964859),  # #175: Sum(primary) 0.72 -> 0.64
     "web-app-exploitation": (13428.4606082079, 3604285.064272992),
     # Vendor mean-anchor (IC3 $123,005): identical curve on both slugs.
     "telecom-sim-swap-fraud": (1769.9898978414, 475076.6553840482),
@@ -57,7 +57,7 @@ _SPOT_PERT = {
 # (none of these three is the destructive-wiper-nationstate override), sigma
 # -> WITHIN_SCENARIO_SIGMA_DEFAULT (1.7).
 _SPOT_LOGNORMAL = {
-    "chemical-process-safety-attack": (13.6876771865, 1.7),
+    "chemical-process-safety-attack": (13.6291809798, 1.7),  # #175: Sum(primary) 0.88 -> 0.83
     "nation-state-ics-supply-chain": (11.4605789846, 1.7),
     "solarwinds-class-supply-chain": (13.1275499041, 1.7),
 }

@@ -75,12 +75,10 @@ _PL_ALLOWLIST: list[frozenset[str]] = [
     # UNMODELED for both (no defensible source, sec6 waiver) -- so the MODELED curves
     # are genuinely identical. Allowlisted, not nudged.
     frozenset({"insider-ip-theft-manufacturing", "ip-theft-by-competitor"}),
-    # Attack-coverage gap-fill epic (#529 Task 1): edge-ransomware-perimeter-
-    # gateway's primary_loss is genuinely identical to ransomware-on-fileshare's
-    # (both professional_services, Sum(primary)=0.70, same ransomware family) --
-    # the two archetypes differ in initial-access vector and TEF/vuln, not loss
-    # magnitude.
-    frozenset({"edge-ransomware-perimeter-gateway", "ransomware-on-fileshare"}),
+    # (#175) The former edge-ransomware-perimeter-gateway / ransomware-on-fileshare
+    # row was removed: edge fires a fines share and now splits its response budget
+    # (Sum(primary) 0.70 -> 0.62); fileshare does not, so the tie dissolved and the
+    # row's "not loss magnitude" rationale no longer held.
 ]
 
 
@@ -279,8 +277,21 @@ _VULN_ALLOWLIST: list[frozenset[str]] = [
     ),
     frozenset({"grid-protective-relay-manipulation", "pipeline-scada-integrity"}),
 ]
+# Admissible categories: (a) genuinely loss-effect-identical archetypes (as
+# _PL_ALLOWLIST); (b) a Sum(secondary) collision forced by a uniform rubric rule, where
+# nudging either entry would be a hidden per-entry adjustment (#175).
 _SL_ALLOWLIST: list[frozenset[str]] = [
     frozenset({"insider-ip-theft-manufacturing", "ip-theft-by-competitor"}),
+    # Issue #175 regulator-and-judgment reaction rule: after the mechanical 1/3
+    # response split both healthcare entries land on Sum(secondary) = 0.33 --
+    # ransomware-on-ehr 0.15+0.10+0.08 vs healthcare-record-alteration 0.14+0.12+0.07.
+    # They differ on primary loss (Sum(p) 0.64 vs 0.40, same order), TEF and
+    # vulnerability. The coincidence is exact, not a rounding artefact -- Sum(s_old) +
+    # t/3 evaluates to 1/3 for both (0.25 + 0.25/3; 0.26 + 0.22/3), so no added
+    # precision separates them; only genuine re-curation of one entry could.
+    # Allowlisted, not nudged: nudging one entry off the uniform rule would be a
+    # hidden per-entry adjustment.
+    frozenset({"healthcare-record-alteration", "ransomware-on-ehr"}),
 ]
 
 _DIM_ALLOWLIST = {

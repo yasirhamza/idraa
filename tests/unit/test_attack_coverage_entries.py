@@ -8,9 +8,8 @@ native lognormal mean = mu_s + ln(Sum shares), sigma = WITHIN_SCENARIO_SIGMA_DEF
 lone catastrophic entry), all validate through LibraryEntrySeed, carry
 loss_tier=paginated + the IRIS envelope cite + an attestation cite, and keep
 Sum(shares) <= 1 with a differentiated PERT TEF/vuln. Also pins the builder's
-IND2SEC to the differentiation guard's copy (drift guard) and confirms A1's
-primary_loss is byte-identical to ransomware-on-fileshare's (the deliberate
-_PL_ALLOWLIST pair).
+IND2SEC to the differentiation guard's copy (drift guard); the former A1/fileshare
+byte-identity check was retired by #175.
 
 The authoritative acceptance for the whole batch is that
 tests/integration/test_library_loss_differentiation.py stays fully green
@@ -65,7 +64,6 @@ _NEW_SLUGS = {
     "destructive-wiper-nationstate": True,
 }
 
-_A1_SLUG = "edge-ransomware-perimeter-gateway"
 _W1_SLUG = "destructive-wiper-nationstate"
 
 
@@ -214,14 +212,10 @@ def test_builder_ind2sec_matches_differentiation_guard() -> None:
     assert BUILDER_MAP == _IND2SEC, "builder IND2SEC drifted from the differentiation guard's copy"
 
 
-def test_a1_primary_loss_matches_ransomware_on_fileshare_byte_for_byte() -> None:
-    """A1 (edge-ransomware-perimeter-gateway) is deliberately loss-effect-identical
-    to ransomware-on-fileshare (both professional_services, Sum(primary)=0.70) --
-    the genuine tie added to _PL_ALLOWLIST. Both are capped/PERT post-Milestone-B."""
-    d = _by_slug()
-    a1 = d[_A1_SLUG]
-    baseline = d["ransomware-on-fileshare"]
-    assert a1["primary_loss"] == baseline["primary_loss"]
+# (#175) test_a1_primary_loss_matches_ransomware_on_fileshare_byte_for_byte was
+# removed: the byte identity was an artefact of identical pre-rule shares. A1 fires
+# a fines share and now splits its response budget under the regulator-and-judgment
+# reaction rule; ransomware-on-fileshare does not. The _PL_ALLOWLIST row went with it.
 
 
 def test_total_published_entries_is_102() -> None:
