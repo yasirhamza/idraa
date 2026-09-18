@@ -115,7 +115,8 @@ Repair trigger (documented in the migration): any pristine or copy-stale
 scenario on a deployment -> land the repair as its own PR. Exit code is 0
 on a completed sweep (2 = usage / missing file; ``--gate`` returns 1 when
 ``pristine + copy_stale + override_one_sided + skipped_pin_version +
-skipped_unparsable > 0``, so a deploy script can enforce the trigger); the
+skipped_unparsable + pinned_stale_side + copy_current_stale_rows > 0``, so a
+deploy script can enforce the trigger without reading the SUMMARY); the
 SUMMARY line is the human-readable gate. A row whose ``library_pin`` /
 ``primary_loss`` / ``secondary_loss`` JSON does not parse is counted in
 ``skipped_unparsable`` (unclassified, not clean). Output carries scenario ids
@@ -1009,6 +1010,20 @@ def _matches(pair: tuple[float, float], ref: list[float] | tuple[float, float]) 
     return abs(pair[0] - round(ref[0], 2)) <= CENT and abs(pair[1] - round(ref[1], 2)) <= CENT
 
 
+def _override_absent(raw: object) -> bool:
+    """True when an override leg is unset. SQLAlchemy's plain JSON type persists Python
+    None as the JSON text 'null' (none_as_null defaults to False), so an ORM-written
+    unset leg is the string 'null', not SQL NULL; both shapes count as absent."""
+    if raw is None:
+        return True
+    if isinstance(raw, (str, bytes)):
+        try:
+            return json.loads(raw) is None
+        except json.JSONDecodeError:
+            return False
+    return False
+
+
 def has_pre_change_identity(
     rows: list[tuple[str | None, str | None, float, float]],
     old: list[float] | tuple[float, float],
@@ -1113,12 +1128,18 @@ def sweep(db_path: Path) -> dict[str, int]:
             "override_one_sided": 0,
         }
         renumbered_entry_ids = {eid for eid, s in slug_by_entry.items() if s in OLD_PAIRS}
-        for eid, pl_null, sl_null in conn.execute(
-            "SELECT library_entry_id, primary_loss IS NULL, secondary_loss IS NULL "
+        # Overrides are only ever ORM-written: an unset leg is the JSON text 'null'
+        # (see _override_absent), so absence is decided in Python, never by IS NULL.
+        # Entries are created at version 1 and never re-versioned
+        # (services/scenario_library.py), so version-1 overrides are all of them.
+        for eid, pl_raw, sl_raw in conn.execute(
+            "SELECT library_entry_id, primary_loss, secondary_loss "
             "FROM scenario_library_overrides "
             "WHERE deleted_at IS NULL AND library_entry_version = 1"
         ):
-            if str(eid).replace("-", "").lower() in renumbered_entry_ids and pl_null != sl_null:
+            if str(eid).replace("-", "").lower() not in renumbered_entry_ids:
+                continue
+            if _override_absent(pl_raw) != _override_absent(sl_raw):
                 summary["override_one_sided"] += 1
         print("scenario_id | slug | pl | sl | class")
         for sid, pin, status, pl_raw, sl_raw in conn.execute(
@@ -1127,6 +1148,8 @@ def sweep(db_path: Path) -> dict[str, int]:
             try:
                 p = (json.loads(pin) if pin else None) or {}
             except json.JSONDecodeError:
+                if status == "deleted":
+                    continue  # a deleted row must not drive the gate, parsable or not
                 summary["skipped_unparsable"] += 1  # unclassified, not clean
                 continue
             entry_hex = str(p.get("entry_id", "")).replace("-", "").lower()
@@ -1163,7 +1186,7 @@ def sweep(db_path: Path) -> dict[str, int]:
                     continue
                 rows = conn.execute(
                     "SELECT sme_id, sme_name, low, high FROM scenario_sme_estimates "
-                    "WHERE replace(scenario_id, '-', '') = :sid AND fieldset = :fs "
+                    "WHERE lower(replace(scenario_id, '-', '')) = :sid AND fieldset = :fs "
                     "ORDER BY recorded_at ASC, id ASC",
                     {"sid": str(sid).replace("-", "").lower(), "fs": fs},
                 ).fetchall()
@@ -1221,6 +1244,9 @@ GATE_KEYS = (
     "override_one_sided",
     "skipped_pin_version",
     "skipped_unparsable",
+    # Judgment tiers: the docstring says a deployment is not clean until these are read.
+    "pinned_stale_side",
+    "copy_current_stale_rows",
 )
 
 

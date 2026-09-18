@@ -24,7 +24,10 @@ the entry's dict per refreshed field plus an org-minted ``max`` on lognormal
 fields (each field taken independently from the entry or the org override). Runs already stored read the scenario's own columns
 and do not change until the scenario is repaired, refreshed or re-adopted. The
 read-only diagnostic ``scripts/sweep_library_secondary_response.py`` classifies
-adoptions (copy-stale / pristine / current / stale / modified). Repair trigger:
+adoptions per loss fieldset (copy-stale / copy-current / pristine / current /
+stale / modified / pinned) and counts one-sided org overrides on the 24 entries
+(``override_one_sided``: re-author the override, not a migration); ``--gate``
+exits 1 on any non-clean counter. Repair trigger:
 if a deployment's sweep reports ANY ``pristine`` or ``copy-stale`` scenario, land
 a separate repair migration (pristine: SME pair → new pair + node re-fit;
 copy-stale: the entry's new node written into the matching fieldset only,

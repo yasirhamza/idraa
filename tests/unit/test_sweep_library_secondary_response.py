@@ -120,9 +120,8 @@ def test_has_pre_change_identity_sees_the_seed_row_inside_a_pool() -> None:
     assert not mod.has_pre_change_identity([], old)
 
 
-def test_gate_exit_is_zero_on_a_clean_db(tmp_path: Path) -> None:
-    db = tmp_path / "clean.db"
-    c = sqlite3.connect(db)
+def _empty_db(path: Path) -> sqlite3.Connection:
+    c = sqlite3.connect(path)
     c.executescript(
         """
         CREATE TABLE scenario_library_entries (id CHAR(32) PRIMARY KEY, slug TEXT, version INTEGER);
@@ -134,8 +133,89 @@ def test_gate_exit_is_zero_on_a_clean_db(tmp_path: Path) -> None:
             library_entry_version INTEGER, primary_loss TEXT, secondary_loss TEXT, deleted_at TEXT);
         """
     )
+    return c
+
+
+def test_gate_exit_is_zero_on_a_clean_db(tmp_path: Path) -> None:
+    db = tmp_path / "clean.db"
+    _empty_db(db).close()
+    assert mod.main(["--gate", str(db)]) == 0
+
+
+def _one_scenario_db(
+    path: Path, pl_node: str, sl_node: str, sme_scenario_id: str | None
+) -> tuple[sqlite3.Connection, str, str]:
+    """One renumbered-entry scenario; returns (conn, slug, scenario_id) for further inserts."""
+    slug = sorted(mod.OLD_PAIRS)[0]
+    c = _empty_db(path)
+    eid, sid = uuid.uuid4().hex, uuid.uuid4().hex
+    c.execute("INSERT INTO scenario_library_entries VALUES (?, ?, 1)", (eid, slug))
+    c.execute(
+        "INSERT INTO scenarios VALUES (?, ?, ?, ?, ?, ?)",
+        (sid, "n", json.dumps({"entry_id": eid, "version": 1}), "active", pl_node, sl_node),
+    )
+    old = mod.OLD_PAIRS[slug]["sl"]
+    c.execute(
+        "INSERT INTO scenario_sme_estimates VALUES (?, ?, 'sl', ?, NULL, ?, ?, '2026-01-01')",
+        (
+            uuid.uuid4().hex,
+            sme_scenario_id or sid,
+            uuid.uuid4().hex,
+            round(old[0], 2),
+            round(old[1], 2),
+        ),
+    )
+    c.commit()
+    return c, slug, sid
+
+
+def test_sme_join_tolerates_uppercase_and_hyphenated_scenario_ids(tmp_path: Path) -> None:
+    other = json.dumps({"distribution": "PERT", "low": 1.0, "mode": 1.0, "high": 2.0})
+    for spelling in ("upper", "hyphen"):
+        db = tmp_path / f"{spelling}.db"
+        c = _empty_db(db)
+        c.close()
+        db.unlink()
+        sid_hex = uuid.uuid4().hex
+        spelt = sid_hex.upper() if spelling == "upper" else str(uuid.UUID(sid_hex))
+        c, _slug, _sid = _one_scenario_db(db, other, other, spelt)
+        # re-point the scenario row at the same id in canonical hex
+        c.execute("UPDATE scenarios SET id = ?", (sid_hex,))
+        c.commit()
+        c.close()
+        summary = mod.sweep(db)
+        assert summary["pristine"] == 1, spelling  # a mis-spelt join would report stale
+
+
+def test_gate_fails_on_pinned_scenario_with_pristine_other_side(tmp_path: Path) -> None:
+    pinned = json.dumps(
+        {
+            "distribution": "PERT",
+            "low": 1.0,
+            "mode": 1.0,
+            "high": 2.0,
+            "distribution_fit_metadata": {"sigma_recalibration": {"source": "analyst_pin"}},
+        }
+    )
+    other = json.dumps({"distribution": "PERT", "low": 1.0, "mode": 1.0, "high": 2.0})
+    db = tmp_path / "pinned.db"
+    c, _slug, _sid = _one_scenario_db(db, pinned, other, None)
+    c.close()
+    summary = mod.sweep(db)
+    assert summary["pristine"] == 0 and summary["pinned_stale_side"] == 1
+    assert mod.main(["--gate", str(db)]) == 1  # judgment tier still fails the gate
+
+
+def test_deleted_row_with_corrupt_pin_does_not_drive_the_gate(tmp_path: Path) -> None:
+    db = tmp_path / "deleted.db"
+    c = _empty_db(db)
+    c.execute(
+        "INSERT INTO scenarios VALUES (?, 'n', '{not json', 'deleted', NULL, NULL)",
+        (uuid.uuid4().hex,),
+    )
     c.commit()
     c.close()
+    assert mod.sweep(db)["skipped_unparsable"] == 0
     assert mod.main(["--gate", str(db)]) == 0
 
 
@@ -366,11 +446,14 @@ def _fixture_db(tmp_path: Path, slug: str) -> Path:
     sme(s6, "sl", round(old_sl[0], 2), round(old_sl[1], 2), "2026-01-01")
     # override_one_sided: PL-only override on the renumbered entry counts; a two-sided one and a
     # soft-deleted one-sided one do not; an override on an unaffected entry does not
+    # The ORM stores an unset leg as the JSON text 'null' (SQLAlchemy JSON, none_as_null
+    # False) -- o1 mirrors that producer shape; o5 pins the raw SQL NULL shape too.
     for oid, eid, pl_o, sl_o, deleted in (
-        ("o1", affected, "{}", None, None),
+        ("o1", affected, "{}", "null", None),
         ("o2", affected, "{}", "{}", None),
-        ("o3", affected, None, "{}", "2026-01-01"),
-        ("o4", other, "{}", None, None),
+        ("o3", affected, "null", "{}", "2026-01-01"),
+        ("o4", other, "{}", "null", None),
+        ("o5", affected, None, "{}", None),
     ):
         c.execute(
             "INSERT INTO scenario_library_overrides VALUES (?, ?, 1, ?, ?, ?)",
@@ -429,7 +512,7 @@ def test_sweep_end_to_end_counts_each_class(
         "skipped_pin_version": 1,
         "skipped_deleted": 1,
         "skipped_unparsable": 1,
-        "override_one_sided": 1,
+        "override_one_sided": 2,
     }
     out = capsys.readouterr().out
     assert slug in out and "pristine" in out
@@ -447,7 +530,7 @@ def test_sweep_end_to_end_counts_each_class(
     assert "Alice" not in out  # no user content in the output
     assert "Acme Q3 Breach" not in out  # scenario names never reach stdout either
     assert f"| {slug} (ovr) | none | none | stale" in out  # s13: override-adopted marker
-    assert "skipped_unparsable=1 override_one_sided=1" in out
+    assert "skipped_unparsable=1 override_one_sided=2" in out
     assert mod.main([str(db)]) == 0
     assert mod.main(["--gate", str(db)]) == 1  # pristine/copy-stale/override rows present
     assert mod.main([]) == 2

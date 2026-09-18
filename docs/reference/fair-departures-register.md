@@ -292,21 +292,22 @@ the rationale; where it lives; how to evaluate it.
   inferred from its `fines` share rather than a named statute, and
   `edge-ransomware-perimeter-gateway`'s proceeding basis is inferred from its
   `fines` share on an entry whose description names no exfiltration, regulated
-  data or proceeding (the `fines` share itself is an unadjusted `ransomware`
-  §3 default — a curation gap, #181); none affects the numbers (the fraction
-  is selected by threat type). The fractions are conventions of the same grade
-  as the shares, not identifiable from the corpus (no observable separates
-  IR-of-the-event cost from forced-response cost per entry), selected by
-  threat type: 3/7 for `data_disclosure` (whose default already splits
-  response 0.20 P : 0.15 S) and for `social_engineering` phishing→breach
-  entries (routed to that default by the rubric), 1/3 for every other type
-  (whose default carries response as primary-only). Consequences, stated so a
-  reader can check them: residual ALE on an affected scenario falls between
-  0.37% and 8.9% at Response effectiveness between 0.3 and 0.9 (about 10% at
-  full effectiveness; a scenario carrying a currency-valued loss-reduction
-  control, C10, falls further, outside the top of that band), because Idraa
-  routes Response onto Secondary Loss at weight 0.5 vs Primary at 0.2
-  (`composition_topology.py` `_MAGNITUDE_WEIGHTS`; C4:
+  data or proceeding (its `fines` 0.06 is a §4-trimmed reading of the
+  `ransomware` §3 default's "PII churn/fines *if data involved*" row, which
+  carries 0.10 — a curation gap, #181 §2); none affects the numbers (the
+  fraction is selected by threat type). The fractions are conventions of the
+  same grade as the shares, not identifiable from the corpus (no observable
+  separates IR-of-the-event cost from forced-response cost per entry),
+  selected by threat type: 3/7 for `data_disclosure` (whose default already
+  splits response 0.20 P : 0.15 S) and for `social_engineering`
+  phishing→breach entries (routed to that default by the rubric), 1/3 for
+  every other type (whose default carries response as primary-only).
+  Consequences, stated so a reader can check them: residual ALE on an affected
+  scenario falls between 0.37% and 8.9% at Response effectiveness between 0.3
+  and 0.9 (about 10% at full effectiveness; a scenario carrying a
+  currency-valued loss-reduction control, C10, falls further, outside the top
+  of that band), because Idraa routes Response onto Secondary Loss at weight
+  0.5 vs Primary at 0.2 (`composition_topology.py` `_MAGNITUDE_WEIGHTS`; C4:
   implementation-calibration, not identifiable — FAIR-CAM §3.3.3 grounds the
   direction, not the numbers, so every figure in this bullet is a point
   estimate that moves with the weight-robustness ensemble; the bands scale
@@ -323,27 +324,38 @@ the rationale; where it lives; how to evaluate it.
   groups also reduce risk) — for a scenario once it carries the new split;
   runs already stored are computed from the scenario's own distributions and
   do not change until it is repaired, refreshed or re-adopted; the per-event
-  tail narrows for 17 entries and widens for 7 (the split moves |Σp − Σs|
-  further from zero), and one new cross-sector curve coincidence appears
+  tail narrows for 17 entries and widens for 7 (for those 7 the split moves
+  |Σp − Σs| further from zero; for the 17 it moves toward zero, where the
+  independent sum's variance is minimal at a fixed total); one new
+  cross-sector curve coincidence appears
   (`tolling-plant-ransomware-customer-liability` Σp 0.70 → 0.62 now matches
-  `third-party-processor-breach`'s node on the shared envelope; within-sector
-  differentiation is unaffected); an adopted scenario on one of the four
-  catastrophic entries carries a capacity cap and samples the truncated
-  lognormal, whose mean is concave in the split, so its inherent mean rises
-  (up to ≈ 7.1% on `telecom-lawful-intercept…` as the cap approaches the
-  capacity floor (B2: `max` must exceed the field's p95); ≈ 6.5% at 1.5× the
-  floor) and its residual can rise instead of falling (up to ≈ 5.4% at
-  Response effectiveness 0.3; ≈ 4.5% at 1.5× the floor), an effect below 0.15%
-  once the cap exceeds ~100× the entry's pre-change PL p95; and 17 entries
-  move toward the Σp ≈ Σs point where A5's independence understatement is
-  largest. This pass covers the regulator-and-judgment sub-case only: the 39
-  remaining entries firing `reputation` without `fines` are not audited here
-  (follow-up issue #181). Competitive-advantage rows stay primary with a
-  per-entry justification on the market-position definition (the compromised
-  asset is the differentiator itself; the exploiting party is the threat
-  agent), a placement Jones & Freund, 2nd ed. (2026), Ch. 3 (the six forms of
-  loss) treats as nuanced but mainly primary for the trade-secret case, that
-  the FAIR Institute's loss-magnitude map allows for either side
+  `third-party-processor-breach`'s node on the shared envelope) and one new
+  within-sector coincidence on Secondary Loss (`healthcare-record-alteration`
+  and `ransomware-on-ehr` both land on Σs = 0.33 — 0.26 + 0.22/3 and 0.25 +
+  0.25/3 each evaluate to exactly 1/3 of their budgets — so their SL nodes
+  coincide on the healthcare envelope; allowlisted in `_SL_ALLOWLIST` rather
+  than nudged, since nudging either off the uniform rule would be a hidden
+  per-entry adjustment, and PL (Σp 0.40 vs 0.64), TEF and vulnerability still
+  separate them), while one pre-existing within-sector PL tie dissolves
+  (`edge-ransomware-perimeter-gateway` / `ransomware-on-fileshare`,
+  professional_services, Σp 0.70 → 0.62 vs 0.70) and its `_PL_ALLOWLIST` row
+  is removed; an adopted scenario on one of the four catastrophic entries
+  carries a capacity cap and samples the truncated lognormal, whose mean is
+  concave in the split, so its inherent mean rises (up to ≈ 7.1% on
+  `telecom-lawful-intercept…` as the cap approaches the capacity floor (B2:
+  `max` must exceed the field's p95); ≈ 6.5% at 1.5× the floor) and its
+  residual can rise instead of falling (up to ≈ 5.4% at Response effectiveness
+  0.3; ≈ 4.5% at 1.5× the floor), an effect below 0.15% once the cap exceeds
+  ~100× the entry's pre-change PL p95; and 17 entries move toward the Σp ≈ Σs
+  point where A5's independence understatement is largest. This pass covers
+  the regulator-and-judgment sub-case only: the 39 remaining entries firing
+  `reputation` without `fines` are not audited here (follow-up issue #181).
+  Competitive-advantage rows stay primary with a per-entry justification on
+  the market-position definition (the compromised asset is the differentiator
+  itself; the exploiting party is the threat agent), a placement Jones &
+  Freund, 2nd ed. (2026), Ch. 3 (the six forms of loss) treats as nuanced but
+  mainly primary for the trade-secret case, that the FAIR Institute's
+  loss-magnitude map allows for either side
   (https://www.fairinstitute.org/blog/fair-risk-basics-what-is-loss-magnitude,
   accessed 2026-09-18), and that its Crash Course lists among the typically
   secondary forms
