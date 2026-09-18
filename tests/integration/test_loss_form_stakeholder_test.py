@@ -331,6 +331,65 @@ def test_register_a5_b5_descriptive_statistics_hold() -> None:
     assert near_floor == 5  # register A5: "five entries now sit within 0.01 of the 0.5 floor"
 
 
+def _bands() -> dict[str, tuple[float, float]]:
+    """Register B5/A1 consequence bands recomputed from the shipped seed: the transferred
+    share s is the response/secondary share; Σp₀ = Σp + s and Σs₀ = Σs − s recover the
+    pre-change sides (the sweep test uses the same identity)."""
+    by_slug = {e["slug"]: e for e in _load()}
+    residual: dict[float, list[float]] = {0.3: [], 0.9: []}
+    roi: list[float] = []
+    slef: list[float] = []
+    narrows = widens = 0
+    for slug in reclass.RENUMBERED_SLUGS:
+        e = by_slug[slug]
+        sp, ss = _side_sums(e)
+        s = next(
+            p["share"]
+            for p in e["loss_form_profile"]
+            if p["form"] == "response" and p["kind"] == "secondary"
+        )
+        sp0, ss0 = sp + s, ss - s
+        for eff in residual:
+            residual[eff].append(0.3 * eff * s / (sp0 * (1 - 0.2 * eff) + ss0 * (1 - 0.5 * eff)))
+        roi.append(0.3 * s / (0.2 * sp0 + 0.5 * ss0))
+        slef.append(s * 0.5 / (sp0 + 0.5 * ss0))
+        # Independent PL+SL at a fixed total mean: the sum's variance is smallest at
+        # balance, so moving |Σp − Σs| toward zero narrows the per-event tail (A5).
+        if abs(sp - ss) < abs(sp0 - ss0):
+            narrows += 1
+        else:
+            widens += 1
+    return {
+        "residual": (min(residual[0.3]), max(residual[0.9])),
+        "roi": (min(roi), max(roi)),
+        "slef": (min(slef), max(slef)),
+        "tails": (narrows, widens),
+    }
+
+
+def test_register_b5_consequence_bands_hold() -> None:
+    """Tripwire for the register's descriptive bands (PRG-Meth N-4): re-tuning any share on a
+    renumbered entry must fail here rather than silently stale B5/A1."""
+    b = _bands()
+    assert (f"{100 * b['residual'][0]:.2f}", f"{100 * b['residual'][1]:.1f}") == ("0.37", "8.9")
+    assert (f"{100 * b['roi'][0]:.0f}", f"{100 * b['roi'][1]:.0f}") == ("4", "26")
+    assert (f"{100 * b['slef'][0]:.1f}", f"{100 * b['slef'][1]:.1f}") == ("2.2", "14.9")
+    assert b["tails"] == (17, 7)
+
+
+def test_composition_role_dominant_is_the_global_argmax() -> None:
+    """Corpus-wide invariant behind the 7 role flips (PRG-Arch N-4): `dominant` marks exactly
+    the rows whose share equals the entry's maximum share across both kinds."""
+    for e in _load():
+        rows = [p for p in e["loss_form_profile"] if p.get("share") is not None]
+        if not rows:
+            continue
+        top = max(p["share"] for p in rows)
+        expected = {(p["form"], p["kind"]) for p in rows if p["share"] == top}
+        actual = {(p["form"], p["kind"]) for p in rows if p.get("composition_role") == "dominant"}
+        assert actual == expected, e["slug"]
+
+
 def test_ind2sec_matches_guard_copy() -> None:
     # tests/ and tests/integration/ are packages, so the repo root is on sys.path.
     from tests.integration.test_library_loss_differentiation import _IND2SEC

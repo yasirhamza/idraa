@@ -66,6 +66,9 @@ def _check(cond: bool, msg: str) -> None:
 # Selected by threat_event_type. social_engineering has no rubric default of its own: §3
 # routes phishing→breach entries to the data_disclosure default (BEC entries are
 # beyond-envelope and never fire fines), so it takes 3/7 too.
+# CALIBRATION (fair-departures-register.md B5): conventions of the same grade as the
+# shares, not identifiable from the corpus; 1/3 is the conservative side of FAIR-CAM
+# §3.3.3's "predominantly secondary" reading (less control credit, residual higher).
 SECONDARY_FRACTION: dict[str, float] = {"data_disclosure": 3 / 7, "social_engineering": 3 / 7}
 DEFAULT_SECONDARY_FRACTION = 1 / 3
 

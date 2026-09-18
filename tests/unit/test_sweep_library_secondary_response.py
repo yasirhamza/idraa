@@ -120,6 +120,31 @@ def test_has_pre_change_identity_sees_the_seed_row_inside_a_pool() -> None:
     assert not mod.has_pre_change_identity([], old)
 
 
+def test_gate_exit_is_zero_on_a_clean_db(tmp_path: Path) -> None:
+    db = tmp_path / "clean.db"
+    c = sqlite3.connect(db)
+    c.executescript(
+        """
+        CREATE TABLE scenario_library_entries (id CHAR(32) PRIMARY KEY, slug TEXT, version INTEGER);
+        CREATE TABLE scenarios (id CHAR(32) PRIMARY KEY, name TEXT, library_pin TEXT, status TEXT,
+            primary_loss TEXT, secondary_loss TEXT);
+        CREATE TABLE scenario_sme_estimates (id CHAR(32) PRIMARY KEY, scenario_id CHAR(32), fieldset TEXT,
+            sme_id CHAR(32), sme_name TEXT, low REAL, high REAL, recorded_at TEXT);
+        CREATE TABLE scenario_library_overrides (id CHAR(32) PRIMARY KEY, library_entry_id CHAR(32),
+            library_entry_version INTEGER, primary_loss TEXT, secondary_loss TEXT, deleted_at TEXT);
+        """
+    )
+    c.commit()
+    c.close()
+    assert mod.main(["--gate", str(db)]) == 0
+
+
+def test_scenario_class_copy_stale_is_total() -> None:
+    assert mod._scenario_class("copy-stale", "stale") == "copy-stale"
+    assert mod._scenario_class("none", "copy-stale") == "copy-stale"
+    assert mod._scenario_class("pinned", "copy-stale") == "pinned"
+
+
 def test_scenario_class_copy_current_counts_as_current() -> None:
     assert mod._scenario_class("copy-current*", "none") == "current"
     assert mod._scenario_class("copy-current", "none") == "current"
@@ -205,10 +230,12 @@ def _fixture_db(tmp_path: Path, slug: str) -> Path:
     c.executescript(
         """
         CREATE TABLE scenario_library_entries (id CHAR(32) PRIMARY KEY, slug TEXT, version INTEGER);
-        CREATE TABLE scenarios (id CHAR(32) PRIMARY KEY, library_pin TEXT, status TEXT,
+        CREATE TABLE scenarios (id CHAR(32) PRIMARY KEY, name TEXT, library_pin TEXT, status TEXT,
             primary_loss TEXT, secondary_loss TEXT);
         CREATE TABLE scenario_sme_estimates (id CHAR(32) PRIMARY KEY, scenario_id CHAR(32), fieldset TEXT,
             sme_id CHAR(32), sme_name TEXT, low REAL, high REAL, recorded_at TEXT);
+        CREATE TABLE scenario_library_overrides (id CHAR(32) PRIMARY KEY, library_entry_id CHAR(32),
+            library_entry_version INTEGER, primary_loss TEXT, secondary_loss TEXT, deleted_at TEXT);
         """
     )
     affected = uuid.uuid4().hex
@@ -240,7 +267,8 @@ def _fixture_db(tmp_path: Path, slug: str) -> Path:
             else "null"
         )
         c.execute(
-            "INSERT INTO scenarios VALUES (?, ?, ?, ?, ?)", (sid, pin, status, pl_node, sl_node)
+            "INSERT INTO scenarios VALUES (?, ?, ?, ?, ?, ?)",
+            (sid, "Acme Q3 Breach", pin, status, pl_node, sl_node),
         )
         return sid
 
@@ -336,6 +364,43 @@ def _fixture_db(tmp_path: Path, slug: str) -> Path:
     s6 = scenario(affected, version=2)
     sme(s6, "pl", round(old_pl[0], 2), round(old_pl[1], 2), "2026-01-01")
     sme(s6, "sl", round(old_sl[0], 2), round(old_sl[1], 2), "2026-01-01")
+    # override_one_sided: PL-only override on the renumbered entry counts; a two-sided one and a
+    # soft-deleted one-sided one do not; an override on an unaffected entry does not
+    for oid, eid, pl_o, sl_o, deleted in (
+        ("o1", affected, "{}", None, None),
+        ("o2", affected, "{}", "{}", None),
+        ("o3", affected, None, "{}", "2026-01-01"),
+        ("o4", other, "{}", None, None),
+    ):
+        c.execute(
+            "INSERT INTO scenario_library_overrides VALUES (?, ?, 1, ?, ?, ?)",
+            (uuid.uuid5(uuid.NAMESPACE_DNS, oid).hex, eid, pl_o, sl_o, deleted),
+        )
+    # (ovr) marker: a scenario adopted through an override prints it after the slug
+    s13 = uuid.uuid4().hex
+    c.execute(
+        "INSERT INTO scenarios VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            s13,
+            "Acme Q3 Breach",
+            json.dumps({"entry_id": affected, "version": 1, "override_id": "o1"}),
+            "active",
+            other_node,
+            other_node,
+        ),
+    )
+    # skipped_unparsable: a corrupt JSON column is unclassified, not clean
+    c.execute(
+        "INSERT INTO scenarios VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            uuid.uuid4().hex,
+            "Acme Q3 Breach",
+            json.dumps({"entry_id": affected, "version": 1}),
+            "active",
+            "{not json",
+            other_node,
+        ),
+    )
     # skipped_deleted: a soft-deleted row must not count even though it would otherwise be pristine
     s7 = scenario(affected, status="deleted")
     sme(s7, "pl", round(old_pl[0], 2), round(old_pl[1], 2), "2026-01-01")
@@ -352,10 +417,10 @@ def test_sweep_end_to_end_counts_each_class(
     db = _fixture_db(tmp_path, slug)
     summary = mod.sweep(db)
     assert summary == {
-        "affected_scenarios": 9,
+        "affected_scenarios": 10,
         "pristine": 2,
         "current": 3,
-        "stale": 1,
+        "stale": 2,
         "modified": 1,
         "copy_stale": 2,
         "pinned": 4,
@@ -363,6 +428,8 @@ def test_sweep_end_to_end_counts_each_class(
         "copy_current_stale_rows": 2,
         "skipped_pin_version": 1,
         "skipped_deleted": 1,
+        "skipped_unparsable": 1,
+        "override_one_sided": 1,
     }
     out = capsys.readouterr().out
     assert slug in out and "pristine" in out
@@ -378,6 +445,10 @@ def test_sweep_end_to_end_counts_each_class(
     assert "| pinned | copy-current* | pinned" in out  # s11: read, starred, not in the row counter
     assert "| pinned | copy-current | pinned" in out  # s12: clean other side, not stale
     assert "Alice" not in out  # no user content in the output
+    assert "Acme Q3 Breach" not in out  # scenario names never reach stdout either
+    assert f"| {slug} (ovr) | none | none | stale" in out  # s13: override-adopted marker
+    assert "skipped_unparsable=1 override_one_sided=1" in out
     assert mod.main([str(db)]) == 0
+    assert mod.main(["--gate", str(db)]) == 1  # pristine/copy-stale/override rows present
     assert mod.main([]) == 2
     assert mod.main([str(tmp_path / "missing.db")]) == 2

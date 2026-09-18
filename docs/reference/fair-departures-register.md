@@ -285,34 +285,38 @@ the rationale; where it lives; how to evaluate it.
   applied on every loss event (departure A1); under a standard SLEF branch
   with q = P(secondary | primary event) the same reclassification would lower
   inherent ALE by `s(1−q)/(Σp₀ + q·Σs₀)`, 2.2%–14.9% at q = 0.5, so A1's error
-  bound binds harder on these 24 entries (recorded in A1). Two judgment calls
-  in the basis strings: `healthcare-record-alteration` takes the proceeding
-  string although its bucket also includes reportable-use patient
-  notification, and `generative-ai-prompt-injection`'s data-obligation basis
-  is inferred from its `fines` share rather than a named statute; neither
-  affects the numbers (the fraction is selected by threat type). The fractions
-  are conventions of the same grade as the shares, not identifiable from the
-  corpus (no observable separates IR-of-the-event cost from forced-response
-  cost per entry), selected by threat type: 3/7 for `data_disclosure` (whose
-  default already splits response 0.20 P : 0.15 S) and for
-  `social_engineering` phishing→breach entries (routed to that default by the
-  rubric), 1/3 for every other type (whose default carries response as
-  primary-only). Consequences, stated so a reader can check them: residual ALE
-  on an affected scenario falls between 0.37% and 8.9% at Response
-  effectiveness between 0.3 and 0.9 (about 10% at full effectiveness; a
-  scenario carrying a currency-valued loss-reduction control, C10, falls
-  further, outside the top of that band), because Idraa routes Response onto
-  Secondary Loss at weight 0.5 vs Primary at 0.2 (`composition_topology.py`
-  `_MAGNITUDE_WEIGHTS`; C4: implementation-calibration, not identifiable —
-  FAIR-CAM §3.3.3 grounds the direction, not the numbers, so every figure in
-  this bullet is a point estimate that moves with the weight-robustness
-  ensemble; the bands scale linearly in the fraction up to 2-dp rounding — at
-  f = 1/2 a 1/3 entry's figure is ×1.5 and a 3/7 entry's ×7/6, moving the band
-  to 0.6%–11.3% (the top entry changes with the fraction, since 1/3 entries
-  gain more than 3/7 ones: `law-enforcement-records-extortion-breach` goes
-  8.9% → 10.3% and `k12-edtech-vendor-breach` overtakes it at 11.3%) — and 1/3
-  sits on the conservative side of §3.3.3's "predominantly secondary" reading:
-  less control credit, residual higher); since inherent ALE is unchanged, the
+  bound binds harder on these 24 entries (recorded in A1). Three judgment
+  calls in the basis strings: `healthcare-record-alteration` takes the
+  proceeding string although its bucket also includes reportable-use patient
+  notification, `generative-ai-prompt-injection`'s data-obligation basis is
+  inferred from its `fines` share rather than a named statute, and
+  `edge-ransomware-perimeter-gateway`'s proceeding basis is inferred from its
+  `fines` share on an entry whose description names no exfiltration, regulated
+  data or proceeding (the `fines` share itself is an unadjusted `ransomware`
+  §3 default — a curation gap, #181); none affects the numbers (the fraction
+  is selected by threat type). The fractions are conventions of the same grade
+  as the shares, not identifiable from the corpus (no observable separates
+  IR-of-the-event cost from forced-response cost per entry), selected by
+  threat type: 3/7 for `data_disclosure` (whose default already splits
+  response 0.20 P : 0.15 S) and for `social_engineering` phishing→breach
+  entries (routed to that default by the rubric), 1/3 for every other type
+  (whose default carries response as primary-only). Consequences, stated so a
+  reader can check them: residual ALE on an affected scenario falls between
+  0.37% and 8.9% at Response effectiveness between 0.3 and 0.9 (about 10% at
+  full effectiveness; a scenario carrying a currency-valued loss-reduction
+  control, C10, falls further, outside the top of that band), because Idraa
+  routes Response onto Secondary Loss at weight 0.5 vs Primary at 0.2
+  (`composition_topology.py` `_MAGNITUDE_WEIGHTS`; C4:
+  implementation-calibration, not identifiable — FAIR-CAM §3.3.3 grounds the
+  direction, not the numbers, so every figure in this bullet is a point
+  estimate that moves with the weight-robustness ensemble; the bands scale
+  linearly in the fraction up to 2-dp rounding — at f = 1/2 a 1/3 entry's
+  figure is ×1.5 and a 3/7 entry's ×7/6, moving the band to 0.6%–11.3% (the
+  top entry changes with the fraction, since 1/3 entries gain more than 3/7
+  ones: `law-enforcement-records-extortion-breach` goes 8.9% → 10.3% and
+  `k12-edtech-vendor-breach` overtakes it at 11.3%) — and 1/3 sits on the
+  conservative side of §3.3.3's "predominantly secondary" reading: less
+  control credit, residual higher); since inherent ALE is unchanged, the
   modelled control benefit rises by exactly that amount on an uncapped/PERT
   scenario and the reported ROI (risk reduction ÷ control cost, D6) in the
   same proportion (+4% to +26% on a Response-only posture, less when other
@@ -320,32 +324,42 @@ the rationale; where it lives; how to evaluate it.
   runs already stored are computed from the scenario's own distributions and
   do not change until it is repaired, refreshed or re-adopted; the per-event
   tail narrows for 17 entries and widens for 7 (the split moves |Σp − Σs|
-  further from zero); an adopted scenario on one of the four catastrophic
-  entries carries a capacity cap and samples the truncated lognormal, whose
-  mean is concave in the split, so its inherent mean rises (up to ≈ 7.1% on
-  `telecom-lawful-intercept…` as the cap approaches the capacity floor (B2:
-  `max` must exceed the field's p95); ≈ 6.5% at 1.5× the floor) and its
-  residual can rise instead of falling (up to ≈ 5.4% at Response effectiveness
-  0.3; ≈ 4.5% at 1.5× the floor), an effect below 0.15% once the cap exceeds
-  ~100× the entry's pre-change PL p95; and 17 entries move toward the Σp ≈ Σs
-  point where A5's independence understatement is largest. This pass covers
-  the regulator-and-judgment sub-case only: the 39 remaining entries firing
-  `reputation` without `fines` are not audited here (follow-up issue #181).
-  Competitive-advantage rows stay primary with a per-entry justification on
-  the market-position definition (the compromised asset is the differentiator
-  itself; the exploiting party is the threat agent), a placement Jones &
-  Freund, 2nd ed. (2026), Ch. 3 (the six forms of loss) treats as nuanced but
-  mainly primary for the trade-secret case, that the FAIR Institute's
-  loss-magnitude map allows for either side
+  further from zero), and one new cross-sector curve coincidence appears
+  (`tolling-plant-ransomware-customer-liability` Σp 0.70 → 0.62 now matches
+  `third-party-processor-breach`'s node on the shared envelope; within-sector
+  differentiation is unaffected); an adopted scenario on one of the four
+  catastrophic entries carries a capacity cap and samples the truncated
+  lognormal, whose mean is concave in the split, so its inherent mean rises
+  (up to ≈ 7.1% on `telecom-lawful-intercept…` as the cap approaches the
+  capacity floor (B2: `max` must exceed the field's p95); ≈ 6.5% at 1.5× the
+  floor) and its residual can rise instead of falling (up to ≈ 5.4% at
+  Response effectiveness 0.3; ≈ 4.5% at 1.5× the floor), an effect below 0.15%
+  once the cap exceeds ~100× the entry's pre-change PL p95; and 17 entries
+  move toward the Σp ≈ Σs point where A5's independence understatement is
+  largest. This pass covers the regulator-and-judgment sub-case only: the 39
+  remaining entries firing `reputation` without `fines` are not audited here
+  (follow-up issue #181). Competitive-advantage rows stay primary with a
+  per-entry justification on the market-position definition (the compromised
+  asset is the differentiator itself; the exploiting party is the threat
+  agent), a placement Jones & Freund, 2nd ed. (2026), Ch. 3 (the six forms of
+  loss) treats as nuanced but mainly primary for the trade-secret case, that
+  the FAIR Institute's loss-magnitude map allows for either side
   (https://www.fairinstitute.org/blog/fair-risk-basics-what-is-loss-magnitude,
   accessed 2026-09-18), and that its Crash Course lists among the typically
   secondary forms
   (https://www.fairinstitute.org/blog/a-crash-course-on-capturing-loss-magnitude-with-the-fair-model,
-  accessed 2026-09-18). Audit baseline: 24 entries renumbered (23 firing
-  `fines` plus one notification-bearing `data_disclosure` entry with no
-  `fines` share, rubric §4), 5 justified. Adopted scenarios are not rewritten
-  by the migration; a read-only sweep classifies them, and any pristine or
-  copy-stale scenario triggers a separate repair PR.
+  accessed 2026-09-18). Mean-neutrality is a property of the canonical entry:
+  an org holding a per-field `ScenarioLibraryOverride` on only one of
+  `primary_loss` / `secondary_loss` for a renumbered entry is not mean-neutral
+  — the canonical side moves and the overridden side does not, shifting that
+  org's adopted or refreshed PL+SL mean by the transferred share; such
+  overrides must be re-authored, and the sweep counts them
+  (`override_one_sided`) rather than classifying them. Audit baseline: 24
+  entries renumbered (23 firing `fines` plus one notification-bearing
+  `data_disclosure` entry with no `fines` share, rubric §4), 5 justified.
+  Adopted scenarios are not rewritten by the migration; a read-only sweep
+  classifies them, and any pristine or copy-stale scenario triggers a separate
+  repair PR.
 
 ### B6. Qualitative likelihood and impact bands map to FAIR ranges
 

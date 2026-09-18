@@ -113,8 +113,19 @@ entry, not soft-deleted, no pinned field); the repair gate is
 ``pristine + copy_stale``, not ``affected``.
 Repair trigger (documented in the migration): any pristine or copy-stale
 scenario on a deployment -> land the repair as its own PR. Exit code is 0
-always (2 = usage / missing file); the SUMMARY line is the gate. Output carries
-scenario ids and library slugs only (never scenario names -- user content).
+on a completed sweep (2 = usage / missing file; ``--gate`` returns 1 when
+``pristine + copy_stale + override_one_sided + skipped_pin_version +
+skipped_unparsable > 0``, so a deploy script can enforce the trigger); the
+SUMMARY line is the human-readable gate. A row whose ``library_pin`` /
+``primary_loss`` / ``secondary_loss`` JSON does not parse is counted in
+``skipped_unparsable`` (unclassified, not clean). Output carries scenario ids
+and library slugs only (never scenario names -- user content); a scenario
+adopted through an org override prints ``(ovr)`` after its slug.
+``override_one_sided`` counts live ``scenario_library_overrides`` rows on the 24
+renumbered entries that author only ONE of primary_loss / secondary_loss: the
+canonical side moved and the overridden side did not, so that org's adoptions
+and refreshes are not mean-neutral (register B5); such overrides must be
+re-authored -- this sweep only counts them.
 Soft-deleted scenarios are skipped: a deleted row must not drive the repair gate.
 Scenarios whose pin names an entry version other than 1 (or none at all) are
 skipped too: the
@@ -124,7 +135,12 @@ the sweep could NOT classify those rows -- they are unclassified, not clean;
 investigate them before declaring a deployment clean.
 
 Usage:
-    uv run python scripts/sweep_library_secondary_response.py /path/to/idraa.db
+    uv run python scripts/sweep_library_secondary_response.py [--gate] /path/to/idraa.db
+
+Output carries production scenario ids -- keep it in the operator's terminal or a
+private note; do not paste it into a public PR or issue body.
+Sunset: delete this script once the repair PR lands or every deployment's sweep
+reports clean (the frozen OLD/NEW tables are a one-shot diagnostic).
 
 Opened with SQLite URI mode=ro (the sweep_run_samples_finite.py idiom); run
 against a clean online-backup copy or the live DB, not a raw cp of a WAL database.
@@ -1055,6 +1071,8 @@ def _scenario_class(pl: str, sl: str) -> str:
     pinned/copy-stale early-outs (see ``sweep``). copy-current counts as current."""
     if "pinned" in (pl, sl):
         return "pinned"
+    if "copy-stale" in (pl, sl):  # total over the sweep's own labels (sweep early-outs first)
+        return "copy-stale"
     pl, sl = (("current" if c.startswith("copy-current") else c) for c in (pl, sl))
     if "pristine" in (pl, sl):
         return "pristine"
@@ -1091,26 +1109,45 @@ def sweep(db_path: Path) -> dict[str, int]:
             "copy_current_stale_rows": 0,
             "skipped_pin_version": 0,
             "skipped_deleted": 0,
+            "skipped_unparsable": 0,
+            "override_one_sided": 0,
         }
+        renumbered_entry_ids = {eid for eid, s in slug_by_entry.items() if s in OLD_PAIRS}
+        for eid, pl_null, sl_null in conn.execute(
+            "SELECT library_entry_id, primary_loss IS NULL, secondary_loss IS NULL "
+            "FROM scenario_library_overrides "
+            "WHERE deleted_at IS NULL AND library_entry_version = 1"
+        ):
+            if str(eid).replace("-", "").lower() in renumbered_entry_ids and pl_null != sl_null:
+                summary["override_one_sided"] += 1
         print("scenario_id | slug | pl | sl | class")
         for sid, pin, status, pl_raw, sl_raw in conn.execute(
             "SELECT id, library_pin, status, primary_loss, secondary_loss FROM scenarios"
         ):
-            p = (json.loads(pin) if pin else None) or {}
+            try:
+                p = (json.loads(pin) if pin else None) or {}
+            except json.JSONDecodeError:
+                summary["skipped_unparsable"] += 1  # unclassified, not clean
+                continue
             entry_hex = str(p.get("entry_id", "")).replace("-", "").lower()
             slug = slug_by_entry.get(entry_hex)
             if slug not in OLD_PAIRS:
                 continue
+            label = f"{slug} (ovr)" if p.get("override_id") else slug
             if status == "deleted":
                 summary["skipped_deleted"] += 1
                 continue
             if p.get("version") != 1:
                 summary["skipped_pin_version"] += 1
                 continue
-            nodes = {
-                fs: (json.loads(raw) if isinstance(raw, str) else raw)
-                for fs, raw in (("pl", pl_raw), ("sl", sl_raw))
-            }
+            try:
+                nodes = {
+                    fs: (json.loads(raw) if isinstance(raw, str) else raw)
+                    for fs, raw in (("pl", pl_raw), ("sl", sl_raw))
+                }
+            except json.JSONDecodeError:
+                summary["skipped_unparsable"] += 1  # unclassified, not clean
+                continue
             classes: dict[str, str] = {}
             stale_rows_under_current = False
             for fs in ("pl", "sl"):
@@ -1126,9 +1163,9 @@ def sweep(db_path: Path) -> dict[str, int]:
                     continue
                 rows = conn.execute(
                     "SELECT sme_id, sme_name, low, high FROM scenario_sme_estimates "
-                    "WHERE scenario_id = :sid AND fieldset = :fs "
+                    "WHERE replace(scenario_id, '-', '') = :sid AND fieldset = :fs "
                     "ORDER BY recorded_at ASC, id ASC",
-                    {"sid": sid, "fs": fs},
+                    {"sid": str(sid).replace("-", "").lower(), "fs": fs},
                 ).fetchall()
                 row_class = classify_fieldset(rows, OLD_PAIRS[slug][fs], NEW_PAIRS[slug][fs])
                 if is_copy_of(nodes[fs], NEW_NODES[slug][fs]):
@@ -1147,13 +1184,13 @@ def sweep(db_path: Path) -> dict[str, int]:
                 summary["pinned"] += 1
                 if {"pristine", "copy-stale", "copy-current*"} & set(classes.values()):
                     summary["pinned_stale_side"] += 1
-                print(f"{_canonical(sid)} | {slug} | {classes['pl']} | {classes['sl']} | pinned")
+                print(f"{_canonical(sid)} | {label} | {classes['pl']} | {classes['sl']} | pinned")
                 continue
             if "copy-stale" in classes.values():
                 summary["affected_scenarios"] += 1
                 summary["copy_stale"] += 1
                 print(
-                    f"{_canonical(sid)} | {slug} | {classes['pl']} | {classes['sl']} | copy-stale"
+                    f"{_canonical(sid)} | {label} | {classes['pl']} | {classes['sl']} | copy-stale"
                 )
                 continue
             klass = _scenario_class(classes["pl"], classes["sl"])
@@ -1161,7 +1198,7 @@ def sweep(db_path: Path) -> dict[str, int]:
             summary[klass] += 1
             if stale_rows_under_current:
                 summary["copy_current_stale_rows"] += 1
-            print(f"{_canonical(sid)} | {slug} | {classes['pl']} | {classes['sl']} | {klass}")
+            print(f"{_canonical(sid)} | {label} | {classes['pl']} | {classes['sl']} | {klass}")
         print(
             f"SUMMARY affected={summary['affected_scenarios']} pristine={summary['pristine']} "
             f"copy_stale={summary['copy_stale']} current={summary['current']} "
@@ -1169,18 +1206,34 @@ def sweep(db_path: Path) -> dict[str, int]:
             f"pinned={summary['pinned']} pinned_stale_side={summary['pinned_stale_side']} "
             f"copy_current_stale_rows={summary['copy_current_stale_rows']} "
             f"skipped_pin_version={summary['skipped_pin_version']} "
-            f"skipped_deleted={summary['skipped_deleted']}"
+            f"skipped_deleted={summary['skipped_deleted']} "
+            f"skipped_unparsable={summary['skipped_unparsable']} "
+            f"override_one_sided={summary['override_one_sided']}"
         )
         return summary
     finally:
         conn.close()
 
 
+GATE_KEYS = (
+    "pristine",
+    "copy_stale",
+    "override_one_sided",
+    "skipped_pin_version",
+    "skipped_unparsable",
+)
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 1 or not Path(argv[0]).is_file():
-        print(__doc__ if len(argv) != 1 else f"no such file: {argv[0]}", file=sys.stderr)
+    gate = "--gate" in argv
+    args = [a for a in argv if a != "--gate"]
+    if len(args) != 1 or not Path(args[0]).is_file():
+        print(__doc__ if len(args) != 1 else f"no such file: {args[0]}", file=sys.stderr)
         return 2
-    sweep(Path(argv[0]))
+    summary = sweep(Path(args[0]))
+    if gate and sum(summary[k] for k in GATE_KEYS) > 0:
+        print("GATE: not clean -- " + " ".join(f"{k}={summary[k]}" for k in GATE_KEYS))
+        return 1
     return 0
 
 
