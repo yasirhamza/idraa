@@ -83,6 +83,16 @@
           </span>
         {% endif %}
       </p>
+      {% if fieldset_key == 'sl' %}
+        {# #174 / register A1: the scaling guardrail must be visible (tooltips are hover-only) #}
+        <p class="text-micro text-ink-2 mb-2">
+          Optional &mdash; but if a regulator, court, customer or counterparty would
+          react, estimate it rather than leaving it blank. Idraa applies secondary
+          loss to every simulated loss event: if the reaction would follow only some
+          of them, estimate the range for the loss events where it does follow, then
+          scale it by the fraction of loss events for which it does.
+        </p>
+      {% endif %}
 
       {# sigma-recal PR3 T2 (D22): live loss-dispersion readout, PL/SL only.
          Positioned BEFORE the row-grid's own x-data block below (not

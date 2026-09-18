@@ -32,6 +32,7 @@ def test_share_rubric_carries_all_load_bearing_pieces() -> None:
         "compose_forms_to_lognormal",
         # discipline
         "Family pinning",
+        "Regulator-and-judgment reaction rule",
         "vulnerability-grade",
         # disclosed A1 biases carried forward
         "location-not-shape",

@@ -115,6 +115,7 @@ async def test_step3_likelihood_page_shows_only_tef_and_vuln(
     assert resp.status_code == 200
     body = resp.text
     assert "Threat event frequency" in body
+    assert "scale it by the fraction of loss events" not in body  # SL guardrail is Impact-only
     assert "Vulnerability" in body
     assert "Primary loss" not in body
     assert "Secondary loss" not in body
@@ -160,6 +161,8 @@ async def test_step4_impact_page_shows_only_pl_and_sl(
     assert "Threat event frequency" not in body
     assert "Step 4 of 6" in body
     assert 'action="/scenarios/new/wizard/step/4' in body
+    # #174 / register A1: the SL scaling guardrail is visible copy on the Impact page only.
+    assert "scale it by the fraction of loss events" in body
 
 
 @pytest.mark.asyncio

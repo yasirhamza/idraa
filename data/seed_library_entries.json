@@ -42,15 +42,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 24478.8629170978,
-      "mode": 24478.8629170978,
-      "high": 6570284.009215002
+      "low": 21758.9892608694,
+      "mode": 21758.9892608694,
+      "high": 5840252.452964859
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 8499.6051799546,
-      "mode": 8499.6051799546,
-      "high": 2281348.6144199492
+      "low": 11219.4788375594,
+      "mode": 11219.4788375594,
+      "high": 3011380.171039504
     },
     "calibration_anchor": {
       "industry": "healthcare",
@@ -85,7 +85,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.25
+        "share": 0.17
       },
       {
         "form": "replacement",
@@ -113,6 +113,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.1
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): notification, credit monitoring and third-party legal defense forced by the regulator/customer reaction to a personal-data breach",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.08
       }
     ],
     "loss_shape": "capped"
@@ -167,15 +176,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 6238.130336978,
-      "mode": 6238.130336978,
-      "high": 1674354.243465197
+      "low": 5525.2011556327,
+      "mode": 5525.2011556327,
+      "high": 1482999.47278979
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 2227.9036917359,
-      "mode": 2227.9036917359,
-      "high": 597983.6583691587
+      "low": 2940.8328730964,
+      "mode": 2940.8328730964,
+      "high": 789338.4290486504
     },
     "calibration_anchor": {
       "industry": "utilities",
@@ -209,7 +218,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.25
+        "share": 0.17
       },
       {
         "form": "replacement",
@@ -237,6 +246,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.1
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): regulatory-investigation cooperation, counterparty claims handling and third-party legal defense forced by the regulator/counterparty reaction",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.08
       }
     ],
     "loss_shape": "capped"
@@ -291,12 +309,12 @@
     },
     "primary_loss": {
       "distribution": "lognormal",
-      "mean": 13.5923670067,
+      "mean": 13.5278284855,
       "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
-      "mean": 11.2897819137,
+      "mean": 11.7752897295,
       "sigma": 1.7
     },
     "calibration_anchor": {
@@ -340,7 +358,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.16
+        "share": 0.11
       },
       {
         "form": "fines",
@@ -350,6 +368,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.08
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): regulatory-investigation cooperation, counterparty claims handling and third-party legal defense forced by the regulator/counterparty reaction",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
       }
     ],
     "loss_shape": "catastrophic"
@@ -405,12 +432,12 @@
     },
     "primary_loss": {
       "distribution": "lognormal",
-      "mean": 13.6529916285,
+      "mean": 13.5923670067,
       "sigma": 1.7
     },
     "secondary_loss": {
       "distribution": "lognormal",
-      "mean": 11.4075649493,
+      "mean": 11.8493977016,
       "sigma": 1.7
     },
     "calibration_anchor": {
@@ -454,7 +481,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.15
+        "share": 0.1
       },
       {
         "form": "fines",
@@ -464,6 +491,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.09
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): regulatory-investigation cooperation, counterparty claims handling and third-party legal defense forced by the regulator/counterparty reaction",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.05
       }
     ],
     "loss_shape": "catastrophic"
@@ -1196,15 +1232,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 12207.6914620596,
-      "mode": 12207.6914620596,
-      "high": 3276622.7857167795
+      "low": 7934.999450279,
+      "mode": 7934.999450279,
+      "high": 2129804.810699881
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 18311.5371929403,
-      "mode": 18311.5371929403,
-      "high": 4914934.178535162
+      "low": 22584.2292050312,
+      "mode": 22584.2292050312,
+      "high": 6061752.153635362
     },
     "calibration_anchor": {
       "industry": "financial",
@@ -1228,8 +1264,8 @@
         "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
         "citations": [],
         "verified": false,
-        "composition_role": "dominant",
-        "share": 0.2
+        "composition_role": "contributing",
+        "share": 0.13
       },
       {
         "form": "reputation",
@@ -1237,7 +1273,7 @@
         "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
         "citations": [],
         "verified": false,
-        "composition_role": "contributing",
+        "composition_role": "dominant",
         "share": 0.18
       },
       {
@@ -1248,6 +1284,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.12
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): notification, credit monitoring and third-party legal defense forced by the regulator/customer reaction to a personal-data breach",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.07
       }
     ],
     "loss_shape": "capped"
@@ -1348,7 +1393,7 @@
       {
         "form": "competitive_advantage",
         "kind": "primary",
-        "magnitude_basis": "UNMODELED -- dominant IP/trade-secret loss, no defensible public magnitude source (beyond-envelope, sec6 waiver).",
+        "magnitude_basis": "UNMODELED -- dominant IP/trade-secret loss, no defensible public magnitude source (beyond-envelope, sec6 waiver). \u2014 stakeholder test: primary \u2014 the compromised asset is the differentiator itself (process/design IP); market position erodes as a result of the threat action, not a stakeholder reaction; customer defection is the reputation form (secondary).",
         "citations": [],
         "verified": false,
         "composition_role": "provenance_only",
@@ -2867,15 +2912,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 21079.0208467746,
-      "mode": 21079.0208467746,
-      "high": 5657744.563892181
+      "low": 18699.1313946984,
+      "mode": 18699.1313946984,
+      "high": 5018966.951401304
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 6799.6841440603,
-      "mode": 6799.6841440603,
-      "high": 1825078.8915618842
+      "low": 9179.5735940194,
+      "mode": 9179.5735940194,
+      "high": 2463856.5034845187
     },
     "calibration_anchor": {
       "industry": "healthcare",
@@ -2909,7 +2954,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.22
+        "share": 0.15
       },
       {
         "form": "replacement",
@@ -2937,6 +2982,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.08
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): notification, credit monitoring and third-party legal defense forced by the regulator/customer reaction to a personal-data breach",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.07
       }
     ],
     "loss_shape": "capped"
@@ -3074,15 +3128,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 9106.9378304997,
-      "mode": 9106.9378304997,
-      "high": 2444360.5980919134
+      "low": 5008.8158065525,
+      "mode": 5008.8158065525,
+      "high": 1344398.3288908857
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 19124.5694434875,
-      "mode": 19124.5694434875,
-      "high": 5133157.255842193
+      "low": 23222.6914661408,
+      "mode": 23222.6914661408,
+      "high": 6233119.524695968
     },
     "calibration_anchor": {
       "industry": "retail",
@@ -3107,7 +3161,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.2
+        "share": 0.11
       },
       {
         "form": "reputation",
@@ -3126,6 +3180,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.2
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): notification, credit monitoring and third-party legal defense forced by the regulator/customer reaction to a personal-data breach",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.09
       }
     ],
     "loss_shape": "capped"
@@ -3178,15 +3241,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 9203.3785919994,
-      "mode": 9203.3785919994,
-      "high": 2470245.917817102
+      "low": 5259.073481329,
+      "mode": 5259.073481329,
+      "high": 1411569.095945523
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 12271.1714565912,
-      "mode": 12271.1714565912,
-      "high": 3293661.223915026
+      "low": 16215.4765681407,
+      "mode": 16215.4765681407,
+      "high": 4352338.046022559
     },
     "calibration_anchor": {
       "industry": "information",
@@ -3209,8 +3272,8 @@
         "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
         "citations": [],
         "verified": false,
-        "composition_role": "dominant",
-        "share": 0.21
+        "composition_role": "contributing",
+        "share": 0.12
       },
       {
         "form": "reputation",
@@ -3218,7 +3281,7 @@
         "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
         "citations": [],
         "verified": false,
-        "composition_role": "contributing",
+        "composition_role": "dominant",
         "share": 0.18
       },
       {
@@ -3229,6 +3292,15 @@
         "verified": false,
         "composition_role": "contributing",
         "share": 0.1
+      },
+      {
+        "form": "response",
+        "kind": "secondary",
+        "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md \u00a74 regulator-and-judgment reaction rule): notification, credit monitoring and third-party legal defense forced by the regulator/customer reaction to a personal-data breach",
+        "citations": [],
+        "verified": false,
+        "composition_role": "contributing",
+        "share": 0.09
       }
     ],
     "loss_shape": "capped"

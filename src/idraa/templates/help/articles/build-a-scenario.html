@@ -54,25 +54,34 @@
 
 <h3 class="text-h4 text-ink-1 mb-2">3. Primary Loss</h3>
 <p class="text-body text-ink-2 mb-6">
-  The direct financial cost <strong>per loss event</strong> &mdash; what you
-  spend when a single incident occurs: incident response, system recovery, ransom
-  payment, productivity loss during downtime. This is a per-event magnitude, not
-  an annual figure. The engine multiplies it by Loss Event Frequency across
-  thousands of simulated years to produce an annualised loss distribution. Enter
-  low and high estimates in dollars for that 90% range.
+  The cost <strong>per loss event</strong> that your organisation itself
+  incurs from the event: incident response and forensics (your own team or a
+  firm you retain), system
+  recovery, ransom payment, replacement, productivity loss during downtime. This
+  is a per-event magnitude, not an annual figure. The engine multiplies it by
+  Loss Event Frequency across thousands of simulated years to produce an
+  annualised loss distribution. Enter low and high estimates in dollars for that
+  90% range.
 </p>
 
 <h3 class="text-h4 text-ink-1 mb-2">4. Secondary Loss</h3>
 <p class="text-body text-ink-2 mb-6">
-  The knock-on cost <strong>per loss event</strong> &mdash; fines, regulatory
-  penalties, reputational damage, lost customers, and legal liability that arise
-  after the incident. Like Primary Loss, this is a per-event magnitude. The two
-  are added to form Loss Magnitude for each simulated event; annualisation
+  The cost <strong>per loss event</strong> that arises from how secondary
+  stakeholders react &mdash; regulators, customers, partners, courts: fines and
+  regulatory penalties, legal liability, lost customers, reputational damage,
+  and the response those reactions force on you. Notification, credit
+  monitoring, cooperation with a regulator&rsquo;s or court&rsquo;s
+  investigation, counterparty claims and legal defence against third-party claims
+  belong here, not in Primary Loss. The loss is yours either way; the test
+  is what makes it arise, the event itself or someone else&rsquo;s reaction to
+  it, not how directly it follows the incident. Like Primary Loss, this is a
+  per-event magnitude. The two
+  are added to form Loss Magnitude for each simulated loss event; annualisation
   happens in the Monte Carlo layer, not in your input. If secondary consequences
   are negligible, set both low and high to zero. If they would follow only some
   loss events, estimate the range for the case where they do occur and scale it
   by how often they follow &mdash; Idraa applies Secondary Loss on every
-  simulated event and has no separate probability for it. Do not zero an
+  simulated loss event and has no separate probability for it. Do not zero an
   unknown: estimate it and revisit.
 </p>
 

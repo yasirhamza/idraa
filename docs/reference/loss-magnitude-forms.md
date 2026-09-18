@@ -39,23 +39,33 @@ adjacent-domain overclaim.
 
 ## 2. Primary vs. Secondary is the stakeholder test — NOT a fixed partition
 
-FAIR's Primary/Secondary distinction is about **which stakeholder bears the loss
-and how it arises**, not a fixed assignment of the six forms to two buckets:
+FAIR's Primary/Secondary distinction is about **how the loss arises** — the threat
+action itself, or a secondary stakeholder's reaction to it — not a fixed
+assignment of the six forms to two buckets:
 
-- **Primary Loss** — a loss borne by the **primary stakeholder** (the
-  organization) occurring as a *direct* consequence of the event.
+- **Primary Loss** — a loss the **primary stakeholder** (the organization) incurs
+  as a result of the threat action against the asset itself.
 - **Secondary Loss** — a loss stemming from the reactions of **secondary
-  stakeholders** (customers, regulators, shareholders, partners) to the event.
+  stakeholders** (customers, regulators, shareholders, partners) to the event —
+  borne by the organization too; FAIR models the organization's cost of those
+  reactions, not the secondary stakeholders' own losses.
 
 A single form can fall on **either side** depending on how it arises. Most
 importantly, **response spans both**: internal containment/forensics is a
 *primary* response cost, while customer notification, credit monitoring, and
-legal defense against third parties are *secondary* response costs. Fines &
-judgments and reputation are canonically secondary (they are secondary-stakeholder
-reactions). Productivity and replacement are canonically primary. **Competitive
-advantage is classified per the stakeholder test and cited per entry** — IP
-erosion is often modeled as secondary (a market/competitor reaction) but can be
-a direct primary loss; the placement is not assumed, it is justified.
+legal defense against third parties — and, for a safety, product or contract
+proceeding, regulatory-investigation cooperation and counterparty claims
+handling — are *secondary* response costs. Fines & judgments are canonically
+secondary; reputation is canonically secondary in Idraa's library (both arise
+from secondary-stakeholder reactions), though the FAIR Institute map marks
+reputation as capable of either side
+(https://www.fairinstitute.org/blog/fair-risk-basics-what-is-loss-magnitude,
+accessed 2026-09-18; no library entry exercises the primary reading today).
+Productivity and replacement are canonically primary. **Competitive advantage
+is classified per the stakeholder test and cited per entry** — IP erosion is
+often modeled as secondary (a market/competitor reaction) but can be a primary
+loss where the compromised asset is the differentiator itself; the placement
+is not assumed, it is justified.
 
 Consequently the model does **not** hard-code a form → side partition. Each
 active form in an entry's profile carries an explicit **`kind`** (`primary` /

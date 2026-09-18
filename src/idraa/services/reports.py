@@ -113,9 +113,11 @@ FAIR_GLOSSARY: dict[str, str] = {
     ),
     "Loss Magnitude": (
         "Loss Magnitude (LM): the amount of loss resulting from a single loss event,"
-        " combining Primary Loss (direct financial impact) and Secondary Loss (indirect"
-        " and reputational costs such as regulatory fines, notification costs, and"
-        " brand damage)."
+        " combining Primary Loss (what the event itself costs the organization:"
+        " response, recovery, replacement, downtime) and Secondary Loss (what"
+        " secondary stakeholders' reactions cost the organization: fines and judgments,"
+        " lost business, and the notification, credit-monitoring and third-party-claim"
+        " legal response those reactions force)."
         " Loss Magnitude is an Open FAIR node."
     ),
     "ALE": (

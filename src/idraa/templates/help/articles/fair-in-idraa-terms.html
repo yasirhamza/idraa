@@ -65,12 +65,22 @@
 <p class="text-body text-ink-2 mb-6">
   Loss Magnitude is the total cost <strong>per loss event</strong>, not an
   annual figure. It splits into two Open FAIR nodes:
-  <strong>Primary Loss (PL)</strong> &mdash; direct costs such as incident
-  response, recovery, and ransom &mdash; and
-  <strong>Secondary Loss (SL)</strong> &mdash; knock-on costs such as
-  regulatory fines, lost business, and reputational damage. The engine
-  annualises them by multiplying each simulated per-event magnitude by the
-  simulated event count for that year.
+  <strong>Primary Loss (PL)</strong> &mdash; costs your organization itself
+  incurs as a result of the event: incident response and forensics (your own
+  team or a firm you retain),
+  recovery, ransom, replacement, lost productivity.
+  <strong>Secondary Loss (SL)</strong> &mdash; costs that arise from how
+  secondary stakeholders (regulators, customers, partners) react to the event:
+  fines and judgments, lost business, and the response those reactions force
+  on you, such as notification, credit monitoring and legal defence against
+  third-party claims. The loss is yours either way; the test is what makes it
+  arise: the event itself, or someone else&rsquo;s reaction to it, not how directly it
+  follows the event. The engine annualises both by multiplying each simulated
+  per-event magnitude by that year&rsquo;s simulated loss-event frequency &mdash; an
+  expected number of loss events, not a whole-number count of them.
+  FAIR gives Secondary Loss its own frequency; Idraa has none, so the
+  secondary range you author is applied on every loss event &mdash; see
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair">Where Idraa departs from FAIR</a>.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="ale-the-mean-annual-loss">ALE: the mean annual loss</h2>
@@ -201,8 +211,10 @@
   sample export</a> exists, so you can verify the propagation yourself.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  Everything on this page is the standard FAIR model. The places where Idraa
-  changes it, or fills in a number the standards leave blank, are listed in
+  Apart from the one departure flagged in &sect;4 above &mdash; Secondary Loss has
+  no separate frequency in Idraa &mdash; everything on this page is the standard
+  FAIR model. The places where Idraa changes it, or fills in a number the
+  standards leave blank, are listed in
   <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair">Where Idraa departs from FAIR</a>.
 </p>
 
@@ -223,8 +235,8 @@
       <tr><td>TEF</td><td>Threat Event Frequency</td><td>How often a threat attempts the event, per year.</td></tr>
       <tr><td>Vulnerability (Vuln)</td><td>Vulnerability</td><td>The inherent chance an attempt succeeds, before your controls &mdash; the controls you tick reduce it in the analysis. A probability, not a scanner finding.</td></tr>
       <tr><td>LEF</td><td>Loss Event Frequency</td><td>How often an attempt actually causes loss (Threat Event Frequency &times; Vulnerability).</td></tr>
-      <tr><td>PL</td><td>Primary Loss</td><td>The direct cost of an event (response, repair, ransom).</td></tr>
-      <tr><td>SL</td><td>Secondary Loss</td><td>The knock-on cost (fines, reputation, lost business).</td></tr>
+      <tr><td>PL</td><td>Primary Loss</td><td>Cost your organization itself incurs from the event (response, recovery, ransom, replacement, downtime).</td></tr>
+      <tr><td>SL</td><td>Secondary Loss</td><td>Cost to you arising from secondary stakeholders&rsquo; reactions (fines, lost business, notification and legal defence).</td></tr>
       <tr><td>LM</td><td>Loss Magnitude</td><td>The total cost per event (Primary plus Secondary Loss).</td></tr>
       <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level.</td></tr>
       <tr><td>EPC</td><td>Exceedance Probability Curve</td><td>A companion view of the loss exceedance curve, showing the probability of exceeding each loss amount.</td></tr>

@@ -105,8 +105,8 @@ class FairCamMapping(Enum):
     CONTROL_STRENGTH = "control_strength"  # Resistance against threat
 
     # FAIR magnitude factors affected by controls
-    PRIMARY_LOSS_MAGNITUDE = "primary_loss_magnitude"  # Direct financial impact
-    SECONDARY_LOSS_MAGNITUDE = "secondary_loss_magnitude"  # Indirect consequences
+    PRIMARY_LOSS_MAGNITUDE = "primary_loss_magnitude"  # Cost to the org of the event itself
+    SECONDARY_LOSS_MAGNITUDE = "secondary_loss_magnitude"  # Cost to the org of secondary reactions
     LOSS_EVENT_FREQUENCY = "loss_event_frequency"  # Combined frequency outcome
 
 

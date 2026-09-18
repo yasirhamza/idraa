@@ -67,12 +67,62 @@ reference "full incident" (Σ≈1.0); everything else is scaled relative to it.
 | **ot_integrity** | productivity 0.40 P · response 0.15 P · replacement 0.05 P | 0.60 / 0.00 / **0.60** | corrupted process → bad output/rework + investigation |
 
 Notes on the table:
-- **`response` appears twice for `data_disclosure`** (internal-IR primary + notification/legal secondary) — these are two `loss_form_profile` entries with the same machine key `form=response` but distinct `kind` (the (form,kind)-uniqueness guard permits this); NOT a new "response-notification" key.
+- **`response` appears twice for `data_disclosure`** (IR-of-the-event primary + notification/legal secondary) — these are two `loss_form_profile` entries with the same machine key `form=response` but distinct `kind` (the (form,kind)-uniqueness guard permits this); NOT a new "response-notification" key.
+- **`response` is split on every reaction-firing entry, not only `data_disclosure`.**
+  The §4 Regulator-and-judgment reaction rule applies to any entry whose profile
+  carries a `fines` secondary share; for every threat type except
+  `data_disclosure` (and `social_engineering`, which §3 routes to that default)
+  the §3 defaults above show the pre-split budget and the rule derives the P/S
+  split from it. `data_disclosure`'s default already carries
+  both kinds (0.20 P : 0.15 S); the rule preserves that 4:3 ratio but applies it
+  to a legacy entry's existing `response/primary` share, so a budget-preserving
+  reclassification lands below the default's 0.35 total. New `data_disclosure`
+  entries are authored on the §3 default, not derived by splitting.
 - **Σprimary ties across threat-type DEFAULTS are expected and resolved at the entry level.** After differentiating the former malware≡supply_chain collision (nudged above), remaining Σprimary ties (e.g. `data_disclosure` ≈ `insider_misuse` at 0.20; no two full profiles are byte-identical now) are STARTING points only — §4 per-entry adjustment differentiates two genuinely-different co-sector archetypes, and the D-i slug-keyed differentiation guard + the A1 share-sum-tie allowlist are the backstop. The defaults are not final per-entry values.
 - **Regime note — competitive_advantage is always beyond-envelope.** `competitive_advantage` is BEYOND IRIS's cost scope (A1.2 M-A1-5), so it may never be taken as a share of the envelope. An insider_misuse archetype that exposes trade secrets carries its IP loss via §5 beyond-envelope FW (own source), NOT an in-envelope competitive_advantage share.
 
 ## 4. Per-entry adjustments (the threat-type default is a STARTING point)
 
+- **Regulator-and-judgment reaction rule (stakeholder test, issue #175).** Any
+  entry that fires a `fines` secondary share — FAIR's *fines and judgments* form:
+  a regulator's, a court's or a contractual counterparty's reaction — or that is
+  named in the script's `EXTRA_RENUMBERED` set because its exfiltrated third-party
+  data carries a statutory notification duty with no fines share authored (one
+  entry today, `telecom-lawful-intercept-nationstate-compromise`) — splits its
+  `response` budget into `response/primary` (IR, forensics and recovery of the event itself)
+  and `response/secondary` (the response that reaction forces: for a
+  personal-data breach, notification, credit monitoring and legal defence
+  against third-party claims; for a safety, product or contract proceeding,
+  regulatory-investigation cooperation, counterparty claims handling and legal
+  defence against third-party claims). The
+  secondary fraction of the response budget is **3/7 where the threat type
+  resolves to the `data_disclosure` default** (`data_disclosure` itself, and
+  `social_engineering` phishing→breach entries) and **1/3 for every other threat
+  type**; the same
+  fraction is applied to both mechanisms as a convention, not a claim that their
+  cost structures are identical. `s = round(total × f, 2)`, `p = round(total − s, 2)`, so
+  Σshares and the inherent PL+SL mean are unchanged (PL falls, SL rises). A
+  `data_disclosure` entry with no `fines` share and no forced-response
+  obligation (espionage of the org's own data) carries no secondary response and
+  is allowlisted with an entry-specific rationale in
+  `NO_SECONDARY_RESPONSE_ALLOWLIST` (`scripts/build_secondary_response_reclass.py`),
+  enforced by `tests/integration/test_loss_form_stakeholder_test.py`. The
+  fraction is selected by `threat_event_type`, not by whether a data-subject
+  obligation exists: 3/7 for `data_disclosure` because its §3 default already
+  splits response 0.20 P : 0.15 S, and for `social_engineering` phishing→breach
+  entries, which §3 routes to that default (BEC entries are beyond-envelope and
+  never fire `fines`); 1/3 for every other type, whose §3 default
+  carries response as primary-only, as a convention keeping IR,
+  forensics and recovery the dominant cost of an IR-dominant budget (FAIR-CAM
+  §3.3.3 calls Response's examples predominantly secondary but sets no
+  per-entry split). Entries of other types that carry a notification duty still
+  take 1/3; re-levelling them is a per-entry adjustment and out of scope.
+  Scope: this rule covers
+  the regulator-and-judgment sub-case of the stakeholder test; entries firing
+  `reputation` without `fines` (customer reaction only) are not covered by it.
+  The fractions are conventions of the same grade as the shares (analyst
+  judgment, vulnerability-grade), applied by
+  `scripts/build_secondary_response_reclass.py`.
 - **Reconnaissance / scanning** (e.g. `ot-network-scanning-reconnaissance`, typed
   `ot_availability`): NOT the ot_availability 0.90 default. Recon fires response
   only at a near-zero share — **response 0.03 P, Σ≈0.03**. This is the flagship
@@ -98,8 +148,9 @@ It carries its **own** loss distribution and composes via `compose_forms_to_logn
   own lognormal, primary.
 - **IP / trade-secret theft** → adjudicated trade-secret damages, own lognormal,
   competitive-advantage. Its `kind` (primary vs secondary) is **justified per entry
-  via the stakeholder test** (`loss-magnitude-forms.md` — direct erosion of the
-  org's own differentiator vs a secondary-market reaction), never assumed.
+  via the stakeholder test** (`loss-magnitude-forms.md` — erosion of the org's
+  own differentiator (the compromised asset is the differentiator itself) vs a
+  secondary-market reaction), never assumed.
 - **reputation / churn** for a churn-heavy archetype in a sector whose IRIS envelope
   is BI/churn-light MAY be beyond-envelope if its own source exists; otherwise it is
   a documented envelope-share with the churn-light caveat noted.
