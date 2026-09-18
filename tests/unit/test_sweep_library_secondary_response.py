@@ -61,7 +61,12 @@ def test_old_nodes_cover_the_24_slugs_and_differ_from_the_shipped_seed() -> None
     }
     for slug, d in mod.OLD_PAIRS.items():
         for fs in ("pl", "sl"):
-            assert tuple(d[fs]) == reclass.seeded_pair(mod.OLD_NODES[slug][fs]), (slug, fs)
+            # 1e-12 relative, not exact: libm exp/log differ by an ulp across macOS arm64
+            # (where the tables were generated) and Linux x86-64 (CI); CENT = 0.011 is the
+            # resolution that matters for classification.
+            assert tuple(d[fs]) == pytest.approx(
+                reclass.seeded_pair(mod.OLD_NODES[slug][fs]), rel=1e-12
+            ), (slug, fs)
         # OLD_NODES re-derive from the shipped seed: old sum = new sum +/- the entry's response/secondary share
         e = by_slug[slug]
         s = sum(
@@ -277,7 +282,9 @@ def test_new_pairs_are_the_seeded_pairs_of_the_shipped_seed() -> None:
     by_slug = {e["slug"]: e for e in entries}
     for slug, d in mod.NEW_PAIRS.items():
         for fs, key in (("pl", "primary_loss"), ("sl", "secondary_loss")):
-            assert tuple(d[fs]) == reclass.seeded_pair(by_slug[slug][key]), (slug, fs)
+            assert tuple(d[fs]) == pytest.approx(
+                reclass.seeded_pair(by_slug[slug][key]), rel=1e-12
+            ), (slug, fs)  # 1e-12 relative: cross-platform libm ulp differences
 
 
 def test_classify_pristine_matches_old_pair_within_a_cent() -> None:
