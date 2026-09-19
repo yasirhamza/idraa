@@ -271,7 +271,7 @@ name: str
 description: str
 domain: ControlDomain           # LOSS_EVENT / VARIANCE_MANAGEMENT / DECISION_SUPPORT
 control_function: ControlFunction  # Overview-era 9-value enum
-fair_cam_mappings: List[FairCamMapping]
+fair_cam_mappings: List[FairCamMapping]   # removed 2026-09 (#177)
 control_type: ControlType       # conflated enum (see §5.2)
 control_strength: float
 control_reliability: float
@@ -312,7 +312,7 @@ tags: List[str]
 | `name`, `description` | str | Standard-orthogonal | — | Valid auxiliary |
 | `domain` | ControlDomain enum | **Standard-conformant** | §2.2, page 5 | Correct three-domain ontology. BUT: string values are `"loss_event"` / `"variance"` / `"decision"` — the truncated "variance" and "decision" diverge from v3's `"variance_management"` / `"decision_support"`, requiring the explicit `_DOMAIN_MAP` in the adapter. |
 | `control_function` | ControlFunction enum (9 values) | **Standard-deviant** | §3.1-3.3, §4.1-4.3, §5.1-5.3 | THREAT_PREVENTION / VULNERABILITY_REDUCTION / IMPACT_MITIGATION (LEC); PERFORMANCE_MONITORING / CONFIGURATION_MANAGEMENT / MAINTENANCE_SCHEDULING (VMC); RISK_VISIBILITY / COMPLIANCE_REPORTING / STRATEGIC_PLANNING (DSC). These are Overview-era domain summaries, not Standard sub-functions. Three values per domain is a 3:9+ mismatch with the Standard's taxonomy. |
-| `fair_cam_mappings` | List[FairCamMapping] | **Standard-deviant** | §3, §4, §5 throughout | FairCamMapping enum contains FAIR-axis concepts (CONTACT_FREQUENCY, PROBABILITY_OF_ACTION, etc.) rather than Standard sub-function identifiers. Partially overlaps Standard intent but uses a different vocabulary. |
+| `fair_cam_mappings` (removed 2026-09, #177) | List[FairCamMapping] | **Standard-deviant** | §3, §4, §5 throughout | FairCamMapping enum contains FAIR-axis concepts (CONTACT_FREQUENCY, PROBABILITY_OF_ACTION, etc.) rather than Standard sub-function identifiers. Partially overlaps Standard intent but uses a different vocabulary. |
 | `control_type` | ControlType enum | **Standard-deviant** | — | Conflates classical action types (PREVENTIVE/DETECTIVE/CORRECTIVE) with implementation types (ADMINISTRATIVE/TECHNICAL/PHYSICAL) into one enum. The Standard uses neither; this enum has six values and mixes two orthogonal taxonomies. |
 | `control_strength` | float | **Standard-deviant** | §2.4, page 6 | Same Deviation α as v3: single flat scalar for "strength" cannot represent sub-function-specific Capability. |
 | `control_reliability` | float | **Standard-deviant** | §2.4.3, page 7 | Flat scalar cannot represent sub-function-specific Reliability. |
@@ -699,7 +699,7 @@ Then apply Boolean composition across assignments:
 
 Each of the 26 sub-functions is statically declared to target a specific FAIR factor. For example: `lec_prev_avoidance` → Contact Frequency multiplier; `lec_prev_resistance` → Vulnerability multiplier; `lec_resp_loss_reduction` → Loss Magnitude subtractor; VMC and DSC effects → reliability modifier on LEC control effectiveness.
 
-fair_cam already implements a partial version of this approach at `fair_cam/models/control.py:374-402` (`get_fair_impact_factor()`), which returns domain-specific FAIR-axis multipliers. This is evidence the option is implementable within the current fair_cam structure.
+fair_cam once implemented a partial version of this approach (`Control.get_fair_impact_factor()`, removed in #177 as dead and contradictory — its multipliers were never the engine's; see register C4), which returned domain-specific FAIR-axis multipliers. This is evidence the option is implementable within the current fair_cam structure.
 
 **Pros**: Most rigorous; directly maps sub-function outputs to FAIR model axes; best alignment with Standard's intent of tracing control effects to FAIR causal nodes; eliminates unit-homogeneity confusion by operating on the appropriate FAIR node.
 

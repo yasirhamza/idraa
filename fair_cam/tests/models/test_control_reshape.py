@@ -95,15 +95,13 @@ def test_control_has_no_degradation_rate_field():
     assert not hasattr(c, "degradation_rate")
 
 
-def test_deprecated_fields_still_accept_values():
-    """fair_cam_mappings and control_function are deprecated (PR mu removes)
-    but must still be constructible and inspectable in PR kappa for backward
-    compat with Layer 3 (get_fair_impact_factor) and _get_function_description.
-    A future PR accidentally removing either field should fail this test."""
-    from fair_cam.models.control import (
-        ControlFunction,
-        FairCamMapping,
-    )
+def test_deprecated_control_function_still_accepts_values():
+    """control_function is deprecated but must still be constructible and
+    inspectable for backward compat with _get_function_description. A future PR
+    accidentally removing the field should fail this test. (fair_cam_mappings /
+    FairCamMapping / get_fair_impact_factor were removed in #177 -- zero callers,
+    contradictory unlabelled weight table; register C4.)"""
+    from fair_cam.models.control import ControlFunction
 
     c = Control(
         control_id="C1",
@@ -113,8 +111,7 @@ def test_deprecated_fields_still_accept_values():
         control_type=ControlType.TECHNICAL,
         cost_model=CostModel(),
         assignments=[_assignment()],
-        fair_cam_mappings=[FairCamMapping.CONTROL_STRENGTH],
         control_function=ControlFunction.THREAT_PREVENTION,
     )
-    assert c.fair_cam_mappings == [FairCamMapping.CONTROL_STRENGTH]
     assert c.control_function == ControlFunction.THREAT_PREVENTION
+    assert not hasattr(c, "fair_cam_mappings") and not hasattr(c, "get_fair_impact_factor")
