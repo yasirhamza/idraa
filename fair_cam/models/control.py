@@ -95,21 +95,6 @@ class ControlFunction(Enum):
     STRATEGIC_PLANNING = "strategic_planning"  # Enable risk-informed planning
 
 
-class FairCamMapping(Enum):
-    """FAIR-CAM ontological mappings for controls"""
-
-    # FAIR frequency factors affected by controls
-    CONTACT_FREQUENCY = "contact_frequency"  # How often threat actor attempts contact
-    PROBABILITY_OF_ACTION = "probability_of_action"  # Likelihood actor takes action
-    THREAT_CAPABILITY = "threat_capability"  # Actor's skill/resources
-    CONTROL_STRENGTH = "control_strength"  # Resistance against threat
-
-    # FAIR magnitude factors affected by controls
-    PRIMARY_LOSS_MAGNITUDE = "primary_loss_magnitude"  # Cost to the org of the event itself
-    SECONDARY_LOSS_MAGNITUDE = "secondary_loss_magnitude"  # Cost to the org of secondary reactions
-    LOSS_EVENT_FREQUENCY = "loss_event_frequency"  # Combined frequency outcome
-
-
 class ControlType(Enum):
     """Control implementation types"""
 
@@ -329,9 +314,6 @@ class Control:
     # Per-assignment effectiveness (spec §4.3 + §4.4)
     assignments: list[FairCamControlFunctionAssignment] = field(default_factory=list)
 
-    # DEPRECATED -- used by Layer 3 get_fair_impact_factor; PR mu removes
-    fair_cam_mappings: list[FairCamMapping] = field(default_factory=list)
-
     # DEPRECATED -- Overview-era 9-value enum; v3 deleted analog in T14 (PR iota);
     # PR mu removes once Layer 3 refactor lands. Default to None to allow construction
     # without specifying a value.
@@ -477,7 +459,7 @@ class Control:
             "ISO27001": self.iso27001_mappings,
         }
 
-    def get_fair_cam_classification(self) -> dict[str, str | list[str]]:
+    def get_fair_cam_classification(self) -> dict[str, str]:
         """Get FAIR-CAM domain classification"""
         cf = self.control_function
         return {
@@ -485,7 +467,6 @@ class Control:
             "domain_description": self._get_domain_description(),
             "function": cf.value if cf is not None else "",
             "function_description": self._get_function_description() if cf is not None else "",
-            "fair_mappings": [mapping.value for mapping in self.fair_cam_mappings],
         }
 
     def _get_domain_description(self) -> str:
@@ -516,42 +497,6 @@ class Control:
         if self.control_function is None:
             return "Unknown function"
         return descriptions.get(self.control_function, "Unknown function")
-
-    def add_fair_cam_mapping(self, mapping: FairCamMapping) -> None:
-        """Add a FAIR-CAM ontological mapping"""
-        if mapping not in self.fair_cam_mappings:
-            self.fair_cam_mappings.append(mapping)
-            self.last_updated = datetime.now()
-
-    def get_fair_impact_factor(self) -> dict[str, float]:
-        """Calculate how this control affects specific FAIR factors"""
-        impact_factors = {}
-        current_effectiveness = self.get_current_effectiveness()
-
-        for mapping in self.fair_cam_mappings:
-            if mapping == FairCamMapping.CONTACT_FREQUENCY:
-                # Reduce frequency of threat actor contact attempts
-                impact_factors["contact_frequency_reduction"] = current_effectiveness * 0.8
-            elif mapping == FairCamMapping.PROBABILITY_OF_ACTION:
-                # Reduce likelihood threat actor takes action
-                impact_factors["action_probability_reduction"] = current_effectiveness * 0.7
-            elif mapping == FairCamMapping.THREAT_CAPABILITY:
-                # Effectively increases difficulty for threat actor
-                impact_factors["threat_capability_mitigation"] = current_effectiveness * 0.6
-            elif mapping == FairCamMapping.CONTROL_STRENGTH:
-                # Direct resistance against threat
-                impact_factors["control_strength_value"] = current_effectiveness
-            elif mapping == FairCamMapping.PRIMARY_LOSS_MAGNITUDE:
-                # Reduce direct financial impact
-                impact_factors["primary_loss_reduction"] = current_effectiveness * 0.5
-            elif mapping == FairCamMapping.SECONDARY_LOSS_MAGNITUDE:
-                # Reduce indirect consequences
-                impact_factors["secondary_loss_reduction"] = current_effectiveness * 0.4
-            elif mapping == FairCamMapping.LOSS_EVENT_FREQUENCY:
-                # Overall frequency reduction
-                impact_factors["frequency_reduction"] = current_effectiveness * 0.9
-
-        return impact_factors
 
     def add_dependency(self, dependency: ControlDependency) -> None:
         """Add a control dependency"""
@@ -971,12 +916,6 @@ class ControlRegistry:
         """Get all controls with a specific function"""
         return [
             control for control in self._controls.values() if control.control_function == function
-        ]
-
-    def get_controls_by_fair_mapping(self, mapping: FairCamMapping) -> list[Control]:
-        """Get controls that affect a specific FAIR factor"""
-        return [
-            control for control in self._controls.values() if mapping in control.fair_cam_mappings
         ]
 
     def get_domain_distribution(self) -> dict[str, int]:

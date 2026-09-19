@@ -493,10 +493,14 @@ Everything numeric in this section is therefore Idraa's.
   groups ever target the same node their multipliers are applied as a
   product (currently inert: only Prevention and Response carry targets, on
   disjoint nodes).
-- **Dead code warning.** `fair_cam/models/control.py` still carries a
-  deprecated `get_fair_impact_factor` method with a second, contradictory,
-  unlabelled weight table (0.8 / 0.7 / 0.6 / 0.5 / 0.4 / 0.9). It has zero
-  callers and is not the engine's table; removal is tracked in issue #177.
+- **Dead code removed (#177, 2026-09).** `fair_cam/models/control.py` once
+  carried a deprecated `get_fair_impact_factor` method with a second,
+  contradictory, unlabelled weight table (0.8 / 0.7 / 0.6 / 0.5 / 0.4 / 0.9)
+  and the `fair_cam_mappings` / `FairCamMapping` surface that fed it; all of
+  it had zero callers and was deleted (cleanup record:
+  `fair-cam-methodology.md`, "What is NOT in FAIR / FAIR-CAM").
+  `GROUP_NODE_MAPPING` is now the only FAIR-axis routing-weight table; the κ
+  coupling constant (C7) is named and pinned separately.
 - **Evaluate.** `fair_cam/tests/test_composition_topology.py` pins the
   values; the ensemble's σ-sensitivity fixture shows how verdicts move.
 
