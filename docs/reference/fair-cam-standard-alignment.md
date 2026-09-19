@@ -263,7 +263,11 @@ The current adapter (`src/idraa/services/run_executor.py:70-82`) silently drops 
 
 ### 5.1 Schema (`fair_cam/models/control.py:239-300`)
 
-The `Control` dataclass is defined at `fair_cam/models/control.py:238`. Its fields are:
+The `Control` dataclass is defined at `fair_cam/models/control.py:238`. Its fields are
+(snapshot of the pre-PR-κ dataclass as audited; the live shape differs — the flat
+strength/coverage/reliability scalars and `degradation_rate` went in PR κ, and
+`fair_cam_mappings` in #177 — so treat the listing and the line citations in this
+section as historical):
 
 ```python
 control_id: str
@@ -699,7 +703,7 @@ Then apply Boolean composition across assignments:
 
 Each of the 26 sub-functions is statically declared to target a specific FAIR factor. For example: `lec_prev_avoidance` → Contact Frequency multiplier; `lec_prev_resistance` → Vulnerability multiplier; `lec_resp_loss_reduction` → Loss Magnitude subtractor; VMC and DSC effects → reliability modifier on LEC control effectiveness.
 
-fair_cam once implemented a partial version of this approach (`Control.get_fair_impact_factor()`, removed in #177 as dead and contradictory — its multipliers were never the engine's; see register C4), which returned domain-specific FAIR-axis multipliers. This is evidence the option is implementable within the current fair_cam structure.
+fair_cam once implemented a partial version of this approach (`Control.get_fair_impact_factor()`, removed in #177 as dead and contradictory — its multipliers were never the engine's; see register C4), which returned domain-specific FAIR-axis multipliers. That it once existed is evidence Option D was implementable within fair_cam's structure; the code is gone, the structural argument stands.
 
 **Pros**: Most rigorous; directly maps sub-function outputs to FAIR model axes; best alignment with Standard's intent of tracing control effects to FAIR causal nodes; eliminates unit-homogeneity confusion by operating on the appropriate FAIR node.
 

@@ -497,8 +497,10 @@ Everything numeric in this section is therefore Idraa's.
   carried a deprecated `get_fair_impact_factor` method with a second,
   contradictory, unlabelled weight table (0.8 / 0.7 / 0.6 / 0.5 / 0.4 / 0.9)
   and the `fair_cam_mappings` / `FairCamMapping` surface that fed it; all of
-  it had zero callers and was deleted. `GROUP_NODE_MAPPING` is the only
-  weight table.
+  it had zero callers and was deleted (cleanup record:
+  `fair-cam-methodology.md`, "What is NOT in FAIR / FAIR-CAM").
+  `GROUP_NODE_MAPPING` is now the only FAIR-axis routing-weight table; the κ
+  coupling constant (C7) is named and pinned separately.
 - **Evaluate.** `fair_cam/tests/test_composition_topology.py` pins the
   values; the ensemble's σ-sensitivity fixture shows how verdicts move.
 

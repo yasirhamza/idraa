@@ -114,4 +114,26 @@ def test_deprecated_control_function_still_accepts_values():
         control_function=ControlFunction.THREAT_PREVENTION,
     )
     assert c.control_function == ControlFunction.THREAT_PREVENTION
-    assert not hasattr(c, "fair_cam_mappings") and not hasattr(c, "get_fair_impact_factor")
+
+
+def test_fair_impact_factor_surface_is_gone():
+    """#177: the second, contradictory FAIR-axis weight table and everything that
+    fed it must stay deleted (register C4; cleanup record in fair-cam-methodology.md).
+    Kept separate from the control_function compat test so it survives PR mu."""
+    from fair_cam.models import control as _c
+
+    c = Control(
+        control_id="C1",
+        name="Test",
+        description="",
+        domain=ControlDomain.LOSS_EVENT,
+        control_type=ControlType.TECHNICAL,
+        cost_model=CostModel(),
+        assignments=[_assignment()],
+    )
+    assert not hasattr(c, "fair_cam_mappings")
+    assert not hasattr(c, "get_fair_impact_factor")
+    assert not hasattr(c, "add_fair_cam_mapping")
+    assert not hasattr(_c, "FairCamMapping")
+    assert not hasattr(_c.ControlRegistry, "get_controls_by_fair_mapping")
+    assert "fair_mappings" not in c.get_fair_cam_classification()

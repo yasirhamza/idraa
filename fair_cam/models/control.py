@@ -459,7 +459,7 @@ class Control:
             "ISO27001": self.iso27001_mappings,
         }
 
-    def get_fair_cam_classification(self) -> dict[str, str | list[str]]:
+    def get_fair_cam_classification(self) -> dict[str, str]:
         """Get FAIR-CAM domain classification"""
         cf = self.control_function
         return {

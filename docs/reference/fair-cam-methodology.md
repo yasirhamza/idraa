@@ -282,3 +282,15 @@ record: `docs/plans/2026-05-04-pr-phi-fair-cam-cleanup-sweep-design.md`.
 (`services/scenario_calibration.py`, `routes/calibration_overrides.py`, related
 repos + templates + tests) deleted in lockstep. Cleanup record:
 `docs/plans/2026-05-06-pr-pi-simple-scenario-mc-design.md`.
+
+**Surface deleted in #177 (2026-09):** `Control.get_fair_impact_factor`
+(`fair_cam/models/control.py`) plus the `fair_cam_mappings` field,
+`FairCamMapping` enum, `add_fair_cam_mapping`,
+`ControlRegistry.get_controls_by_fair_mapping` and the `fair_mappings` key of
+`get_fair_cam_classification`. A second, unlabelled FAIR-axis multiplier table
+(0.8 / 0.7 / 0.6 / 0.5 / 0.4 / 0.9) that contradicted the engine's
+`GROUP_NODE_MAPPING`, mapped a control's effect onto Threat Capability (a
+threat attribute, not a control-adjustable node) and double-counted frequency
+via a separate Loss Event Frequency multiplier. Zero callers in the entire
+repository history — no stored run was ever computed with it. Register entry:
+C4.
