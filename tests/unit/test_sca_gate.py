@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+import sca_gate
 from sca_gate import (  # ruff's E402 exempts sys.path.insert idioms
     evaluate,
     parse_suppressions,
@@ -87,3 +88,63 @@ def test_partition_export_never_pins_one_package_twice_per_layer():
 
 def test_partition_export_skips_local_editables_and_comments():
     assert partition_export("-e .\n# via x\n./fair_cam\n\n") == []
+
+
+def _drive_main(monkeypatch, export_text, audit):
+    """Run main() with the uv export and each pip-audit layer stubbed."""
+    import json
+    import subprocess
+
+    def fake_run(argv, **kwargs):
+        Path(argv[argv.index("-o") + 1]).write_text(export_text)
+        return subprocess.CompletedProcess(argv, 0)
+
+    def fake_audit(pins):
+        deps = audit(pins)
+        code = 1 if any(d.get("vulns") for d in deps) else 0
+        return subprocess.CompletedProcess([], code, stdout=json.dumps({"dependencies": deps}))
+
+    monkeypatch.setattr(sca_gate.subprocess, "run", fake_run)
+    monkeypatch.setattr(sca_gate, "_audit", fake_audit)
+    return sca_gate.main()
+
+
+def _clean_except(bad_pin):
+    def audit(pins):
+        return [
+            {"name": p.split("==")[0], "version": p.split("==")[1]}
+            | (
+                {"vulns": [{"id": "GHSA-fork", "fix_versions": ["9"]}]}
+                if p == bad_pin
+                else {"vulns": []}
+            )
+            for p in pins
+        ]
+
+    return audit
+
+
+def test_main_fails_on_vuln_hidden_behind_non_matching_marker(monkeypatch, capsys):
+    # #182 end to end: the old gate never sent the >=3.15 fork to pip-audit.
+    rc = _drive_main(monkeypatch, _EXPORT, _clean_except("anyio==4.15.1"))
+    assert rc == 1
+    assert "anyio: GHSA-fork" in capsys.readouterr().out
+
+
+def test_main_fails_closed_on_skipped_pin(monkeypatch):
+    def audit(pins):
+        return [{"name": p.split("==")[0], "skip_reason": "not on PyPI"} for p in pins]
+
+    assert _drive_main(monkeypatch, _EXPORT, audit) == 2
+
+
+def test_main_fails_closed_on_dropped_pin(monkeypatch):
+    assert _drive_main(monkeypatch, _EXPORT, lambda pins: []) == 2
+
+
+def test_main_fails_closed_on_empty_export(monkeypatch):
+    assert _drive_main(monkeypatch, "-e .\n", _clean_except(None)) == 2
+
+
+def test_main_passes_clean_export(monkeypatch):
+    assert _drive_main(monkeypatch, _EXPORT, _clean_except(None)) == 0

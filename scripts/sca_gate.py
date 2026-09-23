@@ -66,7 +66,7 @@ def partition_export(text: str) -> list[list[str]]:
         line = raw.split(";", 1)[0].strip()
         if not line or line.startswith(("#", "-", ".", "/")):
             continue
-        name = re.split(r"[\[=<>!~ ]", line, maxsplit=1)[0].lower().replace("_", "-")
+        name = re.sub(r"[-_.]+", "-", re.split(r"[\[=<>!~ ]", line, maxsplit=1)[0]).lower()
         pins = versions.setdefault(name, [])
         if line not in pins:
             pins.append(line)
@@ -140,10 +140,21 @@ def main() -> int:
             )
             return 2
         try:
-            deps.extend(json.loads(proc.stdout)["dependencies"])  # KeyError = schema drift
+            layer = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
+            skipped = [f"{d['name']}: {d['skip_reason']}" for d in layer if "skip_reason" in d]
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
             return 2
+        # A pin pip-audit could not audit (or silently dropped) is not a pass.
+        if skipped or len(layer) != len(pins):
+            for s in skipped:
+                print(f"sca_gate: pin not audited — {s}")
+            print(
+                f"sca_gate: {len(layer)} results for {len(pins)} pins, {len(skipped)} skipped "
+                f"— failing closed; {SKIP_HINT}"
+            )
+            return 2
+        deps.extend(layer)
     try:
         failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))
     except (KeyError, TypeError) as exc:
