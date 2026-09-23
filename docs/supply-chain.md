@@ -40,7 +40,13 @@ Two SCA layers, deliberately different rules — they will not always agree.
   PR, so it cannot wedge on a pre-existing finding — those are
   Dependabot-alert territory.
 - **Local gate — `scripts/sca_gate.py`, fixability-based.** Runs
-  `pip-audit` against the locked runtime set on every push.
+  `pip-audit` against the locked runtime set on every push. The export is
+  flattened marker-agnostically (#182): every lock pin is audited whatever its
+  environment marker, including `python_full_version` forks and
+  platform-only pins the running interpreter would otherwise skip; forked
+  pins of one package are spread across separate requirement files and the
+  results unioned. Dev-extra packages are outside this gate and are covered
+  by Dependabot alerts.
   **Severity-data caveat:** pip-audit's JSON reports fixability, not
   severity, so the local gate cannot replicate the PR gate's severity rule —
   it fails on any *fixable, unsuppressed* vulnerability and warns on
