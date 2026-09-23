@@ -32,7 +32,8 @@ Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
    │  Middleware is LIFO-registered; wire order below is outermost-first
    │  (app.py:1110-1112) — B0 and B3 run BEFORE B2 (session lookup hits the
    │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
-   ├─ uat_basic_auth (outermost; UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
+   ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
+   ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
    ├─ CSRFMiddleware ──(B3)── state-changing request ↔ verified-origin request
    ├─ SessionMiddleware (ASGI-wide, before routing) ──(B2)── unauth ↔ authenticated
    ├─ EnrollmentGuardMiddleware ──(B4)── authenticated ↔ MFA-enrolled
@@ -64,6 +65,22 @@ covered by another boundary's row."
   trusting a spoofable value (`deps.py:117-127`); audit logging falls back to
   best-effort `request.client` instead (`deps.py:130-151`) — a deliberate
   forensic-vs-security-critical asymmetry.
+- **T (request smuggling / desync, 2026-09)**: the back-end parser
+  (uvicorn + httptools) rejects every classic gadget (dual CL, CL.TE, TE.CL,
+  obfuscated TE, bare LF — advisory GHSA-46jj-823j-mjj9 dynamic pass). The
+  two shapes it accepted — a body on GET/HEAD/OPTIONS and
+  `Transfer-Encoding` on HTTP/1.0 — are gadgets only if the Fly edge frames
+  them differently, which cannot be tested locally. The outermost
+  `RequestFramingMiddleware` (`middleware/request_framing.py:28-45`) refuses
+  both with 400 and any method outside GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS
+  with 501, always with `Connection: close`, before any other layer reads the
+  request. Live uvicorn probe: GET+body with a pipelined second request →
+  one 400, connection closed, the pipelined request never runs; pinned by
+  `tests/unit/test_request_framing.py`.
+- **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
+  setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
+  security-settings state (`app.py:1302-1310`). The idraa#107 cache-state
+  signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
   enabled with no trust strategy configured (`app.py:977-988`) — misconfig is
   loud, not silent.
@@ -76,7 +93,8 @@ covered by another boundary's row."
 ## 2a. B0 — UAT basic-auth pre-gate (hosted UAT only)
 
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
-full-doc re-audit. This is the app's actual **outermost** request-path layer
+full-doc re-audit. This is the app's outermost **authentication** layer (only
+the B1 request-framing guard sits outside it, since 2026-09)
 (`middleware/uat_basic_auth.py`, wired at `app.py:1174`; confirmed order
 `app.py:1110-1112`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
@@ -97,6 +115,13 @@ docstring).
 - **T (misconfiguration)**: an empty-string `user` with a real password set
   fails closed rather than matching any caller (`uat_basic_auth.py:79-80`,
   explicit trap comment).
+- **S (weak credential, C6, 2026-09)**: the credential is read from
+  `Settings.uat_basic_auth_user` / `uat_basic_auth_password`
+  (`config.py:351-352`), not straight from `os.environ`, so it gets boot
+  hardening like `SESSION_SECRET`: in prod an enabled pre-gate needs a 16+
+  character password, a non-empty user and password ≠ user
+  (`_check_uat_basic_auth_hardening`, `config.py:501-527`), else the app
+  refuses to boot. Unset stays allowed (self-hosted, no pre-gate).
 - **S (timing)**: `secrets.compare_digest` on both user and password,
   assigned to locals and AND-ed at the end rather than short-circuited
   (`uat_basic_auth.py:132-134`) — the docstring explains the short-circuit
@@ -106,8 +131,9 @@ docstring).
   instance to the inner (still-intact) session-auth boundary, not to a
   specific account. The middleware's *presence and position* ARE pinned by
   `tests/unit/test_app_middleware_order.py::test_middleware_wire_order`,
-  which asserts the exact 7-element `app.user_middleware` list with
-  `uat_basic_auth` outermost — removing or reordering it fails that test.
+  which asserts the exact 8-element `app.user_middleware` list with the
+  request-framing guard outermost and `uat_basic_auth` next — removing or
+  reordering either fails that test.
   What nothing checks is whether THIS DOCUMENT still enumerates the real
   middleware stack (see §12 item 6).
 
@@ -222,6 +248,17 @@ docstring).
   (`routes/step_up.py:87-239`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
   `auth.py:274`).
+- **B1 — the settings write is never disarmed (2026-09).** The global
+  kill-switch (window ≤ 0) and the per-category ADMIN override both live in the
+  settings that `POST /settings/security` writes. `step_up_required()` honours
+  them, so one fresh write could previously switch step-up off for good —
+  every later write, including re-arming it, passed with any stale admin
+  cookie. That route alone is wired `require_step_up(ADMIN, unconditional=True)`
+  (`routes/settings.py:168-172`, `routes/deps.py:258-261`): it ignores both
+  switches and checks freshness against `settings_write_step_up_window()`
+  (`services/security_settings.py:156-170`) — the configured window, else the
+  env default, else a 600 s floor. Switched-off categories stay off everywhere
+  else. Pinned by `tests/integration/test_step_up_categories.py::test_b1_*`.
 - **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
   (`routes/step_up.py:145,147`), so it inherits both the atomic recovery-code
@@ -427,6 +464,15 @@ auto-substitution blocking XML entity expansion (billion-laughs class,
 `register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
 
+**Export — download header (C9, 2026-09)**: every generated download
+builds `Content-Disposition` through one helper, `attachment_disposition()`
+(`utils/csv_export.py:44-50`), which quotes the name and replaces `"`, `;`,
+`\` and every control character. The scenario JSON and library-bundle
+exports used to interpolate `filename` raw (safe only because every caller
+passes a literal or a UUID); they now use the helper, pinned by
+`tests/unit/test_csv_export_helper.py`. `routes/reports.py` and
+`routes/runs.py` build theirs from a `[a-zA-Z0-9_-]` slug.
+
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
 cell starting with `=+-@\t\r` (`utils/csv_export.py:26-33`, used by
 `services/sample_export.py:68,181` and `services/verification_workbook.py:
@@ -522,7 +568,11 @@ full run lifecycle — create (`services/runs.py:328`), cancel (`:382`),
 delete (`:442`), sample-purge (`:475`) — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted
-(`redact_email`, `audit.py:95-116`), financial values bucketed
+(`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
+raw email — `routes/users.py` invite and `routes/setup.py` first admin — were
+fixed in 2026-09 (advisory C4) and an AST guard,
+`tests/unit/test_audit_email_never_raw.py`, now fails on any email-keyed
+`changes=` literal not passed through `redact_email`), financial values bucketed
 (`bucket_amount`, `audit.py:119-137`) before storage. 70+ call sites spot-
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known
