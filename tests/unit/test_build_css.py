@@ -103,8 +103,10 @@ def test_every_text_class_in_templates_is_defined():
     }
     assert {"text-h4", "text-display", "text-ink-1"} <= used  # non-vacuous
 
-    def selector(cls: str) -> str:
-        return "." + re.sub(r"([:/.\[\]%#])", r"\\\1", cls)
+    def defined(cls: str) -> bool:
+        # End-anchored: ``text-ink`` must not pass on the strength of ``.text-ink-1``.
+        selector = "." + re.sub(r"([:/.\[\]%#])", r"\\\1", cls)
+        return re.search(re.escape(selector) + r"(?=[\s{,:>+~.\[)])", sheets) is not None
 
-    missing = sorted(cls for cls in used if selector(cls) not in sheets)
+    missing = sorted(cls for cls in used if not defined(cls))
     assert not missing, f"text-* classes used in templates but defined by no stylesheet: {missing}"
