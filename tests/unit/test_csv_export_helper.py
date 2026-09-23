@@ -81,3 +81,31 @@ def test_csv_response_emits_preamble_comment_lines() -> None:
     )
     body = _body(resp)
     assert body.startswith("# controls compose multiplicatively")
+
+
+def test_json_exports_build_disposition_through_the_sanitiser() -> None:
+    """Advisory C9: the scenario JSON and library-bundle exports interpolated
+    ``filename`` raw into Content-Disposition (safe only because every caller
+    passes a literal or a UUID). They now share attachment_disposition."""
+    from idraa.services.library_bundle_export import export_bundle_response
+    from idraa.services.scenario_export import export_json_response
+
+    evil = "x\"; filename*=UTF-8''evil.html\r\nSet-Cookie: a=b\\.json"
+    for resp in (
+        export_json_response([], filename=evil),
+        export_bundle_response([], filename=evil),
+    ):
+        dispo = resp.headers["content-disposition"]
+        assert dispo.startswith('attachment; filename="') and dispo.endswith('"')
+        inner = dispo[len('attachment; filename="') : -1]
+        assert not any(c in inner for c in '";\\\r\n')
+    assert (
+        export_json_response([], filename="scenarios.json").headers["content-disposition"]
+        == 'attachment; filename="scenarios.json"'
+    )
+
+
+def test_attachment_disposition_strips_every_control_character() -> None:
+    from idraa.utils.csv_export import attachment_disposition
+
+    assert attachment_disposition("a\x00b\x1fc\x7fd.csv") == 'attachment; filename="a_b_c_d.csv"'
