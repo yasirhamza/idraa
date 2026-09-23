@@ -12,7 +12,7 @@
     {%- set _code = _currency.code -%}
 
     {%- if display_results.currency_provenance %}
-      <p class="text-caption text-ink-2 mb-4 italic">
+      <p class="text-micro text-ink-2 mb-4 italic">
         {{ display_results.currency_provenance }}
       </p>
     {%- endif %}
@@ -97,14 +97,14 @@
       </table>
     </div>
     {% if not display_results.dist_stats.has_tail %}
-      <p class="text-caption text-ink-3 mt-1">VaR 90/99.9 and ES metrics not available for this run (computed for runs executed after the tail-metrics release). Re-run the analysis to populate.</p>
+      <p class="text-micro text-ink-3 mt-1">VaR 90/99.9 and ES metrics not available for this run (computed for runs executed after the tail-metrics release). Re-run the analysis to populate.</p>
     {% endif %}
-    <p class="text-caption text-ink-3 mt-2">{{ display_results.dist_stats_note }}</p>
+    <p class="text-micro text-ink-3 mt-2">{{ display_results.dist_stats_note }}</p>
     {%- if display_results.dist_stats.has_tail %}
     {# #508: single-run parity with the aggregate view's "mc-interval" caveat —
        the aggregate panel gets it via the caveat framework; this panel renders
        its ES interval inline, so the explanation lives inline too. #}
-    <p class="text-caption text-ink-3 mt-1">Where shown, the &ldquo;95% MC interval&rdquo; beside an ES is Monte Carlo sampling error &mdash; how much the estimate would move if the simulation were re-run with a different random seed (a convergence measure), not uncertainty in the loss itself. It narrows as the iteration count rises.</p>
+    <p class="text-micro text-ink-3 mt-1">Where shown, the &ldquo;95% MC interval&rdquo; beside an ES is Monte Carlo sampling error &mdash; how much the estimate would move if the simulation were re-run with a different random seed (a convergence measure), not uncertainty in the loss itself. It narrows as the iteration count rises.</p>
     {%- endif %}
 
     <h3 class="mt-6 font-mono uppercase tracking-[0.14em] text-[10.5px] text-ink-3">Loss distributions</h3>

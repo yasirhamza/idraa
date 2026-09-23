@@ -26,6 +26,8 @@ from idraa.models.control import Control
 from idraa.models.enums import UserRole
 from idraa.models.risk_analysis_run import RiskAnalysisRun
 from idraa.models.scenario import Scenario
+from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
 from idraa.services.audit import AuditWriter, redact_email
 from idraa.services.auth import hash_password
@@ -192,22 +194,41 @@ async def guarded_admin_disarm(
     return int(result.rowcount or 0) == 1
 
 
-async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
-    """Count business entities authored by ``user_id`` within ``org_id``.
+# ``users.id`` references that block a hard delete (#133). The first three
+# are authorship the product keeps (their FKs are SET NULL, but deleting an
+# author would erase who created the run / scenario / control); the SME
+# columns have no ``ondelete`` (NO ACTION), so deleting a referenced user
+# would raise IntegrityError -> 500 instead of the intended 409. Other SET
+# NULL authorship columns (overrides, bands, binding profiles, ...) are
+# deliberately NOT listed: they null out on delete. The third element marks
+# NO-ACTION integrity columns, counted across ALL orgs — any referencing row
+# fails the DELETE, wherever it lives. ``tests/services/test_user_delete_fk_
+# coverage.py`` fails when a new blocking user FK is not listed here.
+_HISTORY_COLUMNS = (
+    (RiskAnalysisRun, RiskAnalysisRun.created_by, False),
+    (Scenario, Scenario.created_by, False),
+    (Control, Control.created_by, False),
+    (SubjectMatterExpert, SubjectMatterExpert.created_by, True),
+    (SubjectMatterExpert, SubjectMatterExpert.archived_by, True),
+    (ScenarioSMEEstimate, ScenarioSMEEstimate.recorded_by, True),
+)
 
-    Sums rows across the three authored-entity tables (runs, scenarios,
-    controls) where ``created_by == user_id``. Org-scoped so a cross-org
-    authorship (shouldn't happen given org isolation, but defensive) doesn't
-    block a legitimate delete.
+
+async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
+    """Count rows whose reference to ``user_id`` blocks a hard delete.
+
+    Sums ``_HISTORY_COLUMNS``: runs / scenarios / controls authored within
+    ``org_id`` (org-scoped so a cross-org authorship — impossible given org
+    isolation, but defensive — doesn't block a legitimate delete), plus SME
+    records created or archived and SME estimates recorded, counted in every
+    org because their NO-ACTION foreign keys would fail the DELETE anyway.
     """
     total = 0
-    for model in (RiskAnalysisRun, Scenario, Control):
-        count = await db.scalar(
-            select(func.count())
-            .select_from(model)
-            .where(model.created_by == user_id, model.organization_id == org_id)
-        )
-        total += int(count or 0)
+    for model, column, integrity_only in _HISTORY_COLUMNS:
+        stmt = select(func.count()).select_from(model).where(column == user_id)
+        if not integrity_only:
+            stmt = stmt.where(model.organization_id == org_id)
+        total += int(await db.scalar(stmt) or 0)
     return total
 
 
@@ -221,7 +242,7 @@ async def delete_user(
     """Conditional hard-delete a user (#296).
 
     A user may be hard-deleted ONLY if they authored no business entities
-    (runs, scenarios, controls). Guards, in order:
+    (``_HISTORY_COLUMNS``: runs, scenarios, controls, SME records). Guards, in order:
 
       1. Org-scoped fetch — ``None`` (cross-org / missing) -> return ``False``
          so the route maps to 404.
@@ -263,7 +284,7 @@ async def delete_user(
         raise UserDeleteError("cannot delete the last admin")
     if await _authored_count(db, user_id, org_id) > 0:
         raise UserHasHistoryError(
-            "user authored entities (runs / scenarios / controls) — deactivate instead"
+            "user authored entities (runs / scenarios / controls / SME records) — deactivate instead"
         )
     # Capture audit values BEFORE the delete; the row may be gone after.
     email_redacted = redact_email(user.email)

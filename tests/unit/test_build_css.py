@@ -78,3 +78,35 @@ def test_extract_control_rules_nonempty_and_scoped():
     # spot-check scoping: no unrelated component rules leak in
     assert ".btn{" not in restore
     assert ".card{" not in restore
+
+
+def test_every_text_class_in_templates_is_defined():
+    """#176: 29 ``text-h4`` usages (and ``text-caption``) rendered at the
+    inherited size because no stylesheet defined them — Tailwind silently
+    drops unknown classes. Every static ``text-*`` class in a template's
+    ``class="..."`` must exist in one of the served sheets: the built
+    Tailwind sheet, the hand-written app.css utilities, or vendored DaisyUI."""
+    import re
+
+    static = Path(build_css.__file__).resolve().parents[1] / "static"
+    templates = static.parent / "templates"
+    sheets = build_css.OUTPUT.read_text(encoding="utf-8") + (static / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    sheets += "".join(p.read_text(encoding="utf-8") for p in static.rglob("daisyui*.css"))
+    used = {
+        cls
+        for path in templates.rglob("*.html")
+        for attr in re.finditer(r'class="([^"]*)"', path.read_text(encoding="utf-8"))
+        for cls in attr.group(1).split()
+        if cls.startswith("text-") and not re.search(r"[{}'%]", cls)
+    }
+    assert {"text-h4", "text-display", "text-ink-1"} <= used  # non-vacuous
+
+    def defined(cls: str) -> bool:
+        # End-anchored: ``text-ink`` must not pass on the strength of ``.text-ink-1``.
+        selector = "." + re.sub(r"([:/.\[\]%#])", r"\\\1", cls)
+        return re.search(re.escape(selector) + r"(?=[\s{,:>+~.\[)])", sheets) is not None
+
+    missing = sorted(cls for cls in used if not defined(cls))
+    assert not missing, f"text-* classes used in templates but defined by no stylesheet: {missing}"
