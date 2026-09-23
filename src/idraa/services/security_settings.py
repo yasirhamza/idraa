@@ -149,6 +149,27 @@ def effective_step_up_window() -> int:
     return get_settings().auth_step_up_max_age_seconds
 
 
+# B1: the window /settings/security writes use when the configured one is 0.
+_SETTINGS_WRITE_FLOOR_SECONDS = 600
+
+
+def settings_write_step_up_window() -> int:
+    """Freshness window for writes to the security settings themselves (advisory B1).
+
+    The kill-switch (window <= 0) and the ADMIN category override both live
+    in the settings this route writes. If they also disarmed its own gate,
+    one fresh write could switch step-up off for good: every later write —
+    including re-enabling it — would pass with any stale admin cookie. So
+    this route always demands freshness: the configured window when it is
+    positive, else the env default when positive, else a 600 s floor.
+    """
+    window = effective_step_up_window()
+    if window > 0:
+        return window
+    env_window = get_settings().auth_step_up_max_age_seconds
+    return env_window if env_window > 0 else _SETTINGS_WRITE_FLOOR_SECONDS
+
+
 def step_up_required(category: StepUpCategory) -> bool:
     if effective_step_up_window() <= 0:  # global kill-switch
         return False

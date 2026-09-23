@@ -397,16 +397,19 @@ def reset_login_throttle(user: User) -> None:
     user.locked_until = None
 
 
-def is_step_up_fresh(sess: AuthSession) -> bool:
+def is_step_up_fresh(sess: AuthSession, *, max_age: int | None = None) -> bool:
     """True when the session's last re-auth is inside the step-up window.
 
-    max_age == 0 disables step-up (operator opt-out, mirrors
-    auth_max_failed_logins). A NULL reauthenticated_at (pre-P2 row) is
-    stale — fail closed, the user re-verifies once and gets stamped.
+    ``max_age`` defaults to the effective window; max_age == 0 disables
+    step-up (operator opt-out, mirrors auth_max_failed_logins). A caller that
+    must never be disarmed passes an explicit positive ``max_age`` (B1). A
+    NULL reauthenticated_at (pre-P2 row) is stale — fail closed, the user
+    re-verifies once and gets stamped.
     """
     from idraa.services.security_settings import effective_step_up_window
 
-    max_age = effective_step_up_window()
+    if max_age is None:
+        max_age = effective_step_up_window()
     if max_age == 0:
         return True
     ra = sess.reauthenticated_at

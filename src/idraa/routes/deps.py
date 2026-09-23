@@ -229,9 +229,16 @@ def _step_up_next(request: Request) -> str:
 
 def require_step_up(
     category: StepUpCategory,
+    *,
+    unconditional: bool = False,
 ) -> Callable[[Request, User | None, AuthSession | None], None]:
     """Per-category step-up gate. Wire as a route dependency:
     @router.get("/x/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
+
+    ``unconditional=True`` (the security-settings write only, advisory B1)
+    ignores the global kill-switch and the per-category override and checks
+    freshness against ``settings_write_step_up_window()``, so the settings
+    that disarm step-up can never disarm the gate on their own write path.
     """
 
     def _dep(
@@ -243,8 +250,15 @@ def require_step_up(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
             )
-        from idraa.services.security_settings import step_up_required
+        from idraa.services.security_settings import (
+            settings_write_step_up_window,
+            step_up_required,
+        )
 
+        if unconditional:
+            if not is_step_up_fresh(sess, max_age=settings_write_step_up_window()):
+                raise StepUpRequired(next_url=_step_up_next(request))
+            return
         if step_up_required(category) and not is_step_up_fresh(sess):
             raise StepUpRequired(next_url=_step_up_next(request))
 

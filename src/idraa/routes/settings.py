@@ -164,7 +164,12 @@ async def security_settings_get(
     return templates.TemplateResponse(request, "settings/security.html", ctx)
 
 
-@router.post("/settings/security", dependencies=[Depends(require_step_up(StepUpCategory.ADMIN))])
+# B1: unconditional — this route writes the kill-switch and the ADMIN override,
+# so neither may disarm its own gate.
+@router.post(
+    "/settings/security",
+    dependencies=[Depends(require_step_up(StepUpCategory.ADMIN, unconditional=True))],
+)
 async def security_settings_post(
     request: Request,
     db: AsyncSession = Depends(get_db),

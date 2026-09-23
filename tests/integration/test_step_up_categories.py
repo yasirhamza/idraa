@@ -98,3 +98,68 @@ async def test_destructive_off_does_NOT_drop_passkey_delete(authed_admin, db_ses
         client, f"/account/security/passkey/{uuid.uuid4()}/delete", {}, follow_redirects=False
     )
     assert r.status_code == 303 and "/auth/step-up" in r.headers["location"]
+
+
+async def _apply_window(db, org_id, window, **kw):
+    db.add(SecuritySettings(organization_id=org_id, step_up_window_seconds=window, **kw))
+    await db.commit()
+    await ss.load_security_settings(db, org_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "window,category_kw",
+    [
+        (0, {}),  # global kill-switch
+        (600, {"step_up_admin": False}),  # ADMIN category switched off
+    ],
+    ids=["kill_switch", "admin_category_off"],
+)
+async def test_b1_security_settings_write_is_never_disarmed(
+    authed_admin, db_session, window, category_kw
+):
+    """Advisory B1: once step-up was switched off (globally or for ADMIN),
+    every later write to /settings/security — including switching it back
+    on — passed with any stale admin cookie. The settings write now always
+    demands a fresh step-up, while the switched-off categories elsewhere
+    stay off."""
+    client, org_id = authed_admin
+    await _apply_window(db_session, org_id, window, **category_kw)
+    await _make_stale(db_session, client)
+
+    r = await csrf_post(
+        client, "/settings/security", {"mfa_policy": "optional"}, follow_redirects=False
+    )
+    assert r.status_code == 303 and "/auth/step-up" in r.headers["location"]
+    db_session.expire_all()
+    row = (
+        await db_session.execute(
+            SecuritySettings.__table__.select().where(SecuritySettings.organization_id == org_id)
+        )
+    ).one()
+    assert row.mfa_policy is None  # no write happened
+
+    # The switched-off gate still applies elsewhere: a stale ADMIN export passes.
+    r = await client.get("/users/export.csv", follow_redirects=False)
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_b1_fresh_session_can_still_write_with_kill_switch_on(authed_admin, db_session):
+    from tests.integration.test_security_settings_page import _enroll_mfa
+
+    client, org_id = authed_admin
+    await _enroll_mfa(db_session, client)  # else EnrollmentGuard funnels the POST
+    await _apply_window(db_session, org_id, 0)
+    r = await csrf_post(
+        client, "/settings/security", {"step_up_window_seconds": "600"}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings/security?saved=1"
+    db_session.expire_all()
+    row = (
+        await db_session.execute(
+            SecuritySettings.__table__.select().where(SecuritySettings.organization_id == org_id)
+        )
+    ).one()
+    assert row.step_up_window_seconds == 600  # re-armed
