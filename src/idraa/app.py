@@ -35,6 +35,7 @@ from idraa.help_content import help_url as _help_url
 from idraa.middleware.csrf import CSRFMiddleware
 from idraa.middleware.enrollment_guard import EnrollmentGuardMiddleware
 from idraa.middleware.maintenance_count import MaintenanceBadgeCountMiddleware
+from idraa.middleware.request_framing import RequestFramingMiddleware
 from idraa.middleware.security_headers import SecurityHeadersMiddleware, security_header_map
 from idraa.middleware.session import SessionMiddleware
 from idraa.middleware.uat_basic_auth import uat_basic_auth_factory
@@ -1174,6 +1175,12 @@ def create_app() -> FastAPI:
     # (dev, test, local docker). /healthz is exempt so the platform health
     # probe passes regardless of credential state.
     app.middleware("http")(uat_basic_auth_factory())
+
+    # Request-framing guard (HTTP desync defence in depth, advisory
+    # GHSA-46jj-823j-mjj9). OUTERMOST: refuses a body on GET/HEAD/OPTIONS,
+    # Transfer-Encoding on HTTP/1.0 and unknown methods before any other
+    # layer (the Basic pre-gate included) reads the request.
+    app.add_middleware(RequestFramingMiddleware)
 
     # Routers
     from idraa.routes import auth as auth_router
