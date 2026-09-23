@@ -6,16 +6,27 @@ per line, each immediately preceded by a comment stating the reason + a
 review-by date — a bare id FAILS the gate (machine-enforced auditability).
 Tool errors fail CLOSED with a pointer at the offline hatch
 IDRAA_GATE_SKIP_AUDIT=1 (document the reason in the next commit).
+
+Marker-agnostic (#182): pip-audit drops every requirement whose environment
+marker does not match the RUNNING interpreter, so a lock fork such as
+``anyio==4.15.1 ; python_full_version >= '3.15'`` (or a win32-only pin) was
+never audited. The export is flattened to bare ``name==version`` pins with the
+markers stripped and audited with ``--no-deps --disable-pip``; because
+pip-audit rejects two pins of one package in a single file, forked pins are
+spread across as many requirement files as the widest fork and the results
+unioned.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPRESSIONS = REPO_ROOT / "scripts" / "sca_suppressions.txt"
@@ -42,7 +53,28 @@ def parse_suppressions(path: Path) -> set[str]:
     return ids
 
 
-def evaluate(deps: list[dict], suppressed: set[str]) -> tuple[list[str], list[str]]:
+def partition_export(text: str) -> list[list[str]]:
+    """Strip markers from a ``uv export`` file; one pin list per fork layer.
+
+    Layer ``i`` holds the ``i``-th distinct version of every package that has
+    more than ``i`` versions, so no layer pins one package twice. Local
+    editable/path lines (``-e .``) and comments are skipped — they are
+    first-party code, not index packages.
+    """
+    versions: dict[str, list[str]] = {}
+    for raw in text.splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if not line or line.startswith(("#", "-", ".", "/")):
+            continue
+        name = re.sub(r"[-_.]+", "-", re.split(r"[\[=<>!~ ]", line, maxsplit=1)[0]).lower()
+        pins = versions.setdefault(name, [])
+        if line not in pins:
+            pins.append(line)
+    depth = max((len(v) for v in versions.values()), default=0)
+    return [[pins[i] for pins in versions.values() if len(pins) > i] for i in range(depth)]
+
+
+def evaluate(deps: list[dict[str, Any]], suppressed: set[str]) -> tuple[list[str], list[str]]:
     failures, warnings = [], []
     for dep in deps:
         for v in dep.get("vulns", []):
@@ -51,25 +83,23 @@ def evaluate(deps: list[dict], suppressed: set[str]) -> tuple[list[str], list[st
                 warnings.append(label)
             else:
                 failures.append(label)
-    return failures, warnings
+    return list(dict.fromkeys(failures)), list(dict.fromkeys(warnings))
 
 
-def main() -> int:
+def _audit(pins: list[str]) -> subprocess.CompletedProcess[str]:
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
+        tf.write("\n".join(pins) + "\n")
         req = tf.name
     try:
-        subprocess.run(  # noqa: S603 — fixed argv, no user input
-            ["uv", "export", "--frozen", "--no-dev", "--no-hashes", "-o", req],
-            cwd=REPO_ROOT,
-            check=True,
-        )
-        proc = subprocess.run(  # noqa: S603 — direct module run, no nested uv resolve
+        return subprocess.run(  # noqa: S603 — direct module run, no nested uv resolve
             [
                 sys.executable,
                 "-m",
                 "pip_audit",
                 "-r",
                 req,
+                "--no-deps",
+                "--disable-pip",
                 "--format",
                 "json",
                 "--progress-spinner",
@@ -82,17 +112,56 @@ def main() -> int:
         )
     finally:
         os.unlink(req)
-    # pip-audit: 0 = clean, 1 = vulns found, anything else = tool/network error.
-    if proc.returncode not in (0, 1):
-        print(proc.stderr, file=sys.stderr)
-        print(f"sca_gate: pip-audit errored (exit {proc.returncode}) — failing closed; {SKIP_HINT}")
-        return 2
+
+
+def main() -> int:
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
+        exported = tf.name
     try:
-        deps = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
+        subprocess.run(  # noqa: S603 — fixed argv, no user input
+            ["uv", "export", "--frozen", "--no-dev", "--no-hashes", "-q", "-o", exported],
+            cwd=REPO_ROOT,
+            check=True,
+        )
+        layers = partition_export(Path(exported).read_text())
+    finally:
+        os.unlink(exported)
+    if not layers:
+        print(f"sca_gate: empty dependency export — failing closed; {SKIP_HINT}")
+        return 2
+    deps: list[dict[str, Any]] = []
+    for pins in layers:
+        proc = _audit(pins)
+        # pip-audit: 0 = clean, 1 = vulns found, anything else = tool/network error.
+        if proc.returncode not in (0, 1):
+            print(proc.stderr, file=sys.stderr)
+            print(
+                f"sca_gate: pip-audit errored (exit {proc.returncode}) — failing closed; {SKIP_HINT}"
+            )
+            return 2
+        try:
+            layer = json.loads(proc.stdout)["dependencies"]  # KeyError = schema drift
+            skipped = [f"{d['name']}: {d['skip_reason']}" for d in layer if "skip_reason" in d]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
+            return 2
+        # A pin pip-audit could not audit (or silently dropped) is not a pass.
+        if skipped or len(layer) != len(pins):
+            for s in skipped:
+                print(f"sca_gate: pin not audited — {s}")
+            print(
+                f"sca_gate: {len(layer)} results for {len(pins)} pins, {len(skipped)} skipped "
+                f"— failing closed; {SKIP_HINT}"
+            )
+            return 2
+        deps.extend(layer)
+    try:
         failures, warnings = evaluate(deps, parse_suppressions(SUPPRESSIONS))
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+    except (KeyError, TypeError) as exc:
         print(f"sca_gate: unparseable pip-audit output ({exc}) — failing closed; {SKIP_HINT}")
         return 2
+    audited = sum(len(p) for p in layers)
+    print(f"sca_gate: audited {audited} pins across {len(layers)} marker-fork layer(s)")
     for w in warnings:
         print(f"sca_gate WARN: {w}")
     for f in failures:

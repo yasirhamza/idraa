@@ -10,7 +10,7 @@ maintained operator-locally.
 | # | Layer | Mechanism | Enforcement point |
 |---|---|---|---|
 | 1 | Dependency integrity | `uv.lock` pins every package by exact version + sha256 hash; `uv lock --check` fails the gate on pyproject/lock drift | local gate + CI `gate` job |
-| 2 | Dependency vulns (SCA) | `dependency-review-action` on PRs (delta, severity-based) + Dependabot alerts (standing tree) + `pip-audit` in the local gate (offline, fixability-based) | PR checks + Security tab + pre-push |
+| 2 | Dependency vulns (SCA) | `dependency-review-action` on PRs (delta, severity-based) + Dependabot alerts (standing tree) + `pip-audit` in the local gate (queries the PyPI vulnerability service; fixability-based) | PR checks + Security tab + pre-push |
 | 3 | CI/build hardening | `ci.yml`'s `gate` job runs `scripts/run_local_gate.py` verbatim, so CI cannot drift from the local authority; every `uses:` is SHA-pinned with a version comment; top-level `permissions: contents: read` | GitHub Actions |
 | 4 | Build/release transparency | Docker base image digest-pinned (both stages); CycloneDX SBOM generated from `uv.lock` on every `main` push, uploaded as a sha-keyed artifact | CI + `Dockerfile` |
 | 5 | First-party SAST | `ruff check --select S` in the local gate, re-checked by the named blocking `sast` CI job (`ruff check --select S` — same tool + same pyproject config, so findings cannot diverge); `zizmor` lints the workflows; CodeQL (`python`) advisory on PRs + weekly cron | gate + `ci-success` + Security tab |
@@ -40,7 +40,14 @@ Two SCA layers, deliberately different rules — they will not always agree.
   PR, so it cannot wedge on a pre-existing finding — those are
   Dependabot-alert territory.
 - **Local gate — `scripts/sca_gate.py`, fixability-based.** Runs
-  `pip-audit` against the locked runtime set on every push.
+  `pip-audit` against the locked runtime set on every push. The export is
+  flattened marker-agnostically (#182): every runtime-export pin is audited whatever its
+  environment marker, including `python_full_version` forks and
+  platform-only pins the running interpreter would otherwise skip; forked
+  pins of one package are spread across separate requirement files and the
+  results unioned. A pin pip-audit skips or drops fails the gate closed.
+  Dev-extra packages are outside this gate and are covered
+  by Dependabot alerts.
   **Severity-data caveat:** pip-audit's JSON reports fixability, not
   severity, so the local gate cannot replicate the PR gate's severity rule —
   it fails on any *fixable, unsuppressed* vulnerability and warns on
