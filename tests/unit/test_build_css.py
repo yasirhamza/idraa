@@ -80,20 +80,31 @@ def test_extract_control_rules_nonempty_and_scoped():
     assert ".card{" not in restore
 
 
-def test_every_type_scale_class_in_templates_is_built():
-    """#176: 29 ``text-h4`` usages rendered at body size because the config
-    had no ``h4`` step. Any type-scale token a template uses must exist in
-    the built sheet (Tailwind silently drops unknown classes)."""
+def test_every_text_class_in_templates_is_defined():
+    """#176: 29 ``text-h4`` usages (and ``text-caption``) rendered at the
+    inherited size because no stylesheet defined them — Tailwind silently
+    drops unknown classes. Every static ``text-*`` class in a template's
+    ``class="..."`` must exist in one of the served sheets: the built
+    Tailwind sheet, the hand-written app.css utilities, or vendored DaisyUI."""
     import re
 
-    templates = Path(build_css.__file__).resolve().parents[1] / "templates"
-    token = re.compile(r"\btext-(display|h\d|body|meta|micro|number-[a-z]+)\b")
+    static = Path(build_css.__file__).resolve().parents[1] / "static"
+    templates = static.parent / "templates"
+    sheets = build_css.OUTPUT.read_text(encoding="utf-8") + (static / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    sheets += "".join(p.read_text(encoding="utf-8") for p in static.rglob("daisyui*.css"))
     used = {
-        m.group(0)
+        cls
         for path in templates.rglob("*.html")
-        for m in token.finditer(path.read_text(encoding="utf-8"))
+        for attr in re.finditer(r'class="([^"]*)"', path.read_text(encoding="utf-8"))
+        for cls in attr.group(1).split()
+        if cls.startswith("text-") and not re.search(r"[{}'%]", cls)
     }
-    assert "text-h4" in used  # non-vacuous: the #176 class is still in use
-    css = build_css.OUTPUT.read_text(encoding="utf-8")
-    missing = sorted(cls for cls in used if f".{cls}{{" not in css)
-    assert not missing, f"type-scale classes used in templates but not built: {missing}"
+    assert {"text-h4", "text-display", "text-ink-1"} <= used  # non-vacuous
+
+    def selector(cls: str) -> str:
+        return "." + re.sub(r"([:/.\[\]%#])", r"\\\1", cls)
+
+    missing = sorted(cls for cls in used if selector(cls) not in sheets)
+    assert not missing, f"text-* classes used in templates but defined by no stylesheet: {missing}"

@@ -101,7 +101,7 @@ class UserDeleteError(ConflictError):
 
 class UserHasHistoryError(UserDeleteError):
     """Attempt to hard-delete a user who authored business entities (runs,
-    scenarios, or controls). The admin must deactivate (``is_active=False``)
+    scenarios, controls) or SME records (#133). The admin must deactivate (``is_active=False``)
     instead so the authorship attribution is preserved. Maps to HTTP 409
     (subclass of :class:`UserDeleteError`/``ConflictError``) (#296)."""
 

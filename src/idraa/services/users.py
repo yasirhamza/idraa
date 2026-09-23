@@ -194,38 +194,41 @@ async def guarded_admin_disarm(
     return int(result.rowcount or 0) == 1
 
 
-# Every ``users.id`` reference that keeps a user's history (or would block
-# the DELETE outright). The three ``created_by`` columns are SET NULL but are
-# authorship the product keeps; the SME columns have no ``ondelete`` (NO
-# ACTION), so deleting a referenced user would raise IntegrityError -> 500
-# instead of the intended 409 (#133). ``tests/services/test_user_delete_fk_
-# coverage.py`` fails when a new NO-ACTION user FK is not listed here.
+# ``users.id`` references that block a hard delete (#133). The first three
+# are authorship the product keeps (their FKs are SET NULL, but deleting an
+# author would erase who created the run / scenario / control); the SME
+# columns have no ``ondelete`` (NO ACTION), so deleting a referenced user
+# would raise IntegrityError -> 500 instead of the intended 409. Other SET
+# NULL authorship columns (overrides, bands, binding profiles, ...) are
+# deliberately NOT listed: they null out on delete. The third element marks
+# NO-ACTION integrity columns, counted across ALL orgs — any referencing row
+# fails the DELETE, wherever it lives. ``tests/services/test_user_delete_fk_
+# coverage.py`` fails when a new blocking user FK is not listed here.
 _HISTORY_COLUMNS = (
-    (RiskAnalysisRun, RiskAnalysisRun.created_by),
-    (Scenario, Scenario.created_by),
-    (Control, Control.created_by),
-    (SubjectMatterExpert, SubjectMatterExpert.created_by),
-    (SubjectMatterExpert, SubjectMatterExpert.archived_by),
-    (ScenarioSMEEstimate, ScenarioSMEEstimate.recorded_by),
+    (RiskAnalysisRun, RiskAnalysisRun.created_by, False),
+    (Scenario, Scenario.created_by, False),
+    (Control, Control.created_by, False),
+    (SubjectMatterExpert, SubjectMatterExpert.created_by, True),
+    (SubjectMatterExpert, SubjectMatterExpert.archived_by, True),
+    (ScenarioSMEEstimate, ScenarioSMEEstimate.recorded_by, True),
 )
 
 
 async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
-    """Count business rows that reference ``user_id`` as their author within ``org_id``.
+    """Count rows whose reference to ``user_id`` blocks a hard delete.
 
-    Sums ``_HISTORY_COLUMNS``: runs / scenarios / controls authored, SME
-    records created or archived, SME estimates recorded. Org-scoped so a
-    cross-org reference (shouldn't happen given org isolation, but defensive)
-    doesn't block a legitimate delete.
+    Sums ``_HISTORY_COLUMNS``: runs / scenarios / controls authored within
+    ``org_id`` (org-scoped so a cross-org authorship — impossible given org
+    isolation, but defensive — doesn't block a legitimate delete), plus SME
+    records created or archived and SME estimates recorded, counted in every
+    org because their NO-ACTION foreign keys would fail the DELETE anyway.
     """
     total = 0
-    for model, column in _HISTORY_COLUMNS:
-        count = await db.scalar(
-            select(func.count())
-            .select_from(model)
-            .where(column == user_id, model.organization_id == org_id)
-        )
-        total += int(count or 0)
+    for model, column, integrity_only in _HISTORY_COLUMNS:
+        stmt = select(func.count()).select_from(model).where(column == user_id)
+        if not integrity_only:
+            stmt = stmt.where(model.organization_id == org_id)
+        total += int(await db.scalar(stmt) or 0)
     return total
 
 
