@@ -67,7 +67,7 @@ def invalidate() -> None:
     "cold" is unobservable in prod. If a future prod path ever invalidates
     WITHOUT reloading (e.g. a settings-row delete), split the flag handling
     first: leaving _warmed True there is correct ("empty", not "cold" =
-    boot-warm-failed false alarm on /healthz). See cache_state().
+    boot-warm-failed false alarm on /settings/security). See cache_state().
     """
     global _cache, _warmed
     _cache = None
@@ -75,7 +75,7 @@ def invalidate() -> None:
 
 
 def cache_state() -> Literal["warm", "empty", "cold"]:
-    """Tri-state warm signal for /healthz (idraa#107(2)).
+    """Tri-state warm signal shown on /settings/security (idraa#107(2); off /healthz since C5).
 
     - ``"warm"``  — snapshot loaded; persisted overrides are in effect.
     - ``"empty"`` — a warm/load completed successfully but no
@@ -89,8 +89,7 @@ def cache_state() -> Literal["warm", "empty", "cold"]:
 
     A two-state warm/cold signal would report "cold" forever on a healthy
     install that never wrote a settings row, training operators to ignore
-    the field. Read-only on module state — safe for /healthz, which must
-    stay DB-free during the boot-write window.
+    the field. Read-only on module state (no DB read).
     """
     if _cache is not None:
         return "warm"

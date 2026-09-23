@@ -35,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
+from idraa.config import get_settings
 from idraa.models._types import now_utc
 from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.security_settings import SecuritySettings
@@ -44,6 +45,7 @@ from idraa.services.audit import AuditWriter
 from idraa.services.flash import build_flash
 from idraa.services.org import require_sole_org
 from idraa.services.security_settings import (
+    cache_state,
     effective_mfa_policy,
     effective_step_up_window,
     load_security_settings,
@@ -145,6 +147,9 @@ async def _context(
         "categories": categories,
         "effective_mfa_policy": effective_mfa_policy(),
         "effective_step_up_window_seconds": effective_step_up_window(),
+        # idraa#107 operator signal, moved off unauthenticated /healthz (C5).
+        "settings_cache_state": cache_state(),
+        "app_version": get_settings().version,
     }
 
 

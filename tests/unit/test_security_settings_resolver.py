@@ -64,7 +64,7 @@ async def test_warm_cache_marks_warmed_on_no_org(monkeypatch):
     This drives the REAL warm path (not a hand-poked flag): the `_warmed =
     True` statement must sit outside the `if org is not None:` block. Moving
     it inside — the exact regression the tri-state exists to prevent — makes
-    /healthz report "cold" (= boot warm FAILED) on every healthy fresh
+    /settings/security report "cold" (= boot warm FAILED) on every healthy fresh
     install, and this test fails.
     """
     import contextlib

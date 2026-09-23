@@ -1294,19 +1294,13 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
-        # security_settings_cache (idraa#107): tri-state operator signal.
-        # "warm" = overrides loaded; "empty" = warm completed, no settings row
-        # saved yet (normal); "cold" = never warmed / boot warm FAILED —
-        # env-fallback policy in effect, investigate. Deliberately DB-free
-        # (healthz is the liveness probe during the boot-write window; it
-        # must never contend for the SQLite writer).
-        from idraa.services.security_settings import cache_state
-
-        return {
-            "status": "ok",
-            "version": settings.version,
-            "security_settings_cache": cache_state(),
-        }
+        # Liveness only. Unauthenticated and exempt from every pre-gate, so it
+        # carries no version or security-state detail (advisory C5): the
+        # security_settings_cache operator signal (idraa#107) renders on the
+        # admin-only /settings/security page instead. Deliberately DB-free —
+        # the liveness probe during the boot-write window must never contend
+        # for the SQLite writer.
+        return {"status": "ok"}
 
     @app.get("/sw.js", include_in_schema=False)
     async def service_worker() -> FileResponse:
