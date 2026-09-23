@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -276,3 +277,86 @@ async def test_audit_row_has_no_raw_email_local_part(
     assert local_part not in serialized
     # Domain is allowed to remain (redact_email keeps the domain).
     assert "test.local" in serialized
+
+
+async def _seed_sme_history(
+    db_session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID, surface: str
+) -> None:
+    """#133: SME rows reference users.id with NO ACTION (no ondelete)."""
+    from datetime import UTC, datetime
+
+    from idraa.models.enums import EntityStatus, ScenarioFieldset, ScenarioType, ThreatCategory
+    from idraa.models.scenario import Scenario
+    from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+    from idraa.models.sme import SubjectMatterExpert
+
+    if surface == "sme_created_by":
+        db_session.add(
+            SubjectMatterExpert(organization_id=org_id, name="SME A", created_by=user_id)
+        )
+    elif surface == "sme_archived_by":
+        db_session.add(
+            SubjectMatterExpert(
+                organization_id=org_id,
+                name="SME B",
+                # created by the (undeletable-here) admin; only archived_by is the target
+                created_by=(
+                    await db_session.execute(select(User.id).where(User.email == "user@test.local"))
+                ).scalar_one(),
+                archived_at=datetime.now(UTC),
+                archived_by=user_id,
+            )
+        )
+    else:
+        scenario = Scenario(
+            organization_id=org_id,
+            name="sme-estimate-scenario",
+            scenario_type=ScenarioType.CUSTOM,
+            threat_category=ThreatCategory.RANSOMWARE,
+            threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 2.0},
+            vulnerability={"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6},
+            primary_loss={"distribution": "PERT", "low": 5e4, "mode": 2.5e5, "high": 2e6},
+            status=EntityStatus.ACTIVE,
+        )
+        db_session.add(scenario)
+        await db_session.flush()
+        db_session.add(
+            ScenarioSMEEstimate(
+                organization_id=org_id,
+                scenario_id=scenario.id,
+                fieldset=ScenarioFieldset.TEF,
+                sme_name="Free-text SME",
+                low=0.1,
+                high=2.0,
+                recorded_at=datetime.now(UTC),
+                recorded_by=user_id,
+            )
+        )
+    await db_session.commit()
+
+
+@pytest.mark.parametrize(
+    "surface", ["sme_created_by", "sme_archived_by", "sme_estimate_recorded_by"]
+)
+async def test_delete_user_with_sme_history_returns_409_not_500(
+    authed_admin: tuple[AsyncClient, object], db_session: AsyncSession, surface: str
+) -> None:
+    """#133: these FKs have no ondelete, so the DELETE raised IntegrityError
+    (500) instead of the intended "deactivate instead" 409."""
+    client, _ = authed_admin
+    org_id = await _admin_org_id(db_session)
+    target = await _seed_user_in_org(db_session, org_id, email=f"{surface}@test.local")
+    await db_session.commit()
+    target_id = target.id
+    await _seed_sme_history(db_session, org_id, target_id, surface)
+
+    r = await csrf_post(
+        client, f"/users/{target_id}/delete", {"confirm": "1"}, follow_redirects=False
+    )
+    assert r.status_code == 409
+    assert "deactivate" in r.text.lower()
+    db_session.expire_all()
+    still = (
+        await db_session.execute(select(User).where(User.id == target_id))
+    ).scalar_one_or_none()
+    assert still is not None

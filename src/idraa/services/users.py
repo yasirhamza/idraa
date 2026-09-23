@@ -26,6 +26,8 @@ from idraa.models.control import Control
 from idraa.models.enums import UserRole
 from idraa.models.risk_analysis_run import RiskAnalysisRun
 from idraa.models.scenario import Scenario
+from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+from idraa.models.sme import SubjectMatterExpert
 from idraa.models.user import User
 from idraa.services.audit import AuditWriter, redact_email
 from idraa.services.auth import hash_password
@@ -192,20 +194,36 @@ async def guarded_admin_disarm(
     return int(result.rowcount or 0) == 1
 
 
-async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
-    """Count business entities authored by ``user_id`` within ``org_id``.
+# Every ``users.id`` reference that keeps a user's history (or would block
+# the DELETE outright). The three ``created_by`` columns are SET NULL but are
+# authorship the product keeps; the SME columns have no ``ondelete`` (NO
+# ACTION), so deleting a referenced user would raise IntegrityError -> 500
+# instead of the intended 409 (#133). ``tests/services/test_user_delete_fk_
+# coverage.py`` fails when a new NO-ACTION user FK is not listed here.
+_HISTORY_COLUMNS = (
+    (RiskAnalysisRun, RiskAnalysisRun.created_by),
+    (Scenario, Scenario.created_by),
+    (Control, Control.created_by),
+    (SubjectMatterExpert, SubjectMatterExpert.created_by),
+    (SubjectMatterExpert, SubjectMatterExpert.archived_by),
+    (ScenarioSMEEstimate, ScenarioSMEEstimate.recorded_by),
+)
 
-    Sums rows across the three authored-entity tables (runs, scenarios,
-    controls) where ``created_by == user_id``. Org-scoped so a cross-org
-    authorship (shouldn't happen given org isolation, but defensive) doesn't
-    block a legitimate delete.
+
+async def _authored_count(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> int:
+    """Count business rows that reference ``user_id`` as their author within ``org_id``.
+
+    Sums ``_HISTORY_COLUMNS``: runs / scenarios / controls authored, SME
+    records created or archived, SME estimates recorded. Org-scoped so a
+    cross-org reference (shouldn't happen given org isolation, but defensive)
+    doesn't block a legitimate delete.
     """
     total = 0
-    for model in (RiskAnalysisRun, Scenario, Control):
+    for model, column in _HISTORY_COLUMNS:
         count = await db.scalar(
             select(func.count())
             .select_from(model)
-            .where(model.created_by == user_id, model.organization_id == org_id)
+            .where(column == user_id, model.organization_id == org_id)
         )
         total += int(count or 0)
     return total
@@ -221,7 +239,7 @@ async def delete_user(
     """Conditional hard-delete a user (#296).
 
     A user may be hard-deleted ONLY if they authored no business entities
-    (runs, scenarios, controls). Guards, in order:
+    (``_HISTORY_COLUMNS``: runs, scenarios, controls, SME records). Guards, in order:
 
       1. Org-scoped fetch — ``None`` (cross-org / missing) -> return ``False``
          so the route maps to 404.
@@ -263,7 +281,7 @@ async def delete_user(
         raise UserDeleteError("cannot delete the last admin")
     if await _authored_count(db, user_id, org_id) > 0:
         raise UserHasHistoryError(
-            "user authored entities (runs / scenarios / controls) — deactivate instead"
+            "user authored entities (runs / scenarios / controls / SME records) — deactivate instead"
         )
     # Capture audit values BEFORE the delete; the row may be gone after.
     email_redacted = redact_email(user.email)
