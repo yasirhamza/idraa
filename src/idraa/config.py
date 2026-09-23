@@ -11,6 +11,7 @@ from idraa.errors import RetentionConfigError
 
 _DEFAULT_SECRET = "change-me-in-production"  # noqa: S105 — literal placeholder, guarded below
 _PROD_MIN_SECRET_LEN = 32
+_PROD_MIN_UAT_PASSWORD_LEN = 16
 
 
 class Settings(BaseSettings):
@@ -345,6 +346,10 @@ class Settings(BaseSettings):
     auth_mfa_policy: Literal["required", "optional"] = "required"
     totp_issuer: str = "Idraa"
     mfa_encryption_key: str | None = None
+    # UAT Basic-auth pre-gate (middleware/uat_basic_auth.py). Unset password =
+    # the pre-gate is off. Boot-validated in prod like the other secrets (C6).
+    uat_basic_auth_user: str | None = None
+    uat_basic_auth_password: str | None = None
     # Minimal login throttle — idraa#81 slice pulled into P1 at plan-gate (B1):
     # the reworked login must not ship a rate-limit-free 6-digit second factor.
     auth_max_failed_logins: int = Field(default=5, ge=0)  # 0 disables lockout
@@ -491,6 +496,35 @@ class Settings(BaseSettings):
                 f"in environment={self.environment!r} (got {len(self.session_secret)}). "
                 "Regenerate the SESSION_SECRET environment variable."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _check_uat_basic_auth_hardening(self) -> Settings:
+        """Refuse to boot in prod with a weak UAT Basic-auth pre-gate (advisory C6).
+
+        The password used to be read straight from ``os.environ`` by the
+        middleware, bypassing the boot-time hardening SESSION_SECRET and
+        MFA_ENCRYPTION_KEY get, so a 4-character password booted silently.
+        When the pre-gate is enabled in prod (password set) it needs a
+        16+ character password, a non-empty user (an empty user makes the
+        middleware reject every request — fail closed, but a silent outage),
+        and a password that is not the user name. Unset = pre-gate off, which
+        stays allowed: self-hosted installs without a pre-gate are supported.
+        """
+        if self.environment != "prod" or not self.uat_basic_auth_password:
+            return self
+        if not self.uat_basic_auth_user:
+            raise ValueError(
+                "UAT_BASIC_AUTH_PASSWORD is set but UAT_BASIC_AUTH_USER is empty in "
+                "environment='prod'. Set both, or unset the password to disable the pre-gate."
+            )
+        if len(self.uat_basic_auth_password) < _PROD_MIN_UAT_PASSWORD_LEN:
+            raise ValueError(
+                f"UAT_BASIC_AUTH_PASSWORD must be at least {_PROD_MIN_UAT_PASSWORD_LEN} "
+                f"characters in environment='prod' (got {len(self.uat_basic_auth_password)})."
+            )
+        if self.uat_basic_auth_password == self.uat_basic_auth_user:
+            raise ValueError("UAT_BASIC_AUTH_PASSWORD must differ from UAT_BASIC_AUTH_USER.")
         return self
 
     @model_validator(mode="after")

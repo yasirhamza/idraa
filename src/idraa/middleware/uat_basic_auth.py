@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import base64
 import binascii
-import os
 import secrets
 from collections.abc import Awaitable, Callable
 
 from starlette.requests import Request
 from starlette.responses import Response
+
+from idraa.config import get_settings
 
 EXEMPT_PATHS = frozenset(
     {
@@ -55,12 +56,14 @@ MiddlewareFn = Callable[[Request, DispatchFn], Awaitable[Response]]
 def uat_basic_auth_factory(*, user: str | None = None, password: str | None = None) -> MiddlewareFn:
     """Build the basic-auth middleware function.
 
-    If ``user`` or ``password`` is None, the corresponding env var
-    (``UAT_BASIC_AUTH_USER``, ``UAT_BASIC_AUTH_PASSWORD``) is consulted.
+    If ``user`` or ``password`` is None, the corresponding ``Settings`` field
+    (env ``UAT_BASIC_AUTH_USER`` / ``UAT_BASIC_AUTH_PASSWORD``) is used, so the
+    prod boot validator hardens it like the other secrets (advisory C6).
     Tests pass explicit values; production reads env via platform secrets.
     """
-    eff_user = user if user is not None else os.environ.get("UAT_BASIC_AUTH_USER")
-    eff_password = password if password is not None else os.environ.get("UAT_BASIC_AUTH_PASSWORD")
+    settings = get_settings()
+    eff_user = user if user is not None else settings.uat_basic_auth_user
+    eff_password = password if password is not None else settings.uat_basic_auth_password
 
     async def uat_basic_auth(request: Request, call_next: DispatchFn) -> Response:
         # Health-probe exemption is unconditional: the platform health probe
