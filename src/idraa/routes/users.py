@@ -33,7 +33,7 @@ from idraa.formatting import utc_isoformat
 from idraa.models.enums import StepUpCategory, UserRole
 from idraa.models.user import User
 from idraa.routes.deps import audit_client_ip, client_ip, get_db, require_role, require_step_up
-from idraa.services.audit import AuditWriter, log_bulk_export
+from idraa.services.audit import AuditWriter, log_bulk_export, redact_email
 from idraa.services.auth import is_locked, reset_login_throttle, revoke_user_sessions
 from idraa.services.mfa_enrollment import reset_user_mfa
 from idraa.services.org import require_sole_org
@@ -196,7 +196,10 @@ async def invite_post(
             entity_type="user",
             entity_id=user.id,
             action="create",
-            changes={"email": [None, user.email], "role": [None, role_enum.value]},
+            changes={
+                "email_redacted": [None, redact_email(user.email)],
+                "role": [None, role_enum.value],
+            },
             user_id=me.id,
             ip_address=client_ip(request),
         )

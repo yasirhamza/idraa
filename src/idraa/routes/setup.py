@@ -22,7 +22,7 @@ from idraa.models.enums import IndustryType, OrganizationSize, UserRole
 from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db
-from idraa.services.audit import AuditWriter
+from idraa.services.audit import AuditWriter, redact_email
 from idraa.services.auth import (
     create_session,
     hash_password,
@@ -137,7 +137,7 @@ async def setup_post(
         entity_type="user",
         entity_id=user.id,
         action="create",
-        changes={"email": [None, normalized_email]},
+        changes={"email_redacted": [None, redact_email(normalized_email)]},
         user_id=user.id,
         ip_address=client_ip(request),
     )
