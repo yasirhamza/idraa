@@ -78,3 +78,22 @@ def test_extract_control_rules_nonempty_and_scoped():
     # spot-check scoping: no unrelated component rules leak in
     assert ".btn{" not in restore
     assert ".card{" not in restore
+
+
+def test_every_type_scale_class_in_templates_is_built():
+    """#176: 29 ``text-h4`` usages rendered at body size because the config
+    had no ``h4`` step. Any type-scale token a template uses must exist in
+    the built sheet (Tailwind silently drops unknown classes)."""
+    import re
+
+    templates = Path(build_css.__file__).resolve().parents[1] / "templates"
+    token = re.compile(r"\btext-(display|h\d|body|meta|micro|number-[a-z]+)\b")
+    used = {
+        m.group(0)
+        for path in templates.rglob("*.html")
+        for m in token.finditer(path.read_text(encoding="utf-8"))
+    }
+    assert "text-h4" in used  # non-vacuous: the #176 class is still in use
+    css = build_css.OUTPUT.read_text(encoding="utf-8")
+    missing = sorted(cls for cls in used if f".{cls}{{" not in css)
+    assert not missing, f"type-scale classes used in templates but not built: {missing}"

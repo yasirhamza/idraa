@@ -34,6 +34,7 @@ module.exports = {
         display: ["1.75rem", { lineHeight: "2.25rem", fontWeight: "600" }],
         h2: ["1.25rem", { lineHeight: "1.75rem", fontWeight: "600" }],
         h3: ["1rem", { lineHeight: "1.5rem", fontWeight: "600" }],
+        h4: ["0.875rem", { lineHeight: "1.25rem", fontWeight: "600" }],
         body: ["0.875rem", { lineHeight: "1.25rem" }],
         meta: ["0.75rem", { lineHeight: "1rem", fontWeight: "500", letterSpacing: "0.05em" }],
         micro: ["0.6875rem", { lineHeight: "1rem", fontWeight: "500" }],
