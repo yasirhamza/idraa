@@ -48,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.models._types import now_utc
+from idraa.models.enums import WebAuthnChallengePurpose
 from idraa.models.mfa import WebAuthnCredential
 from idraa.models.session import AuthSession
 from idraa.models.user import User
@@ -84,6 +85,7 @@ from idraa.services.login_throttle import (
 )
 from idraa.services.mfa_enrollment import user_has_strong_factor
 from idraa.services.second_factor import verify_totp_or_recovery
+from idraa.services.webauthn_challenge import audit_replay_once, consume_challenge
 
 router = APIRouter()
 
@@ -407,6 +409,27 @@ async def login_passkey_verify(
     if not webauthn_service.sign_count_ok(cred.sign_count, new_count):
         await register_failed_source(db, source)
         return _json_err("counter")
+    # S3: claim the challenge BEFORE any ORM mutation (cred.sign_count below
+    # is the first mutation). B5 (advisory GHSA-46jj-823j-mjj9): a False here
+    # means this exact (assertion, challenge) pair already minted a session —
+    # reject the replay rather than minting a second one.
+    if not await consume_challenge(db, challenge, WebAuthnChallengePurpose.LOGIN):
+        await register_failed_source(db, source)
+        if await audit_replay_once(db, challenge):
+            # cred.user_id is the owner of an already-verified WebAuthn
+            # assertion — same org-scope reasoning as the success path below.
+            replay_user = await db.get(User, cred.user_id)  # org-scope: ok — verified-cred owner
+            if replay_user is not None:
+                await AuditWriter(db).log(
+                    organization_id=replay_user.organization_id,
+                    entity_type="user",
+                    entity_id=replay_user.id,
+                    action="user.webauthn_challenge_replayed",
+                    changes={"surface": "login"},
+                    user_id=replay_user.id,
+                    ip_address=client_ip(request),
+                )
+        return _json_err("challenge already used")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
     # cred.user_id is the owner of an already-verified WebAuthn assertion.

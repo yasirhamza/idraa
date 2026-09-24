@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.app import templates
 from idraa.config import get_settings
 from idraa.models._types import now_utc
-from idraa.models.enums import StepUpCategory
+from idraa.models.enums import StepUpCategory, WebAuthnChallengePurpose
 from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.user import User
 from idraa.routes.deps import client_ip, get_db, require_step_up, require_user
@@ -41,6 +41,7 @@ from idraa.services.mfa_enrollment import (
     maybe_stamp_enrolled,
     maybe_unstamp_enrolled,
 )
+from idraa.services.webauthn_challenge import audit_replay_once, consume_challenge
 
 router = APIRouter()
 
@@ -275,6 +276,23 @@ async def passkey_register_verify(
         reg = webauthn_service.verify_registration(payload["credential"], challenge)
     except Exception as exc:  # any bad/tampered ceremony → 400, not 500
         return _json_error(f"verification failed: {type(exc).__name__}")
+    # S3: claim the challenge BEFORE any ORM mutation (the credential add +
+    # flush below is the first mutation). B5 (advisory GHSA-46jj-823j-mjj9):
+    # on HEAD a plain replay already 400s on the credential_id UNIQUE
+    # constraint, but register -> delete -> replay within the TTL re-registers
+    # the deleted credential — this claim closes that window too.
+    if not await consume_challenge(db, challenge, WebAuthnChallengePurpose.REGISTER):
+        if await audit_replay_once(db, challenge):
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.webauthn_challenge_replayed",
+                changes={"surface": "register"},
+                user_id=user.id,
+                ip_address=client_ip(request),
+            )
+        return _json_error("challenge already used")
     nickname = (payload.get("nickname") or "Passkey")[:64]
     cred = WebAuthnCredential(
         user_id=user.id,
@@ -285,11 +303,18 @@ async def passkey_register_verify(
         transports=reg.transports,
         nickname=nickname,
     )
-    db.add(cred)
     try:
-        await db.flush()  # surface a duplicate credential_id as IntegrityError, not a 500
+        # SAVEPOINT, not a bare db.rollback(): the challenge claim above
+        # already inserted a row in THIS transaction. A plain db.rollback()
+        # on a duplicate-credential IntegrityError would undo that insert
+        # too, un-consuming the claim and re-opening the replay window for
+        # this same challenge on retry. begin_nested() scopes the rollback
+        # to just this credential insert (mirrors login_throttle.py's
+        # fail-open begin_nested() usage).
+        async with db.begin_nested():
+            db.add(cred)
+            await db.flush()  # surface a duplicate credential_id as IntegrityError, not a 500
     except IntegrityError:
-        await db.rollback()
         return _json_error("credential already registered")
     await AuditWriter(db).log(
         organization_id=user.organization_id,

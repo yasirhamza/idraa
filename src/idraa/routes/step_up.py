@@ -20,13 +20,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Form, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.models._types import now_utc
+from idraa.models.enums import WebAuthnChallengePurpose
 from idraa.models.mfa import WebAuthnCredential
 from idraa.models.session import AuthSession
 from idraa.models.user import User
@@ -52,6 +53,7 @@ from idraa.services.auth import (
 from idraa.services.login_throttle import is_ip_blocked, register_failed_source
 from idraa.services.mfa_enrollment import user_has_strong_factor
 from idraa.services.second_factor import verify_totp_or_recovery
+from idraa.services.webauthn_challenge import audit_replay_once, consume_challenge
 
 router = APIRouter()
 
@@ -175,7 +177,10 @@ async def step_up_passkey_options(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
+    sess: AuthSession | None = Depends(current_session),
 ) -> Response:
+    if sess is None:  # S8: nothing to bind the minted challenge to
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     creds = (
         (await db.execute(select(WebAuthnCredential).where(WebAuthnCredential.user_id == user.id)))
         .scalars()
@@ -187,7 +192,7 @@ async def step_up_passkey_options(
         allow_credential_ids=[c.credential_id for c in creds]
     )
     resp = Response(content=options_json, media_type="application/json")
-    set_webauthn_stepup_challenge_cookie(resp, challenge)
+    set_webauthn_stepup_challenge_cookie(resp, challenge, sess.id)
     return resp
 
 
@@ -239,7 +244,11 @@ async def step_up_passkey_verify(
         await register_failed_source(db, resolve_throttle_source(request, surface="stepup"))
 
     signed = request.cookies.get("rf_webauthn_stepup")
-    challenge = load_webauthn_stepup_challenge(signed) if signed else None
+    challenge = (
+        load_webauthn_stepup_challenge(signed, sess.id if sess is not None else None)
+        if signed
+        else None
+    )
     if challenge is None:
         return _json_err("challenge expired")
     credential = payload.get("credential")
@@ -274,6 +283,27 @@ async def step_up_passkey_verify(
     if not webauthn_service.sign_count_ok(cred.sign_count, new_count):
         await _audit_failure("counter")
         return _json_err("counter")
+    # S3: claim the challenge BEFORE any ORM mutation (cred.sign_count below
+    # is the first mutation). B5 (advisory GHSA-46jj-823j-mjj9): a False here
+    # means this exact (assertion, challenge) pair already stamped
+    # reauthenticated_at once — reject the replay. First replay writes TWO
+    # rows (user.step_up_failed + user.webauthn_challenge_replayed); later
+    # replays of the same challenge write one user.step_up_failed row each,
+    # bounded by the stepup throttle above (audit_replay_once is guarded to
+    # fire at most once per challenge — §11 S1).
+    if not await consume_challenge(db, challenge, WebAuthnChallengePurpose.STEPUP):
+        await _audit_failure("challenge already used")
+        if await audit_replay_once(db, challenge):
+            await AuditWriter(db).log(
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                action="user.webauthn_challenge_replayed",
+                changes={"surface": "stepup"},
+                user_id=user.id,
+                ip_address=client_ip(request),
+            )
+        return _json_err("challenge already used")
     cred.sign_count = new_count
     cred.last_used_at = now_utc()
 
