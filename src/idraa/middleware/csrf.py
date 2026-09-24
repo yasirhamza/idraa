@@ -289,7 +289,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     ``403 Forbidden``. No allowlist of exempt routes — callers that truly
     need to POST without CSRF (none today) must opt out explicitly.
 
-    Error responses deliberately use a single opaque ``"Forbidden"`` body;
+    Error responses deliberately use ONE fixed body for every failure (a
+    "Forbidden ... reload the page and try again" hint, identical whatever
+    failed);
     the specific failure mode (cookie missing / cookie invalid / token
     missing / token mismatch) is logged at WARNING for operators but NOT
     leaked to the caller — distinguishing them client-side gave an attacker

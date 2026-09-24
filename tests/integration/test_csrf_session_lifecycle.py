@@ -191,12 +191,21 @@ async def test_stale_tab_after_relogin_is_403_with_refresh(client: AsyncClient) 
         follow_redirects=False,
     )
     assert r.status_code == 303 and "idraa_session" in client.cookies
-    client.cookies.set("csrf_token", tab_token)  # the old tab still holds it
+    # The old tab's token is the ONLY csrf cookie sent, so the 403 must come
+    # from the session binding, not a double-submit mismatch.
+    client.cookies.delete("csrf_token")
+    client.cookies.set("csrf_token", tab_token)
     r = await client.post(
         "/logout", headers={"X-CSRF-Token": tab_token, "HX-Request": "true"}, follow_redirects=False
     )
     assert r.status_code == 403
     assert r.headers.get("HX-Refresh") == "true"
+    # One fixed body for every CSRF failure: tells the user what to do, never
+    # which check tripped (no oracle).
+    assert "reload the page" in r.text
+    assert "binding" not in r.text and "session" not in r.text.split("reload")[0].lower().replace(
+        "signed in or out", ""
+    )
 
 
 def test_js_reads_csrf_only_through_the_helper() -> None:
