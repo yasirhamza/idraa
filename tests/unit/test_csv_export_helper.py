@@ -109,3 +109,25 @@ def test_attachment_disposition_strips_every_control_character() -> None:
     from idraa.utils.csv_export import attachment_disposition
 
     assert attachment_disposition("a\x00b\x1fc\x7fd.csv") == 'attachment; filename="a_b_c_d.csv"'
+
+
+def test_every_content_disposition_goes_through_the_one_builder() -> None:
+    """Advisory C9 guard: no source file builds a ``Content-Disposition``
+    header by hand — every download calls utils.download.attachment_disposition."""
+    import re
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "src" / "idraa"
+    offenders = []
+    checked = 0
+    for path in src.rglob("*.py"):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"""["']Content-Disposition["']\s*:""", line):
+                checked += 1
+                if (
+                    "attachment_disposition(" not in line
+                    and "disposition" not in line.split(":", 1)[1]
+                ):
+                    offenders.append(f"{path.relative_to(src)}:{lineno}")
+    assert checked >= 9, "guard found too few Content-Disposition headers; it may be vacuous"
+    assert not offenders, f"hand-built Content-Disposition header(s): {offenders}"

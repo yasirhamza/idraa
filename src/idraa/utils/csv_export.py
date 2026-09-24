@@ -7,9 +7,9 @@ Plan-gate Sec-1: prefixes cells starting with formula-trigger chars (=, +, -, @,
 \\t, \\r) with a single-quote so Excel/Sheets/Numbers do not interpret them as
 formulas. OWASP "CSV Injection" mitigation.
 
-Plan-gate Sec-5: sanitises filename in Content-Disposition (replaces ", ;, \\,
-and every control character). ``attachment_disposition`` is the one builder for
-that header; the JSON exports use it too (advisory C9).
+Plan-gate Sec-5: the Content-Disposition filename is sanitised by
+``utils.download.attachment_disposition``, the one builder every download uses
+(advisory C9).
 
 Plan-gate M-1: optional preamble lets matrix CSV warn about multiplicative
 composition before the header row.
@@ -25,8 +25,12 @@ from typing import Any
 
 from fastapi import Response
 
+from idraa.utils.download import (  # re-exported (C9)
+    attachment_disposition,
+    sanitize_disposition_filename,
+)
+
 _FORMULA_TRIGGER = re.compile(r"^[=+\-@\t\r]")
-_FILENAME_UNSAFE = re.compile(r'[";\\\x00-\x1f\x7f]')
 
 
 def _sanitize_cell(value: Any) -> Any:
@@ -34,20 +38,6 @@ def _sanitize_cell(value: Any) -> Any:
     if isinstance(value, str) and _FORMULA_TRIGGER.match(value):
         return "'" + value
     return value
-
-
-def _sanitize_filename(filename: str) -> str:
-    """Strip characters that would let a caller break out of the Content-Disposition header."""
-    return _FILENAME_UNSAFE.sub("_", filename)
-
-
-def attachment_disposition(filename: str) -> str:
-    """``Content-Disposition`` value for a download: sanitised, quoted filename.
-
-    The header is built here and nowhere else so a future caller passing a
-    request-derived name cannot inject header syntax (advisory C9).
-    """
-    return f'attachment; filename="{_sanitize_filename(filename)}"'
 
 
 def _rows_to_csv_lines(header: list[str], rows: Iterable[tuple[Any, ...]]) -> Iterator[bytes]:
@@ -113,4 +103,4 @@ def csv_response(
 # Public aliases: the samples export (services/sample_export.py) reuses the
 # exact header/preamble sanitisation and filename rules of csv_response.
 sanitize_cell = _sanitize_cell
-sanitize_filename = _sanitize_filename
+sanitize_filename = sanitize_disposition_filename

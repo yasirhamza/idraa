@@ -61,7 +61,7 @@ covered by another boundary's row."
   trusted directly (`routes/deps.py:59-66,95-96`). Two opt-in trust
   strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
   `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
-  `config.py:332-343`). Both unset → the per-IP throttle no-ops rather than
+  `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
   trusting a spoofable value (`deps.py:117-127`); audit logging falls back to
   best-effort `request.client` instead (`deps.py:130-151`) — a deliberate
   forensic-vs-security-critical asymmetry.
@@ -71,9 +71,9 @@ covered by another boundary's row."
   two shapes it accepted — a body on GET/HEAD/OPTIONS and
   `Transfer-Encoding` on HTTP/1.0 — are gadgets only if the Fly edge frames
   them differently, which cannot be tested locally. The outermost
-  `RequestFramingMiddleware` (`middleware/request_framing.py:28-45`) refuses
+  `RequestFramingMiddleware` (`middleware/request_framing.py:33-50`) refuses
   both with 400 and any method outside GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS
-  with 501, always with `Connection: close`, before any other layer reads the
+  with 405 + `Allow`, always with `Connection: close`, before any other layer reads the
   request. Live uvicorn probe: GET+body with a pipelined second request →
   one 400, connection closed, the pipelined request never runs; pinned by
   `tests/unit/test_request_framing.py`.
@@ -231,17 +231,17 @@ docstring).
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
-  (`routes/deps.py:230-265`) 401s if unauthenticated, else requires
+  (`routes/deps.py:230-266`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
-  `services/security_settings.py:140-180`). **43** real call sites (37 as of
+  `services/security_settings.py:140-186`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
   `routes/deps.py:236` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
   destructive deletes, **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,256,376,467,510,557`, 1 in
-  `routes/settings.py:171`, and the **6 B2 additions** — `POST /organization`,
+  `routes/settings.py:176`, and the **6 B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
   (`routes/mfa.py:95,135,189,231,258,311`). Re-verification
@@ -254,10 +254,14 @@ docstring).
   them, so one fresh write could previously switch step-up off for good —
   every later write, including re-arming it, passed with any stale admin
   cookie. That route alone is wired `require_step_up(ADMIN, unconditional=True)`
-  (`routes/settings.py:167-172`, `routes/deps.py:258-261`): it ignores both
+  (`routes/settings.py:172-177`, `routes/deps.py:259-262`): it ignores both
   switches and checks freshness against `settings_write_step_up_window()`
-  (`services/security_settings.py:156-170`) — the configured window, else the
-  env default, else a 600 s floor. Switched-off categories stay off everywhere
+  (`services/security_settings.py`) — the env default (600 s floor when the env
+  opts out), which a configured window can only TIGHTEN (`min`), so neither the
+  kill-switch, the ADMIN override nor a huge window disarms it. Configured
+  windows are bounded to one day (`MAX_STEP_UP_WINDOW_SECONDS`, validated in
+  `routes/settings.py::_parse_window`), which also keeps `is_step_up_fresh`
+  clear of a `timedelta` overflow. Switched-off categories stay off everywhere
   else. Pinned by `tests/integration/test_step_up_categories.py::test_b1_*`.
 - **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
@@ -313,7 +317,7 @@ docstring).
   (`repositories/scenario_repo.py:57-74`, `repositories/run_repo.py:27-41`);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
-  (`routes/overlays.py:456`, `routes/scenarios.py:713,748`,
+  (`routes/overlays.py:457`, `routes/scenarios.py:713,748`,
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
@@ -429,8 +433,8 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
 `Content-Length` (`routes/deps.py:23`; enforced in
-`register_import.py:253-257`, `scenario_import.py:123-127`,
-`library_import.py:79-83`); a zip-bomb guard on the XLSX path that reads only
+`register_import.py:253-257`, `scenario_import.py:124-128`,
+`library_import.py:80-84`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
@@ -464,17 +468,18 @@ auto-substitution blocking XML entity expansion (billion-laughs class,
 `register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
 
-**Export — download header (C9, 2026-09)**: every generated download
-builds `Content-Disposition` through one helper, `attachment_disposition()`
-(`utils/csv_export.py:44-50`), which quotes the name and replaces `"`, `;`,
-`\` and every control character. The scenario JSON and library-bundle
-exports used to interpolate `filename` raw (safe only because every caller
-passes a literal or a UUID); they now use the helper, pinned by
-`tests/unit/test_csv_export_helper.py`. `routes/reports.py` and
-`routes/runs.py` build theirs from a `[a-zA-Z0-9_-]` slug.
+**Export — download header (C9, 2026-09)**: every download in `src/idraa`
+(CSV, scenario JSON, library bundle, PDF reports, samples export, the four
+template/sample downloads) builds `Content-Disposition` through one helper,
+`attachment_disposition()` (`utils/download.py`), which quotes the name and
+replaces `"`, `;`, `\` and every control character. The scenario JSON and
+library-bundle exports used to interpolate `filename` raw (safe only because
+every caller passed a literal or a UUID). A guard in
+`tests/unit/test_csv_export_helper.py` fails on any hand-built
+`"Content-Disposition"` key in the source tree.
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
-cell starting with `=+-@\t\r` (`utils/csv_export.py:28-35`, used by
+cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
 `services/sample_export.py:68,181` and `services/verification_workbook.py:
 51-66`, which also guards legacy `{=...}` array-formula braces). PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
@@ -492,7 +497,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:64-75`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
-  `POST /analyses` (`routes/runs.py:1185-1196`) — the HTML form's `max=`
+  `POST /analyses` (`routes/runs.py:1186-1197`) — the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
@@ -517,7 +522,7 @@ new export format must re-implement, not assume is "someone else's problem."
   window. A burst of concurrent runs would then drain the 15-slot pool (size 5
   + overflow 10, `db.py`), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
-  reports.py production outage (`routes/reports.py:219-228,332-346`). Control
+  reports.py production outage (`routes/reports.py:220-229,333-347`). Control
   (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1844`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
@@ -572,7 +577,12 @@ own rate-limit-then-audit choke point
 raw email — `routes/users.py` invite and `routes/setup.py` first admin — were
 fixed in 2026-09 (advisory C4) and an AST guard,
 `tests/unit/test_audit_email_never_raw.py`, now fails on any email-keyed
-`changes=` literal not passed through `redact_email`), financial values bucketed
+`changes=` literal not passed through `redact_email` — a tripwire: it does not
+see a `changes` dict assembled in a variable first). **Accepted residual:**
+user-create rows written BEFORE the C4 fix still hold the raw email; they are
+not rewritten, because rewriting audit history would undermine its
+tamper-evidence, and the same address is already visible to admins on the
+user record itself. Financial values bucketed
 (`bucket_amount`, `audit.py:119-137`) before storage. 70+ call sites spot-
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known

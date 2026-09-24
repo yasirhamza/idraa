@@ -32,3 +32,16 @@ def test_step_up_wiring_count():
     # The retired pre-category dependency must be fully gone (routes AND its
     # docstrings in deps.py/errors.py):
     assert not any(_RETIRED in p.read_text() for p in pathlib.Path("src/idraa").rglob("*.py"))
+
+
+def test_unconditional_step_up_is_only_the_security_settings_write():
+    """B1: ``unconditional=True`` ignores the kill-switch and category overrides;
+    it exists for the one route that writes them. Pin that it does not spread."""
+    root = pathlib.Path(__file__).resolve().parents[2] / "src" / "idraa" / "routes"
+    hits = [
+        (p.name, n)
+        for p in root.rglob("*.py")
+        for n, line in enumerate(p.read_text().splitlines(), 1)
+        if "require_step_up(" in line and "unconditional=True" in line
+    ]
+    assert [name for name, _ in hits] == ["settings.py"], hits

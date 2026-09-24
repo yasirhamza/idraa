@@ -50,10 +50,8 @@ from fastapi import Response
 
 from idraa.models.scenario import Scenario
 from idraa.services.scenario_import_parsers import CSV_HEADERS, collapse_num
-from idraa.utils.csv_export import (  # I5: has the CSV-injection sanitizer
-    attachment_disposition,
-    csv_response,
-)
+from idraa.utils.csv_export import csv_response  # I5: has the CSV-injection sanitizer
+from idraa.utils.download import attachment_disposition
 
 # Identical to the importer's columns — the round-trip contract depends on it.
 CSV_EXPORT_HEADERS: list[str] = list(CSV_HEADERS)

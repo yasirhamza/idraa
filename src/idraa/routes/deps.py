@@ -239,6 +239,7 @@ def require_step_up(
     ignores the global kill-switch and the per-category override and checks
     freshness against ``settings_write_step_up_window()``, so the settings
     that disarm step-up can never disarm the gate on their own write path.
+    ``category`` is then only documentary: its per-category override is ignored.
     """
 
     def _dep(

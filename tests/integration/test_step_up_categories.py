@@ -112,8 +112,9 @@ async def _apply_window(db, org_id, window, **kw):
     [
         (0, {}),  # global kill-switch
         (600, {"step_up_admin": False}),  # ADMIN category switched off
+        (999_999_999, {}),  # huge window (PR-gate): the write still needs freshness
     ],
-    ids=["kill_switch", "admin_category_off"],
+    ids=["kill_switch", "admin_category_off", "huge_window"],
 )
 async def test_b1_security_settings_write_is_never_disarmed(
     authed_admin, db_session, window, category_kw
@@ -139,9 +140,10 @@ async def test_b1_security_settings_write_is_never_disarmed(
     ).one()
     assert row.mfa_policy is None  # no write happened
 
-    # The switched-off gate still applies elsewhere: a stale ADMIN export passes.
-    r = await client.get("/users/export.csv", follow_redirects=False)
-    assert r.status_code == 200
+    if window == 0 or category_kw:
+        # The switched-off gate still applies elsewhere: a stale ADMIN export passes.
+        r = await client.get("/users/export.csv", follow_redirects=False)
+        assert r.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -163,3 +165,18 @@ async def test_b1_fresh_session_can_still_write_with_kill_switch_on(authed_admin
         )
     ).one()
     assert row.step_up_window_seconds == 600  # re-armed
+
+
+@pytest.mark.asyncio
+async def test_window_input_is_bounded(authed_admin, db_session):
+    """A multi-million-year window would overflow timedelta in is_step_up_fresh
+    (500 on every step-up route) and, before the clamp, disarm the gate."""
+    from tests.integration.test_security_settings_page import _enroll_mfa
+
+    client, org_id = authed_admin
+    await _enroll_mfa(db_session, client)
+    r = await csrf_post(
+        client, "/settings/security", {"step_up_window_seconds": "86401"}, follow_redirects=False
+    )
+    assert r.status_code == 400
+    assert "86400" in r.text

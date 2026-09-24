@@ -81,6 +81,7 @@ from idraa.services.overlays_importer import (
     validate_csv,
 )
 from idraa.utils.csv_export import csv_response
+from idraa.utils.download import attachment_disposition
 
 router = APIRouter()
 
@@ -275,7 +276,7 @@ async def overlays_template_csv(
     return Response(
         content=generate_template_csv(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=overlays_template.csv"},
+        headers={"Content-Disposition": attachment_disposition("overlays_template.csv")},
     )
 
 

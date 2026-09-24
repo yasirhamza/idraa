@@ -103,15 +103,17 @@ async def test_warm_cache_failure_stays_cold(monkeypatch):
 @pytest.mark.parametrize(
     "cached_window,env_window,expected",
     [
-        (300, 600, 300),  # configured window wins when positive
+        (300, 600, 300),  # a tighter configured window wins
         (0, 900, 900),  # kill-switch on: env default
         (0, 0, 600),  # kill-switch on, env opt-out: 600 s floor
         (None, 0, 600),  # nothing configured, env opt-out: floor
+        (999_999_999, 600, 600),  # huge window cannot widen it (PR-gate)
+        (999_999_999, 0, 600),  # huge window + env opt-out: floor
     ],
 )
 def test_settings_write_window_never_disarms(monkeypatch, cached_window, env_window, expected):
     """Advisory B1: the security-settings write is never exempt from step-up."""
-    monkeypatch.setattr(get_settings(), "auth_step_up_max_age_seconds", env_window, raising=False)
+    monkeypatch.setattr(get_settings(), "auth_step_up_max_age_seconds", env_window)
     monkeypatch.setattr(
         ss,
         "_cache",

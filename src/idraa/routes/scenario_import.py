@@ -45,6 +45,7 @@ from idraa.services.scenario_import import (
     generate_template_csv,
     validate_upload,
 )
+from idraa.utils.download import attachment_disposition
 
 router = APIRouter()
 
@@ -98,7 +99,7 @@ async def scenario_import_template_csv(
     return Response(
         content=generate_template_csv(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=scenarios_template.csv"},
+        headers={"Content-Disposition": attachment_disposition("scenarios_template.csv")},
     )
 
 
@@ -109,7 +110,7 @@ async def scenario_import_sample_json(
     return Response(
         content=generate_sample_json(),
         media_type="application/json",
-        headers={"Content-Disposition": "attachment; filename=scenarios_sample.json"},
+        headers={"Content-Disposition": attachment_disposition("scenarios_sample.json")},
     )
 
 

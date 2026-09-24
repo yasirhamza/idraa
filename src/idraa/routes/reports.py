@@ -48,6 +48,7 @@ from idraa.services.pdf_report import render_executive_pdf
 from idraa.services.reports import build_executive_pdf_data
 from idraa.services.verification_workbook import build_verification_workbook
 from idraa.utils.csv_export import csv_response
+from idraa.utils.download import attachment_disposition
 
 _XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -252,7 +253,7 @@ async def download_run_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": attachment_disposition(filename),
             "Cache-Control": "private, no-store",
         },
     )
@@ -379,7 +380,7 @@ async def download_verification_workbook(
         content=xlsx_bytes,
         media_type=_XLSX_MEDIA,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": attachment_disposition(filename),
             "Cache-Control": "private, no-store",
         },
     )

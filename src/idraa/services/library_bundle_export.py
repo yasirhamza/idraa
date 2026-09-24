@@ -32,7 +32,7 @@ from fastapi import Response
 
 from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.services.seed_library_loader import LibraryEntrySeed
-from idraa.utils.csv_export import attachment_disposition
+from idraa.utils.download import attachment_disposition
 
 # Exactly the authored seed fields, in declaration order. Deriving from the seed
 # model is the contract: it can never drift from the import-side schema.

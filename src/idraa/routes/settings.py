@@ -45,6 +45,7 @@ from idraa.services.audit import AuditWriter
 from idraa.services.flash import build_flash
 from idraa.services.org import require_sole_org
 from idraa.services.security_settings import (
+    MAX_STEP_UP_WINDOW_SECONDS,
     cache_state,
     effective_mfa_policy,
     effective_step_up_window,
@@ -88,6 +89,10 @@ def _parse_window(raw: str) -> int | None:
         raise _ValidationError("step_up_window_seconds must be a whole number") from None
     if value < 0:
         raise _ValidationError("step_up_window_seconds must be >= 0")
+    if value > MAX_STEP_UP_WINDOW_SECONDS:
+        raise _ValidationError(
+            f"step_up_window_seconds must be <= {MAX_STEP_UP_WINDOW_SECONDS} (one day)"
+        )
     return value
 
 

@@ -31,9 +31,9 @@ def _scope(method: str, headers: dict[str, str] | None = None, version: str = "1
         ("OPTIONS", {"content-length": "1"}, "1.1", 400),
         ("GET", {"transfer-encoding": "chunked"}, "1.1", 400),
         ("POST", {"transfer-encoding": "chunked"}, "1.0", 400),
-        ("TRACE", {}, "1.1", 501),
-        ("CONNECT", {}, "1.1", 501),
-        ("PROPFIND", {}, "1.1", 501),
+        ("TRACE", {}, "1.1", 405),
+        ("CONNECT", {}, "1.1", 405),
+        ("PROPFIND", {}, "1.1", 405),
     ],
 )
 def test_framing_violation(method, headers, version, expected) -> None:
@@ -59,9 +59,9 @@ async def test_get_with_body_is_refused_and_closes(client) -> None:
     assert r.headers["connection"] == "close"
 
 
-async def test_unknown_method_is_501_with_allow(client) -> None:
+async def test_unknown_method_is_405_with_allow(client) -> None:
     r = await client.request("PROPFIND", "/")
-    assert r.status_code == 501
+    assert r.status_code == 405
     assert "POST" in r.headers["allow"] and "TRACE" not in r.headers["allow"]
 
 

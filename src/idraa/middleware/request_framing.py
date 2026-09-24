@@ -10,7 +10,8 @@ the front-end proxy (Fly's edge) frames them differently:
   exist in 1.0, so the two hops may disagree on where the request ends).
 
 Following PortSwigger's back-end mitigation, this OUTERMOST pure-ASGI layer
-rejects both with 400 and answers any method outside the allow-list with 501,
+rejects both with 400 and answers any method outside the allow-list with 405
+(+ ``Allow``; a 5xx would read as a server error to monitoring and the DAST job),
 before any other middleware reads the request. Every rejection carries
 ``Connection: close`` so an unread body can never be parsed as the next
 request on a kept-alive connection. Browsers, HTMX and the platform health
@@ -19,17 +20,21 @@ probe never send any of these shapes, so legitimate traffic is unaffected.
 
 from __future__ import annotations
 
+import logging
+
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 _BODYLESS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+logger = logging.getLogger(__name__)
 
 
 def framing_violation(scope: Scope) -> tuple[int, bytes] | None:
     """(status, reason) when the request must be refused, else None."""
     method = scope["method"]
     if method not in ALLOWED_METHODS:
-        return 501, b"Method not implemented"
+        return 405, b"Method not allowed"
     has_te = False
     content_length: bytes | None = None
     for name, value in scope["headers"]:
@@ -59,12 +64,21 @@ class RequestFramingMiddleware:
             await self.app(scope, receive, send)
             return
         status, reason = violation
+        # One line per refusal: the guard is outermost, so a false positive would
+        # otherwise block a request shape with no trace in the app log.
+        logger.warning(
+            "request_framing refused %s %s (HTTP/%s): %s",
+            scope["method"],
+            scope.get("path", ""),
+            scope.get("http_version", "?"),
+            reason.decode(),
+        )
         headers = [
             (b"content-type", b"text/plain; charset=utf-8"),
             (b"connection", b"close"),
             (b"x-content-type-options", b"nosniff"),
         ]
-        if status == 501:
+        if status == 405:
             headers.append((b"allow", ", ".join(sorted(ALLOWED_METHODS)).encode()))
         body = b"" if scope["method"] == "HEAD" else reason
         headers.append((b"content-length", str(len(body)).encode()))

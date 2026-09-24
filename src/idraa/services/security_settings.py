@@ -149,8 +149,13 @@ def effective_step_up_window() -> int:
     return get_settings().auth_step_up_max_age_seconds
 
 
-# B1: the window /settings/security writes use when the configured one is 0.
+# B1: the window /settings/security writes use when the configured one is 0,
+# and the CEILING on it otherwise (a huge configured window must not disarm it).
 _SETTINGS_WRITE_FLOOR_SECONDS = 600
+# Upper bound on any configured step-up window (routes/settings.py validates
+# input against it). One day: long enough for any real session, far below the
+# timedelta overflow a multi-million-year value hits in is_step_up_fresh.
+MAX_STEP_UP_WINDOW_SECONDS = 86_400
 
 
 def settings_write_step_up_window() -> int:
@@ -160,14 +165,15 @@ def settings_write_step_up_window() -> int:
     in the settings this route writes. If they also disarmed its own gate,
     one fresh write could switch step-up off for good: every later write —
     including re-enabling it — would pass with any stale admin cookie. So
-    this route always demands freshness: the configured window when it is
-    positive, else the env default when positive, else a 600 s floor.
+    this route always demands freshness. Its window is the env default (or a
+    600 s floor when the env opts out), and a configured window only ever
+    TIGHTENS it: ``min(configured, baseline)``. A huge configured window is
+    otherwise the same disarm as the kill-switch (PR-gate finding).
     """
-    window = effective_step_up_window()
-    if window > 0:
-        return window
     env_window = get_settings().auth_step_up_max_age_seconds
-    return env_window if env_window > 0 else _SETTINGS_WRITE_FLOOR_SECONDS
+    baseline = env_window if env_window > 0 else _SETTINGS_WRITE_FLOOR_SECONDS
+    window = effective_step_up_window()
+    return min(window, baseline) if window > 0 else baseline
 
 
 def step_up_required(category: StepUpCategory) -> bool:
