@@ -582,8 +582,8 @@ new export format must re-implement, not assume is "someone else's problem."
 `AuditLog` (`models/audit_log.py:36-64`, indexed on `(org, timestamp)` and
 `(entity_type, entity_id)`) is written via `AuditWriter.log`
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
-datetime/Enum. Confirmed call sites at login success (`auth.py:262`), failed
-login and lockout (`auth.py:188` `user.login_failed`, `auth.py:198`
+datetime/Enum. Confirmed call sites at login success (`routes/auth.py:262`), failed
+login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198`
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `:362` under the generic `"update"` action — not a role-specific
 action string), and the
@@ -610,7 +610,7 @@ gap, not a finding of an actual miss.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
-  a `user.login_failed` row (`auth.py:188`), not only the attempt that trips
+  a `user.login_failed` row (`routes/auth.py:188`), not only the attempt that trips
   the lockout. A low-and-slow campaign staying under the threshold (or running
   with lockout disabled, `auth_max_failed_logins=0`) is no longer invisible.
   Mirrors the `/login/mfa` path's per-attempt audit. **Row-count bounds, in
@@ -618,7 +618,7 @@ gap, not a finding of an actual miss.
   default 5); the per-source IP throttle when enabled
   (`auth_ip_max_failed_logins`, default 20); and — independent of BOTH, so it
   still holds on a self-hosted deploy that disables them — a hard per-account
-  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `auth.py:101,183`). The ceiling matters
+  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `routes/auth.py:101,183`). The ceiling matters
   because the first N misses ARE the detection signal; past N, more rows add
   only disk cost. Unknown emails still write nothing (no user to attribute to;
   no enumeration oracle).
