@@ -161,12 +161,18 @@ def _login(client: httpx.Client, password: str) -> tuple[str, str] | None:
     if not session_cookie:
         print("[dast] POST /login did not mint an idraa_session cookie", file=sys.stderr)
         return None
-    # Re-read: CSRFMiddleware only re-issues the cookie when it minted a
-    # fresh one this request (see middleware/csrf.py) — on the POST it
-    # reused the inbound (still-valid) cookie, so this is normally the
-    # same value as above, but reading it again keeps this correct even if
-    # that internal behavior changes.
-    csrf = client.cookies.get("csrf_token") or csrf
+    # GHSA-46jj-823j-mjj9 B4: CSRF tokens are bound to the session cookie, so
+    # the anon token minted on GET /login is dead now that a session exists.
+    # An authenticated GET re-mints a session-bound token; read that one.
+    authed = client.get("/")
+    csrf = client.cookies.get("csrf_token")
+    if authed.status_code not in (200, 303) or not csrf:
+        print(
+            f"[dast] authenticated GET / returned {authed.status_code} "
+            "without a fresh csrf_token cookie",
+            file=sys.stderr,
+        )
+        return None
     return session_cookie, csrf
 
 

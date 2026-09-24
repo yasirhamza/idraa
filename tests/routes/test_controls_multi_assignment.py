@@ -120,6 +120,10 @@ async def _bootstrap_app(client: AsyncClient, suffix: str) -> tuple[str, str]:
 
 async def _login(client: AsyncClient, email: str, password: str) -> None:
     await csrf_post(client, "/login", {"email": email, "password": password})
+    # CSRF tokens are bound to the session cookie (GHSA-46jj-823j-mjj9 B4): the
+    # token in the jar was minted before this login, so load a page — as a
+    # browser does after the login redirect — to receive a session-bound one.
+    await client.get("/controls")
 
 
 def _make_csv(
