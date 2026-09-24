@@ -30,7 +30,7 @@ Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XF
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
    │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1110-1112) — B0 and B3 run BEFORE B2 (session lookup hits the
+   │  (app.py:1122-1183) — B0 and B3 run BEFORE B2 (session lookup hits the
    │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
@@ -61,7 +61,7 @@ covered by another boundary's row."
   trusted directly (`routes/deps.py:59-66,95-96`). Two opt-in trust
   strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
   `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
-  `config.py:331-342`). Both unset → the per-IP throttle no-ops rather than
+  `config.py:332-343`). Both unset → the per-IP throttle no-ops rather than
   trusting a spoofable value (`deps.py:117-127`); audit logging falls back to
   best-effort `request.client` instead (`deps.py:130-151`) — a deliberate
   forensic-vs-security-critical asymmetry.
@@ -82,7 +82,7 @@ covered by another boundary's row."
   security-settings state (`app.py:1302-1310`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:977-988`) — misconfig is
+  enabled with no trust strategy configured (`app.py:978-989`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -95,8 +95,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1174`; confirmed order
-`app.py:1110-1112`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1177`; confirmed order
+`app.py:1122-1183`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -104,16 +104,16 @@ the edge credential does not equal compromising the app, per the module
 docstring).
 
 - **S/E**: when `UAT_BASIC_AUTH_PASSWORD` is unset (dev/test/local docker),
-  the middleware is a pure no-op (`uat_basic_auth.py:74-75`) — this boundary
+  the middleware is a pure no-op (`uat_basic_auth.py:77-78`) — this boundary
   doesn't exist outside the hosted UAT runtime. When set, every request
   without a valid `Authorization: Basic` header 401s
-  (`_check_auth`, `uat_basic_auth.py:100-134`), except the exact paths in
-  `EXEMPT_PATHS` (`:32-47` — `/healthz` plus enumerated PWA install assets),
-  and only for `GET`/`HEAD` on those paths (`:71`) — a guard against a future
+  (`_check_auth`, `uat_basic_auth.py:103-137`), except the exact paths in
+  `EXEMPT_PATHS` (`:33-48` — `/healthz` plus enumerated PWA install assets),
+  and only for `GET`/`HEAD` on those paths (`:74`) — a guard against a future
   POST handler on one of those paths silently inheriting an unauthenticated
   write.
 - **T (misconfiguration)**: an empty-string `user` with a real password set
-  fails closed rather than matching any caller (`uat_basic_auth.py:79-80`,
+  fails closed rather than matching any caller (`uat_basic_auth.py:82-83`,
   explicit trap comment).
 - **S (weak credential, C6, 2026-09)**: the credential is read from
   `Settings.uat_basic_auth_user` / `uat_basic_auth_password`
@@ -124,7 +124,7 @@ docstring).
   refuses to boot. Unset stays allowed (self-hosted, no pre-gate).
 - **S (timing)**: `secrets.compare_digest` on both user and password,
   assigned to locals and AND-ed at the end rather than short-circuited
-  (`uat_basic_auth.py:132-134`) — the docstring explains the short-circuit
+  (`uat_basic_auth.py:135-137`) — the docstring explains the short-circuit
   form would leak "wrong user" vs. "wrong password" via response timing.
 - **Residual risk**: single shared credential (not per-user), by design for
   a UAT gate — compromise of that one credential exposes the whole hosted
@@ -153,15 +153,15 @@ docstring).
   login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
   verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
   a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
-  `auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:362`), isolated
+  `auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:367`), isolated
   from the default executor that Monte-Carlo run computes saturate (§10). This
   keeps the single event loop non-blocking (was a measured 13.7× head-of-line
   block) while preserving the timing-equal anti-enumeration property (both
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
-  store errors — per-account lockout (5 attempts/900s, `config.py:350-351`;
+  store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
   `auth.py:343-393`) and per-source `LoginAttempt` throttle (20/900s/900s,
-  `config.py:396-398`; `services/login_throttle.py`), applied to both
+  `config.py:401-403`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:211,239`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
   (`register_failed_login`) was a non-atomic read-modify-write that lost
@@ -220,7 +220,7 @@ docstring).
   downstream form parsing — `_CachedRequest.wrapped_receive`). That buffer is
   now size-capped: `_read_body_capped` (`csrf.py:76-102`) reads via
   `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
-  `config.py:379`) and returns a 413 before the whole body is buffered
+  `config.py:384`) and returns a 413 before the whole body is buffered
   (`csrf.py:235-252`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
   `routes/deps.py:23`) + multipart framing so legitimate imports pass; a test
   pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
@@ -231,17 +231,17 @@ docstring).
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
-  (`routes/deps.py:230-251`) 401s if unauthenticated, else requires
+  (`routes/deps.py:230-265`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
-  600s, `config.py:367`; per-category admin override,
-  `services/security_settings.py:141-160`). **43** real call sites (37 as of
+  600s, `config.py:372`; per-category admin override,
+  `services/security_settings.py:140-180`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
-  `routes/deps.py:234` and a prose mention at
+  `routes/deps.py:236` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
   destructive deletes, **14** admin/user-mgmt (7 in
-  `routes/users.py:110,160,253,373,464,507,554`, 1 in
-  `routes/settings.py:162`, and the **6 B2 additions** — `POST /organization`,
+  `routes/users.py:110,160,256,376,467,510,557`, 1 in
+  `routes/settings.py:171`, and the **6 B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
   (`routes/mfa.py:95,135,189,231,258,311`). Re-verification
@@ -254,7 +254,7 @@ docstring).
   them, so one fresh write could previously switch step-up off for good —
   every later write, including re-arming it, passed with any stale admin
   cookie. That route alone is wired `require_step_up(ADMIN, unconditional=True)`
-  (`routes/settings.py:168-172`, `routes/deps.py:258-261`): it ignores both
+  (`routes/settings.py:167-172`, `routes/deps.py:258-261`): it ignores both
   switches and checks freshness against `settings_write_step_up_window()`
   (`services/security_settings.py:156-170`) — the configured window, else the
   env default, else a 600 s floor. Switched-off categories stay off everywhere
@@ -294,7 +294,7 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1144-1167`).
+  `app.py:1145-1168`).
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
@@ -377,7 +377,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:94-97`), which Starlette constructs with
+  (`app.py:95-98`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — every file under `src/idraa/templates/` is `.html` (zero
@@ -404,7 +404,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:99-104` about a
+  The only textual hit is an explanatory comment in `app.py:100-105` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
@@ -428,7 +428,7 @@ only where it applies (the XLSX-capable module — the other has no zip path).
 extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
-`Content-Length` (`routes/deps.py:20`; enforced in
+`Content-Length` (`routes/deps.py:23`; enforced in
 `register_import.py:253-257`, `scenario_import.py:123-127`,
 `library_import.py:79-83`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
@@ -474,7 +474,7 @@ passes a literal or a UUID); they now use the helper, pinned by
 `routes/runs.py` build theirs from a `[a-zA-Z0-9_-]` slug.
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
-cell starting with `=+-@\t\r` (`utils/csv_export.py:26-33`, used by
+cell starting with `=+-@\t\r` (`utils/csv_export.py:28-35`, used by
 `services/sample_export.py:68,181` and `services/verification_workbook.py:
 51-66`, which also guards legacy `{=...}` array-formula braces). PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
@@ -490,13 +490,13 @@ new export format must re-implement, not assume is "someone else's problem."
 
 ## 10. B10 — Run execution / Monte Carlo (resource exhaustion)
 
-- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:63-74`, default
+- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:64-75`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
   `POST /analyses` (`routes/runs.py:1185-1196`) — the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
-  shared across all orgs on one VM (`config.py:252-294`): high-fidelity
+  shared across all orgs on one VM (`config.py:253-295`): high-fidelity
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
   BACKGROUND runs to `max_concurrent_standard_runs` (default 8). The
@@ -540,7 +540,7 @@ new export format must re-implement, not assume is "someone else's problem."
   event-loop block for a cross-boundary starvation DoS. New RAM term: each
   concurrent Argon2 verify holds ~64 MiB (`m=65536`), so the pool adds
   `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
-  budget (`config.py:66-75`) — fits the 4 GB VM; re-derive with the MC caps if
+  budget (`config.py:67-76`) — fits the 4 GB VM; re-derive with the MC caps if
   the VM shape changes.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
@@ -548,7 +548,7 @@ new export format must re-implement, not assume is "someone else's problem."
   actually read `performance / 2 cpus / 4096mb` since 2026-06-29 (PR #428/
   #429) — a ~5-week drift. **CLAUDE.md now carries the corrected figures**
   plus its own inline "Corrected 2026-08-05" note. Kept here (rather than
-  deleted) because the underlying coupling still matters: `config.py:66-75`
+  deleted) because the underlying coupling still matters: `config.py:67-76`
   ties the 1,000,000-iteration cap directly to the 4GB headroom (~700MB peak
   RSS at N=1M/M=30), so if the VM shape is ever downgraded, that cap must be
   re-benchmarked, not just inherited. This document defers to `fly.toml` as
@@ -561,8 +561,8 @@ new export format must re-implement, not assume is "someone else's problem."
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
 datetime/Enum. Confirmed call sites at login success (`auth.py:259`), failed
 login and lockout (`auth.py:185` `user.login_failed`, `auth.py:195`
-`user.login_locked_out`), role change (dict built at `routes/users.py:314`,
-logged at `:359` under the generic `"update"` action — not a role-specific
+`user.login_locked_out`), role change (dict built at `routes/users.py:317`,
+logged at `:362` under the generic `"update"` action — not a role-specific
 action string), and the
 full run lifecycle — create (`services/runs.py:328`), cancel (`:382`),
 delete (`:442`), sample-purge (`:475`) — plus bulk export via its
