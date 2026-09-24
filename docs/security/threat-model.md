@@ -175,7 +175,24 @@ docstring).
   fires reliably.
 - **E**: MFA — TOTP (pyotp, single-use-per-step replay guard,
   `services/totp.py:21-55`) and WebAuthn/passkeys
-  (`services/webauthn_service.py:66-142`) both live; `user_has_strong_factor`
+  (`services/webauthn_service.py:66-142`) both live. **WebAuthn challenge
+  single-use (advisory GHSA-46jj-823j-mjj9 B5, 2026-09):** challenges are
+  stateless signed cookies, and `sign_count_ok` must allow 0 → 0 (platform
+  authenticators never increment), so a captured (assertion, challenge cookie)
+  pair used to replay within the 300 s TTL — every replay minted a new login
+  session or re-stamped a step-up. Each verify route (login, step-up,
+  registration) now claims the challenge atomically AFTER the signature checks
+  and BEFORE any side effect: `consume_challenge`
+  (`services/webauthn_challenge.py`) is an `INSERT ... ON CONFLICT
+  (challenge_digest) DO NOTHING RETURNING` into `webauthn_challenge_consumed`
+  (auth-layer table, no `organization_id`, like `login_attempt`); a second use
+  of the same challenge gets 400 `challenge already used`. Rows expire at TTL +
+  60 s and are swept at boot and by the periodic reaper
+  (`services/run_reaper.py::sweep_expired_webauthn_challenges`). The step-up
+  challenge cookie is additionally bound to the minting session
+  (`services/auth.py::load_webauthn_stepup_challenge` compares `sess.id.hex`),
+  so a captured step-up ceremony cannot stamp a different session of the same
+  user. `user_has_strong_factor`
   (`services/mfa_enrollment.py:18-29`) accepts either.
   `EnrollmentGuardMiddleware` (`middleware/enrollment_guard.py:36-54`)
   force-redirects unenrolled users to `/account/security` when the effective
@@ -612,6 +629,20 @@ gap, not a finding of an actual miss.
   cross-org `*_for_org` **404s** — is NOT closed here (those 404s are raised at
   many scattered call sites with no shared user-carrying chokepoint); it is
   tracked as a follow-up (§12).
+
+**New action (B5, 2026-09): `user.webauthn_challenge_replayed`.** Written when
+a verified WebAuthn assertion arrives for a challenge that was already
+consumed — the forensic signal of the replay B5 closes (`changes.surface` =
+login / stepup / register). **Write-amplification bound:** it needs a valid
+captured assertion (random submissions fail signature verification first), and
+it is self-limiting per challenge: `audit_replay_once` flips
+`replay_audited` with a guarded UPDATE (`rowcount == 1`), so each challenge
+yields at most ONE such row however often it is replayed. On step-up, every
+replay additionally writes the existing `user.step_up_failed` row (first replay
+= two rows, later replays = one each), bounded by the per-source step-up
+throttle when a client-IP trust strategy is configured (without one the
+throttle no-ops, as for every other step-up failure reason — a replay still
+needs the victim's session plus a captured assertion).
 
 **New action (B6, 2026-08-15): `user.recovery_code_claim_lost`.** Written by
 `verify_totp_or_recovery` (`services/second_factor.py:159-172`) when a submitted
