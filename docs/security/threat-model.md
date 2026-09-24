@@ -579,10 +579,12 @@ fixed in 2026-09 (advisory C4) and an AST guard,
 `tests/unit/test_audit_email_never_raw.py`, now fails on any email-keyed
 `changes=` literal not passed through `redact_email` — a tripwire: it does not
 see a `changes` dict assembled in a variable first). **Accepted residual:**
-user-create rows written BEFORE the C4 fix still hold the raw email; they are
-not rewritten, because rewriting audit history would undermine its
-tamper-evidence, and the same address is already visible to admins on the
-user record itself. Financial values bucketed
+user-create rows written BEFORE the C4 fix still hold the raw email — including
+for users since hard-deleted, whose own `user.delete` row is redacted, so the
+old create row is then the only place the address survives. They are not
+rewritten automatically, because rewriting audit history undermines its
+tamper-evidence; an erasure request for such a user needs a manual, audited
+redaction of that one row. Financial values bucketed
 (`bucket_amount`, `audit.py:119-137`) before storage. 70+ call sites spot-
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known

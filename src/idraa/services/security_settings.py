@@ -144,8 +144,10 @@ def effective_mfa_policy() -> str:
 
 
 def effective_step_up_window() -> int:
+    # Clamped: a row stored before the input bound existed must not overflow
+    # timedelta in is_step_up_fresh (500 on every step-up route).
     if _cache is not None and _cache.step_up_window_seconds is not None:
-        return _cache.step_up_window_seconds
+        return min(_cache.step_up_window_seconds, MAX_STEP_UP_WINDOW_SECONDS)
     return get_settings().auth_step_up_max_age_seconds
 
 

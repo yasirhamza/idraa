@@ -113,21 +113,40 @@ def test_attachment_disposition_strips_every_control_character() -> None:
 
 def test_every_content_disposition_goes_through_the_one_builder() -> None:
     """Advisory C9 guard: no source file builds a ``Content-Disposition``
-    header by hand — every download calls utils.download.attachment_disposition."""
-    import re
+    header by hand — every value is an ``attachment_disposition(...)`` call
+    (or the ``disposition`` local csv_response binds from one). Covers both
+    ``{"Content-Disposition": v}`` and ``headers["Content-Disposition"] = v``."""
+    import ast
     from pathlib import Path
 
     src = Path(__file__).resolve().parents[2] / "src" / "idraa"
-    offenders = []
-    checked = 0
+
+    def ok(value: ast.AST) -> bool:
+        if isinstance(value, ast.Call):
+            fn = value.func
+            return (
+                getattr(fn, "id", None) or getattr(fn, "attr", None)
+            ) == "attachment_disposition"
+        return isinstance(value, ast.Name) and value.id == "disposition"
+
+    def is_key(node: ast.AST | None) -> bool:
+        return isinstance(node, ast.Constant) and str(node.value).lower() == "content-disposition"
+
+    offenders, checked = [], 0
     for path in src.rglob("*.py"):
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"""["']Content-Disposition["']\s*:""", line):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            pairs = []
+            if isinstance(node, ast.Dict):
+                pairs = [(k, v) for k, v in zip(node.keys, node.values, strict=True) if is_key(k)]
+            elif isinstance(node, ast.Assign):
+                pairs = [
+                    (t.slice, node.value)
+                    for t in node.targets
+                    if isinstance(t, ast.Subscript) and is_key(t.slice)
+                ]
+            for _, value in pairs:
                 checked += 1
-                if (
-                    "attachment_disposition(" not in line
-                    and "disposition" not in line.split(":", 1)[1]
-                ):
-                    offenders.append(f"{path.relative_to(src)}:{lineno}")
+                if not ok(value):
+                    offenders.append(f"{path.relative_to(src)}:{node.lineno}")
     assert checked >= 9, "guard found too few Content-Disposition headers; it may be vacuous"
     assert not offenders, f"hand-built Content-Disposition header(s): {offenders}"

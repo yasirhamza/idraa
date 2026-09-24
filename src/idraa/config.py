@@ -369,7 +369,7 @@ class Settings(BaseSettings):
     # Step-up ("sudo mode") freshness window — P2. Sensitive actions require a
     # re-auth within this many seconds. 0 disables step-up entirely (mirrors
     # auth_max_failed_logins' 0-disables convention).
-    auth_step_up_max_age_seconds: int = Field(default=600, ge=0)
+    auth_step_up_max_age_seconds: int = Field(default=600, ge=0, le=86_400)
 
     # Global request-body cap (A4 hardening). CSRFMiddleware buffers the FULL
     # body of every unsafe-method request BEFORE the route runs (double-submit

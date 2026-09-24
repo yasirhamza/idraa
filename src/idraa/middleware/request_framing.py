@@ -67,7 +67,7 @@ class RequestFramingMiddleware:
         # One line per refusal: the guard is outermost, so a false positive would
         # otherwise block a request shape with no trace in the app log.
         logger.warning(
-            "request_framing refused %s %s (HTTP/%s): %s",
+            "request_framing refused %r %r (HTTP/%r): %s",
             scope["method"],
             scope.get("path", ""),
             scope.get("http_version", "?"),
