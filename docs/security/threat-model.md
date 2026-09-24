@@ -79,10 +79,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1302-1310`). The idraa#107 cache-state
+  security-settings state (`app.py:1308-1316`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:978-989`) — misconfig is
+  enabled with no trust strategy configured (`app.py:979-990`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -95,8 +95,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1177`; confirmed order
-`app.py:1122-1183`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1183`; confirmed order
+`app.py:1128-1189`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -142,11 +142,11 @@ docstring).
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
   signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:280-298`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:314-332`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:28,261-277,321-337`).
+  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,355-371`).
 - **S** (credential stuffing): Argon2 password hashing with a precomputed
   dummy-hash timing-safe check for nonexistent/inactive users
   (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:75-89`) — prevents a
@@ -160,9 +160,9 @@ docstring).
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
   store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `auth.py:343-393`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `auth.py:377-427`) and per-source `LoginAttempt` throttle (20/900s/900s,
   `config.py:401-403`; `services/login_throttle.py`), applied to both
-  `/login` and step-up re-verification (`routes/step_up.py:211,239`).
+  `/login` and step-up re-verification (`routes/step_up.py:216,244`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
   (`register_failed_login`) was a non-atomic read-modify-write that lost
   increments under concurrency (~1 of 5 retained); it now does a guarded
@@ -261,10 +261,10 @@ docstring).
   `routes/settings.py:176`, and the **6 B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
-  (`routes/mfa.py:95,135,189,231,258,311`). Re-verification
-  (`routes/step_up.py:87-239`) has its own throttle and stamps
+  (`routes/mfa.py:96,136,190,232,259,336`). Re-verification
+  (`routes/step_up.py:89-331`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `auth.py:274`).
+  `auth.py:308`).
 - **B1 — the settings write is never disarmed (2026-09).** The global
   kill-switch (window ≤ 0) and the per-category ADMIN override both live in the
   settings that `POST /settings/security` writes. `step_up_required()` honours
@@ -282,7 +282,7 @@ docstring).
   else. Pinned by `tests/integration/test_step_up_categories.py::test_b1_*`.
 - **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
-  (`routes/step_up.py:145,147`), so it inherits both the atomic recovery-code
+  (`routes/step_up.py:147,149`), so it inherits both the atomic recovery-code
   burn (§3 E) and the dedicated-pool Argon2 offload (§3 S) with no step-up-
   specific code.
 - **B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
@@ -310,12 +310,12 @@ docstring).
   `APIRouter(dependencies=...)` blanket gate found) — every
   `POST/PUT/PATCH/DELETE` handler across `routes/*.py` was diffed against
   presence of an auth dependency; the only unguarded hits are the
-  pre-authentication login routes (`routes/auth.py:116,240,326,334`) plus
-  `POST /logout` (`routes/auth.py:404-405`, takes `user: User | None =
+  pre-authentication login routes (`routes/auth.py:113,128,273,359,367`) plus
+  `POST /logout` (`routes/auth.py:458-459`, takes `user: User | None =
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1145-1168`).
+  `app.py:1151-1174`).
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
@@ -355,11 +355,12 @@ docstring).
   - **Suppressed with a recorded reason** (`# org-scope: ok — <reason>`,
     same line as the call — the checker enforces a non-empty reason):
     6 sites rebinding the *current session's own* `user.id` across a
-    detached-instance boundary (`routes/mfa.py:141,191,259,312`,
-    `routes/step_up.py:100,282`); 2 sites resolving a user id from a
+    detached-instance boundary (`routes/mfa.py:148,198,270,347`,
+    `routes/step_up.py:102,312`); 3 sites resolving a user id from a
     source that's already unforgeable — a server-signed pending-MFA
-    cookie (`routes/auth.py:267`) and an already-verified WebAuthn
-    credential's owner (`routes/auth.py:382`); 2 sites in
+    cookie (`routes/auth.py:300`) and an already-verified WebAuthn
+    credential's owner (`routes/auth.py:421,436` — login and the B5 replay-audit
+    lookup); 2 sites in
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
     per-request handler with an attacker-suppliable id).
@@ -581,8 +582,8 @@ new export format must re-implement, not assume is "someone else's problem."
 `AuditLog` (`models/audit_log.py:36-64`, indexed on `(org, timestamp)` and
 `(entity_type, entity_id)`) is written via `AuditWriter.log`
 (`services/audit.py:140-168`), which JSON-safe-coerces Decimal/UUID/
-datetime/Enum. Confirmed call sites at login success (`auth.py:259`), failed
-login and lockout (`auth.py:185` `user.login_failed`, `auth.py:195`
+datetime/Enum. Confirmed call sites at login success (`auth.py:261`), failed
+login and lockout (`auth.py:187` `user.login_failed`, `auth.py:197`
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `:362` under the generic `"update"` action — not a role-specific
 action string), and the
@@ -609,7 +610,7 @@ gap, not a finding of an actual miss.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
-  a `user.login_failed` row (`auth.py:185`), not only the attempt that trips
+  a `user.login_failed` row (`auth.py:187`), not only the attempt that trips
   the lockout. A low-and-slow campaign staying under the threshold (or running
   with lockout disabled, `auth_max_failed_logins=0`) is no longer invisible.
   Mirrors the `/login/mfa` path's per-attempt audit. **Row-count bounds, in
@@ -617,7 +618,7 @@ gap, not a finding of an actual miss.
   default 5); the per-source IP throttle when enabled
   (`auth_ip_max_failed_logins`, default 20); and — independent of BOTH, so it
   still holds on a self-hosted deploy that disables them — a hard per-account
-  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `auth.py:98,180`). The ceiling matters
+  ceiling `_FAILED_LOGIN_AUDIT_CAP` (50, `auth.py:100,182`). The ceiling matters
   because the first N misses ARE the detection signal; past N, more rows add
   only disk cost. Unknown emails still write nothing (no user to attribute to;
   no enumeration oracle).

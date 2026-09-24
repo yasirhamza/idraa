@@ -65,7 +65,7 @@ def test_challenge_digest_uniqueness_enforced(
                 "(id, challenge_digest, purpose, consumed_at, expires_at, replay_audited) "
                 "VALUES (:id, :digest, 'login', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)"
             ),
-            {"id": str(uuid.uuid4()), "digest": digest},
+            {"id": uuid.uuid4().hex, "digest": digest},
         )
         with pytest.raises(sa.exc.IntegrityError):
             conn.execute(
@@ -74,7 +74,7 @@ def test_challenge_digest_uniqueness_enforced(
                     "(id, challenge_digest, purpose, consumed_at, expires_at, replay_audited) "
                     "VALUES (:id, :digest, 'stepup', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)"
                 ),
-                {"id": str(uuid.uuid4()), "digest": digest},
+                {"id": uuid.uuid4().hex, "digest": digest},
             )
 
 
@@ -84,7 +84,7 @@ def test_downgrade_drops_table(
 ) -> None:
     """Downgrade -1 removes the table cleanly."""
     command.upgrade(alembic_config, "head")
-    command.downgrade(alembic_config, "-1")
+    command.downgrade(alembic_config, "b5e2c7a9d413")
 
     with alembic_engine.connect() as conn:
         table_names = sa.inspect(conn).get_table_names()

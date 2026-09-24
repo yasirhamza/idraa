@@ -18,7 +18,7 @@ from idraa.models._types import now_utc
 from idraa.models.enums import StepUpCategory, WebAuthnChallengePurpose
 from idraa.models.mfa import RecoveryCode, UserTotp, WebAuthnCredential
 from idraa.models.user import User
-from idraa.routes.deps import client_ip, get_db, require_step_up, require_user
+from idraa.routes.deps import audit_client_ip, client_ip, get_db, require_step_up, require_user
 from idraa.services import totp as totp_service
 from idraa.services import webauthn_service
 from idraa.services.audit import AuditWriter
@@ -290,10 +290,11 @@ async def passkey_register_verify(
                 action="user.webauthn_challenge_replayed",
                 changes={"surface": "register"},
                 user_id=user.id,
-                ip_address=client_ip(request),
+                ip_address=audit_client_ip(request),
             )
         return _json_error("challenge already used")
-    nickname = (payload.get("nickname") or "Passkey")[:64]
+    raw_nickname = payload.get("nickname")
+    nickname = (raw_nickname if isinstance(raw_nickname, str) and raw_nickname else "Passkey")[:64]
     cred = WebAuthnCredential(
         user_id=user.id,
         credential_id=reg.credential_id,

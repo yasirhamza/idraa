@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("purpose", sa.String(length=16), nullable=False),
         sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("replay_audited", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("replay_audited", sa.Boolean(), nullable=False, server_default="0"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("challenge_digest"),
     )

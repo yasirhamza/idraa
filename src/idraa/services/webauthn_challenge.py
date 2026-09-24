@@ -57,7 +57,7 @@ async def consume_challenge(
     Matches only the unique-key conflict (a NOT NULL or other constraint bug
     still raises) — no exception-flow control path.
     """
-    if db.new or db.dirty:
+    if db.new or db.dirty or db.deleted:
         raise RuntimeError(
             "consume_challenge() called with a dirty session — the challenge "
             "must be claimed BEFORE any ORM mutation (S3); see "

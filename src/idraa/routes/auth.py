@@ -53,6 +53,7 @@ from idraa.models.mfa import WebAuthnCredential
 from idraa.models.session import AuthSession
 from idraa.models.user import User
 from idraa.routes.deps import (
+    audit_client_ip,
     client_ip,
     current_session,
     current_user,
@@ -427,7 +428,7 @@ async def login_passkey_verify(
                     action="user.webauthn_challenge_replayed",
                     changes={"surface": "login"},
                     user_id=replay_user.id,
-                    ip_address=client_ip(request),
+                    ip_address=audit_client_ip(request),
                 )
         return _json_err("challenge already used")
     cred.sign_count = new_count
