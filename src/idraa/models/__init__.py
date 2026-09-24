@@ -49,6 +49,7 @@ from idraa.models.session import AuthSession
 from idraa.models.sme import SubjectMatterExpert
 from idraa.models.system_state import SystemState
 from idraa.models.user import User
+from idraa.models.webauthn_challenge_consumed import WebAuthnChallengeConsumed
 from idraa.models.wizard_draft import WizardDraft
 
 __all__ = [
@@ -94,6 +95,7 @@ __all__ = [
     "User",
     "UserRole",
     "UserTotp",
+    "WebAuthnChallengeConsumed",
     "WebAuthnCredential",
     "WizardDraft",
 ]
