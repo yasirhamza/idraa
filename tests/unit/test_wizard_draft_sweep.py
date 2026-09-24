@@ -123,6 +123,12 @@ async def test_sweep_exception_does_not_kill_reaper_loop(
     monkeypatch.setattr(run_reaper, "sweep_expired_previews", _noop_sweep)
     monkeypatch.setattr(run_reaper, "sweep_expired_sessions", _noop_sweep)
 
+    async def _noop_challenge_sweep() -> None:
+        return None
+
+    monkeypatch.setattr(run_reaper, "sweep_expired_webauthn_challenges", _noop_challenge_sweep)
+    monkeypatch.setattr(run_reaper, "sweep_expired_login_attempts", _noop_sweep)
+
     task = asyncio.create_task(run_reaper.periodic_reaper_loop(_StubSettings()))  # type: ignore[arg-type]
     # Condition-wait, not a fixed sleep: under xdist load the event loop can
     # be starved past any wall-clock budget (issue #164 — flaked on a main

@@ -19,6 +19,21 @@ class StepUpCategory(StrEnum):
     CREDENTIALS = "credentials"
 
 
+class WebAuthnChallengePurpose(StrEnum):
+    """Ceremony a WebAuthn challenge was minted for (advisory GHSA-46jj-823j-mjj9 B5).
+
+    Forensic-only on ``WebAuthnChallengeConsumed`` — the single-use claim's
+    UNIQUE key is ``challenge_digest`` ALONE, not ``(challenge_digest,
+    purpose)``. Login and registration share cookie ``rf_webauthn_challenge``
+    + signing salt, so digest-only uniqueness also blocks cross-purpose
+    reuse; do not widen the key to include this column.
+    """
+
+    LOGIN = "login"
+    STEPUP = "stepup"
+    REGISTER = "register"
+
+
 class EntityStatus(StrEnum):
     DRAFT = "draft"
     ACTIVE = "active"

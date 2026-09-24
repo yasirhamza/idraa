@@ -963,6 +963,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         sweep_expired_login_attempts,
         sweep_expired_previews,
         sweep_expired_sessions,
+        sweep_expired_webauthn_challenges,
         sweep_wizard_drafts,
     )
     from idraa.services.security_settings import warm_cache as _warm_security_settings_cache
@@ -1064,6 +1065,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await sweep_expired_login_attempts(_settings)
     except Exception:
         logging.getLogger(__name__).exception("Boot login_attempt sweep failed; continuing startup")
+    # B5: boot sweep of expired consumed-WebAuthn-challenge rows (sibling try).
+    try:
+        await sweep_expired_webauthn_challenges()
+    except Exception:
+        logging.getLogger(__name__).exception("Boot webauthn challenge sweep failed; continuing")
 
     # Task 5 (Arch-B1): a SEPARATE startup-only VACUUM sweep, additive to the
     # throttled opportunistic sweep above — NOT a replacement (replacing it

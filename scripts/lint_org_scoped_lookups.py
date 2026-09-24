@@ -30,7 +30,7 @@ maintained allowlist below — update it when a new org-scoped model is added
 (``models/mixins.py:OrgMixin`` or a direct ``organization_id`` column).
 Deliberately EXCLUDED: ``Organization`` (is the org, not FK'd to one) and the
 user-scoped-not-org-scoped tables (``AuthSession``, ``WebAuthnCredential``,
-``UserTotp``, ``RecoveryCode``, ``LoginAttempt``).
+``UserTotp``, ``RecoveryCode``, ``LoginAttempt``, ``WebAuthnChallengeConsumed``).
 
 Usage:
 - ``python scripts/lint_org_scoped_lookups.py file1.py file2.py`` — scan

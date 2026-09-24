@@ -287,6 +287,27 @@ async def sweep_expired_login_attempts(settings: Settings) -> None:
         logger.info("login_attempt TTL sweep deleted %d inactive row(s)", deleted)
 
 
+async def sweep_expired_webauthn_challenges() -> None:
+    """B5 (advisory GHSA-46jj-823j-mjj9): delete consumed-challenge rows past
+    ``expires_at`` (TTL + 60 s slack). After that the challenge cookie's own
+    max_age already rejects a replay, so the row carries no information.
+    Rows need a valid WebAuthn assertion to exist and are never range-scanned,
+    so with the periodic loop off (interval 0) the boot sweep alone suffices."""
+    from idraa.db import get_session
+    from idraa.models.webauthn_challenge_consumed import WebAuthnChallengeConsumed
+
+    async with get_session() as session:
+        result: CursorResult[Any] = await session.execute(  # type: ignore[assignment]
+            delete(WebAuthnChallengeConsumed).where(
+                WebAuthnChallengeConsumed.expires_at < now_utc()
+            )
+        )
+        await session.commit()
+    deleted = result.rowcount
+    if deleted and deleted > 0:
+        logger.info("webauthn_challenge_consumed sweep deleted %d expired row(s)", deleted)
+
+
 async def periodic_reaper_loop(settings: Settings) -> None:
     """#211 Phase 2: sweep orphaned runs every ``run_reaper_interval_seconds``.
 
@@ -336,3 +357,9 @@ async def periodic_reaper_loop(settings: Settings) -> None:
             raise
         except Exception:
             logger.exception("login_attempt TTL sweep failed; will retry next interval")
+        try:
+            await sweep_expired_webauthn_challenges()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("webauthn challenge sweep failed; will retry next interval")

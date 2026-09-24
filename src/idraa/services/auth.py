@@ -135,6 +135,14 @@ def load_mfa_pending(token: str, max_age: int = 300) -> uuid.UUID | None:
         return None
 
 
+# Shared TTL for every WebAuthn challenge (login + step-up + registration):
+# cookie max_age on both setters, the `max_age=` default on both loaders, AND
+# the single-use claim's expires_at window in services/webauthn_challenge.py
+# (consume_challenge). One constant so the three can never drift apart
+# (advisory GHSA-46jj-823j-mjj9 B5 plan-gate A2/S6).
+WEBAUTHN_CHALLENGE_MAX_AGE = 300
+
+
 def _webauthn_challenge_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-challenge")
 
@@ -143,7 +151,7 @@ def sign_webauthn_challenge(challenge_b64url: str) -> str:
     return _webauthn_challenge_serializer().dumps(challenge_b64url)
 
 
-def load_webauthn_challenge(token: str, max_age: int = 300) -> str | None:
+def load_webauthn_challenge(token: str, max_age: int = WEBAUTHN_CHALLENGE_MAX_AGE) -> str | None:
     try:
         value: str = _webauthn_challenge_serializer().loads(token, max_age=max_age)
     except BadData:
@@ -193,7 +201,7 @@ def set_webauthn_challenge_cookie(response: Response, challenge_b64url: str) -> 
     response.set_cookie(
         "rf_webauthn_challenge",
         sign_webauthn_challenge(challenge_b64url),
-        max_age=300,
+        max_age=WEBAUTHN_CHALLENGE_MAX_AGE,
         httponly=True,
         samesite="lax",
         secure=_secure(),
@@ -225,28 +233,54 @@ def clear_totp_pending_cookie(response: Response) -> None:
 # registration ceremony (P2 plan-gate Sec-N1). Same payload shape, different
 # PURPOSE: a challenge minted for the anonymous login ceremony must never
 # validate for an authenticated step-up re-verify, per the salt convention
-# above _serializer. ---
+# above _serializer.
+#
+# S8 (advisory GHSA-46jj-823j-mjj9, rev 3 N2-N4): the payload additionally
+# binds the CURRENT AuthSession id, so a captured step-up ceremony cannot be
+# replayed to stamp a different (stolen) session of the same user — the
+# loader returns the challenge only when the bound session id matches. ---
 def _webauthn_stepup_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().session_secret, salt="rf-webauthn-stepup")
 
 
-def sign_webauthn_stepup_challenge(challenge_b64url: str) -> str:
-    return _webauthn_stepup_serializer().dumps(challenge_b64url)
+def sign_webauthn_stepup_challenge(challenge_b64url: str, session_id: uuid.UUID) -> str:
+    return _webauthn_stepup_serializer().dumps({"c": challenge_b64url, "s": session_id.hex})
 
 
-def load_webauthn_stepup_challenge(token: str, max_age: int = 300) -> str | None:
+def load_webauthn_stepup_challenge(
+    token: str, session_id: uuid.UUID | None, max_age: int = WEBAUTHN_CHALLENGE_MAX_AGE
+) -> str | None:
+    """Return the signed challenge iff it is bound to ``session_id``.
+
+    ``session_id=None`` (no live session at verify time) rejects BEFORE any
+    comparison. An old-format cookie — a plain signed string, as minted
+    before this session-binding shipped — decodes to a ``str``, not a
+    ``dict``, and loads as ``None`` rather than raising (no TypeError/500 on
+    a pre-deploy cookie still in flight).
+    """
+    if session_id is None:
+        return None
     try:
-        value: str = _webauthn_stepup_serializer().loads(token, max_age=max_age)
+        value = _webauthn_stepup_serializer().loads(token, max_age=max_age)
     except BadData:
         return None
-    return value
+    if not isinstance(value, dict):
+        return None
+    challenge, sid = value.get("c"), value.get("s")
+    if not isinstance(challenge, str) or not isinstance(sid, str):
+        return None
+    if sid != session_id.hex:
+        return None
+    return challenge
 
 
-def set_webauthn_stepup_challenge_cookie(response: Response, challenge_b64url: str) -> None:
+def set_webauthn_stepup_challenge_cookie(
+    response: Response, challenge_b64url: str, session_id: uuid.UUID
+) -> None:
     response.set_cookie(
         "rf_webauthn_stepup",
-        sign_webauthn_stepup_challenge(challenge_b64url),
-        max_age=300,
+        sign_webauthn_stepup_challenge(challenge_b64url, session_id),
+        max_age=WEBAUTHN_CHALLENGE_MAX_AGE,
         httponly=True,
         samesite="lax",
         secure=_secure(),

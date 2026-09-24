@@ -178,6 +178,15 @@ async def test_new_sweep_exceptions_do_not_kill_reaper_loop(
     monkeypatch.setattr(run_reaper, "sweep_expired_previews", _raising_preview_sweep)
     monkeypatch.setattr(run_reaper, "sweep_expired_sessions", _raising_session_sweep)
 
+    async def _noop_settings_sweep(settings: object) -> None:
+        return None
+
+    async def _noop_challenge_sweep() -> None:
+        return None
+
+    monkeypatch.setattr(run_reaper, "sweep_expired_login_attempts", _noop_settings_sweep)
+    monkeypatch.setattr(run_reaper, "sweep_expired_webauthn_challenges", _noop_challenge_sweep)
+
     task = asyncio.create_task(run_reaper.periodic_reaper_loop(_StubSettings()))  # type: ignore[arg-type]
     # Condition-wait, not a fixed sleep (issue #164 — same shape as the
     # wizard-draft twin): the 5s ceiling only bounds the failure case.
