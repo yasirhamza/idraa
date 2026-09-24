@@ -234,7 +234,7 @@ docstring).
   (`routes/deps.py:230-266`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
-  `services/security_settings.py:140-186`). **43** real call sites (37 as of
+  `services/security_settings.py:140-188`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
   `routes/deps.py:236` and a prose mention at
