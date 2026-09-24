@@ -92,6 +92,9 @@
      air-gapped networks, and CSP script-src drops the unpkg.com grant. No
      SRI/crossorigin needed same-origin; integrity is guaranteed by the
      committed, version-pinned filename + CSP 'self'. #}
+  {# B4: the one CSRF-token reader for JS (cookie first; <meta> goes stale
+     after a boosted login). Loaded before any script that posts. #}
+  <script src="/static/js/csrf.js?v={{ static_version }}"></script>
   <script src="/static/vendor/htmx-1.9.12.min.js?v={{ static_version }}"></script>
   {# HTMX 1.9.x defaults drop 4xx + 5xx responses (no swap), making
      server-side form validation errors invisible — the route returns
