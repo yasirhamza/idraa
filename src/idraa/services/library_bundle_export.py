@@ -32,6 +32,7 @@ from fastapi import Response
 
 from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.services.seed_library_loader import LibraryEntrySeed
+from idraa.utils.download import attachment_disposition
 
 # Exactly the authored seed fields, in declaration order. Deriving from the seed
 # model is the contract: it can never drift from the import-side schema.
@@ -63,7 +64,7 @@ def export_bundle_response(
         content=payload.encode("utf-8"),
         media_type="application/json",
         headers={
-            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Disposition": attachment_disposition(filename),
             # idraa#110: bulk-egress no-store parity (csv_response / PDF / #109).
             "Cache-Control": "private, no-store",
         },

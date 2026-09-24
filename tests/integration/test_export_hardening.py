@@ -5,12 +5,12 @@
    third surfaced by the review) gain the EXPORTS step-up gate their sibling
    exports already carry, plus audit rows so per-id exports consume the
    export budget (``log_bulk_export`` IS the rate limiter).
-2. #107(2) — /healthz exposes the security-settings cache state as a
-   TRI-state: "warm" (overrides loaded), "empty" (warm completed, no
-   settings row saved yet — normal), "cold" (never warmed / boot warm
-   FAILED — env-fallback policy in effect, the actionable signal).
-   Deliberately DB-free: healthz must stay cheap during the boot-write
-   window (#72).
+2. #107(2) — the security-settings cache state is a TRI-state: "warm"
+   (overrides loaded), "empty" (warm completed, no settings row saved yet —
+   normal), "cold" (never warmed / boot warm FAILED — env-fallback policy in
+   effect, the actionable signal). It renders on the admin-only
+   /settings/security page; unauthenticated /healthz no longer carries it
+   (advisory C5).
 3. #110(1) — bulk-export audit rows record the TRUSTED client IP (edge
    header machinery from routes/deps.py) instead of ``request.client``,
    falling back to it when no trust strategy is configured.
@@ -76,34 +76,35 @@ async def test_exports_off_leaves_routes_open(
 
 
 # ---------------------------------------------------------------------------
-# 2. /healthz warm-state signal (#107 item 2)
+# 2. Security-settings warm-state signal (#107 item 2; on /settings/security since C5)
 
 
 @pytest.mark.asyncio
-async def test_healthz_reports_security_settings_cache_state(
+async def test_security_page_reports_settings_cache_state(
     authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> None:
     """Tri-state signal: cold = never warmed / warm failed; empty = warmed,
     no SecuritySettings row (NORMAL until an admin first saves settings);
     warm = snapshot loaded. Two-state warm/cold would report "cold" forever
     on a healthy install that never wrote a settings row, teaching operators
-    to ignore the field."""
+    to ignore the field. Rendered on the admin-only /settings/security page
+    (moved off unauthenticated /healthz, advisory C5)."""
     client, org_id = authed_admin
 
     security_settings.invalidate()
-    r = await client.get("/healthz")
+    r = await client.get("/settings/security")
     assert r.status_code == 200
-    assert r.json()["security_settings_cache"] == "cold"
+    assert 'data-settings-cache="cold"' in r.text
 
     # Warmed successfully but no row exists -> "empty", NOT "cold".
     security_settings._warmed = True
-    r = await client.get("/healthz")
-    assert r.json()["security_settings_cache"] == "empty"
+    r = await client.get("/settings/security")
+    assert 'data-settings-cache="empty"' in r.text
 
     # _apply persists a SecuritySettings row and loads the cache.
     await _apply(db_session, org_id, step_up_exports=False)
-    r = await client.get("/healthz")
-    assert r.json()["security_settings_cache"] == "warm"
+    r = await client.get("/settings/security")
+    assert "data-settings-cache" not in r.text
 
 
 # ---------------------------------------------------------------------------

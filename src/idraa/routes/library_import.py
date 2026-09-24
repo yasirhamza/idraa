@@ -44,6 +44,7 @@ from idraa.services.library_bundle_import import (
     validate_upload,
 )
 from idraa.services.org import require_sole_org
+from idraa.utils.download import attachment_disposition
 
 router = APIRouter()
 
@@ -65,7 +66,7 @@ async def library_import_template_json(
     return Response(
         content=generate_template_json(),
         media_type="application/json",
-        headers={"Content-Disposition": "attachment; filename=library_bundle_template.json"},
+        headers={"Content-Disposition": attachment_disposition("library_bundle_template.json")},
     )
 
 

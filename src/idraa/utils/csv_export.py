@@ -7,7 +7,9 @@ Plan-gate Sec-1: prefixes cells starting with formula-trigger chars (=, +, -, @,
 \\t, \\r) with a single-quote so Excel/Sheets/Numbers do not interpret them as
 formulas. OWASP "CSV Injection" mitigation.
 
-Plan-gate Sec-5: sanitises filename in Content-Disposition (strips ", ;, CR, LF).
+Plan-gate Sec-5: the Content-Disposition filename is sanitised by
+``utils.download.attachment_disposition``, the one builder every download uses
+(advisory C9).
 
 Plan-gate M-1: optional preamble lets matrix CSV warn about multiplicative
 composition before the header row.
@@ -23,8 +25,12 @@ from typing import Any
 
 from fastapi import Response
 
+from idraa.utils.download import (  # re-exported (C9)
+    attachment_disposition,
+    sanitize_disposition_filename,
+)
+
 _FORMULA_TRIGGER = re.compile(r"^[=+\-@\t\r]")
-_FILENAME_UNSAFE = re.compile(r'[";\r\n]')
 
 
 def _sanitize_cell(value: Any) -> Any:
@@ -32,11 +38,6 @@ def _sanitize_cell(value: Any) -> Any:
     if isinstance(value, str) and _FORMULA_TRIGGER.match(value):
         return "'" + value
     return value
-
-
-def _sanitize_filename(filename: str) -> str:
-    """Strip characters that would let a caller break out of the Content-Disposition header."""
-    return _FILENAME_UNSAFE.sub("_", filename)
 
 
 def _rows_to_csv_lines(header: list[str], rows: Iterable[tuple[Any, ...]]) -> Iterator[bytes]:
@@ -76,7 +77,7 @@ def csv_response(
     streaming for very large exports — the helper intentionally returns a plain
     ``Response`` so test helpers can read ``.body`` without async machinery.
     """
-    safe_filename = _sanitize_filename(filename)
+    disposition = attachment_disposition(filename)
 
     def lines() -> Iterator[bytes]:
         if preamble:
@@ -90,7 +91,7 @@ def csv_response(
         content=body,
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Content-Disposition": disposition,
             # idraa#110: bulk-egress artifacts must not land in shared caches —
             # match the PDF-report (routes/reports.py) and samples-export
             # (#109) no-store precedents.
@@ -102,4 +103,4 @@ def csv_response(
 # Public aliases: the samples export (services/sample_export.py) reuses the
 # exact header/preamble sanitisation and filename rules of csv_response.
 sanitize_cell = _sanitize_cell
-sanitize_filename = _sanitize_filename
+sanitize_filename = sanitize_disposition_filename

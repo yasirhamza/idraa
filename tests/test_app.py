@@ -24,8 +24,9 @@ async def test_healthz_returns_ok(client: AsyncClient) -> None:
     assert body["status"] == "ok"
 
 
-async def test_healthz_includes_version(client: AsyncClient) -> None:
+async def test_healthz_is_liveness_only(client: AsyncClient) -> None:
+    """Advisory C5: /healthz is unauthenticated and exempt from every
+    pre-gate, so it must not disclose the version or security-settings
+    state (that operator signal lives on /settings/security)."""
     response = await client.get("/healthz")
-    body = response.json()
-    # Version may be 0.0.0 in phase 0 — just assert the field exists and is a string
-    assert isinstance(body.get("version"), str)
+    assert response.json() == {"status": "ok"}

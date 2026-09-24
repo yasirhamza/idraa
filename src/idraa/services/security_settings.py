@@ -67,7 +67,7 @@ def invalidate() -> None:
     "cold" is unobservable in prod. If a future prod path ever invalidates
     WITHOUT reloading (e.g. a settings-row delete), split the flag handling
     first: leaving _warmed True there is correct ("empty", not "cold" =
-    boot-warm-failed false alarm on /healthz). See cache_state().
+    boot-warm-failed false alarm on /settings/security). See cache_state().
     """
     global _cache, _warmed
     _cache = None
@@ -75,7 +75,7 @@ def invalidate() -> None:
 
 
 def cache_state() -> Literal["warm", "empty", "cold"]:
-    """Tri-state warm signal for /healthz (idraa#107(2)).
+    """Tri-state warm signal shown on /settings/security (idraa#107(2); off /healthz since C5).
 
     - ``"warm"``  — snapshot loaded; persisted overrides are in effect.
     - ``"empty"`` — a warm/load completed successfully but no
@@ -89,8 +89,7 @@ def cache_state() -> Literal["warm", "empty", "cold"]:
 
     A two-state warm/cold signal would report "cold" forever on a healthy
     install that never wrote a settings row, training operators to ignore
-    the field. Read-only on module state — safe for /healthz, which must
-    stay DB-free during the boot-write window.
+    the field. Read-only on module state (no DB read).
     """
     if _cache is not None:
         return "warm"
@@ -145,9 +144,38 @@ def effective_mfa_policy() -> str:
 
 
 def effective_step_up_window() -> int:
+    # Clamped: a row stored before the input bound existed must not overflow
+    # timedelta in is_step_up_fresh (500 on every step-up route).
     if _cache is not None and _cache.step_up_window_seconds is not None:
-        return _cache.step_up_window_seconds
+        return min(_cache.step_up_window_seconds, MAX_STEP_UP_WINDOW_SECONDS)
     return get_settings().auth_step_up_max_age_seconds
+
+
+# B1: the window /settings/security writes use when the configured one is 0,
+# and the CEILING on it otherwise (a huge configured window must not disarm it).
+_SETTINGS_WRITE_FLOOR_SECONDS = 600
+# Upper bound on any configured step-up window (routes/settings.py validates
+# input against it). One day: long enough for any real session, far below the
+# timedelta overflow a multi-million-year value hits in is_step_up_fresh.
+MAX_STEP_UP_WINDOW_SECONDS = 86_400
+
+
+def settings_write_step_up_window() -> int:
+    """Freshness window for writes to the security settings themselves (advisory B1).
+
+    The kill-switch (window <= 0) and the ADMIN category override both live
+    in the settings this route writes. If they also disarmed its own gate,
+    one fresh write could switch step-up off for good: every later write —
+    including re-enabling it — would pass with any stale admin cookie. So
+    this route always demands freshness. Its window is the env default (or a
+    600 s floor when the env opts out), and a configured window only ever
+    TIGHTENS it: ``min(configured, baseline)``. A huge configured window is
+    otherwise the same disarm as the kill-switch (PR-gate finding).
+    """
+    env_window = get_settings().auth_step_up_max_age_seconds
+    baseline = env_window if env_window > 0 else _SETTINGS_WRITE_FLOOR_SECONDS
+    window = effective_step_up_window()
+    return min(window, baseline) if window > 0 else baseline
 
 
 def step_up_required(category: StepUpCategory) -> bool:

@@ -201,3 +201,35 @@ async def test_admin_invite_duplicate_email_returns_400(
         .all()
     )
     assert len(users) == 1
+
+
+async def test_invite_audit_row_redacts_email(
+    authed_admin: tuple[AsyncClient, object], db_session: AsyncSession
+) -> None:
+    """Advisory C4: the user-create audit row carried the raw email, against
+    services/audit.redact_email's invariant (email NEVER raw in payloads)."""
+    import json
+
+    from idraa.models.audit_log import AuditLog
+
+    client, _ = authed_admin
+    r = await csrf_post(
+        client,
+        "/users/invite",
+        {
+            "email": "distinctlocalpart@test.local",
+            "full_name": "C",
+            "role": "analyst",
+            "password": "pw-12345678",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    row = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.entity_type == "user", AuditLog.action == "create")
+        )
+    ).scalar_one()
+    serialized = json.dumps(row.changes)
+    assert "distinctlocalpart" not in serialized
+    assert row.changes["email_redacted"] == [None, "*****@test.local"]

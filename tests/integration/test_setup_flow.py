@@ -58,6 +58,10 @@ async def test_setup_post_creates_org_and_admin(
     # Audit events: org create + user create + login (sorted -> 2 creates then login)
     actions = sorted(a.action for a in audits)
     assert actions == ["create", "create", "login"]
+    # Advisory C4: the first-admin create row never carries the raw email.
+    user_create = next(a for a in audits if a.entity_type == "user" and a.action == "create")
+    assert "admin@acme.test" not in str(user_create.changes)
+    assert user_create.changes == {"email_redacted": [None, "*****@acme.test"]}
 
 
 async def test_setup_blocked_once_user_exists(

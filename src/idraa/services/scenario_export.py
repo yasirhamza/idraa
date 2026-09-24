@@ -51,6 +51,7 @@ from fastapi import Response
 from idraa.models.scenario import Scenario
 from idraa.services.scenario_import_parsers import CSV_HEADERS, collapse_num
 from idraa.utils.csv_export import csv_response  # I5: has the CSV-injection sanitizer
+from idraa.utils.download import attachment_disposition
 
 # Identical to the importer's columns — the round-trip contract depends on it.
 CSV_EXPORT_HEADERS: list[str] = list(CSV_HEADERS)
@@ -265,7 +266,7 @@ def export_json_response(scenarios: Iterable[Scenario], *, filename: str) -> Res
         content=payload.encode("utf-8"),
         media_type="application/json",
         headers={
-            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Disposition": attachment_disposition(filename),
             # idraa#110: same no-store parity as csv_response — JSON export is
             # the same bulk-egress class as the CSV variant.
             "Cache-Control": "private, no-store",

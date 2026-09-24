@@ -89,6 +89,7 @@ from idraa.services.sample_export import (
     samples_row_to_arrays,
 )
 from idraa.utils.csv_export import csv_response, sanitize_filename
+from idraa.utils.download import attachment_disposition
 
 logger = logging.getLogger(__name__)
 
@@ -526,7 +527,7 @@ async def get_run_samples_csv_gz(
             body,
             media_type="application/gzip",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": attachment_disposition(filename),
                 # Sec3-N3: step-up-gated bulk egress — match the PDF report's
                 # no-store precedent (routes/reports.py).
                 "Cache-Control": "private, no-store",

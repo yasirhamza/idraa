@@ -14,6 +14,20 @@
 
 {%- set errors_dict = {"_form": error} if error else {} -%}
 
+{# idraa#107 operator signal (moved off unauthenticated /healthz, advisory C5). #}
+{% if settings_cache_state == "cold" %}
+<div class="alert alert-warning mb-4" role="status" data-settings-cache="cold">
+  <span>The saved security settings are not loaded: the load at start-up failed or has not run.
+  Environment defaults are in effect, so a saved <strong>Required</strong> MFA policy may be relaxed
+  until the next save here or a restart. Check the server log for
+  <code>security_settings cache warm FAILED</code>.</span>
+</div>
+{% elif settings_cache_state == "empty" %}
+<div class="alert alert-info mb-4" role="status" data-settings-cache="empty">
+  <span>No security settings have been saved yet; environment defaults apply until the first save.</span>
+</div>
+{% endif %}
+
 <form method="post" action="/settings/security" class="space-y-6">
   {{ csrf_field() }}
 
@@ -70,5 +84,7 @@
     <button type="submit" class="btn btn-primary btn-sm">Save</button>
   </div>
 </form>
+
+<p class="text-micro text-ink-3 mt-6" data-app-version>Idraa version {{ app_version }}</p>
 
 {% endblock %}
