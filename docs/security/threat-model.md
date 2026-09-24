@@ -30,7 +30,7 @@ Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XF
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
    │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1122-1183) — B0 and B3 run BEFORE B2 (session lookup hits the
+   │  (app.py:1129-1193) — B0 and B3 run BEFORE B2 (session lookup hits the
    │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
@@ -79,10 +79,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1308-1316`). The idraa#107 cache-state
+  security-settings state (`app.py:1312-1320`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:979-990`) — misconfig is
+  enabled with no trust strategy configured (`app.py:980-991`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -95,8 +95,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1183`; confirmed order
-`app.py:1128-1189`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1187`; confirmed order
+`app.py:1129-1193`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -142,11 +142,11 @@ docstring).
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
   signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:280-304`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:314-338`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:28,261-277,328-344`).
+  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,362-378`).
   **CSRF depends on this cookie value never changing mid-session** (GHSA-46jj-823j-mjj9 B4
   binding, §4): today it is a timestamp-free `URLSafeSerializer` signature and
   `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
@@ -165,7 +165,7 @@ docstring).
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
   store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `auth.py:377-427`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
   `config.py:401-403`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:217,245`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
@@ -227,9 +227,9 @@ docstring).
   token rode session B. `HttpOnly=False` (must be JS-readable),
   `SameSite=Strict`. Validation requires the cookie present and valid **under
   the current binding** and the header-or-form token to
-  `hmac.compare_digest`-match it (`csrf.py:372-403`). A cookie that fails the
+  `hmac.compare_digest`-match it (`csrf.py:374-405`). A cookie that fails the
   current binding is re-minted (every GET after login/logout hands the page a
-  fresh token). Rejections are an opaque 403 (`_forbid`, `csrf.py:438-476`):
+  fresh token). Rejections are an opaque 403 (`_forbid`, `csrf.py:440-478`):
   the body carries no reason; a present-but-stale cookie gets a fresh
   `Set-Cookie` on the 403 (its presence tells only the cookie's own holder
   that their half was stale — not a cross-session oracle), a missing cookie
@@ -265,7 +265,7 @@ docstring).
   an **unauthenticated 500-on-every-request** class, since `verify_csrf_token`
   runs unconditionally near the top of `dispatch` (even on safe GETs) and
   `sig_hex` is never hex-validated before reaching it (unlike `nonce_hex`);
-  `dispatch`'s `submitted` check (`csrf.py:389-395`) covers the double-submit
+  `dispatch`'s `submitted` check (`csrf.py:391-397`) covers the double-submit
   compare against the form-field-or-header token. Regression:
   `tests/integration/test_csrf_nonascii_token.py`.
 - **DoS ceiling (A4, 2026-08-09)**: this middleware buffers the FULL body of
@@ -274,7 +274,7 @@ docstring).
   now size-capped: `_read_body_capped` (`csrf.py:122-148`) reads via
   `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
   `config.py:384`) and returns a 413 before the whole body is buffered
-  (`csrf.py:327-344`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
+  (`csrf.py:329-346`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
   `routes/deps.py:23`) + multipart framing so legitimate imports pass; a test
   pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
   unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
@@ -351,7 +351,7 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1151-1174`).
+  `app.py:1155-1178`).
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
@@ -435,7 +435,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:95-98`), which Starlette constructs with
+  (`app.py:96-99`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — every file under `src/idraa/templates/` is `.html` (zero
@@ -462,7 +462,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:100-105` about a
+  The only textual hit is an explanatory comment in `app.py:101-106` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
@@ -735,7 +735,7 @@ watching:
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
    because it changes the middleware stack. Tracked as a follow-up.
 8. ~~**Non-atomic per-account lockout counter**~~ — **CLOSED 2026-08-15.**
-   `register_failed_login` (`services/auth.py:352-393`) was a plain
+   `register_failed_login` (`services/auth.py:393-434`) was a plain
    read-modify-write (`user.failed_login_count += 1`) that lost increments under
    concurrency (~1 of 5 retained). It now does a guarded
    `UPDATE users SET failed_login_count = failed_login_count + 1` with a `CASE`
