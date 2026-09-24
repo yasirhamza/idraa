@@ -142,12 +142,12 @@ docstring).
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
   signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:314-332`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:280-304`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,355-371`).
-  **CSRF depends on this cookie value never changing mid-session** (B4
+  Absolute 14-day TTL, does not slide (`auth.py:28,261-277,328-344`).
+  **CSRF depends on this cookie value never changing mid-session** (GHSA-46jj-823j-mjj9 B4
   binding, §4): today it is a timestamp-free `URLSafeSerializer` signature and
   `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
   would invalidate every open page's forms (one 403 + reload each) — design it
@@ -215,7 +215,7 @@ docstring).
 
 - **T**: session-bound double-submit HMAC pattern (`middleware/csrf.py`).
   Cookie `csrf_token` = `<nonce>.<HMAC-SHA256(key, nonce || binding)>`
-  (`csrf.py:151-230`): `key` is derived once from `session_secret`
+  (`csrf.py:151-242`): `key` is derived once from `session_secret`
   (`derive_csrf_key`, info `idraa-csrf-v2` — tokens signed the pre-2026-09 way
   never verify), and `binding` (`csrf_binding`, `csrf.py:172-191`) is
   `sha256` of the raw `idraa_session` cookie value — read through exactly the
@@ -229,7 +229,7 @@ docstring).
   the current binding** and the header-or-form token to
   `hmac.compare_digest`-match it (`csrf.py:372-403`). A cookie that fails the
   current binding is re-minted (every GET after login/logout hands the page a
-  fresh token). Rejections are an opaque 403 (`_forbid`, `csrf.py:438-469`):
+  fresh token). Rejections are an opaque 403 (`_forbid`, `csrf.py:438-476`):
   the body carries no reason; a present-but-stale cookie gets a fresh
   `Set-Cookie` on the 403 (its presence tells only the cookie's own holder
   that their half was stale — not a cross-session oracle), a missing cookie
@@ -244,12 +244,17 @@ docstring).
   `<meta name="csrf-token">`, `templates/base.html:7`): `<body hx-boost>`
   swaps only body + title, so the `<head>` meta can hold a pre-login token
   after a boosted login. A test pins that nothing else reads the meta tag.
-- **Residual (B4 design, stated honestly):** (1) pre-login forms (`/login`,
-  `/login/mfa`, `/login/passkey/*`, `/setup`) share the one anon binding, so
-  an attacker-minted anon token is valid there — login CSRF is NOT prevented
-  and those forms keep only SameSite=Strict + host-only cookies; (2) a leaked
-  token works with its own session's cookie for that session's whole life
-  (14-day absolute TTL, no per-token rotation). Both are in §12.
+- **What survives if a lower layer fails (GHSA-46jj-823j-mjj9 B4):**
+
+  | If… | Authenticated writes | Still open |
+  |---|---|---|
+  | SameSite on the CSRF cookie is relaxed | still need a token bound to the victim's session cookie, which a cross-site page can neither read nor compute | pre-login forms (`/login`, `/login/mfa`, `/login/passkey/*`, `/setup`) share the one anon binding, so an attacker-minted anon token is valid there |
+  | a subdomain writes cookies (cookie tossing) | a tossed `csrf_token` is bound to the attacker's session or to anon, so it fails; tossing `idraa_session` too makes the request run AS the attacker (a session swap, not CSRF) | the same pre-login gap: login CSRF is NOT prevented (an earlier design draft's "prevents login CSRF" claim was withdrawn) |
+  | a token leaks | usable only with its own session's cookie | for that session's whole life (14-day absolute TTL, no per-token rotation) |
+
+  The open column is §12 items 9–10. Plain (non-HTMX) form POSTs that hit a
+  stale token get a 403 whose text tells the user to reload; HTMX requests
+  reload automatically.
 - **Non-ASCII-token hardening (D1, 2026-08-14)**: `hmac.compare_digest` raises
   `TypeError` (not a clean non-match) when either operand carries a
   non-ASCII character, so an attacker-crafted non-ASCII token used to escape
@@ -741,7 +746,7 @@ watching:
    read-modify-write, mutually exclusive with the failure path). The deferred
    follow-up that this document previously named is done.
 
-9. **CSRF: pre-login forms share one anon binding (B4 residual, 2026-09).**
+9. **CSRF: pre-login forms share one anon binding (GHSA-46jj-823j-mjj9 B4 residual, 2026-09).**
    `/login`, `/login/mfa`, `/login/passkey/*` and `/setup` bind to the fixed
    anon value, so an attacker-minted anon token is valid there: login CSRF is
    not prevented, and those forms rest on SameSite=Strict + host-only cookies
@@ -749,7 +754,7 @@ watching:
    subdomain cookie tossing outright; every client/test reads the name, so it
    is its own change), and optionally bind `/login/mfa` to the MFA-pending
    cookie.
-10. **CSRF: a leaked token lives as long as its session (B4 residual).** It is
+10. **CSRF: a leaked token lives as long as its session (GHSA-46jj-823j-mjj9 B4 residual).** It is
     bound to one session cookie but not rotated, so a leak is usable for that
     session's 14-day absolute TTL. A forced reload on the first POST after a
     session change discards typed-but-unsaved values on that page (drafts are

@@ -463,7 +463,14 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             # never grants, so this is safe even on the cookie-less
             # cross-site-POST shape (rev 3 Sec-N1).
             headers["HX-Refresh"] = "true"
-        response = PlainTextResponse("Forbidden", status_code=403, headers=headers)
+        # Still opaque about WHICH check failed; for a plain (non-HTMX) form
+        # POST — after a deploy or a sign-in in another tab — say what to do.
+        response = PlainTextResponse(
+            "Forbidden. If you signed in or out in another tab, or the app was just "
+            "updated, reload the page and try again.",
+            status_code=403,
+            headers=headers,
+        )
         if set_cookie_token is not None:
             self._set_csrf_cookie(response, set_cookie_token)
         return response

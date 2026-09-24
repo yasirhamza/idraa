@@ -158,6 +158,47 @@ async def test_logout_then_login_post_uses_reminted_anon_token(client: AsyncClie
     assert r.status_code in (200, 303)  # MFA funnel or session — not a CSRF 403
 
 
+async def test_password_login_then_authenticated_post(client: AsyncClient) -> None:
+    """Plain password login (no second factor): the session cookie arrives on a
+    redirect — never on a rendered form (the invariant that keeps a page's
+    token bound to the right session) — the pre-login token is dead
+    afterwards, and the next page GET's token works."""
+    await _seed_setup(client)
+    client.cookies.delete("idraa_session")
+    anon = await _cookie_token(client, "/login")
+    r = await client.post(
+        "/login",
+        data={"_csrf": anon, "email": "a@b.c", "password": "pw-12345678"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "idraa_session" in client.cookies
+    assert "<form" not in r.text
+    assert (await _logout(client, anon)).status_code == 403
+    fresh = await _cookie_token(client, "/")
+    assert (await _logout(client, fresh)).status_code == 303
+
+
+async def test_stale_tab_after_relogin_is_403_with_refresh(client: AsyncClient) -> None:
+    """A tab rendered under session 1 posts after the user signed out and back
+    in (session 2): 403, and an HTMX request is told to reload."""
+    await _seed_setup(client)
+    tab_token = await _cookie_token(client, "/")  # the old tab's page token
+    assert (await _logout(client, tab_token)).status_code == 303
+    anon = await _cookie_token(client, "/login")
+    r = await client.post(
+        "/login",
+        data={"_csrf": anon, "email": "a@b.c", "password": "pw-12345678"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and "idraa_session" in client.cookies
+    client.cookies.set("csrf_token", tab_token)  # the old tab still holds it
+    r = await client.post(
+        "/logout", headers={"X-CSRF-Token": tab_token, "HX-Request": "true"}, follow_redirects=False
+    )
+    assert r.status_code == 403
+    assert r.headers.get("HX-Refresh") == "true"
+
+
 def test_js_reads_csrf_only_through_the_helper() -> None:
     """Design Test 8: <meta name="csrf-token"> goes stale after a boosted login
     (<body hx-boost> swaps body+title only), so no JS may read it except the
@@ -174,5 +215,15 @@ def test_js_reads_csrf_only_through_the_helper() -> None:
     assert readers == ["static/js/csrf.js"], readers
     webauthn = (root / "static/js/webauthn.js").read_text(encoding="utf-8")
     assert "idraaCsrfToken" in webauthn
+    wizard = (root / "templates/scenarios/wizard/_fair_params_form_inner.html").read_text(
+        encoding="utf-8"
+    )
+    assert "'X-CSRF-Token': csrf" in wizard and "window.idraaCsrfToken" in wizard
+    # The helper agrees with Starlette's last-wins cookie parser: exact-name
+    # match, keep scanning (no early return inside the loop), no decoding.
+    helper = (root / "static/js/csrf.js").read_text(encoding="utf-8")
+    loop = helper[helper.index("for (var i = 0") : helper.index("if (found) return found;")]
+    assert "=== NAME" in loop and "found = " in loop
+    assert "return" not in loop and "decodeURIComponent(" not in helper
     base = (root / "templates/base.html").read_text(encoding="utf-8")
     assert base.index("/static/js/csrf.js") < base.index("/static/js/webauthn.js")

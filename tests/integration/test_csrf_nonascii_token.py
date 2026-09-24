@@ -108,7 +108,9 @@ async def test_empty_session_cookie_binds_same_as_absent(client: AsyncClient) ->
     r2 = await client.post(
         "/login",
         data={"email": "nope@nope.test", "password": "x", "_csrf": token},
-        headers={b"Cookie": f"csrf_token={token}; idraa_session=".encode()},
+        # Verified with NO session cookie at all: a sha256("") binding would
+        # fail here, only the shared anon binding passes.
+        headers={b"Cookie": f"csrf_token={token}".encode()},
         follow_redirects=False,
     )
     # CSRF let it through (not 403); the route itself then rejects the
@@ -133,13 +135,17 @@ async def test_nonascii_session_cookie_get_ok_post_403_never_500(client: AsyncCl
     )
     assert r.status_code == 200
 
+    token = r.cookies.get("csrf_token")
+    assert token
+    # Exercise the binding-VERIFY path under the non-ASCII binding (a token
+    # minted under it is present), not just the cookie-missing path.
     r2 = await client.post(
         "/login",
-        data={"email": "nope@nope.test", "password": "x"},
-        headers={b"Cookie": b"idraa_session=\xc2\xbf"},
+        data={"email": "nope@nope.test", "password": "x", "_csrf": token},
+        headers={b"Cookie": b"csrf_token=" + token.encode() + b"; idraa_session=\xc2\xbf"},
         follow_redirects=False,
     )
-    # No csrf_token cookie was ever supplied on this POST -> "cookie
-    # missing", same as any other tokenless unsafe request. The point of
-    # this test is the ABSENCE of a 500, not the specific 403 reason.
-    assert r2.status_code == 403
+    # Same (non-ASCII) binding on mint and verify -> CSRF passes; the route
+    # then rejects the bogus credentials. The point is the ABSENCE of a 500.
+    assert r2.status_code != 500
+    assert r2.status_code != 403

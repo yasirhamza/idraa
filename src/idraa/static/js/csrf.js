@@ -20,7 +20,10 @@
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i].replace(/^\s+/, "");
       var eq = p.indexOf("=");
-      if (eq > 0 && p.slice(0, eq) === NAME) found = decodeURIComponent(p.slice(eq + 1));
+      // Raw value, like Starlette's parser (no percent-decoding; a real token
+      // is [0-9a-f.] so nothing legitimate needs it, and decodeURIComponent
+      // would throw on a planted malformed %-sequence).
+      if (eq > 0 && p.slice(0, eq) === NAME) found = p.slice(eq + 1);
     }
     if (found) return found;
     var m = document.querySelector('meta[name="csrf-token"]');
