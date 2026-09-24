@@ -144,3 +144,42 @@ async def test_concurrent_claim_wins_once_warm(sm) -> None:
         await s_b.__aexit__(None, None, None)
 
     assert sorted(results) == [False, True]
+
+
+async def test_retention_sweep_deletes_expired_keeps_live(
+    sm: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Design Test 8: the sweep deletes rows past expires_at, keeps live ones."""
+    from contextlib import asynccontextmanager
+
+    from idraa import db as db_module
+    from idraa.services.run_reaper import sweep_expired_webauthn_challenges
+
+    async with sm() as s:
+        assert await webauthn_challenge.consume_challenge(
+            s, "live-challenge", WebAuthnChallengePurpose.LOGIN
+        )
+        s.add(
+            WebAuthnChallengeConsumed(
+                challenge_digest="0" * 64,
+                purpose=WebAuthnChallengePurpose.LOGIN,
+                consumed_at=now_utc() - timedelta(hours=1),
+                expires_at=now_utc() - timedelta(minutes=1),
+            )
+        )
+        await s.commit()
+
+    @asynccontextmanager
+    async def _session():
+        async with sm() as s:
+            yield s
+
+    monkeypatch.setattr(db_module, "get_session", _session)
+    await sweep_expired_webauthn_challenges()
+
+    async with sm() as s:
+        digests = (
+            (await s.execute(select(WebAuthnChallengeConsumed.challenge_digest))).scalars().all()
+        )
+    assert "0" * 64 not in digests
+    assert len(digests) == 1  # the live claim survives
