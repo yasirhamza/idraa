@@ -30,7 +30,13 @@ def _build_app(cap: int) -> Starlette:
         return PlainTextResponse(f"len={len(body)}")
 
     app = Starlette(routes=[Route("/x", echo, methods=["POST"])])
-    app.add_middleware(CSRFMiddleware, secret="x" * 32, secure_cookie=False, max_body_bytes=cap)
+    app.add_middleware(
+        CSRFMiddleware,
+        secret="x" * 32,
+        secure_cookie=False,
+        max_body_bytes=cap,
+        session_cookie_name="idraa_session",
+    )
     return app
 
 

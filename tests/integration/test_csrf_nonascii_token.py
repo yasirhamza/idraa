@@ -80,3 +80,72 @@ async def test_nonascii_cookie_sig_is_not_500(client: AsyncClient) -> None:
     # A non-ASCII cookie sig is rejected as a mismatch -> the cookie is
     # reissued -> the plain GET /login still renders normally: 200, not 500.
     assert r.status_code == 200
+
+
+async def test_empty_session_cookie_binds_same_as_absent(client: AsyncClient) -> None:
+    """B4 session-binding: ``idraa_session=`` (present but empty) must bind
+    identically to no session cookie at all — mirrors ``session.py:45``'s
+    ``if signed:`` truthy check, so CSRF and session auth never disagree
+    about whether a session is "present". A token minted under one must
+    verify under the other.
+    """
+    r = await client.get(
+        "/login",
+        headers={b"Cookie": b"idraa_session="},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    token = r.cookies.get("csrf_token")
+    assert token
+
+    # Submit that token back alongside the SAME empty session cookie — both
+    # resolve to the anon binding, so the double-submit must succeed (the
+    # auth check inside the route rejects the bogus credentials separately,
+    # but that's a 200/303 from the handler, never CSRF's 403). An explicit
+    # ``headers={b"Cookie": ...}`` REPLACES the jar's own Cookie header
+    # rather than merging with it (confirmed: omitting csrf_token here
+    # drops it entirely, so both cookies must be listed explicitly).
+    r2 = await client.post(
+        "/login",
+        data={"email": "nope@nope.test", "password": "x", "_csrf": token},
+        # Verified with NO session cookie at all: a sha256("") binding would
+        # fail here, only the shared anon binding passes.
+        headers={b"Cookie": f"csrf_token={token}".encode()},
+        follow_redirects=False,
+    )
+    # CSRF let it through (not 403); the route itself then rejects the
+    # bogus credentials with its normal invalid-login response (400).
+    assert r2.status_code in (200, 303, 400), r2.text
+
+
+async def test_nonascii_session_cookie_get_ok_post_403_never_500(client: AsyncClient) -> None:
+    """B4 session-binding: a non-ASCII ``idraa_session`` cookie must never
+    500 — CSRF hashes the raw cookie string
+    (``sha256(cookie.encode("utf-8"))``) for its binding regardless of
+    what ``SessionMiddleware`` makes of it (it rejects the signature and
+    falls through anonymous); ``str.encode("utf-8")`` cannot raise, so
+    both the GET that mints under this binding and a POST that fails the
+    double-submit must degrade to a clean 200 / 403 — never an unhandled
+    500.
+    """
+    r = await client.get(
+        "/login",
+        headers={b"Cookie": b"idraa_session=\xc2\xbf"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+
+    token = r.cookies.get("csrf_token")
+    assert token
+    # Exercise the binding-VERIFY path under the non-ASCII binding (a token
+    # minted under it is present), not just the cookie-missing path.
+    r2 = await client.post(
+        "/login",
+        data={"email": "nope@nope.test", "password": "x", "_csrf": token},
+        headers={b"Cookie": b"csrf_token=" + token.encode() + b"; idraa_session=\xc2\xbf"},
+        follow_redirects=False,
+    )
+    # Same (non-ASCII) binding on mint and verify -> CSRF passes; the route
+    # then rejects the bogus credentials. The point is the ABSENCE of a 500.
+    assert r2.status_code != 500
+    assert r2.status_code != 403

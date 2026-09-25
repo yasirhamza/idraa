@@ -42,6 +42,7 @@ from idraa.middleware.uat_basic_auth import uat_basic_auth_factory
 from idraa.models.enums import SUB_FUNCTION_UNITS
 from idraa.models.user import User
 from idraa.services.audit import ExportRateLimitedError
+from idraa.services.auth import SESSION_COOKIE
 from idraa.utils.text import humanize_slug as _humanize_slug_impl
 
 # Per-coroutine current request. Set by the _patched_template_render wrapper
@@ -1136,6 +1137,9 @@ def create_app() -> FastAPI:
         secure_cookie=(settings.environment == "prod"),
         # A4: bound the body this middleware buffers for double-submit replay.
         max_body_bytes=settings.max_request_body_bytes,
+        # GHSA-46jj-823j-mjj9 B4: tokens are bound to this cookie's raw value
+        # (the same accessor SessionMiddleware authenticates with).
+        session_cookie_name=SESSION_COOKIE,
     )
     app.add_middleware(SecurityHeadersMiddleware, enable_hsts=(settings.environment == "prod"))
 

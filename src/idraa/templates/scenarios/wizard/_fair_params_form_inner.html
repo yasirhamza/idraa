@@ -202,7 +202,7 @@
                           this.open = false;
                         },
                         async saveToDirectory() {
-                          const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                          const csrf = window.idraaCsrfToken ? window.idraaCsrfToken() : '';
                           const resp = await fetch('/scenarios/wizard/request-sme', {
                             method: 'POST',
                             headers: {
@@ -211,6 +211,10 @@
                             },
                             body: JSON.stringify({name: this.q.trim()})
                           });
+                          if (resp.status === 403) {
+                            alert(window.IDRAA_SESSION_CHANGED_MSG);
+                            return;
+                          }
                           if (!resp.ok) {
                             alert('Could not save SME: ' + (await resp.text()));
                             return;

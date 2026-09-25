@@ -314,6 +314,11 @@ async def create_session(db: AsyncSession, user_id: uuid.UUID, ip: str | None) -
 def set_session_cookie(response: Response, session_id: uuid.UUID) -> None:
     """Attach a signed idraa_session cookie to the outgoing response.
 
+    CSRF invariant (GHSA-46jj-823j-mjj9 B4): CSRF tokens are bound to this
+    cookie's value, so a response that sets (or clears) it must be a redirect
+    or JSON — never a rendered form, whose token would be bound to the
+    pre-change session. The next GET re-mints a matching token.
+
     Mirrors CSRFMiddleware's precedent: Secure is gated on environment=="prod"
     because dev/test use http:// where a Secure cookie would be silently dropped.
     samesite="lax" permits login-via-external-link (OAuth, email-confirm flows)
@@ -335,6 +340,8 @@ def set_session_cookie(response: Response, session_id: uuid.UUID) -> None:
 
 def clear_session_cookie(response: Response) -> None:
     """Expire the idraa_session cookie on the outgoing response.
+
+    Same CSRF invariant as ``set_session_cookie``: redirect or JSON only.
 
     Mirrors set_session_cookie's attribute set: Starlette's delete_cookie
     echoes `path` and nothing else by default; browsers may treat a mismatch

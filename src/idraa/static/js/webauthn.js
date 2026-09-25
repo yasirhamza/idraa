@@ -1,11 +1,16 @@
 /* webauthn.js — passkey ceremonies over navigator.credentials. No build step.
- * CSRF: every fetch sends X-CSRF-Token from <meta name="csrf-token">.
+ * CSRF: every fetch sends X-CSRF-Token from window.idraaCsrfToken()
+ * (static/js/csrf.js — cookie first, so a stale <head> meta after a boosted
+ * login cannot break it). A 403 means the session changed under the page.
  */
 (function () {
   "use strict";
   function csrf() {
-    var m = document.querySelector('meta[name="csrf-token"]');
-    return m ? m.content : "";
+    return window.idraaCsrfToken ? window.idraaCsrfToken() : "";
+  }
+  function failure(resp, what) {
+    if (resp.status === 403) return new Error(window.IDRAA_SESSION_CHANGED_MSG || what);
+    return new Error(what);
   }
   function b64urlToBuf(s) {
     s = s.replace(/-/g, "+").replace(/_/g, "/");
@@ -63,7 +68,7 @@
   }
   async function register(nickname) {
     var optsResp = await post("/account/security/passkey/options");
-    if (!optsResp.ok) throw new Error("options request failed");
+    if (!optsResp.ok) throw failure(optsResp, "options request failed");
     var options = await optsResp.json();
     options.challenge = b64urlToBuf(options.challenge);
     options.user.id = b64urlToBuf(options.user.id);
@@ -71,19 +76,19 @@
     var cred = await navigator.credentials.create({ publicKey: options });
     var verifyResp = await post("/account/security/passkey/verify",
       { credential: encodeRegistration(cred), nickname: nickname || "Passkey" });
-    if (!verifyResp.ok) throw new Error("verification failed");
+    if (!verifyResp.ok) throw failure(verifyResp, "verification failed");
     window.location.assign("/account/security");
   }
   async function assertionCeremony(optionsUrl, verifyUrl, extra) {
     var optsResp = await post(optionsUrl);
-    if (!optsResp.ok) throw new Error("options request failed");
+    if (!optsResp.ok) throw failure(optsResp, "options request failed");
     var options = await optsResp.json();
     options.challenge = b64urlToBuf(options.challenge);
     (options.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
     var cred = await navigator.credentials.get({ publicKey: options });
     var body = Object.assign({ credential: encodeAssertion(cred) }, extra || {});
     var verifyResp = await post(verifyUrl, body);
-    if (!verifyResp.ok) throw new Error("verification failed");
+    if (!verifyResp.ok) throw failure(verifyResp, "verification failed");
     return verifyResp.json();
   }
   async function authenticate() {

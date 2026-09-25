@@ -30,7 +30,7 @@ Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XF
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
    │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1122-1183) — B0 and B3 run BEFORE B2 (session lookup hits the
+   │  (app.py:1129-1193) — B0 and B3 run BEFORE B2 (session lookup hits the
    │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
@@ -79,10 +79,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1308-1316`). The idraa#107 cache-state
+  security-settings state (`app.py:1312-1320`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:979-990`) — misconfig is
+  enabled with no trust strategy configured (`app.py:980-991`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -95,8 +95,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1183`; confirmed order
-`app.py:1128-1189`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1187`; confirmed order
+`app.py:1129-1193`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -142,11 +142,16 @@ docstring).
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
   signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:314-332`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`auth.py:314-338`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,355-371`).
+  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,362-378`).
+  **CSRF depends on this cookie value never changing mid-session** (GHSA-46jj-823j-mjj9 B4
+  binding, §4): today it is a timestamp-free `URLSafeSerializer` signature and
+  `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
+  would invalidate every open page's forms (one 403 + reload each) — design it
+  with that in mind.
 - **S** (credential stuffing): Argon2 password hashing with a precomputed
   dummy-hash timing-safe check for nonexistent/inactive users
   (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:75-89`) — prevents a
@@ -160,7 +165,7 @@ docstring).
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
   store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `auth.py:377-427`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
   `config.py:401-403`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:217,245`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
@@ -208,37 +213,68 @@ docstring).
 
 ## 4. B3 — CSRF (state-changing request ↔ verified-origin request)
 
-- **T**: stateless double-submit HMAC pattern (`middleware/csrf.py`). Cookie
-  `csrf_token` = `<nonce>.<HMAC-SHA256(session_secret, nonce)>`
-  (`csrf.py:64,105-123`), `HttpOnly=False` (must be JS/Jinja-readable),
-  `SameSite=Strict`. Validation requires cookie present+valid **and**
-  header-or-form token to `hmac.compare_digest`-match it (`csrf.py:271-291`);
-  mismatch is a generic opaque 403 (`_forbid`, `csrf.py:306-317`) — no oracle. **No
-  exemption list** — module docstring and inline comments
-  (`routes/register_import.py:45`, `routes/library.py:344`) state nothing is
-  exempted; fail-closed by design. Non-form JS (WebAuthn) reads a
-  `<meta name="csrf-token">` (`templates/base.html:7`) into an
-  `X-CSRF-Token` header instead of a hidden form field.
+- **T**: session-bound double-submit HMAC pattern (`middleware/csrf.py`).
+  Cookie `csrf_token` = `<nonce>.<HMAC-SHA256(key, nonce || binding)>`
+  (`csrf.py:151-242`): `key` is derived once from `session_secret`
+  (`derive_csrf_key`, info `idraa-csrf-v2` — tokens signed the pre-2026-09 way
+  never verify), and `binding` (`csrf_binding`, `csrf.py:172-191`) is
+  `sha256` of the raw `idraa_session` cookie value — read through exactly the
+  accessor `SessionMiddleware` authenticates with (`request.cookies.get`,
+  last-wins on duplicates; empty = absent) — or a fixed 32-byte anon binding
+  when there is no session cookie. **Advisory GHSA-46jj-823j-mjj9 B4
+  (2026-09):** before this, a token proved only "this server minted it", so an
+  anonymously minted token rode an authenticated admin write and a session-A
+  token rode session B. `HttpOnly=False` (must be JS-readable),
+  `SameSite=Strict`. Validation requires the cookie present and valid **under
+  the current binding** and the header-or-form token to
+  `hmac.compare_digest`-match it (`csrf.py:374-405`). A cookie that fails the
+  current binding is re-minted (every GET after login/logout hands the page a
+  fresh token). Rejections are an opaque 403 (`_forbid`, `csrf.py:440-478`):
+  the body carries no reason; a present-but-stale cookie gets a fresh
+  `Set-Cookie` on the 403 (its presence tells only the cookie's own holder
+  that their half was stale — not a cross-session oracle), a missing cookie
+  does not (that is the cross-site-POST shape; minting there would let a
+  cross-site page reset the victim's cookie), and every 403 to an
+  `HX-Request` carries `HX-Refresh: true` so HTMX reloads instead of swapping
+  "Forbidden" into the page. **No exemption list** — module docstring and
+  inline comments (`routes/register_import.py:45`, `routes/library.py:344`)
+  state nothing is exempted; fail-closed by design. Non-form JS reads the
+  token through `window.idraaCsrfToken()` (`static/js/csrf.js`: the
+  `csrf_token` cookie first — last exact-name match, like the server — then
+  `<meta name="csrf-token">`, `templates/base.html:7`): `<body hx-boost>`
+  swaps only body + title, so the `<head>` meta can hold a pre-login token
+  after a boosted login. A test pins that nothing else reads the meta tag.
+- **What survives if a lower layer fails (GHSA-46jj-823j-mjj9 B4):**
+
+  | If… | Authenticated writes | Still open |
+  |---|---|---|
+  | SameSite on the CSRF cookie is relaxed | still need a token bound to the victim's session cookie, which a cross-site page can neither read nor compute | pre-login forms (`/login`, `/login/mfa`, `/login/passkey/*`, `/setup`) share the one anon binding, so an attacker-minted anon token is valid there |
+  | a subdomain writes cookies (cookie tossing) | a tossed `csrf_token` is bound to the attacker's session or to anon, so it fails; tossing `idraa_session` too makes the request run AS the attacker (a session swap, not CSRF) | the same pre-login gap: login CSRF is NOT prevented (an earlier design draft's "prevents login CSRF" claim was withdrawn) |
+  | a token leaks | usable only with its own session's cookie | for that session's whole life (14-day absolute TTL, no per-token rotation) |
+
+  The open column is §12 items 9–10. Plain (non-HTMX) form POSTs that hit a
+  stale token get a 403 whose text tells the user to reload; HTMX requests
+  reload automatically.
 - **Non-ASCII-token hardening (D1, 2026-08-14)**: `hmac.compare_digest` raises
   `TypeError` (not a clean non-match) when either operand carries a
   non-ASCII character, so an attacker-crafted non-ASCII token used to escape
   as an unhandled 500 rather than the intended 403. Both `compare_digest`
   call sites now guard with `.isascii()` first, rejecting as a normal
   verification failure instead: `verify_csrf_token`'s `sig_hex` check
-  (`csrf.py:145-151`) covers the cookie-signature compare — this one closes
+  (`csrf.py:233-239`) covers the cookie-signature compare — this one closes
   an **unauthenticated 500-on-every-request** class, since `verify_csrf_token`
   runs unconditionally near the top of `dispatch` (even on safe GETs) and
   `sig_hex` is never hex-validated before reaching it (unlike `nonce_hex`);
-  `dispatch`'s `submitted` check (`csrf.py:280-286`) covers the double-submit
+  `dispatch`'s `submitted` check (`csrf.py:391-397`) covers the double-submit
   compare against the form-field-or-header token. Regression:
   `tests/integration/test_csrf_nonascii_token.py`.
 - **DoS ceiling (A4, 2026-08-09)**: this middleware buffers the FULL body of
   every unsafe-method request before the route runs (to replay it for
   downstream form parsing — `_CachedRequest.wrapped_receive`). That buffer is
-  now size-capped: `_read_body_capped` (`csrf.py:76-102`) reads via
+  now size-capped: `_read_body_capped` (`csrf.py:122-148`) reads via
   `request.stream()` under `settings.max_request_body_bytes` (default 8 MB,
   `config.py:384`) and returns a 413 before the whole body is buffered
-  (`csrf.py:235-252`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
+  (`csrf.py:329-346`). The cap sits ABOVE `MAX_UPLOAD_BYTES` (5 MB,
   `routes/deps.py:23`) + multipart framing so legitimate imports pass; a test
   pins that inequality (`tests/unit/test_csrf_body_cap.py`). Before this an
   unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
@@ -315,7 +351,7 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1151-1174`).
+  `app.py:1155-1178`).
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
@@ -399,7 +435,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:95-98`), which Starlette constructs with
+  (`app.py:96-99`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — every file under `src/idraa/templates/` is `.html` (zero
@@ -426,7 +462,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:100-105` about a
+  The only textual hit is an explanatory comment in `app.py:101-106` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
@@ -699,7 +735,7 @@ watching:
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
    because it changes the middleware stack. Tracked as a follow-up.
 8. ~~**Non-atomic per-account lockout counter**~~ — **CLOSED 2026-08-15.**
-   `register_failed_login` (`services/auth.py:352-393`) was a plain
+   `register_failed_login` (`services/auth.py:393-434`) was a plain
    read-modify-write (`user.failed_login_count += 1`) that lost increments under
    concurrency (~1 of 5 retained). It now does a guarded
    `UPDATE users SET failed_login_count = failed_login_count + 1` with a `CASE`
@@ -709,6 +745,21 @@ watching:
    D/brute-force. `reset_login_throttle` stays a blind set (not a
    read-modify-write, mutually exclusive with the failure path). The deferred
    follow-up that this document previously named is done.
+
+9. **CSRF: pre-login forms share one anon binding (GHSA-46jj-823j-mjj9 B4 residual, 2026-09).**
+   `/login`, `/login/mfa`, `/login/passkey/*` and `/setup` bind to the fixed
+   anon value, so an attacker-minted anon token is valid there: login CSRF is
+   not prevented, and those forms rest on SameSite=Strict + host-only cookies
+   alone. Follow-up: rename the cookie `__Host-csrf_token` in prod (blocks
+   subdomain cookie tossing outright; every client/test reads the name, so it
+   is its own change), and optionally bind `/login/mfa` to the MFA-pending
+   cookie.
+10. **CSRF: a leaked token lives as long as its session (GHSA-46jj-823j-mjj9 B4 residual).** It is
+    bound to one session cookie but not rotated, so a leak is usable for that
+    session's 14-day absolute TTL. A forced reload on the first POST after a
+    session change discards typed-but-unsaved values on that page (drafts are
+    server-side and intact); a one-shot "session changed" notice is a UX
+    follow-up.
 
 ## 13. Keeping this document current
 
