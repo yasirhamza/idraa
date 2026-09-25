@@ -87,6 +87,12 @@ async def test_login_passkey_replay_rejected_after_first_success(
         # the jar in whatever state that response dictated — we want THIS
         # exact challenge resent regardless (that's what "replay" means).
         client.cookies.set("rf_webauthn_challenge", raw_challenge)
+        # A replay comes from the attacker's own client, which holds no
+        # session cookie: drop the one the first success minted. (Keeping it
+        # would also make the pre-login CSRF token stale — tokens are bound to
+        # the session cookie, GHSA-46jj-823j-mjj9 B4 — and 403 before the
+        # single-use claim is even reached.)
+        client.cookies.delete("idraa_session")
         return await client.post(
             "/login/passkey/verify", json=payload, headers={"X-CSRF-Token": token}
         )
