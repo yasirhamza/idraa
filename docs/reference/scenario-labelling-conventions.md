@@ -62,6 +62,10 @@ All are tracked in a follow-up issue.
 | Audit reviews, policy-compliance scans | Identify misalignment examples | Compliance Audit, Security Configuration Assessment: no Identify misalignment |
 | Security training programme | Ensure capability example | Security Awareness and Training: Communication + Control monitoring |
 | Audit results, pen-test findings | Controls data examples | no seed control carries Controls data |
+| Mandatory code review | Reduce variance probability example | Secure Coding Practices: Defined expectations + Resistance; no seed control carries Reduce variance probability |
+| Secure build baselines | (hardening, deployment-time) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
+| Standardised, locked-down configurations | Reduce change frequency (by implication) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
+| Risk-based patch prioritisation, vulnerability-management workflow | Treatment selection examples | Patch Management, Vulnerability Assessment: no Treatment selection; no seed control carries it |
 
 Also for the reconciliation: the patching and vulnerability-scanning examples treat asset CVEs as variance
 management (VMC). Rubric §4 Example 3 routes patching an asset CVE to Resistance, and the seed carries both.

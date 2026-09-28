@@ -122,8 +122,7 @@
       "examples": [
         "Change-management approval board",
         "Change blackout windows",
-        "Code-freeze periods",
-        "Standardised, locked-down configurations"
+        "Code-freeze periods"
       ]
     },
     "vmc_prev_reduce_variance_prob": {
@@ -132,9 +131,9 @@
       "what": "Lowers the probability that any given change, error or condition degrades a control or introduces a weakness.",
       "not_for": "Not Reduce change frequency: it makes each change safer rather than fewer. Not Control monitoring: prevents variance before it happens rather than detecting it afterward. Not Resistance.",
       "examples": [
-        "Mandatory peer code review",
         "Pre-deployment testing of changes in a staging environment",
-        "Secure build baselines applied at deployment"
+        "Automated regression tests gating each release",
+        "Release acceptance checks against security requirements"
       ]
     },
     "vmc_id_threat_intelligence": {
@@ -167,10 +166,9 @@
       "what": "Selects and prioritises the appropriate corrective action once a control variance or threat change has been identified.",
       "not_for": "Not Implementation: this chooses and prioritises the fix, Implementation carries it out. Not Analysis (DSC): risk analysis for management decisions rather than triage of identified control variances.",
       "examples": [
-        "Risk-based patch prioritisation",
-        "Vulnerability-management triage workflow",
         "Severity-based remediation playbooks",
-        "Exception process with sign-off"
+        "Exception process with sign-off",
+        "Fix, mitigate or accept decision for each finding"
       ]
     },
     "vmc_corr_implementation": {

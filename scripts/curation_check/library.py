@@ -67,7 +67,10 @@ def load_controls(root: Path = REPO_ROOT) -> list[ControlItem]:
     dropped: dict[str, dict[str, str]] = {}
     for drop in data.get("_meta", {}).get("claim_drops", []):
         for fn in drop["dropped"]:
-            dropped.setdefault(drop["slug"], {})[fn] = drop["reason"]
+            per_slug = dropped.setdefault(drop["slug"], {})
+            if fn in per_slug:
+                raise ValueError(f"claim_drops lists {drop['slug']!r} / {fn!r} twice")
+            per_slug[fn] = drop["reason"]
     return [
         ControlItem(
             slug=e["slug"],

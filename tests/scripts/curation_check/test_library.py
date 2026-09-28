@@ -21,7 +21,7 @@ from scripts.curation_check.library import (
 # Reviewed classification of every criteria example (M-I1, N-I2r2). An example either names a library
 # control (anchor: that control must carry the example's sub-function) or names none. A new example
 # must be added to one of the two, so drift is caught here, not in a campaign.
-EXAMPLE_ANCHORS = {
+EXAMPLE_ANCHORS: dict[str, str | tuple[str, ...]] = {
     "24/7 SOC review of alerts": "managed-detection-response",
     "Acceptable-use policy": "acceptable-use-policy",
     "Allow only approved devices to join the network": "network-access-control",
@@ -33,7 +33,7 @@ EXAMPLE_ANCHORS = {
     "Cyber insurance policy": "cyber-insurance",
     "Data-handling standard": "data-classification-handling",
     "EDR telemetry collection": "endpoint-detection-response",
-    "Encryption at rest and in transit": "data-at-rest-encryption",
+    "Encryption at rest and in transit": ("data-at-rest-encryption", "data-in-transit-encryption"),
     "Endpoint protection that blocks malicious code": "endpoint-detection-response",
     "Hot or warm disaster-recovery site": "business-continuity-disaster-recovery",
     "Isolate a compromised host": "incident-response",
@@ -76,6 +76,7 @@ NO_LIBRARY_CONTROL = frozenset(
         "Decision-support tools for managers",
         "Decommission an unused internet-facing service",
         "Designated security leadership with authority",
+        # a monitoring activity over agent coverage, not the Asset Management control itself
         "Asset-inventory reconciliation of endpoint-agent coverage",
         "Exception and waiver tracking",
         "Exception process with sign-off",
@@ -90,7 +91,6 @@ NO_LIBRARY_CONTROL = frozenset(
         "Legal hold and claims handling",
         "Legal-action and monitoring notices at login",
         "MITRE ATT&CK mapping of relevant techniques",
-        "Mandatory peer code review",
         "Monthly risk reports",
         "Multi-region failover",
         "Operating system and application logging",
@@ -106,15 +106,12 @@ NO_LIBRARY_CONTROL = frozenset(
         "Redundant service providers",
         "Risk assessment and risk register",
         "Risk-appetite and tolerance statement",
-        "Risk-based patch prioritisation",
         "SaaS audit-log export",
         "Scenario modelling",
         "Scheduled daily log review",
         "Sector-specific threat reports",
-        "Secure build baselines applied at deployment",
         "Severity-based remediation playbooks",
         "Signature and heuristic malware databases",
-        "Standardised, locked-down configurations",
         "Stop collecting unneeded sensitive data",
         "System criticality ratings",
         "Threat-actor profiles",
@@ -123,8 +120,10 @@ NO_LIBRARY_CONTROL = frozenset(
         "Vendor security bulletin tracking",
         "Vendor-selection security criteria",
         "Visible CCTV with warning signs",
-        "Vulnerability-management triage workflow",
         "Emergency configuration rollback to restore a degraded control",
+        "Automated regression tests gating each release",
+        "Release acceptance checks against security requirements",
+        "Fix, mitigate or accept decision for each finding",
     }
 )
 
@@ -141,8 +140,22 @@ CONTESTED_EXAMPLES = frozenset(
         "Role-based security training",
         "Audit and assessment results",
         "Pen-test findings summaries",
+        "Mandatory peer code review",
+        "Secure build baselines applied at deployment",
+        "Standardised, locked-down configurations",
+        "Risk-based patch prioritisation",
+        "Vulnerability-management triage workflow",
     }
 )
+
+# Examples whose natural control deliberately dropped the claim in the seed's _meta.claim_drops (NICE-4).
+DROPPED_ANCHORS = {
+    "Penalties for policy violations": ("acceptable-use-policy", "dsc_prev_incentives"),
+    "Legal-action and monitoring notices at login": (
+        "acceptable-use-policy",
+        "lec_prev_deterrence",
+    ),
+}
 
 
 def _scenario(slug: str, name: str) -> dict[str, Any]:
@@ -207,6 +220,25 @@ def test_load_controls_keeps_every_function_and_dropped_claims(tmp_path: Path) -
     assert items[0].state() == {"control_name": "SIEM", "control_description": "Collects logs."}
 
 
+def test_duplicate_claim_drop_is_rejected(tmp_path: Path) -> None:  # NICE-7
+    control = {
+        "slug": "siem",
+        "name": "SIEM",
+        "status": "published",
+        "description": "d",
+        "assignments": [],
+    }
+    meta = {
+        "claim_drops": [
+            {"slug": "siem", "dropped": ["dsc_prev_incentives"], "reason": "first"},
+            {"slug": "siem", "dropped": ["dsc_prev_incentives"], "reason": "second"},
+        ]
+    }
+    _write_seed(tmp_path, [], [], [control], meta)
+    with pytest.raises(ValueError, match=r"siem.*dsc_prev_incentives"):
+        load_controls(tmp_path)
+
+
 def test_real_seed_loads_completely() -> None:
     from scripts.curation_check.config import REPO_ROOT
 
@@ -247,10 +279,22 @@ def test_every_example_is_classified_and_anchors_agree_with_seed_labels() -> Non
     assert set(by_example) == set(EXAMPLE_ANCHORS) | NO_LIBRARY_CONTROL
     conflicts = [
         (e, by_example[e], ctl)
-        for e, ctl in EXAMPLE_ANCHORS.items()
+        for e, anchor in EXAMPLE_ANCHORS.items()
+        for ctl in ((anchor,) if isinstance(anchor, str) else anchor)
         if by_example[e] not in functions[ctl]
     ]
     assert conflicts == []
+
+
+def test_dropped_anchors_match_the_seed_drops() -> None:  # NICE-4
+    c = load_criteria()
+    by_example = {e: slug for slug, s in c.subfunctions.items() for e in s["examples"]}
+    controls = {ctl.slug: ctl for ctl in load_controls()}
+    assert set(DROPPED_ANCHORS) <= NO_LIBRARY_CONTROL
+    for example, (slug, fn) in DROPPED_ANCHORS.items():
+        assert by_example[example] == fn, example
+        assert fn in controls[slug].dropped, example
+        assert fn not in controls[slug].functions, example
 
 
 def test_contested_examples_are_absent() -> None:  # M-I1, owner decision 2026-09-28
