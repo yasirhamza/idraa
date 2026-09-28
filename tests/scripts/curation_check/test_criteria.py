@@ -43,6 +43,7 @@ def test_per_behaviour_rule_replaces_the_mandate_rule() -> None:  # M-B1
     assert "only if the control itself performs or technically enforces" in c.convention  # N-I1r2
     assert "mandating" not in json.dumps(c.subfunctions)
     assert "Correcting misaligned decisions is not offered" in c.convention
+    assert "role-specific" not in json.dumps(c.subfunctions)  # the training conflict stays Open
 
 
 def test_scenario_label_questions_offer_every_value_plus_none() -> None:
@@ -61,6 +62,7 @@ def test_threat_event_texts_do_not_contradict_the_precedence() -> None:  # M-I1r
         "by any means",
         "privileged vendor",
         "Use insider_misuse when the actor already held",
+        "path runs through a trusted third party.",
     ):
         assert phrase not in text, phrase
 

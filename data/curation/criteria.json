@@ -133,7 +133,7 @@
       "not_for": "Not Reduce change frequency: it makes each change safer rather than fewer. Not Control monitoring: prevents variance before it happens rather than detecting it afterward. Not Resistance.",
       "examples": [
         "Mandatory peer code review",
-        "Configuration-as-code linting",
+        "Pre-deployment testing of changes in a staging environment",
         "Secure build baselines applied at deployment"
       ]
     },
@@ -275,7 +275,7 @@
       "label": "Ensure capability",
       "domain": "DSC",
       "what": "Ensures the people responsible for decisions and actions have the skills, authority and resources to act in alignment with expectations.",
-      "not_for": "Not Communication: capability is skills, authority and resources, not awareness of rules. General awareness messaging is Communication; role-specific skills training and staffing are Ensure capability.",
+      "not_for": "Not Communication: capability is skills, authority and resources, not awareness of rules.",
       "examples": [
         "Designated security leadership with authority",
         "Adequate security budget and staffing",
@@ -313,7 +313,7 @@
         "not_for": "Not data_tampering (data altered, not exposed). Not ransomware when the main mechanism is encryption/extortion, even if data is also stolen. Not a malicious insider abusing access they already held (insider_misuse)."
       },
       "data_tampering": {
-        "what": "Unauthorised modification or corruption of IT data or transactions, causing an integrity loss (e.g., altered records, fraudulent changes).",
+        "what": "Unauthorised modification or corruption of IT data or transactions, causing an integrity loss (e.g., altered records, fraudulent changes), where no named mechanism fits.",
         "not_for": "Not ot_integrity, which is manipulation of industrial process values or operator views. Not data_disclosure (exposure without alteration). Not a malicious insider abusing access they already held (insider_misuse)."
       },
       "denial_of_service": {
@@ -322,7 +322,7 @@
       },
       "insider_misuse": {
         "what": "A person with legitimately granted access (employee or contractor) abuses that access for unauthorised purposes, where no named mechanism fits.",
-        "not_for": "Not when a mechanism fits (ransomware, supply_chain, social_engineering, physical_tampering, denial_of_service, malware); a vendor's access path is supply_chain. Not social_engineering or credential theft by outsiders, who lack granted access. Not accidental exposure (data_disclosure)."
+        "not_for": "Not when a mechanism fits (ransomware, supply_chain, social_engineering, physical_tampering, denial_of_service, malware); access through a vendor's systems or channel is supply_chain; a contractor using their own granted access is insider_misuse. Not social_engineering or credential theft by outsiders, who lack granted access. Not accidental exposure (data_disclosure)."
       },
       "malware": {
         "what": "Malicious code (e.g., trojans, worms, infostealers, wipers) compromising systems, where the event is not primarily ransom-driven.",
@@ -330,11 +330,11 @@
       },
       "ot_availability": {
         "what": "Loss of availability of operational technology or industrial processes (e.g., halted production line, loss of control or view).",
-        "not_for": "Not denial_of_service (IT services). Not ot_safety_tampering when safety systems are targeted. Not ot_integrity when the process is manipulated rather than stopped."
+        "not_for": "Not denial_of_service (IT services). Not ot_safety_tampering when safety functions are defeated or altered. Not ot_integrity when the process is manipulated rather than stopped."
       },
       "ot_integrity": {
         "what": "Manipulation of the basic process control system or the operator's view (e.g., altered setpoints or HMI values) without targeting safety functions.",
-        "not_for": "Not data_tampering (IT data). Not ot_safety_tampering when safety instrumented systems are the target. Not ot_availability when the process simply stops."
+        "not_for": "Not data_tampering (IT data). Not ot_safety_tampering when safety functions are defeated or altered. Not ot_availability when the process simply stops."
       },
       "ot_safety_tampering": {
         "what": "Tampering with or disabling safety instrumented systems or safety functions, creating risk of physical harm, injury or environmental release.",
@@ -354,7 +354,7 @@
       },
       "supply_chain": {
         "what": "Compromise or failure reaching the organisation through a third-party vendor, service provider, software dependency or update channel.",
-        "not_for": "Not malware or data_disclosure when the attack is direct. Use supply_chain when the path runs through a trusted third party."
+        "not_for": "Not malware or data_disclosure when the attack is direct. Use supply_chain when the path runs through a trusted third party's systems or channel, unless an OT or safety system is the target and an OT effect is described (OT effect first). A contractor using their own granted access is insider_misuse."
       },
       "miscellaneous": {
         "what": "Clearly described, but none of the named threat event types fits.",
