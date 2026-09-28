@@ -1,0 +1,437 @@
+{
+  "version": 1,
+  "note": "Reviewed option wording for scripts/curation_check. Changes need methodology review. Conventions: docs/reference/scenario-labelling-conventions.md.",
+  "convention": "A control can perform several functions. Map each behaviour the control itself performs. A policy or standard that only requires a safeguard performs Defined expectations (and Communication if it conveys the requirement to people). It performs the safeguard's own function only if the control itself performs or technically enforces that safeguard, meaning the system blocks the non-compliant action; enforcement by sanctions is Incentives, and requiring or listing mechanisms is not performing them. Map by what the control does to loss events, to variance in other controls, or to decision-making, not by the wording of the statement. Correcting misaligned decisions is not offered as an option.",
+  "field_conventions": {
+    "threat_event_type": "Pick by this precedence. 1) If an OT or safety system is the target and the scenario describes an OT effect, choose the OT type whatever the mechanism: ot_safety_tampering when safety functions are defeated or altered; otherwise by the primary loss effect, ot_availability when the process stops or control or view is lost, ot_integrity when the process keeps running in a manipulated state or the operator's view is falsified. If no OT effect is described, continue. 2) Otherwise choose the mechanism (not ranked; the option texts separate them): ransomware, supply_chain, social_engineering, physical_tampering, denial_of_service or malware. 3) If no mechanism fits and a malicious insider abused access they already held, choose insider_misuse; accidental exposure is not misuse. 4) Otherwise choose data_disclosure or data_tampering if the effect is on data; if none fits, miscellaneous."
+  },
+  "subfunctions": {
+    "lec_prev_avoidance": {
+      "label": "Avoidance",
+      "domain": "LEC",
+      "what": "Reduces how often threat actors come into contact with the asset: removing the exposure, or preventing a party from reaching the asset's interface at all.",
+      "not_for": "Not Resistance: authenticating or authorising a party that has already reached the asset's interface is Resistance (for example MFA or least privilege); preventing it from reaching that interface is Avoidance. Not Deterrence: Deterrence leaves contact possible but discourages the actor.",
+      "examples": [
+        "Decommission an unused internet-facing service",
+        "Stop collecting unneeded sensitive data",
+        "Allow only approved devices to join the network",
+        "Block access to known-malicious destinations"
+      ]
+    },
+    "lec_prev_deterrence": {
+      "label": "Deterrence",
+      "domain": "LEC",
+      "what": "Discourages a threat actor who has contact with the asset from choosing to initiate the threat event, lowering the probability of action.",
+      "not_for": "Not Resistance: a deterrent works on the actor's choice, not by blocking the attack. Not Avoidance: contact remains possible. Not Incentives: Deterrence targets threat actors, Incentives target decision-makers.",
+      "examples": [
+        "Visible CCTV with warning signs",
+        "Legal-action and monitoring notices at login",
+        "Publicised prosecution of offenders"
+      ]
+    },
+    "lec_prev_resistance": {
+      "label": "Resistance",
+      "domain": "LEC",
+      "what": "Withstands the threat actor's force once a threat event is initiated, preventing the attempt from becoming a loss event.",
+      "not_for": "Not Avoidance: Resistance blocks an attempt that happens, Avoidance removes or limits the contact. Not Visibility/Recognition: blocking vs. observing.",
+      "examples": [
+        "Multi-factor authentication",
+        "Encryption at rest and in transit",
+        "Least-privilege access control",
+        "Endpoint protection that blocks malicious code",
+        "Patching known software vulnerabilities"
+      ]
+    },
+    "lec_det_visibility": {
+      "label": "Visibility",
+      "domain": "LEC",
+      "what": "Makes threat-relevant activity observable by capturing the information needed to detect a loss event, whether or not anyone reviews it.",
+      "not_for": "Not Monitoring: Visibility produces the signal (logs, telemetry), Monitoring is someone or something reviewing it. Not Recognition: classifying the signal as malicious.",
+      "examples": [
+        "Operating system and application logging",
+        "NetFlow or network tap capture",
+        "EDR telemetry collection",
+        "SaaS audit-log export"
+      ]
+    },
+    "lec_det_monitoring": {
+      "label": "Monitoring",
+      "domain": "LEC",
+      "what": "Reviews the captured signals, continuously or periodically, so that evidence of a loss event is examined in a timely way.",
+      "not_for": "Not Visibility: Monitoring reviews signals, it does not generate them. Not Recognition: deciding a signal is a real threat. Not Control monitoring (VMC): watching controls for failure, not attacks.",
+      "examples": [
+        "24/7 SOC review of alerts",
+        "SIEM correlation pipeline",
+        "Scheduled daily log review",
+        "Automated alerting on security events"
+      ]
+    },
+    "lec_det_recognition": {
+      "label": "Recognition",
+      "domain": "LEC",
+      "what": "Correctly differentiates anomalous or malicious activity from normal activity, so a real threat event is recognised as such.",
+      "not_for": "Not Monitoring: Recognition is the classification logic (signatures, thresholds, playbooks), not the review cadence. Not Threat data (DSC) or Threat intelligence (VMC), which inform decisions and control updates.",
+      "examples": [
+        "Tuned alert thresholds and detection rules",
+        "Signature and heuristic malware databases",
+        "Analyst triage playbooks",
+        "Threat-hunting hypotheses"
+      ]
+    },
+    "lec_resp_event_termination": {
+      "label": "Event termination",
+      "domain": "LEC",
+      "what": "Stops an in-progress loss event by gaining control over it after it has been recognised (containment and eradication).",
+      "not_for": "Not Resistance: termination acts after the event is underway and detected. Not Resilience: it ends the event rather than sustaining operations. Not Implementation (VMC): fixing a control weakness.",
+      "examples": [
+        "Isolate a compromised host",
+        "Block a malicious source IP",
+        "Revoke session tokens and disable a compromised account",
+        "Kill a malicious process"
+      ]
+    },
+    "lec_resp_resilience": {
+      "label": "Resilience",
+      "domain": "LEC",
+      "what": "Keeps critical operations running, or quickly restores them, during a loss event so that operational impact is reduced.",
+      "not_for": "Not Loss reduction: Resilience limits downtime and degraded operation, Loss reduction limits financial loss by other means (insurance, notification). Not Event termination: stopping the attack.",
+      "examples": [
+        "Hot or warm disaster-recovery site",
+        "Multi-region failover",
+        "Redundant service providers",
+        "Tested business continuity plan",
+        "Tested restore from backups"
+      ]
+    },
+    "lec_resp_loss_reduction": {
+      "label": "Loss reduction",
+      "domain": "LEC",
+      "what": "Reduces the economic value lost from a loss event after it occurs, for example by transferring, recovering or limiting costs.",
+      "not_for": "Not Resilience: Loss reduction cuts monetary loss rather than keeping operations up. Not Event termination: it acts on consequences, not the event itself.",
+      "examples": [
+        "Cyber insurance policy",
+        "Breach-notification procedure and templates",
+        "Legal hold and claims handling"
+      ]
+    },
+    "vmc_prev_reduce_change_freq": {
+      "label": "Reduce change frequency",
+      "domain": "VMC",
+      "what": "Reduces how often the protected environment or its controls change, so there are fewer opportunities for a change to degrade a control.",
+      "not_for": "Not Reduce variance probability: this limits how many changes occur, that one makes each change less likely to introduce a weakness. Not Avoidance: acts on change, not threat contact.",
+      "examples": [
+        "Change-management approval board",
+        "Change blackout windows",
+        "Code-freeze periods",
+        "Standardised, locked-down configurations"
+      ]
+    },
+    "vmc_prev_reduce_variance_prob": {
+      "label": "Reduce variance probability",
+      "domain": "VMC",
+      "what": "Lowers the probability that any given change, error or condition degrades a control or introduces a weakness.",
+      "not_for": "Not Reduce change frequency: it makes each change safer rather than fewer. Not Control monitoring: prevents variance before it happens rather than detecting it afterward. Not Resistance.",
+      "examples": [
+        "Mandatory peer code review",
+        "Configuration-as-code linting",
+        "Secure build baselines applied at deployment"
+      ]
+    },
+    "vmc_id_threat_intelligence": {
+      "label": "Threat intelligence",
+      "domain": "VMC",
+      "what": "Identifies changes in the threat landscape that could make existing controls inadequate, so controls can be adjusted.",
+      "not_for": "Not Threat data (DSC): Threat intelligence triggers control changes, Threat data informs management decisions. Not Recognition (LEC): identifying live attacks. Vulnerability scanning of own assets is Control monitoring.",
+      "examples": [
+        "Commercial threat-intelligence feeds",
+        "ISAC participation",
+        "Vendor security bulletin tracking"
+      ]
+    },
+    "vmc_id_control_monitoring": {
+      "label": "Control monitoring",
+      "domain": "VMC",
+      "what": "Detects when an existing control has failed, degraded or drifted from its intended state.",
+      "not_for": "Not Monitoring (LEC): watches controls and weaknesses, not attacks. Not Controls data (DSC): feeds correction work, not management decisions. Not Identify misalignment: that audits decisions.",
+      "examples": [
+        "Configuration-drift detection",
+        "Vulnerability scanning",
+        "Periodic control testing",
+        "Asset-inventory reconciliation of endpoint-agent coverage",
+        "Penetration testing"
+      ]
+    },
+    "vmc_corr_treatment_selection": {
+      "label": "Treatment selection",
+      "domain": "VMC",
+      "what": "Selects and prioritises the appropriate corrective action once a control variance or threat change has been identified.",
+      "not_for": "Not Implementation: this chooses and prioritises the fix, Implementation carries it out. Not Analysis (DSC): risk analysis for management decisions rather than triage of identified control variances.",
+      "examples": [
+        "Risk-based patch prioritisation",
+        "Vulnerability-management triage workflow",
+        "Severity-based remediation playbooks",
+        "Exception process with sign-off"
+      ]
+    },
+    "vmc_corr_implementation": {
+      "label": "Implementation",
+      "domain": "VMC",
+      "what": "Carries out the selected corrective action to restore or improve a degraded control, completing remediation of the variance.",
+      "not_for": "Not Treatment selection: executing vs. choosing the fix. Not Event termination (LEC): remediates control weakness rather than stopping an in-progress attack.",
+      "examples": [
+        "Patch deployment process",
+        "Hotfix release process",
+        "Configuration remediation push",
+        "Emergency configuration rollback to restore a degraded control"
+      ]
+    },
+    "dsc_prev_defined_expectations": {
+      "label": "Defined expectations",
+      "domain": "DSC",
+      "what": "Sets clear, written expectations and objectives (policies, standards, requirements, risk tolerance) that decisions and behaviour are measured against.",
+      "not_for": "Not Communication: writing the expectation vs. conveying it. A policy or standard that only requires a safeguard is Defined expectations; it performs the safeguard's own function only if the control itself performs or technically enforces it (the system blocks the non-compliant action).",
+      "examples": [
+        "Acceptable-use policy",
+        "Data-handling standard",
+        "Risk-appetite and tolerance statement",
+        "Vendor-selection security criteria",
+        "Code of conduct"
+      ]
+    },
+    "dsc_prev_communication": {
+      "label": "Communication",
+      "domain": "DSC",
+      "what": "Conveys defined expectations to decision-makers and staff so that they know and understand them.",
+      "not_for": "Not Defined expectations: communicating vs. writing them. Not Ensure capability: awareness of the rules vs. skills and resources to act. Not Reporting: delivers expectations, not risk insights.",
+      "examples": [
+        "Policy acknowledgement at onboarding",
+        "Security awareness communications",
+        "Policy-change announcements",
+        "Just-in-time policy reminders"
+      ]
+    },
+    "dsc_prev_sa_data_asset": {
+      "label": "Asset data",
+      "domain": "DSC",
+      "what": "Provides accurate data about assets (what exists, its value, sensitivity and criticality) for use in decisions.",
+      "not_for": "Not Threat data or Controls data: describes the assets at risk. Not Visibility (LEC): an inventory informs decisions, it does not capture attack activity.",
+      "examples": [
+        "Configuration management database",
+        "Software bill of materials",
+        "Data catalogue with sensitivity labels",
+        "System criticality ratings"
+      ]
+    },
+    "dsc_prev_sa_data_threat": {
+      "label": "Threat data",
+      "domain": "DSC",
+      "what": "Provides accurate data about threats relevant to the organisation (actors, methods, frequency) for use in decisions.",
+      "not_for": "Not Threat intelligence (VMC): Threat data informs management decisions, Threat intelligence drives control adjustment. Not Recognition (LEC): not used to spot live attacks.",
+      "examples": [
+        "Threat-actor profiles",
+        "MITRE ATT&CK mapping of relevant techniques",
+        "Sector-specific threat reports",
+        "Internal incident history"
+      ]
+    },
+    "dsc_prev_sa_data_controls": {
+      "label": "Controls data",
+      "domain": "DSC",
+      "what": "Provides accurate data about the existence, coverage and effectiveness of controls for use in decisions.",
+      "not_for": "Not Control monitoring (VMC): Controls data feeds decision-makers, Control monitoring feeds correction of drifted controls. Not Asset data or Threat data.",
+      "examples": [
+        "Control catalogue with effectiveness ratings",
+        "Control-coverage maps",
+        "GRC control-status register",
+        "Control-effectiveness scorecard for management"
+      ]
+    },
+    "dsc_prev_sa_analysis": {
+      "label": "Analysis",
+      "domain": "DSC",
+      "what": "Turns asset, threat and control data into accurate risk insights through analysis models.",
+      "not_for": "Not Reporting: producing insight vs. delivering it. Not the data sub-functions: analysis consumes data. Not Treatment selection (VMC): prioritising fixes for identified variances.",
+      "examples": [
+        "Quantitative (FAIR) risk analysis",
+        "Risk assessment and risk register",
+        "Scenario modelling",
+        "Attack-path analysis",
+        "Business impact analysis"
+      ]
+    },
+    "dsc_prev_sa_reporting": {
+      "label": "Reporting",
+      "domain": "DSC",
+      "what": "Delivers analysis results to the right decision-makers in a timely and usable form.",
+      "not_for": "Not Analysis: delivering vs. producing insight. Not Communication: reports risk information, not expectations. Not Monitoring (LEC): alerts to analysts about attacks are not management reporting.",
+      "examples": [
+        "Executive risk dashboards",
+        "Monthly risk reports",
+        "Board risk briefings",
+        "Decision-support tools for managers"
+      ]
+    },
+    "dsc_prev_ensure_capability": {
+      "label": "Ensure capability",
+      "domain": "DSC",
+      "what": "Ensures the people responsible for decisions and actions have the skills, authority and resources to act in alignment with expectations.",
+      "not_for": "Not Communication: capability is skills, authority and resources, not awareness of rules. General awareness messaging is Communication; role-specific skills training and staffing are Ensure capability.",
+      "examples": [
+        "Designated security leadership with authority",
+        "Adequate security budget and staffing",
+        "Expert on-call rotation"
+      ]
+    },
+    "dsc_prev_incentives": {
+      "label": "Incentives",
+      "domain": "DSC",
+      "what": "Puts in place rewards and consequences that motivate decision-makers to make choices aligned with expectations.",
+      "not_for": "Not Deterrence (LEC): Incentives shape decision-makers' choices, Deterrence targets threat actors. Not Identify misalignment: incentives motivate, they do not detect deviations.",
+      "examples": [
+        "Bonus tied to security KPIs",
+        "Penalties for policy violations",
+        "Recognition for good security choices",
+        "Performance reviews weighting risk-aware behaviour"
+      ]
+    },
+    "dsc_id_misaligned": {
+      "label": "Identify misalignment",
+      "domain": "DSC",
+      "what": "Detects when actual decisions or behaviour deviate from defined expectations, such as non-compliance or unapproved risk acceptance.",
+      "not_for": "Not Control monitoring (VMC): finds misaligned decisions, not degraded controls. Not Defined expectations: it checks against them. Not Monitoring (LEC): not attack detection.",
+      "examples": [
+        "Exception and waiver tracking",
+        "Governance committee review cycles",
+        "Periodic review of management decisions against the risk appetite"
+      ]
+    }
+  },
+  "taxonomy": {
+    "threat_event_type": {
+      "data_disclosure": {
+        "what": "Unauthorised access to or exfiltration/exposure of confidential data (a confidentiality loss) where no named mechanism fits.",
+        "not_for": "Not data_tampering (data altered, not exposed). Not ransomware when the main mechanism is encryption/extortion, even if data is also stolen. Not a malicious insider abusing access they already held (insider_misuse)."
+      },
+      "data_tampering": {
+        "what": "Unauthorised modification or corruption of IT data or transactions, causing an integrity loss (e.g., altered records, fraudulent changes).",
+        "not_for": "Not ot_integrity, which is manipulation of industrial process values or operator views. Not data_disclosure (exposure without alteration). Not a malicious insider abusing access they already held (insider_misuse)."
+      },
+      "denial_of_service": {
+        "what": "Disruption of IT service availability by flooding or resource exhaustion.",
+        "not_for": "Not ot_availability (disruption of industrial/OT operations). Not ransomware (availability loss via encryption and extortion). Not sabotage other than flooding or resource exhaustion by someone using access they already held (insider_misuse)."
+      },
+      "insider_misuse": {
+        "what": "A person with legitimately granted access (employee or contractor) abuses that access for unauthorised purposes, where no named mechanism fits.",
+        "not_for": "Not when a mechanism fits (ransomware, supply_chain, social_engineering, physical_tampering, denial_of_service, malware); a vendor's access path is supply_chain. Not social_engineering or credential theft by outsiders, who lack granted access. Not accidental exposure (data_disclosure)."
+      },
+      "malware": {
+        "what": "Malicious code (e.g., trojans, worms, infostealers, wipers) compromising systems, where the event is not primarily ransom-driven.",
+        "not_for": "Not ransomware when encryption plus extortion is the core of the event. Not supply_chain when malware arrives via a trusted vendor or update channel."
+      },
+      "ot_availability": {
+        "what": "Loss of availability of operational technology or industrial processes (e.g., halted production line, loss of control or view).",
+        "not_for": "Not denial_of_service (IT services). Not ot_safety_tampering when safety systems are targeted. Not ot_integrity when the process is manipulated rather than stopped."
+      },
+      "ot_integrity": {
+        "what": "Manipulation of the basic process control system or the operator's view (e.g., altered setpoints or HMI values) without targeting safety functions.",
+        "not_for": "Not data_tampering (IT data). Not ot_safety_tampering when safety instrumented systems are the target. Not ot_availability when the process simply stops."
+      },
+      "ot_safety_tampering": {
+        "what": "Tampering with or disabling safety instrumented systems or safety functions, creating risk of physical harm, injury or environmental release.",
+        "not_for": "Not ot_integrity (manipulation of the basic process control system). Use this when safety functions themselves are the target."
+      },
+      "physical_tampering": {
+        "what": "Physical access to, theft of, or tampering with devices, media or facilities (e.g., stolen laptop, unauthorised site entry).",
+        "not_for": "Not an OT type when an OT or safety system is the target and an OT effect is described (OT effect first, whatever the mechanism). Physical tampering by an insider is still physical_tampering."
+      },
+      "ransomware": {
+        "what": "Malware that encrypts or locks systems/data and extorts payment, including double-extortion with data theft.",
+        "not_for": "Not malware (non-extortion code). Not data_disclosure when theft/exposure occurs without encryption-based extortion."
+      },
+      "social_engineering": {
+        "what": "Manipulation of people through deception (phishing, pretexting, business email compromise) to divulge information, grant access or transfer funds.",
+        "not_for": "Not malware or ransomware when the lure is only initial access and the loss comes from the payload. Not insider_misuse (actor already held access)."
+      },
+      "supply_chain": {
+        "what": "Compromise or failure reaching the organisation through a third-party vendor, service provider, software dependency or update channel.",
+        "not_for": "Not malware or data_disclosure when the attack is direct. Use supply_chain when the path runs through a trusted third party."
+      },
+      "miscellaneous": {
+        "what": "Clearly described, but none of the named threat event types fits.",
+        "not_for": "Not for vague descriptions: if the description is too thin to decide, choose 'not enough information to decide'."
+      }
+    },
+    "asset_class": {
+      "business_process_cost": {
+        "what": "A business process whose disruption or compromise drives up costs (e.g., payroll, procurement, internal operations) rather than directly losing revenue.",
+        "not_for": "Not business_process_revenue (process directly generating revenue). Choose by whether the loss is added cost or lost income."
+      },
+      "business_process_revenue": {
+        "what": "A business process that directly generates the organisation's revenue (e.g., order processing, e-commerce, billing, production for sale).",
+        "not_for": "Not systems (the IT supporting it) when loss is framed as lost income. Not business_process_third_party_revenue (other parties' revenue)."
+      },
+      "business_process_third_party_revenue": {
+        "what": "A business process whose failure impacts customers' or partners' revenue (e.g., services the organisation provides that others depend on).",
+        "not_for": "Not business_process_revenue (the organisation's own revenue). Use when the key harm is to third parties' income."
+      },
+      "cash_or_equivalent": {
+        "what": "Cash, funds or cash-equivalent assets that can be directly stolen or diverted (e.g., bank accounts, payment flows, crypto wallets).",
+        "not_for": "Not business_process_revenue (lost income from disruption). Use when money itself is transferred or stolen, e.g., fraudulent wire transfer."
+      },
+      "data": {
+        "what": "Information assets: sensitive personal data, intellectual property/trade secrets, co-owned proprietary data, or confidential business information.",
+        "not_for": "Not systems (the IT platforms holding data) when the harm is service outage rather than data compromise."
+      },
+      "facilities": {
+        "what": "Physical assets and facilities such as buildings, sites, equipment and physical infrastructure.",
+        "not_for": "Not ot_systems (industrial control technology). Not safety_systems. Use for the physical premises and property themselves."
+      },
+      "ot_systems": {
+        "what": "Operational technology: industrial control systems, SCADA, PLCs, HMIs and engineering workstations that run physical processes.",
+        "not_for": "Not systems (IT). Not safety_systems (safety instrumented systems). Not facilities (buildings and general physical property)."
+      },
+      "people": {
+        "what": "Personnel as the asset at risk, e.g., employee safety or HR/insider-risk scenarios not mapping cleanly to a business process.",
+        "not_for": "Not safety_systems (engineered safety functions). Not data when employee records are the asset; people is the persons themselves."
+      },
+      "safety_systems": {
+        "what": "Safety instrumented systems and engineered safety functions that protect people, plant and environment from hazardous process conditions.",
+        "not_for": "Not ot_systems (basic process control). Not people (the humans harmed). Use when the targeted/affected asset is the safety function."
+      },
+      "systems": {
+        "what": "IT systems, applications, networks and products or services delivered through IT.",
+        "not_for": "Not ot_systems (industrial control). Not data when the compromise is of the information. Not business_process_* when the loss is framed around the process."
+      },
+      "other": {
+        "what": "Clearly described, but none of the named asset classes fits.",
+        "not_for": "Not for vague descriptions: if the description is too thin to decide, choose 'not enough information to decide'."
+      }
+    },
+    "threat_actor_type": {
+      "competitors": {
+        "what": "Rival organisations seeking commercial advantage, e.g., through industrial espionage or theft of trade secrets.",
+        "not_for": "Not nation_state (state-directed espionage) or cybercriminals (financially motivated via extortion/fraud rather than market advantage)."
+      },
+      "cybercriminals": {
+        "what": "Financially motivated external actors or groups (e.g., ransomware gangs, fraudsters, credential thieves).",
+        "not_for": "Not nation_state (state-sponsored, strategic aims). Not hacktivists (ideological). Not insider_malicious (holds granted access)."
+      },
+      "hacktivists": {
+        "what": "Ideologically or politically motivated external actors seeking disruption, exposure or publicity.",
+        "not_for": "Not cybercriminals (profit motive). Not nation_state (state-sponsored), even when state proxies pose as hacktivists without clear attribution."
+      },
+      "insider_accidental": {
+        "what": "Employees or contractors who cause loss unintentionally through error, negligence or misconfiguration.",
+        "not_for": "Not insider_malicious (intent to harm or profit). Use when there is no malicious intent, e.g., misdirected email or exposed storage bucket."
+      },
+      "insider_malicious": {
+        "what": "Employees, contractors or trusted partners who intentionally misuse their access to cause harm or for personal gain.",
+        "not_for": "Not insider_accidental (no intent). Not cybercriminals (external, no granted access); an insider recruited by an external actor is still insider_malicious."
+      },
+      "nation_state": {
+        "what": "State-sponsored or state-directed actors pursuing espionage, sabotage or strategic objectives, typically highly capable.",
+        "not_for": "Not cybercriminals (profit motive) or hacktivists (ideology), even if techniques overlap. Use when state direction or sponsorship is indicated."
+      }
+    }
+  }
+}
