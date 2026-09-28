@@ -1,0 +1,74 @@
+# serializer version: 1
+# name: test_replay_run_writes_the_run_folder
+  '''
+  
+  Scores order the queues and select the unreviewed closest-match list. They are not calibrated probabilities: in the System One trial the judge's yes/no answers on control functions had an expected calibration error (ECE) of 0.14, and 13 of 55 asset-class answers given a score of 0.99 or higher were wrong.
+  
+  Mark each row's **Disposition** as `accepted`, `rejected` or `deferred`, with a one-line **Reason**. Flags are candidates for review, not verdicts.
+  
+  ## Scenario label audit
+  
+  9 candidates from 3 items.
+  
+  Top 5; 3 more scored within 0.10 below the cut.
+  
+  | # | Score | Subject | Finding | Disposition | Reason |
+  |---|---|---|---|---|---|
+  | 1 | 0.98 | call-center-fraud · threat_event_type | curated **social_engineering** score 0.02; judge prefers **supply_chain** (0.70) |  |  |
+  | 2 | 0.98 | ddos-extortion · threat_event_type | curated **denial_of_service** score 0.02; judge prefers **data_tampering** (0.70) |  |  |
+  | 3 | 0.97 | call-center-fraud · asset_class | curated **people** score 0.03; judge prefers **safety_systems** (0.70) |  |  |
+  | 4 | 0.97 | ddos-extortion · asset_class | curated **systems** score 0.03; judge prefers **facilities** (0.70) |  |  |
+  | 5 | 0.97 | ddos-peak · asset_class | curated **business_process_revenue** score 0.03; judge prefers **facilities** (0.70) |  |  |
+  
+  ## Control function audit
+  
+  74 candidates from 3 items; 1 suppressed as deliberately dropped claims (seed `_meta.claim_drops`).
+  
+  ### Possibly missing
+  
+  Top 3; 6 more scored within 0.10 below the cut.
+  
+  | # | Score | Subject | Finding | Disposition | Reason |
+  |---|---|---|---|---|---|
+  | 1 | 0.99 | aup · Implementation | not labelled **Implementation**; judge's yes-score 0.99 |  |  |
+  | 2 | 0.99 | siem · Threat data | not labelled **Threat data**; judge's yes-score 0.99 |  |  |
+  | 3 | 0.97 | aup · Monitoring | not labelled **Monitoring**; judge's yes-score 0.97 |  |  |
+  
+  ### Possibly wrong
+  
+  Top 2; 2 more scored within 0.10 below the cut.
+  
+  | # | Score | Subject | Finding | Disposition | Reason |
+  |---|---|---|---|---|---|
+  | 1 | 0.85 | aup · Communication | labelled **Communication**; judge's yes-score 0.15 |  |  |
+  | 2 | 0.58 | siem · Monitoring | labelled **Monitoring**; judge's yes-score 0.42 |  |  |
+  
+  <details><summary>Suppressed: deliberately dropped claims (seed <code>_meta.claim_drops</code>)</summary>
+  
+  - aup · Incentives: yes-score 0.76; dropped because not groundable
+  
+  </details>
+  
+  ## Scenario overlap
+  
+  2 candidates from 3 items.
+  
+  Top 2; 0 more scored within 0.10 below the cut.
+  
+  | # | Score | Subject | Finding | Disposition | Reason |
+  |---|---|---|---|---|---|
+  | 1 | 0.85 | call-center-fraud ↔ ddos-extortion | from call-center-fraud: judge's top score is **DDoS Extortion** (0.70); distinct-score 0.15; also **DDoS at Seasonal Peak** (0.15); reverse: ddos-extortion's score for this pair 0.15: merge, sharpen, or keep |  |  |
+  | 2 | 0.85 | ddos-extortion ↔ ddos-peak | from ddos-peak: judge's top score is **DDoS Extortion** (0.70); distinct-score 0.15; also **Call-Center Account Takeover** (0.15); reverse: ddos-extortion's score for this pair 0.15: merge, sharpen, or keep |  |  |
+  
+  ## Coverage gaps
+  
+  2 candidates from 2 items.
+  
+  Top 2; 0 more scored within 0.10 below the cut.
+  
+  | # | Score | Subject | Finding | Disposition | Reason |
+  |---|---|---|---|---|---|
+  | 1 | 0.10 | T1 · Edge VPN exploitation (test) | judge's none-score 0.10; closest: **DDoS at Seasonal Peak** (0.70) |  |  |
+  | 2 | 0.10 | T2 · Payment channel flood (test) | judge's none-score 0.10; closest: **Call-Center Account Takeover** (0.70) |  |  |
+  '''
+# ---

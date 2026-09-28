@@ -1,0 +1,2 @@
+{"id": "T1", "title": "Edge VPN exploitation", "text": "Actors exploit unpatched VPN appliances for initial access.", "source": "test"}
+{"id": "T2", "title": "Payment channel flood", "text": "A ransom-driven traffic flood against online banking.", "source": "test"}

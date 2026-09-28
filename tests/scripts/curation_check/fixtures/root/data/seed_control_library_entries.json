@@ -1,0 +1,5 @@
+{"_meta": {"claim_drops": [{"slug": "aup", "dropped": ["dsc_prev_incentives"], "reason": "not groundable"}]}, "entries": [
+  {"slug": "siem", "name": "SIEM", "status": "published", "description": "Collects and correlates security logs.", "assignments": [{"sub_function": "lec_det_monitoring"}, {"sub_function": "lec_det_recognition"}]},
+  {"slug": "nwsg", "name": "Network Segmentation", "status": "published", "description": "Divides the network into isolated zones.", "assignments": [{"sub_function": "lec_prev_avoidance"}]},
+  {"slug": "aup", "name": "Acceptable Use Policy", "status": "published", "description": "Written rules for using company systems.", "assignments": [{"sub_function": "dsc_prev_defined_expectations"}, {"sub_function": "dsc_prev_communication"}]}
+]}
