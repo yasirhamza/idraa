@@ -18,3 +18,6 @@ INTAKE_TITLE_MAX = 80  # intake titles are published in committed reports
 
 MIN_DECIDED_FOR_TUNING = 10
 WILSON_Z = 1.645  # two-sided 90% interval
+
+GAP_COVERED_NONE_MAX = 0.10
+GAP_COVERED_CLOSEST_MIN = 0.80  # gaps: below/above these, show the judge's unreviewed closest match

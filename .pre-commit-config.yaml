@@ -17,16 +17,19 @@ repos:
       # every future build (the standalone Tailwind binary never emits one),
       # so `--check` reports STALE forever. Exclude it too.
       # syrupy `.ambr` snapshots under __snapshots__/ are the SAME class of
-      # hazard again: syrupy pads every blank line inside its `'''...'''`
-      # literal with the block's leading indent, and its own reader relies on
-      # that padding to dedent the literal back correctly. `trailing-whitespace`
-      # strips those "blank" lines to zero-width, which desyncs the dedent and
-      # makes the snapshot fail against its own generator (discovered live:
-      # curation-checker Task 6, test_report.ambr). Exclude it too.
+      # hazard again, for `trailing-whitespace` only: syrupy pads every blank
+      # line inside its `'''...'''` literal with the block's leading indent,
+      # and its own reader relies on that padding to dedent the literal back
+      # correctly. `trailing-whitespace` strips those "blank" lines to
+      # zero-width, which desyncs the dedent and makes the snapshot fail
+      # against its own generator (discovered live: curation-checker Task 6,
+      # test_report.ambr). Exclude it too. `end-of-file-fixer` only touches
+      # the final newline and was verified to leave a generated .ambr file
+      # byte-identical, so it keeps just the vendor/tailwind excludes.
       - id: trailing-whitespace
         exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$|__snapshots__/.*\.ambr$'
       - id: end-of-file-fixer
-        exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$|__snapshots__/.*\.ambr$'
+        exclude: '^src/idraa/static/vendor/|^src/idraa/static/css/tailwind\.css$'
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files

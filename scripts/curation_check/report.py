@@ -9,7 +9,13 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from scripts.curation_check.config import BELOW_CUT_WINDOW, MIN_DECIDED_FOR_TUNING, WILSON_Z
+from scripts.curation_check.config import (
+    BELOW_CUT_WINDOW,
+    GAP_COVERED_CLOSEST_MIN,
+    GAP_COVERED_NONE_MAX,
+    MIN_DECIDED_FOR_TUNING,
+    WILSON_Z,
+)
 from scripts.curation_check.flags import CheckResult, Flag, rank
 
 CHECK_TITLES = {
@@ -22,15 +28,22 @@ CHECK_ORDER = tuple(CHECK_TITLES)
 SUB_TITLES = {"missing": "Possibly missing", "wrong": "Possibly wrong"}
 DISPOSITIONS = ("accepted", "rejected", "deferred")
 DISCLAIMER = (
-    "Scores only order the queues. They are not calibrated probabilities: in the System One trial the judge's "
-    "yes/no answers on control functions had a calibration error of 0.14, and 13 of 55 asset-class answers it "
-    "gave at 0.99 or higher were wrong."
+    "Scores order the queues and select the unreviewed closest-match list. They are not calibrated probabilities: "
+    "in the System One trial the judge's yes/no answers on control functions had an expected calibration error "
+    "(ECE) of 0.14, and 13 of 55 asset-class answers given a score of 0.99 or higher were wrong."
 )
 _CELL_SPLIT = re.compile(r"(?<!\\)\|")
 
 
 def md_cell(text: object) -> str:
-    return " ".join(str(text).split()).replace("<", "&lt;").replace(">", "&gt;").replace("|", "\\|")
+    # a stray backtick would open a code span that swallows the rest of the report
+    return (
+        " ".join(str(text).split())
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("|", "\\|")
+        .replace("`", "'")
+    )
 
 
 def split_top(top: int) -> tuple[int, int]:
@@ -120,15 +133,23 @@ def render(
             lines.append("")
         if check == "gaps":
             closest = sorted(
-                (f for f in res.flags if f.detail.get("closest_p", 0.0) >= 0.8 and f.score < 0.1),
+                (
+                    f
+                    for f in res.flags
+                    if f.detail.get("closest_p", 0.0) >= GAP_COVERED_CLOSEST_MIN
+                    and f.score < GAP_COVERED_NONE_MAX
+                ),
                 key=lambda f: f.subject,
             )
             if closest:
-                lines += ["**Judge's closest match (not reviewed):**", ""]
-                lines += [
-                    f"- {md_cell(f.subject)} → {md_cell(f.detail['closest'])} ({f.detail['closest_p']:.2f})"
-                    for f in closest
-                ]
+                lines += ["**Judge's closest match (not reviewed; not evidence of coverage):**", ""]
+                for f in closest:
+                    tied = f.detail.get("closest_tied") or [f.detail["closest"]]
+                    mark = " (tied)" if len(tied) > 1 else ""
+                    names = md_cell(", ".join(tied))
+                    lines.append(
+                        f"- {md_cell(f.subject)} → {names}{mark}: closest-score {f.detail['closest_p']:.2f}"
+                    )
                 lines.append("")
     if previous is not None:
         now_keys = queue_keys(results, top)
@@ -141,11 +162,12 @@ def render(
             still = [f"{k} (now #{pos[k]})" for k in previous[check] if k in pos]
             new = [k for k in now_keys[check] if k not in previous[check]]
             lines += [
-                f"**{CHECK_TITLES[check]}:** {len(gone)} gone, {len(still)} still flagged, {len(new)} new.",
+                f"**{CHECK_TITLES[check]}:** {len(gone)} left the queue (fixed, outranked or renamed), "
+                f"{len(still)} still flagged, {len(new)} new.",
                 "",
             ]
             lines += (
-                [f"- gone: `{k}`" for k in gone]
+                [f"- left the queue: `{k}`" for k in gone]
                 + [f"- still flagged: `{s}`" for s in still]
                 + [f"- new: `{k}`" for k in new]
             )
@@ -167,11 +189,20 @@ def parse_dispositions(text: str, source: str) -> dict[str, list[tuple[int, str,
         if line.startswith("### "):
             sub = title_to_sub.get(line[4:].strip())
             continue
-        if current is None or not line.startswith("|"):
+        if not line.startswith("|"):
             continue
         cells = [c.strip() for c in _CELL_SPLIT.split(line)[1:-1]]
-        if len(cells) != 6 or not cells[0].isdigit():
-            continue
+        if not cells or not cells[0].isdigit():
+            continue  # header and separator rows
+        # a queue row that cannot be attributed must fail loudly: silently dropped rows would bias the tally
+        if current is None or (current == "control-functions" and sub is None):
+            raise ValueError(
+                f"{source}:{n}: queue row outside a known section (was a heading edited?)"
+            )
+        if len(cells) != 6:
+            raise ValueError(
+                f"{source}:{n}: expected 6 cells, found {len(cells)} (escape '|' in a reason as '\\|')"
+            )
         disposition = cells[4].lower()
         if disposition and disposition not in DISPOSITIONS:
             raise ValueError(
@@ -192,34 +223,34 @@ def wilson(k: int, n: int, z: float = WILSON_Z) -> tuple[float, float]:
     return (max(0.0, centre - half), min(1.0, centre + half))
 
 
-def tally(paths: Iterable[Path]) -> dict[tuple[str, str], dict[str, Any]]:
-    """Pool dispositions across all committed reports, grouped by (model, check). Each subject counts once
-    across campaigns (N-I5r2): the latest decided disposition wins and a later blank never erases an earlier
-    decision, so a rejected flag that re-queues every campaign is not counted again each time."""
+def tally(paths: Iterable[Path]) -> dict[tuple[str, str, int], dict[str, Any]]:
+    """Pool dispositions across all committed reports, grouped by (model, check, top): runs at a different queue
+    length are not pooled, so a raised --top is judged on its own rows. Each subject counts once across campaigns
+    (N-I5r2): the latest accepted/rejected wins, and a later blank or deferral never erases an earlier decision,
+    so a rejected flag that re-queues every campaign is not counted again each time."""
     runs = []
     for p in paths:
         meta_path = p.parent / "run.json"
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
         runs.append(
-            (
-                meta.get("date", ""),
-                str(p),
-                meta.get("model", "unknown"),
-                meta.get("campaign", p.parent.name),
-                p,
-            )
+            (meta.get("date", ""), str(p), meta.get("model", "unknown"), int(meta.get("top", 0)), p)
         )
-    latest: dict[tuple[str, str, str], tuple[int, int, str]] = {}
-    for _date, _name, model, _campaign, p in sorted(runs):
+    latest: dict[tuple[str, str, int, str], tuple[int, int, str]] = {}
+    for _date, _name, model, top, p in sorted(runs):
         for check, rows in parse_dispositions(p.read_text(encoding="utf-8"), str(p)).items():
             for rank_, subject, disposition in rows:
-                key = (model, check, subject)
-                if disposition or key not in latest:
+                key = (model, check, top, subject)
+                prev = latest.get(key)
+                if (
+                    prev is None
+                    or disposition in ("accepted", "rejected")
+                    or (disposition and prev[2] in ("", "deferred"))
+                ):
                     latest[key] = (rank_, len(rows), disposition)
-    out: dict[tuple[str, str], dict[str, Any]] = {}
-    for (model, check, _subject), (rank_, n, d) in latest.items():
+    out: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for (model, check, top, _subject), (rank_, n, d) in latest.items():
         c = out.setdefault(
-            (model, check),
+            (model, check, top),
             {
                 "accepted": 0,
                 "rejected": 0,
@@ -240,10 +271,16 @@ def tally(paths: Iterable[Path]) -> dict[tuple[str, str], dict[str, Any]]:
         c["low_interval"] = wilson(c["low_accepted"], low)
         if decided < MIN_DECIDED_FOR_TUNING:
             c["verdict"] = f"not enough decided rows ({decided} of {MIN_DECIDED_FOR_TUNING})"
-        elif low and c["low_interval"][0] > 0.5:
+        elif (
+            low >= MIN_DECIDED_FOR_TUNING and c["low_interval"][0] > 0.5
+        ):  # the lowest third needs its own floor
             c["verdict"] = "raise --top"
         elif c["hit_interval"][1] < 0.2:
             c["verdict"] = "shrink --top or retire the check"
+        elif low < MIN_DECIDED_FOR_TUNING:
+            c["verdict"] = (
+                f"keep (lowest third has {low} of {MIN_DECIDED_FOR_TUNING} decided rows needed to judge raising --top)"
+            )
         else:
             c["verdict"] = "keep"
     return out

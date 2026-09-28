@@ -5,7 +5,7 @@
   
   Judge `replay` · model `jev-1.13.0` · commit `0123456789` · top 15 per check
   
-  Scores only order the queues. They are not calibrated probabilities: in the System One trial the judge's yes/no answers on control functions had a calibration error of 0.14, and 13 of 55 asset-class answers it gave at 0.99 or higher were wrong.
+  Scores order the queues and select the unreviewed closest-match list. They are not calibrated probabilities: in the System One trial the judge's yes/no answers on control functions had an expected calibration error (ECE) of 0.14, and 13 of 55 asset-class answers given a score of 0.99 or higher were wrong.
   
   Mark each row's **Disposition** as `accepted`, `rejected` or `deferred`, with a one-line **Reason**. Flags are candidates for review, not verdicts.
   
@@ -17,7 +17,7 @@
   
   | # | Score | Subject | Finding | Disposition | Reason |
   |---|---|---|---|---|---|
-  | 1 | 0.95 | fraud · asset_class | curated **people** (0.05); judge prefers **cash_or_equivalent** (0.95) |  |  |
+  | 1 | 0.95 | fraud · asset_class | curated **people** score 0.05; judge prefers **cash_or_equivalent** (0.95) |  |  |
   | 2 | 0.30 | ot · threat_actor_type | description \| with pipe and &lt;b&gt;html&lt;/b&gt; |  |  |
   
   **Errored items (1):**
@@ -34,7 +34,7 @@
   
   | # | Score | Subject | Finding | Disposition | Reason |
   |---|---|---|---|---|---|
-  | 1 | 0.93 | siem · Visibility | not labelled **Visibility** |  |  |
+  | 1 | 0.93 | siem · Visibility | not labelled **Visibility**; judge's yes-score 0.93 |  |  |
   
   ### Possibly wrong
   
@@ -42,7 +42,7 @@
   
   | # | Score | Subject | Finding | Disposition | Reason |
   |---|---|---|---|---|---|
-  | 1 | 0.92 | siem · Monitoring | labelled **Monitoring** |  |  |
+  | 1 | 0.92 | siem · Monitoring | labelled **Monitoring**; judge's yes-score 0.08 |  |  |
   
   <details><summary>Suppressed: deliberately dropped claims (seed <code>_meta.claim_drops</code>)</summary>
   
@@ -58,12 +58,12 @@
   
   | # | Score | Subject | Finding | Disposition | Reason |
   |---|---|---|---|---|---|
-  | 1 | 0.85 | A1 · Edge exploit (CISA) | judge's none-score 0.85 |  |  |
-  | 2 | 0.02 | A2 · Ransomware (CISA) | covered |  |  |
+  | 1 | 0.85 | A1 · Edge exploit (CISA) | judge's none-score 0.85; closest: **Wiper** (0.15) |  |  |
+  | 2 | 0.02 | A2 · Ransomware (CISA) | judge's none-score 0.02; closest: **Ransomware on EHR** (0.97) |  |  |
   
-  **Judge's closest match (not reviewed):**
+  **Judge's closest match (not reviewed; not evidence of coverage):**
   
-  - A2 · Ransomware (CISA) → Ransomware on EHR (0.97)
+  - A2 · Ransomware (CISA) → Ransomware on EHR: closest-score 0.97
   
   '''
 # ---
