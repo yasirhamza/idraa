@@ -21,15 +21,21 @@ def score_scenario(item: ScenarioItem, answers: Answers) -> list[Flag]:
             raise TypeError(f"{field}: expected a choice distribution")
         curated = getattr(item, field)
         p = float(dist.get(curated, 0.0))
-        top = max(dist, key=lambda k: (dist[k], k))
+        # Task-4 review: a tie never claims a preference over the curated label, nor for 'not enough information'
+        top = max(dist, key=lambda k: (dist[k], k == curated, k != NONE_FITS, k))
+        named = [k for k in dist if k not in (curated, NONE_FITS)]
+        alt = max(named, key=lambda k: (dist[k], k)) if named else None
+        nxt = f"; next: **{alt}** {dist[alt]:.2f}" if alt is not None else ""
         if top == NONE_FITS:
-            finding = f"judge's top score is 'not enough information' ({dist[top]:.2f}); curated **{curated}** {p:.2f}"
+            finding = f"judge's top score is 'not enough information' ({dist[top]:.2f}); curated **{curated}** score {p:.2f}{nxt}"
         elif top == curated:
-            finding = f"judge's top score agrees with curated **{curated}** ({p:.2f})"
+            finding = f"judge's top score agrees with curated **{curated}** ({p:.2f}){nxt}"
         elif top in _NO_NAMED_TYPE and curated not in _NO_NAMED_TYPE:
-            finding = f"judge's top score is **{top}** ({dist[top]:.2f}), meaning no named type fits; curated **{curated}** {p:.2f}"
+            finding = f"judge's top score is **{top}** ({dist[top]:.2f}), meaning no named type fits; curated **{curated}** score {p:.2f}"
         else:
-            finding = f"curated **{curated}** ({p:.2f}); judge prefers **{top}** ({dist[top]:.2f})"
+            finding = (
+                f"curated **{curated}** score {p:.2f}; judge prefers **{top}** ({dist[top]:.2f})"
+            )
         flags.append(
             Flag(
                 check="scenario-labels",
@@ -53,11 +59,11 @@ def score_control(item: ControlItem, answers: Answers, *, labels: dict[str, str]
         detail: dict[str, object]
         if slug in item.functions:
             score = 1.0 - p
-            finding = f"labelled **{label}**; judge's yes-score only {p:.2f}: possibly wrong"
+            finding = f"labelled **{label}**; judge's yes-score {p:.2f}"
             detail = {"direction": "wrong"}
         else:
             score = p
-            finding = f"not labelled **{label}**; judge's yes-score {p:.2f}: possibly missing"
+            finding = f"not labelled **{label}**; judge's yes-score {p:.2f}"
             detail = {"direction": "missing"}
             if slug in item.dropped:
                 detail.update(suppressed=True, reason=item.dropped[slug])

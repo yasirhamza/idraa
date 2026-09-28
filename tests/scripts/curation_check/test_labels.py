@@ -49,6 +49,18 @@ def test_scenario_flags_one_per_field_scored_by_disagreement() -> None:
     assert flags["scenario-labels:fraud:asset_class"].score == pytest.approx(0.95)
     assert "prefers **cash_or_equivalent**" in flags["scenario-labels:fraud:asset_class"].finding
     assert "not enough information" in flags["scenario-labels:fraud:threat_actor_type"].finding
+    assert "next: **malware** 0.10" in flags["scenario-labels:fraud:threat_event_type"].finding
+
+
+def test_scenario_ties_never_claim_a_preference() -> None:  # Task-4 review
+    answers = {
+        "threat_event_type": {"malware": 0.5, "social_engineering": 0.5},
+        "asset_class": {"people": 1.0},
+        "threat_actor_type": {NONE_FITS: 0.5, "cybercriminals": 0.5},
+    }
+    flags = score_scenario(SCEN, answers)
+    assert all("agrees with curated" in f.finding for f in flags)
+    assert "next:" not in next(f for f in flags if f.key.endswith(":asset_class")).finding
 
 
 def test_scenario_no_named_type_is_reported_distinctly() -> None:  # M-N1
@@ -94,4 +106,5 @@ def test_control_flags_carry_direction_and_suppress_dropped_claims() -> None:  #
     assert wrong.detail["direction"] == "wrong" and wrong.score == pytest.approx(0.92)
     assert missing.detail["direction"] == "missing" and missing.score == pytest.approx(0.93)
     assert "yes-score" in missing.finding  # M-I4: scores, not "the judge says yes"
+    assert all("possibly" not in f.finding and "only" not in f.finding for f in (wrong, missing))
     assert dropped.detail["suppressed"] is True and dropped.detail["reason"] == "not groundable"
