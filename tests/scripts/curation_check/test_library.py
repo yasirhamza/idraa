@@ -122,7 +122,7 @@ NO_LIBRARY_CONTROL = frozenset(
         "Visible CCTV with warning signs",
         "Emergency configuration rollback to restore a degraded control",
         "Automated regression tests gating each release",
-        "Small, incremental change batches",
+        "Automated unit tests on every code commit",
         "Fix, mitigate or accept decision for each identified control variance",
     }
 )

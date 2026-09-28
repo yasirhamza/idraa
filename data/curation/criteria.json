@@ -133,7 +133,7 @@
       "examples": [
         "Pre-deployment testing of changes in a staging environment",
         "Automated regression tests gating each release",
-        "Small, incremental change batches"
+        "Automated unit tests on every code commit"
       ]
     },
     "vmc_id_threat_intelligence": {
