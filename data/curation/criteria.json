@@ -133,7 +133,7 @@
       "examples": [
         "Pre-deployment testing of changes in a staging environment",
         "Automated regression tests gating each release",
-        "Release acceptance checks against security requirements"
+        "Small, incremental change batches"
       ]
     },
     "vmc_id_threat_intelligence": {
@@ -168,7 +168,7 @@
       "examples": [
         "Severity-based remediation playbooks",
         "Exception process with sign-off",
-        "Fix, mitigate or accept decision for each finding"
+        "Fix, mitigate or accept decision for each identified control variance"
       ]
     },
     "vmc_corr_implementation": {
