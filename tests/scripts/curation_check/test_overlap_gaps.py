@@ -33,8 +33,8 @@ def test_overlap_scores_one_minus_distinct_and_shows_two_matches() -> None:  # M
     ]
     assert "merge, sharpen, or keep" in flag.finding and "**Wiper**" in flag.finding
     assert flag.finding.startswith(
-        "judge's top score is 'distinct' (0.70)"
-    )  # never "reads like" when distinct wins
+        "from ddos-peak: judge's top score is 'distinct' (0.70)"
+    )  # never "reads like"
 
 
 def test_overlap_tie_flags_every_tied_partner() -> None:  # Task-5 review
@@ -68,7 +68,9 @@ def test_merge_pairs_keeps_the_stronger_direction() -> None:
     [merged] = merge_pairs(a + b)
     assert merged.score == pytest.approx(0.40)
     assert merged.detail["reverse_p"] == pytest.approx(0.29)
-    assert "reverse direction, from ddos-peak: 0.29" in merged.finding
+    assert (
+        "; reverse: ddos-peak's score for this pair 0.29: merge, sharpen, or keep" in merged.finding
+    )
 
 
 def _write_intake(tmp_path: Path, lines: list[str]) -> Path:

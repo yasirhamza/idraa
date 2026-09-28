@@ -20,6 +20,7 @@ SAME_RISK_DEFINITION = (
     "entries distinct in scope; the curator decides whether such a variant is justified."
 )
 NONE_DISTINCT_TEXT = "No other scenario describes the same risk; this one is distinct."
+_ACTION = ": merge, sharpen, or keep"
 
 
 def score_overlap(
@@ -37,14 +38,16 @@ def score_overlap(
         return []
     # Task-5 review: a tie never picks one partner, and the copy never claims a match 'distinct' outscored
     top_p = others[0][1]
-    tied = [n for n, p in others if p == top_p]
-    rest = [(n, p) for n, p in others if p < top_p]
+    tied = [
+        n for n, p in others if round(p, 2) == round(top_p, 2)
+    ]  # a tie at the displayed precision
+    rest = [(n, p) for n, p in others if n not in tied]
     names = ", ".join(f"**{n}**" for n in tied)
     tie = ", tied" if len(tied) > 1 else ""
-    if p_distinct >= top_p:
-        lead = f"judge's top score is 'distinct' ({p_distinct:.2f}); closest: {names} ({top_p:.2f}{tie})"
+    if round(p_distinct, 2) >= round(top_p, 2):
+        lead = f"from {item.slug}: judge's top score is 'distinct' ({p_distinct:.2f}); closest: {names} ({top_p:.2f}{tie})"
     else:
-        lead = f"judge's top score is {names} ({top_p:.2f}{tie}); distinct-score {p_distinct:.2f}"
+        lead = f"from {item.slug}: judge's top score is {names} ({top_p:.2f}{tie}); distinct-score {p_distinct:.2f}"
     also = f"; also **{rest[0][0]}** ({rest[0][1]:.2f})" if rest else ""
     flags = []
     for name in tied:
@@ -55,7 +58,7 @@ def score_overlap(
                 key=f"overlap:{a}:{b}",
                 subject=f"{a} ↔ {b}",
                 score=1.0 - p_distinct,
-                finding=f"{lead}{also}: merge, sharpen, or keep",
+                finding=f"{lead}{also}{_ACTION}",
                 detail={
                     "top2": [[n, p] for n, p in others[:2]],
                     "from": item.slug,
@@ -80,7 +83,10 @@ def merge_pairs(flags: list[Flag]) -> list[Flag]:
             r = reverse[0]
             keep = replace(
                 keep,
-                finding=f"{keep.finding} (reverse direction, from {r.detail['from']}: {r.detail['pair_p']:.2f})",
+                finding=(
+                    keep.finding.removesuffix(_ACTION)
+                    + f"; reverse: {r.detail['from']}'s score for this pair {r.detail['pair_p']:.2f}{_ACTION}"
+                ),
                 detail={**keep.detail, "reverse_p": r.detail["pair_p"]},
             )
         merged.append(keep)

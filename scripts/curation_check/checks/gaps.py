@@ -15,11 +15,13 @@ from scripts.curation_check.flags import Flag
 from scripts.curation_check.judge import Answers
 
 INTAKE_SOURCE_MAX = 40  # the source is published in the queue row, like the title
+
 GAP_QUESTION = "Which library scenario covers the threat described in the state?"
 NONE_COVERED_TEXT = "No library scenario covers this threat."
 COVERS_DEFINITION = (
     "A library scenario covers the threat when its threat, method and effect would model the loss event the "
-    "item describes (the FAIR scenario scope). The asset may be broader than, or unstated in, the item."
+    "item describes (the FAIR scenario scope). The asset or effect may be broader than, or unstated in, the item; "
+    "when the item states no effect, a scenario whose threat and method match covers it."
 )
 _FIELDS = ("id", "title", "text", "source")
 
@@ -81,7 +83,9 @@ def score_gap(item: IntakeItem, answers: Answers, *, name_to_slug: dict[str, str
         key=lambda t: (-t[1], t[0]),
     )
     closest_p = ranked[0][1] if ranked else 0.0
-    tied = [k for k, p in ranked if p == closest_p]  # Task-5 review: a tie never names one entry
+    tied = [
+        k for k, p in ranked if round(p, 2) == round(closest_p, 2)
+    ]  # Task-5 review: a tie never names one entry
     closest = tied[0] if tied else "(none)"
     label = "closest (tied)" if len(tied) > 1 else "closest"
     names = ", ".join(f"**{k}**" for k in tied) or "**(none)**"
