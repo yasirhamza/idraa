@@ -119,7 +119,7 @@ if ! flags="$("${GIT[@]}" ls-files -v -- "${GUARDED[@]}" 3<&-)"; then
   echo "scripts/curation-check: could not check for hidden changes; refusing" >&2
   exit 1
 fi
-if [[ -n "$flags" ]] && printf '%s\n' "$flags" | /usr/bin/grep -qv '^H '; then
+if [[ -n "$flags" ]] && /usr/bin/grep -qv '^H ' <<<"$flags"; then  # a here-string: no pipe for pipefail to misread
   echo "scripts/curation-check: guarded files are marked assume-unchanged or skip-worktree (hidden changes); refusing" >&2
   exit 1
 fi

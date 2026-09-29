@@ -17,5 +17,8 @@ if Path(scripts.__file__).resolve().parent != root / "scripts":
     sys.exit(
         f"curation-check: refusing the 'scripts' package at {scripts.__file__}; expected {root / 'scripts'}"
     )
+# ROOT is not needed any more (scripts.* submodules resolve through scripts.__path__); dropping it means an
+# optional dependency that is not installed (brotli, h2, ...) can never resolve to a stray file at the root.
+sys.path[:] = [p for p in sys.path if Path(p).resolve() != root]
 sys.argv[0] = "curation-check"
 runpy.run_module("scripts.curation_check", run_name="__main__", alter_sys=True)

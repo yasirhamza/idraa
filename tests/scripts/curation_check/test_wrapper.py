@@ -17,21 +17,31 @@ LAUNCH = Path(__file__).resolve().parents[3] / "scripts" / "curation_check" / "_
 ABSENT_SERVICE = "idraa-typesafe-key-test-absent"
 
 
-def _safe_env(env: dict[str, str] | None = None) -> dict[str, str]:
-    """Point the wrapper at a Keychain item that does not exist unless the test sets its own service
-    (or forges the clean stage), so no regression can ever read the real key."""
+def _safe_env(
+    env: dict[str, str] | None = None, *, service: str = ABSENT_SERVICE
+) -> dict[str, str]:
+    """Always point the wrapper at a Keychain item that does not exist (overriding anything the developer's
+    shell exports) and drop any real key, so no regression can ever read or send a real secret."""
     out = dict(os.environ if env is None else env)
+    out.pop("TYPESAFE_API_KEY", None)
     if "_CC_CLEAN" not in out:
-        out.setdefault("CURATION_KEYCHAIN_SERVICE", ABSENT_SERVICE)
+        out["CURATION_KEYCHAIN_SERVICE"] = service
     return out
 
 
 def _run(
-    *args: str, cwd: Path | None = None, env: dict[str, str] | None = None
+    *args: str,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    service: str = ABSENT_SERVICE,
 ) -> subprocess.CompletedProcess[str]:
     script = WRAPPER if cwd is None else cwd / "scripts" / "curation-check"
     return subprocess.run(
-        [str(script), *args], capture_output=True, text=True, cwd=cwd, env=_safe_env(env)
+        [str(script), *args],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=_safe_env(env, service=service),
     )
 
 
@@ -54,8 +64,8 @@ def test_wrapper_refuses_unexpected_arguments(args: tuple[str, ...]) -> None:
 
 
 def test_wrapper_refuses_other_keychain_services() -> None:  # S-B2
-    env = {**os.environ, "CURATION_KEYCHAIN_SERVICE": "idraa-cloudflare-token"}
-    result = _run("labels", env=env)
+    # another project's naming pattern, but an item that does not exist: a regression can never read a real secret
+    result = _run("labels", service="idraa-cloudflare-token-test-absent")
     assert result.returncode == 2
     assert "CURATION_KEYCHAIN_SERVICE" in result.stderr
 
@@ -70,7 +80,7 @@ def test_wrapper_ignores_bash_env(tmp_path: Path) -> None:  # S-B2: shebang runs
 
 
 def test_wrapper_refuses_a_forged_clean_stage() -> None:  # I-1r2
-    env = {**os.environ, "_CC_CLEAN": "1", "_CC_SERVICE": "idraa-cloudflare-token"}
+    env = {**os.environ, "_CC_CLEAN": "1", "_CC_SERVICE": "idraa-cloudflare-token-test-absent"}
     result = _run("labels", env=env)
     assert result.returncode == 2
     # valid name, dirty environment; the -test-absent item does not exist, so a broken check can never read the real key
