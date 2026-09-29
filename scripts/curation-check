@@ -18,7 +18,7 @@
 #   security add-generic-password -s idraa-typesafe-key -a typesafe -U -w
 #
 # Usage: scripts/curation-check <all|labels|controls|overlap|gaps|tally>
-#          [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--force]
+#          [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--changed-since REF] [--force]
 
 set -euo pipefail
 set +x
@@ -60,7 +60,7 @@ ulimit -c 0  # a crash never writes the key to a core file
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 usage() {
-  echo "usage: scripts/curation-check <all|labels|controls|overlap|gaps|tally> [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--force]" >&2
+  echo "usage: scripts/curation-check <all|labels|controls|overlap|gaps|tally> [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--changed-since REF] [--force]" >&2
   exit 2
 }
 
@@ -86,6 +86,10 @@ while [[ $# -gt 0 ]]; do
       path="$2"
       [[ "$path" == /* ]] || path="$PWD/$path"  # resolve against the caller's directory, before the cd below
       args+=("$1" "$path"); shift 2 ;;
+    --changed-since)
+      ref_re='^[A-Za-z0-9._/~^@{}][A-Za-z0-9._/~^@{}-]*$'
+      [[ $# -ge 2 && "$2" =~ $ref_re && "$2" != *..* ]] || { echo "scripts/curation-check: --changed-since needs a git ref (letters, digits and ._/~^@{}-; no leading '-', ':', whitespace or '..')" >&2; exit 2; }
+      args+=("$1" "$2"); shift 2 ;;
     --force)
       args+=("$1"); shift ;;
     *)

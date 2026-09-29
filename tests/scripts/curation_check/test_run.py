@@ -42,6 +42,52 @@ def test_build_jobs_covers_every_item_and_defines_same_risk() -> None:
     assert "FAIR scenario scope" in overlap_q["instructions"]["definition"]
 
 
+def test_build_jobs_never_includes_deprecated_entries(tmp_path: Path) -> None:  # S-11
+    root = tmp_path / "root"
+    shutil.copytree(ROOT, root)
+    scenario_path = root / "data" / "seed_library_entries.json"
+    scenarios_raw = json.loads(scenario_path.read_text())
+    published_scenario = scenarios_raw[0]  # DDoS Extortion
+    dup_name = f"{published_scenario['name']} (deprecated duplicate)"
+    dup_slug = f"{published_scenario['slug']}-deprecated-dup"
+    scenarios_raw.append(
+        {**published_scenario, "slug": dup_slug, "name": dup_name, "status": "deprecated"}
+    )
+    scenario_path.write_text(json.dumps(scenarios_raw))
+
+    control_path = root / "data" / "seed_control_library_entries.json"
+    control_doc = json.loads(control_path.read_text())
+    published_control = control_doc["entries"][0]  # siem
+    dup_control_slug = f"{published_control['slug']}-deprecated-dup"
+    control_doc["entries"].append(
+        {**published_control, "slug": dup_control_slug, "status": "deprecated"}
+    )
+    control_path.write_text(json.dumps(control_doc))
+
+    scenarios = load_scenarios(root)
+    controls = load_controls(root)
+    # load_scenarios/load_controls keep every entry regardless of status (seed hash stays whole-file)
+    assert any(s.slug == dup_slug and s.status == "deprecated" for s in scenarios)
+    assert any(c.slug == dup_control_slug and c.status == "deprecated" for c in controls)
+
+    kw: dict[str, Any] = {
+        "scenarios": scenarios,
+        "controls": controls,
+        "criteria": load_criteria(),
+        "intake": load_intake(INTAKE),
+    }
+    for check in ("scenario-labels", "overlap", "gaps"):
+        jobs = build_jobs(check, **kw)
+        assert not any(dup_slug in job.item_key for job in jobs)
+        for job in jobs:
+            match_q = job.questions.get("match")
+            if match_q is not None:
+                assert dup_name not in match_q["criteria"]
+
+    control_jobs = build_jobs("control-functions", **kw)
+    assert not any(dup_control_slug in job.item_key for job in control_jobs)
+
+
 def test_malformed_answers_error_one_item_and_the_run_continues(tmp_path: Path) -> None:
     jobs = _jobs()["scenario-labels"]
     judge = FakeJudge(broken=frozenset({jobs[0].item_key}))

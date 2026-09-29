@@ -149,6 +149,10 @@ ignore = [
   "S603",  # git subprocess with a fixed argv plus a repo path; never a shell
   "S607",  # runs `git` by partial path for provenance and ignore checks; not user-controlled
 ]
+"scripts/curation_check/library.py" = [
+  "S603",  # git subprocess with a fixed argv plus a repo path; never a shell (changed-entries mode)
+  "S607",  # runs `git` by partial path for merge-base/blob reads; not user-controlled
+]
 
 [tool.ruff.format]
 quote-style = "double"

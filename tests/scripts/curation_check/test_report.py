@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from scripts.curation_check.flags import CheckResult, Flag
+from scripts.curation_check.library import ChangedSince
 from scripts.curation_check.report import (
     md_cell,
     parse_dispositions,
@@ -161,6 +162,97 @@ def test_before_after_numbers_positions_within_control_sub_queues() -> None:  # 
         META, _results(), top=15, previous={"control-functions": ["control-functions:siem:m"]}
     )
     assert "control-functions:siem:m (now Possibly wrong #1)" in text
+
+
+def test_changed_entries_section_lists_matches_no_flag_and_deprecated_rows() -> None:
+    results = _results()
+    results["control-functions"].errored = [("control-functions:missing-ctrl", "boom")]
+    changed = ChangedSince(
+        ref_sha="a" * 40,
+        merge_base="b" * 40,
+        slugs=frozenset({"fraud", "missing-ctrl"}),
+        deprecated=frozenset({"old-scenario"}),
+    )
+    text = render(META, results, top=15, changed=changed)
+    assert "## Changed entries" in text
+    assert "### Scenario label audit" in text
+    section = text.split("## Changed entries", 1)[1]
+    assert "fraud · asset_class" in section  # matched flag (key intersects the changed slugs)
+    assert "missing-ctrl" in section and "no flag" in section  # errored item, zero flags
+    assert "old-scenario" in section
+    assert "deprecated — not checked (published-only)" in section
+
+
+def test_changed_section_leaves_the_ranked_queue_rendering_untouched() -> None:  # (iii)
+    changed = ChangedSince(
+        ref_sha="a" * 40, merge_base="b" * 40, slugs=frozenset({"fraud"}), deprecated=frozenset()
+    )
+    without = render(META, _results(), top=15)
+    with_changed = render(META, _results(), top=15, changed=changed)
+    ranked_queue_portion = with_changed.split("## Changed entries", 1)[0]
+    assert ranked_queue_portion.rstrip("\n") == without.rstrip("\n")
+    assert "## Changed entries" not in without
+    assert "## Changed entries" in with_changed
+
+
+def test_changed_entries_section_is_excluded_from_tally(tmp_path: Path) -> None:  # A-9, (i)
+    run = {"model": "m", "campaign": "x", "date": "2026-10-01", "top": 15}
+    lines = [
+        "# Curation check",
+        "",
+        "## Changed entries",
+        "",
+        "Every entry whose seed record differs from merge base `abc123`.",
+        "",
+        "### Scenario label audit",
+        "",
+        "| # | Score | Subject | Finding | Disposition | Reason |",
+        "|---|---|---|---|---|---|",
+        "| 1 | 0.90 | s1 | f | accepted | r |",
+        "",
+    ]
+    d = tmp_path / "r1"
+    d.mkdir()
+    (d / "report.md").write_text("\n".join(lines))
+    (d / "run.json").write_text(json.dumps(run))
+    assert tally([d / "report.md"]) == {}
+
+
+def test_changed_entries_between_ranked_queue_and_before_after_parses_cleanly(
+    tmp_path: Path,
+) -> None:  # (ii)
+    run = {"model": "m", "campaign": "x", "date": "2026-10-01", "top": 15}
+    lines = [
+        "# Curation check",
+        "",
+        "## Scenario label audit",
+        "",
+        "| # | Score | Subject | Finding | Disposition | Reason |",
+        "|---|---|---|---|---|---|",
+        "| 1 | 0.90 | s1 | f | accepted | r |",
+        "",
+        "## Changed entries",
+        "",
+        "Every entry whose seed record differs from merge base `abc123`.",
+        "",
+        "### Scenario label audit",
+        "",
+        "| # | Score | Subject | Finding | Disposition | Reason |",
+        "|---|---|---|---|---|---|",
+        "| 1 | — | s9 | no flag |  |  |",
+        "",
+        "## Before / after",
+        "",
+        "- left the queue: `x`",
+        "",
+    ]
+    d = tmp_path / "r1"
+    d.mkdir()
+    (d / "report.md").write_text("\n".join(lines))
+    (d / "run.json").write_text(json.dumps(run))
+    counts = tally([d / "report.md"])
+    assert counts[("m", "scenario-labels", 15)]["accepted"] == 1
+    assert counts[("m", "scenario-labels", 15)]["decided"] == 1
 
 
 def _report(

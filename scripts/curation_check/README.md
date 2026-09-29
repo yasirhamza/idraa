@@ -13,6 +13,11 @@ Dev-only tool that gives every library curation campaign ranked review queues:
 - Scores only order the queues; they are not calibrated probabilities.
 - The tool never edits seed data and never blocks CI.
 - Deliberately dropped control claims (seed `_meta.claim_drops`) are suppressed, not re-flagged every campaign.
+- **Published-only.** Every check's subjects and match options are drawn from `status == "published"`
+  entries only; a deprecated entry is never judged or paired (`load_scenarios`/`load_controls` still
+  return everything — the seed hash stays whole-file). Effect on `--compare-to`: a flag on an entry
+  deprecated since the start of the campaign shows as "left the queue" (fixed, outranked or renamed
+  cannot be told apart from "no longer published" from the before/after section alone).
 
 ## Run
 
@@ -20,8 +25,19 @@ Dev-only tool that gives every library curation campaign ranked review queues:
 scripts/curation-check all --campaign epic-f                          # start of campaign
 scripts/curation-check all --campaign epic-f --intake ~/intake.jsonl  # with a gap intake list (keep it outside the repo)
 scripts/curation-check all --campaign epic-f --compare-to curation-runs/<start-folder>   # end of campaign (another day)
+scripts/curation-check all --campaign epic-f --changed-since main     # every published entry changed since a git ref
 scripts/curation-check tally                                          # hit rates across committed reports
 ```
+
+**`--changed-since <git-ref>`:** lists, in full, every published entry whose parsed seed record (or,
+for a control, its `_meta.claim_drops` rows) differs at `git merge-base <ref> HEAD` (not the ref's own
+tip) from the working tree, or is absent at that merge base. The `## Changed entries` section is a view
+over the flags the checks already produced — it never makes extra judge calls. Rows are listed in full,
+not ranked (the ranked queues above it, `run.json`'s `queues` and the `## Before / after` section are
+unaffected), and are excluded from `tally` (a curator dispositioning a changed-entries row does not
+double-count it). An entry deprecated since the merge base gets a "deprecated — not checked
+(published-only)" row instead of being judged. `run.json` records `changed_since: {ref_sha, merge_base,
+subjects}` — resolved commit shas, never the raw ref text.
 
 **Setup:**
 - macOS, one time, in your own terminal: `security add-generic-password -s idraa-typesafe-key -a typesafe -U -w`.
@@ -41,11 +57,11 @@ The wrapper runs in a clean environment and passes the key on stdin. Proxy, base
 
 ## Dispositions
 
-- In `report.md`, set every row's **Disposition** to `accepted`, `rejected` or `deferred`, with a one-line **Reason**.
+- In `report.md`, set every row's **Disposition** to `accepted`, `rejected` or `deferred`, with a one-line **Reason**. `## Changed entries` rows take a disposition too, for the record, but `tally` never counts them.
 - Accepted flags become seed changes through the normal campaign process: research, adversarial verification, methodology gate.
-- When every row is dispositioned, commit exactly `report.md`, `run.json` and `responses.jsonl` under `docs/curation/<date>-<campaign>/` with the campaign PR. `scripts/lint_tracked_paths.py` refuses anything else there (a pre-commit hook; CI does not run it).
+- When every row is dispositioned, commit `report.md` and `run.json` under `docs/curation/<date>-<campaign>/` with the campaign PR; commit `responses.jsonl` too only if it is 500 KB or smaller — otherwise archive it outside the repo and record its sha256 in the report's provenance line. `scripts/lint_tracked_paths.py` refuses anything else there (a pre-commit hook; CI does not run it).
 - An intake item's id, source and a title of at most 80 characters are published in the report.
-- **Never commit an intake file.** It may contain licensed text.
+- **Never commit an intake file.** It may contain licensed text. **Never pass `--intake` on a run whose report is committed** — the `## Changed entries` section publishes every judge flag at every score for a changed entry in the committed, public `report.md` (the ranked queues above it show only the top 15), so this rule matters more with `--changed-since`.
 
 ## Tuning rules (applied by `tally`)
 

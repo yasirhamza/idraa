@@ -57,6 +57,12 @@ def _run(
         ("gaps", "--intake", "/definitely/not/here.jsonl"),
         ("tally", "--top", "5"),
         (),
+        ("labels", "--changed-since"),
+        ("labels", "--changed-since", "-x"),
+        ("labels", "--changed-since", "--force"),
+        ("labels", "--changed-since", "a b"),
+        ("labels", "--changed-since", "HEAD:path"),
+        ("labels", "--changed-since", "a..b"),
     ],
 )
 def test_wrapper_refuses_unexpected_arguments(args: tuple[str, ...]) -> None:
@@ -229,3 +235,15 @@ def test_wrapper_rejects_near_misses_of_the_jev_eval_name(service: str) -> None:
     result = _run("labels", service=service)
     assert result.returncode == 2
     assert "CURATION_KEYCHAIN_SERVICE" in result.stderr
+
+
+def test_wrapper_accepts_a_valid_changed_since_ref_and_stops_at_the_dirty_check(
+    tmp_path: Path,
+) -> None:  # Sec-1/A-8: a valid ref clears argument parsing and never reaches the Keychain
+    repo = _scratch_repo(tmp_path)
+    (repo / "data" / "curation" / "criteria.json").write_text('{"changed": true}')
+    result = _run("labels", "--changed-since", "origin/main", cwd=repo)
+    assert result.returncode == 1
+    assert "uncommitted changes" in result.stderr
+    assert "refusing argument" not in result.stderr
+    assert "--changed-since needs" not in result.stderr

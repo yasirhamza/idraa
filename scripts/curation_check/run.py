@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Any, TypeVar
 
 from scripts.curation_check.checks.gaps import (
     COVERS_DEFINITION,
@@ -50,6 +50,16 @@ class Job:
     score: Callable[[Answers], list[Flag]]
 
 
+_Item = TypeVar("_Item", ScenarioItem, ControlItem)
+
+
+def _published(items: list[_Item]) -> list[_Item]:
+    """A deprecated entry is not curated content (ruling S-11): every check's subjects and match
+    options are drawn from published entries only. `load_scenarios`/`load_controls` still return
+    everything; only job-building filters."""
+    return [i for i in items if i.status == "published"]
+
+
 def build_jobs(
     check: str,
     *,
@@ -58,6 +68,8 @@ def build_jobs(
     criteria: Criteria,
     intake: list[IntakeItem],
 ) -> list[Job]:
+    scenarios = _published(scenarios)
+    controls = _published(controls)
     if check == "scenario-labels":
         qs = scenario_label_questions(criteria)
         return [

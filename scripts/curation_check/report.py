@@ -17,6 +17,7 @@ from scripts.curation_check.config import (
     WILSON_Z,
 )
 from scripts.curation_check.flags import CheckResult, Flag, rank
+from scripts.curation_check.library import ChangedSince
 
 CHECK_TITLES = {
     "scenario-labels": "Scenario label audit",
@@ -27,6 +28,7 @@ CHECK_TITLES = {
 CHECK_ORDER = tuple(CHECK_TITLES)
 SUB_TITLES = {"missing": "Possibly missing", "wrong": "Possibly wrong"}
 DISPOSITIONS = ("accepted", "rejected", "deferred")
+CHANGED_ENTRIES_TITLE = "Changed entries"
 DISCLAIMER = (
     "Scores order the queues and select the unreviewed closest-match list. They are not calibrated probabilities: "
     "in the System One trial the judge's yes/no answers on control functions had an expected calibration error "
@@ -78,11 +80,43 @@ def _table(queue: list[Flag]) -> list[str]:
     ]
 
 
+def _changed_table(res: CheckResult, changed: ChangedSince) -> list[str]:
+    """Every flag of `res` whose key names a changed subject (all scores, not ranked), a 'no flag'
+    row for a changed subject this check ran (it errored, so it produced zero flags) but did not
+    flag, and a 'deprecated — not checked' row per subject deprecated since the merge base. No
+    extra judging: purely a view over `res.flags`/`res.errored` already produced (spec §4.5.2)."""
+    flagged = sorted(
+        (f for f in res.flags if set(f.key.split(":")[1:]) & changed.slugs),
+        key=lambda f: (-f.score, f.subject),
+    )
+    flagged_subjects = {seg for f in res.flags for seg in f.key.split(":")[1:]}
+    errored_subjects = {seg for key, _ in res.errored for seg in key.split(":")[1:]}
+    no_flag = sorted((errored_subjects & changed.slugs) - flagged_subjects)
+    deprecated = sorted(changed.deprecated)
+    if not flagged and not no_flag and not deprecated:
+        return ["_No candidates._"]
+    rows = ["| # | Score | Subject | Finding | Disposition | Reason |", "|---|---|---|---|---|---|"]
+    i = 0
+    for f in flagged:
+        i += 1
+        rows.append(f"| {i} | {f.score:.2f} | {md_cell(f.subject)} | {md_cell(f.finding)} |  |  |")
+    for slug in no_flag:
+        i += 1
+        rows.append(f"| {i} | — | {md_cell(slug)} | no flag |  |  |")
+    for slug in deprecated:
+        i += 1
+        rows.append(
+            f"| {i} | — | {md_cell(slug)} | deprecated — not checked (published-only) |  |  |"
+        )
+    return rows
+
+
 def render(
     meta: dict[str, str],
     results: dict[str, CheckResult],
     top: int,
     previous: dict[str, list[str]] | None = None,
+    changed: ChangedSince | None = None,
 ) -> str:
     lines = [
         f"# Curation check: {meta['campaign']} ({meta['date']})",
@@ -151,6 +185,20 @@ def render(
                         f"- {md_cell(f.subject)} → {names}{mark}: closest-score {f.detail['closest_p']:.2f}"
                     )
                 lines.append("")
+    if changed is not None:
+        lines += [
+            f"## {CHANGED_ENTRIES_TITLE}",
+            "",
+            f"Every entry whose seed record differs from merge base `{changed.merge_base[:10]}`; "
+            "listed in full, not ranked, excluded from tally.",
+            "",
+        ]
+        for check in CHECK_ORDER:
+            if check not in results:
+                continue
+            lines += [f"### {CHECK_TITLES[check]}", ""]
+            lines += _changed_table(results[check], changed)
+            lines.append("")
     if previous is not None:
         now_keys = queue_keys(results, top)
         lines += ["## Before / after", ""]
@@ -185,9 +233,15 @@ def parse_dispositions(text: str, source: str) -> dict[str, list[tuple[int, str,
     out: dict[str, list[tuple[int, str, str]]] = {}
     current: str | None = None
     sub: str | None = None
+    skipping = False
     for n, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
-            current, sub = title_to_check.get(line[3:].strip()), None
+            skipping = line[3:].strip() == CHANGED_ENTRIES_TITLE
+            current, sub = (
+                (None, None) if skipping else (title_to_check.get(line[3:].strip()), None)
+            )
+            continue
+        if skipping:
             continue
         if line.startswith("### "):
             sub = title_to_sub.get(line[4:].strip())
