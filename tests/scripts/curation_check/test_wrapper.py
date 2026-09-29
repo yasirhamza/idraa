@@ -103,20 +103,42 @@ def test_wrapper_refuses_to_run_via_bash() -> (
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
 
 
+def _git_env() -> dict[str, str]:
+    """Scratch-repo git calls must never inherit GIT_DIR, GIT_INDEX_FILE or other GIT_* variables: inside a git
+    hook (the pre-push gate) they point at the real repository, and `git init`/`add` would act on it."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def _scratch_repo(root: Path) -> Path:
     (root / "scripts" / "curation_check").mkdir(parents=True)
     (root / "data" / "curation").mkdir(parents=True)
     shutil.copy2(WRAPPER, root / "scripts" / "curation-check")
     (root / "scripts" / "curation_check" / "__init__.py").write_text("")
     (root / "data" / "curation" / "criteria.json").write_text("{}")
-    subprocess.run([*GIT, "init", "-q"], cwd=root, check=True)
-    subprocess.run([*GIT, "add", "-A"], cwd=root, check=True)
-    subprocess.run([*GIT, "commit", "-qm", "init"], cwd=root, check=True)
+    subprocess.run([*GIT, "init", "-q"], cwd=root, check=True, env=_git_env())
+    subprocess.run([*GIT, "add", "-A"], cwd=root, check=True, env=_git_env())
+    subprocess.run([*GIT, "commit", "-qm", "init"], cwd=root, check=True, env=_git_env())
     return root
 
 
 def _run_scratch(root: Path) -> subprocess.CompletedProcess[str]:
     return _run("labels", cwd=root)
+
+
+def test_scratch_repo_ignores_an_inherited_git_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # regression: under the pre-push hook, GIT_DIR pointed the scratch `git init`/`add` at the real repository
+    decoy = tmp_path / "decoy.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(decoy)], check=True, env=_git_env())
+    before = sorted(p.relative_to(decoy).as_posix() for p in decoy.rglob("*"))
+    config_before = (decoy / "config").read_text()
+    monkeypatch.setenv("GIT_DIR", str(decoy))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(decoy / "index"))
+    repo = _scratch_repo(tmp_path / "repo")
+    assert (repo / ".git").is_dir()
+    assert sorted(p.relative_to(decoy).as_posix() for p in decoy.rglob("*")) == before
+    assert (decoy / "config").read_text() == config_before
 
 
 def test_wrapper_refuses_uncommitted_changes(tmp_path: Path) -> None:
@@ -131,7 +153,9 @@ def test_wrapper_sees_untracked_files_git_config_would_hide(
     tmp_path: Path,
 ) -> None:  # Task-9 security review
     repo = _scratch_repo(tmp_path)
-    subprocess.run([*GIT, "config", "status.showUntrackedFiles", "no"], cwd=repo, check=True)
+    subprocess.run(
+        [*GIT, "config", "status.showUntrackedFiles", "no"], cwd=repo, check=True, env=_git_env()
+    )
     (repo / "scripts" / "curation_check" / "extra.py").write_text("")
     result = _run_scratch(repo)
     assert result.returncode == 1
@@ -146,6 +170,7 @@ def test_wrapper_refuses_skip_worktree_hidden_edits(
         [*GIT, "update-index", "--skip-worktree", "data/curation/criteria.json"],
         cwd=repo,
         check=True,
+        env=_git_env(),
     )
     (repo / "data" / "curation" / "criteria.json").write_text('{"changed": true}')
     result = _run_scratch(repo)
