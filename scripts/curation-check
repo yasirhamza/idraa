@@ -6,9 +6,9 @@
 #     re-executes itself under `env -i` with PATH=/usr/bin:/bin, so nothing from the caller's
 #     environment (PYTHONPATH, proxies, TYPESAFE_BASE_URL, ...) survives.
 #   * The key is read from macOS Keychain (service $CURATION_KEYCHAIN_SERVICE, default and
-#     allowlist: idraa-typesafe-key[-suffix]) or, where there is no Keychain, from
-#     TYPESAFE_API_KEY, and piped to Python on stdin. It never appears in an argument, an
-#     environment variable, a file or the terminal.
+#     allowlist: idraa-typesafe-key[-suffix], or the exact name jev-eval-typesafe-key) or,
+#     where there is no Keychain, from TYPESAFE_API_KEY, and piped to Python on stdin. It never
+#     appears in an argument, an environment variable, a file or the terminal.
 #   * Only the tool's own commands and flags are accepted, and the run is refused when the
 #     code that executes with the key has uncommitted changes.
 # Defends against accidental exposure; it does not stop a user or agent who deliberately reads
@@ -30,8 +30,8 @@ fi
 
 if [[ -z "${_CC_CLEAN:-}" ]]; then
   service="${CURATION_KEYCHAIN_SERVICE:-idraa-typesafe-key}"
-  if [[ ! "$service" =~ ^idraa-typesafe-key(-[a-z0-9-]+)?$ ]]; then
-    echo "scripts/curation-check: CURATION_KEYCHAIN_SERVICE must be idraa-typesafe-key or idraa-typesafe-key-<suffix>" >&2
+  if [[ ! "$service" =~ ^(idraa-typesafe-key(-[a-z0-9-]+)?|jev-eval-typesafe-key)$ ]]; then
+    echo "scripts/curation-check: CURATION_KEYCHAIN_SERVICE must be idraa-typesafe-key, idraa-typesafe-key-<suffix> or jev-eval-typesafe-key" >&2
     exit 2
   fi
   if [[ "$(/usr/bin/uname -s)" != "Darwin" && -n "${TYPESAFE_API_KEY:-}" ]]; then
@@ -45,7 +45,7 @@ if [[ -z "${_CC_CLEAN:-}" ]]; then
 fi
 
 # Stage 2 trusts nothing it did not set itself: a caller could export _CC_CLEAN to skip stage 1 (I-1r2).
-if [[ ! "${_CC_SERVICE:-}" =~ ^idraa-typesafe-key(-[a-z0-9-]+)?$ || "${PATH:-}" != "/usr/bin:/bin" ]]; then
+if [[ ! "${_CC_SERVICE:-}" =~ ^(idraa-typesafe-key(-[a-z0-9-]+)?|jev-eval-typesafe-key)$ || "${PATH:-}" != "/usr/bin:/bin" ]]; then
   echo "scripts/curation-check: unexpected environment; run scripts/curation-check directly" >&2
   exit 2
 fi

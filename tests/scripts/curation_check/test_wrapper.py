@@ -201,3 +201,31 @@ def test_launcher_ignores_modules_planted_at_the_root(
     assert result.returncode == 0, result.stderr
     assert ran.read_text() == '"ok"'
     assert not planted.exists()
+
+
+def test_wrapper_accepts_the_exact_jev_eval_service_name(
+    tmp_path: Path,
+) -> None:  # owner decision 2026-09-29
+    # Two independent guards stand between this test and the Keychain: the bad --top value is refused at
+    # argument parsing, and the scratch repo is dirty. Passing proves the name cleared both allowlist checks.
+    repo = _scratch_repo(tmp_path)
+    (repo / "data" / "curation" / "criteria.json").write_text('{"changed": true}')
+    result = _run("labels", "--top", "abc", cwd=repo, service="jev-eval-typesafe-key")
+    assert result.returncode == 2
+    assert "--top needs a positive whole number" in result.stderr
+    assert "CURATION_KEYCHAIN_SERVICE" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "service",
+    [
+        "jev-eval-typesafe-key-x",
+        "xjev-eval-typesafe-key",
+        "jev-eval-typesafe",
+        "jev-eval-typesafe-key\nx",
+    ],
+)
+def test_wrapper_rejects_near_misses_of_the_jev_eval_name(service: str) -> None:
+    result = _run("labels", service=service)
+    assert result.returncode == 2
+    assert "CURATION_KEYCHAIN_SERVICE" in result.stderr
