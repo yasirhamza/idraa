@@ -41,7 +41,7 @@ re-judged per `docs/reference/loss-form-share-rubric.md`, not copied from the ty
 ## Where Idraa's enum text and the seed disagree
 
 `SUB_FUNCTION_DESCRIPTIONS` (in `src/idraa/models/enums.py`) and the control library disagree on these placements.
-All are tracked in a follow-up issue.
+All are tracked in #192.
 
 **Decided in `criteria.json`.** These follow the decomposition rubric; the enum text still needs aligning.
 
