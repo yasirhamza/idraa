@@ -55,6 +55,7 @@ for name in $(compgen -e); do
     *) echo "scripts/curation-check: unexpected environment variable '$name'; run scripts/curation-check directly" >&2; exit 2 ;;
   esac
 done
+ulimit -c 0  # a crash never writes the key to a core file
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -96,18 +97,30 @@ cd "$ROOT"
 PY="$ROOT/.venv/bin/python"
 
 if [[ "$cmd" == "tally" ]]; then
-  exec "$PY" -E -s -m scripts.curation_check tally
+  exec 3<&-  # tally never needs the key
+  exec "$PY" -I "$ROOT/scripts/curation_check/_launch.py" "$ROOT" tally
 fi
 
-GUARDED=(scripts/curation-check scripts/__init__.py scripts/curation_check data/curation/criteria.json)
-# git (and any hook or fsmonitor it starts) never sees fd 3, which holds the key on Linux.
-if ! dirty="$(/usr/bin/git status --porcelain -- "${GUARDED[@]}" 3<&-)"; then
+GUARDED=(scripts/curation-check scripts/__init__.py scripts/curation_check data/curation/criteria.json pyproject.toml uv.lock)
+# Repo or user git config must not hide changes: untracked files are always listed and fsmonitor is off.
+GIT=(/usr/bin/git -c status.showUntrackedFiles=all -c core.fsmonitor=false)
+# git (and any hook it starts) never sees fd 3, which holds the key on Linux.
+if ! dirty="$("${GIT[@]}" status --porcelain -- "${GUARDED[@]}" 3<&-)"; then
   echo "scripts/curation-check: could not check for uncommitted changes; refusing" >&2
   exit 1
 fi
 if [[ -n "$dirty" ]]; then
   echo "scripts/curation-check: uncommitted changes in code that runs with the key; refusing:" >&2
-  /usr/bin/git status --short -- "${GUARDED[@]}" >&2 3<&-
+  "${GIT[@]}" status --short -- "${GUARDED[@]}" >&2 3<&-
+  exit 1
+fi
+# assume-unchanged / skip-worktree hide edits from `git status`; tracked files must all show as plain 'H'.
+if ! flags="$("${GIT[@]}" ls-files -v -- "${GUARDED[@]}" 3<&-)"; then
+  echo "scripts/curation-check: could not check for hidden changes; refusing" >&2
+  exit 1
+fi
+if [[ -n "$flags" ]] && printf '%s\n' "$flags" | /usr/bin/grep -qv '^H '; then
+  echo "scripts/curation-check: guarded files are marked assume-unchanged or skip-worktree (hidden changes); refusing" >&2
   exit 1
 fi
 
@@ -126,6 +139,6 @@ fi
 
 # ${args[@]+...} keeps `set -u` happy on macOS's bash 3.2 when no flags were given.
 status=0
-printf '%s\n' "$key" | "$PY" -E -s -m scripts.curation_check "$cmd" --judge jev --key-stdin ${args[@]+"${args[@]}"} || status=$?
+printf '%s\n' "$key" | "$PY" -I "$ROOT/scripts/curation_check/_launch.py" "$ROOT" "$cmd" --judge jev --key-stdin ${args[@]+"${args[@]}"} || status=$?
 unset key
 exit "$status"

@@ -25,7 +25,7 @@ scripts/curation-check tally                                          # hit rate
 
 **Setup:**
 - macOS, one time, in your own terminal: `security add-generic-password -s idraa-typesafe-key -a typesafe -U -w`.
-- Elsewhere, set `TYPESAFE_API_KEY` before calling the wrapper.
+- Elsewhere, set `TYPESAFE_API_KEY` for that one command only (`TYPESAFE_API_KEY=... scripts/curation-check ...` typed in your own terminal); never export it in a shell an agent inherits.
 - Install the SDK with `uv sync --extra dev --extra curation`.
 
 The wrapper runs in a clean environment and passes the key on stdin. Proxy, base-URL and Python path variables in your shell have no effect. Run it directly as `scripts/curation-check ...`; `bash scripts/curation-check` is refused because it would skip the wrapper's protected mode.
@@ -57,3 +57,4 @@ The wrapper runs in a clean environment and passes the key on stdin. Proxy, base
 - **Pinning:** the judge model and endpoint are pinned in `config.py` (`jev-1.13.0`, `https://api.typesafe.ai`).
 - **Library size:** the overlap and gap checks put every library description into one question. Above about 200 entries they need a two-stage question (spec §4.5, not built yet). `run.json` warns as token use approaches the limit.
 - **Supply chain:** the `curation` extra is outside `sca_gate`, like `dev`. Dependabot and dependency-review cover it (`docs/supply-chain.md`).
+- **Trusted venv:** `.venv` runs in the process that holds the key (its `.pth` files and site-packages). The wrapper refuses uncommitted changes to `pyproject.toml` and `uv.lock`, but it does not verify the installed packages; sync the venv only from the committed lock.
