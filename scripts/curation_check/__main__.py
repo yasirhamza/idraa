@@ -84,12 +84,11 @@ def _make_judge(args: argparse.Namespace, jobs: dict[str, list[Job]], api_key: s
                 f"(questions or seed data changed): {', '.join(stale[:10])}"
             )
         return judge
-    # Task 8 creates this module; until then mypy sees it as an untyped/missing import.
-    from scripts.curation_check.judges.jev import JevJudge  # type: ignore[import-untyped]
+    from scripts.curation_check.judges.jev import JevJudge
 
     if not api_key:
         raise JudgeFatalError("live runs need the key on stdin; use scripts/curation-check")
-    return JevJudge.from_sdk(JEV_MODEL, api_key=api_key)  # type: ignore[no-any-return]
+    return JevJudge.from_sdk(JEV_MODEL, api_key=api_key)
 
 
 def _tally(root: Path) -> int:

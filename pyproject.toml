@@ -77,6 +77,12 @@ dev = [
   "pytest-xdist>=3.6",
 ]
 
+curation = [
+  # Dev-only curation checker judge (scripts/curation_check). Pinned. Outside
+  # sca_gate like `dev`; covered by Dependabot + dependency-review (docs/supply-chain.md).
+  "typesafe-sdk==0.7.2",
+]
+
 [project.scripts]
 idraa = "idraa.tasks.__main__:main"
 

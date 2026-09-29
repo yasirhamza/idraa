@@ -46,8 +46,9 @@ Two SCA layers, deliberately different rules — they will not always agree.
   platform-only pins the running interpreter would otherwise skip; forked
   pins of one package are spread across separate requirement files and the
   results unioned. A pin pip-audit skips or drops fails the gate closed.
-  Dev-extra packages are outside this gate and are covered
-  by Dependabot alerts.
+  Dev-extra and `curation`-extra packages (typesafe-sdk, httpx2) are outside
+  this gate and are covered by Dependabot alerts and the dependency-review
+  PR check.
   **Severity-data caveat:** pip-audit's JSON reports fixability, not
   severity, so the local gate cannot replicate the PR gate's severity rule —
   it fails on any *fixable, unsuppressed* vulnerability and warns on
