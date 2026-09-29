@@ -196,12 +196,9 @@ SECTOR_PREDICATES: dict[str, Callable[[dict], bool]] = {
             ),
             True,  # 0 data_tampering in pre-T3 → should fail
         ),
-        # (e) people asset class >= 1 — 0 entries in 44-state
-        (
-            "people_asset_class_ge_1",
-            lambda entries: any(e["asset_class"] == "people" for e in entries),
-            True,  # 0 people entries in pre-T3 → should fail
-        ),
+        # (e) people asset class >= 1 — floor removed by Epic F (#192): people
+        # now means the persons themselves and has zero published entries by
+        # design (allowlisted in test_library_taxonomy_coverage.py).
         # (f) competitors actor >= 1 — 0 entries in 44-state
         (
             "competitors_actor_ge_1",
@@ -293,7 +290,8 @@ def test_threat_event_type_coverage_ge_2(tet):
 @pytest.mark.parametrize(
     "asset_class",
     [
-        "people",
+        # "people" removed by Epic F (#192): owner decision 2026-09-29 — people is
+        # the persons themselves; zero published entries by design.
         "facilities",
         "business_process_revenue",
         "business_process_cost",

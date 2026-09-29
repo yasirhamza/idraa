@@ -87,11 +87,25 @@ def _build_coverage(entries: list[dict]) -> dict[str, Counter]:
 #       Curation decision: allowlisted until a genuine scenario class is
 #       identified that doesn't fit any named category.
 #
+#   AssetClass.PEOPLE
+#       Owner decision 2026-09-29 (#192, Epic F): people = the organisation's
+#       personnel as the asset at risk — the persons themselves. Staff who
+#       are deceived, recruited or who misuse access are the threat vector or
+#       actor, not the asset, so the six former people entries were relabelled
+#       to the asset actually lost (data / cash_or_equivalent). Zero published
+#       entries by design; the library browse facet stops offering "People"
+#       until a genuine people scenario (harm to persons) is authored.
+#
 # ---------------------------------------------------------------------------
 
 ALLOWLIST: dict[object, str] = {
     AssetClass.OTHER: (
         "catch-all sentinel; scenarios are authored against concrete classes, not 'other'"
+    ),
+    AssetClass.PEOPLE: (
+        "owner decision 2026-09-29 (#192): people = the persons themselves; no library scenario "
+        "currently targets personnel as the asset (staff are vector/actor); genuine people scenarios "
+        "are optional follow-up"
     ),
     ThreatCategory.MISCELLANEOUS: (
         "open catch-all for import round-trips / future edge cases; "

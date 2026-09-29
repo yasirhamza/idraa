@@ -420,7 +420,7 @@
       "iec_61850",
       "nation_state"
     ],
-    "description": "A nation-state actor manipulates electric-substation protection and control \u2014 issuing unauthorized breaker-open commands, abusing IEC 61850 / 60870-5-104 protocols, or disabling protective relays so faults are not cleared. The effect ranges from operator-visible load loss to equipment-damaging protection defeat, the signature capability demonstrated by the Industroyer/CRASHOVERRIDE and Industroyer2 toolsets against Ukrainian grid operators.",
+    "description": "A nation-state actor defeats electric-substation protection \u2014 disabling or mis-setting protective relays, or abusing IEC 61850 / 60870-5-104 protocols, so that faults are not cleared \u2014 causing equipment damage (transformers, lines, generators) and extended restoration. The signature capability was demonstrated by the Industroyer/CRASHOVERRIDE and Industroyer2 toolsets against Ukrainian grid operators. Operator-visible load loss from unauthorized breaker-open commands is modelled by denial-of-control, not here.",
     "example_incidents": "Ukraine 2016 (Industroyer/CRASHOVERRIDE, Kyiv substation de-energized via protocol abuse); Ukraine 2022 (Industroyer2 targeting a high-voltage substation, disrupted before full effect); Ukraine 2015 (manual breaker operation, ~225,000 customers lost power).",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
@@ -601,7 +601,7 @@
   {
     "slug": "chemical-process-safety-attack",
     "name": "Chemical Process Overpressure / Runaway via Control Manipulation",
-    "status": "published",
+    "status": "deprecated",
     "threat_event_type": "ot_safety_tampering",
     "threat_actor_type": "nation_state",
     "asset_class": "safety_systems",
@@ -852,7 +852,7 @@
       "data_exfiltration",
       "broken_access_control"
     ],
-    "description": "Cybercriminals exploit a vulnerability in an internet-facing web application or API \u2014 SQL injection, broken access control / IDOR, server-side request forgery, or an unauthenticated API endpoint \u2014 to read and exfiltrate the backing data store. Basic web-application attacks are the single largest pattern in external-breach data, and the loss is dominated by the volume and sensitivity of records exposed plus the downstream breach-notification and regulatory tail.",
+    "description": "Cybercriminals exploit a vulnerability in an internet-facing web application or API \u2014 SQL injection, broken access control / IDOR, server-side request forgery, or an unauthenticated API endpoint \u2014 to read and exfiltrate the backing data store. Basic web-application attacks are the single largest pattern in external-breach data, and the loss is dominated by the volume and sensitivity of records exposed plus the downstream breach-notification and regulatory tail. Where personal data is exposed, mandatory notification regimes shape that tail: GDPR (72-hour notice to the supervisory authority; fines up to 4% of global annual revenue), CCPA/CPRA (statutory damages of $100\u2013$750 per consumer per incident), HIPAA and state breach laws, plus class-action exposure.",
     "example_incidents": "Capital One 2019 (SSRF against a web application reached IAM credentials and exfiltrated ~106M records; ~USD 270M total cost incl. USD 80M OCC fine); routine OWASP-class SQLi and broken-access-control breaches reported across financial, retail, and information sectors.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
@@ -863,7 +863,8 @@
       "retail",
       "information",
       "healthcare",
-      "public"
+      "public",
+      "hospitality"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -907,7 +908,9 @@
       "dynamic-application-security-testing",
       "static-application-security-testing",
       "secure-coding-practices",
-      "penetration-testing"
+      "penetration-testing",
+      "incident-response",
+      "cyber-insurance"
     ],
     "standards_references": null,
     "loss_tier": "paginated",
@@ -1829,7 +1832,7 @@
     "status": "published",
     "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
-    "asset_class": "people",
+    "asset_class": "data",
     "attack_vector": "insider_access_abuse",
     "tags": [
       "education",
@@ -1943,7 +1946,7 @@
     "status": "published",
     "threat_event_type": "denial_of_service",
     "threat_actor_type": "hacktivists",
-    "asset_class": "business_process_revenue",
+    "asset_class": "systems",
     "attack_vector": "external_network_exploitation",
     "tags": [
       "government",
@@ -2033,7 +2036,7 @@
     "slug": "gov-records-tampering",
     "name": "Government Records Tampering \u2014 Malicious Insider Data Corruption",
     "status": "published",
-    "threat_event_type": "data_tampering",
+    "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
     "asset_class": "data",
     "attack_vector": "insider_access_abuse",
@@ -2142,7 +2145,7 @@
     "status": "published",
     "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
-    "asset_class": "people",
+    "asset_class": "data",
     "attack_vector": "insider_access_abuse",
     "tags": [
       "government",
@@ -2437,7 +2440,7 @@
     "status": "published",
     "threat_event_type": "social_engineering",
     "threat_actor_type": "cybercriminals",
-    "asset_class": "people",
+    "asset_class": "data",
     "attack_vector": "phishing",
     "tags": [
       "healthcare",
@@ -2564,7 +2567,7 @@
       "social_engineering",
       "wire_fraud"
     ],
-    "description": "Cybercriminals impersonate executives or HR staff via email compromise to redirect employee direct-deposit accounts to attacker-controlled bank accounts, or to authorize fraudulent wire transfers to fictitious vendors. Professional-services firms (law, accounting, consulting, engineering) are high-value BEC targets because of their client trust relationships, high-value payment flows, and relatively small AP/HR teams with limited dual-control over fund transfers. Loss includes unrecoverable wire transfers, wire-recovery fees, payroll-system forensics, and regulatory/employment-law exposure for misdirected payroll.",
+    "description": "Cybercriminals impersonate executives or HR staff via email compromise to redirect employee direct-deposit accounts to attacker-controlled bank accounts. Professional-services firms (law, accounting, consulting, engineering) are high-value BEC targets because of their client trust relationships, high-value payment flows, and relatively small AP/HR teams with limited dual-control over fund transfers. Loss includes unrecoverable diverted payroll deposits, funds-recovery fees, payroll-system forensics, and regulatory/employment-law exposure for misdirected payroll.",
     "example_incidents": "FBI IC3 PSAs document recurring law-firm BEC payroll fraud (multiple cases $1\u2013$5M; Oregon-based law firm $2.5 M fraudulent wire). Accounting-firm HR email spoofing in tax season is a documented seasonal pattern. IC3 2024 reports BEC losses of $2.77 B across all sectors with professional services disproportionately represented by complaint value.",
     "source_citations": [
       "IC3 2025 Annual Report p.7-8, p.132 (BEC per-complaint mean $123,005; downward-biased -- mixes consumer/SMB with corporate)"
@@ -2642,7 +2645,7 @@
     "status": "published",
     "threat_event_type": "data_tampering",
     "threat_actor_type": "cybercriminals",
-    "asset_class": "business_process_cost",
+    "asset_class": "business_process_revenue",
     "attack_vector": "external_network_exploitation",
     "tags": [
       "energy",
@@ -2835,7 +2838,7 @@
     "status": "published",
     "threat_event_type": "social_engineering",
     "threat_actor_type": "cybercriminals",
-    "asset_class": "people",
+    "asset_class": "cash_or_equivalent",
     "attack_vector": "social_engineering",
     "tags": [
       "telecom",
@@ -4023,7 +4026,7 @@
     "status": "published",
     "threat_event_type": "social_engineering",
     "threat_actor_type": "competitors",
-    "asset_class": "people",
+    "asset_class": "data",
     "attack_vector": "social_engineering",
     "tags": [
       "technology_saas",
@@ -4040,7 +4043,7 @@
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)",
       "LOSS UNDERSTATED: the dominant competitive-advantage / IP-theft loss channel is UNMODELED -- no defensible public magnitude source (adjudicated-damages sweep found none; the entry's prior IP cites are the gap-report mis-cites). Only incident-response + reputation are modeled here. Explicit sec6-materiality-bar waiver (plan-gate R11)."
     ],
-    "canonical_fair_gap": "FAIR's SOCIAL_ENGINEERING archetype addresses deception to gain system access. Competitor recruitment for trade-secret exfiltration is a structurally different threat: the asset at risk is people (the knowledge carrier), the attack vector is a job offer (not a phishing email), and the primary loss is litigation + competitive-advantage destruction rather than data-breach notification costs. The control failure is in offboarding processes and data-access governance, not in technical perimeter defenses. TEF is campaign-level: one competitor recruitment campaign targeting the employee population is one TEF event; per-employee-approach frequency is NOT the TEF unit. Attribution to competitors is prospective for any individual incident \u2014 this is the analyst-judged threat_actor_type for the archetype; individual disclosed cases (Waymo/Uber) may differ in actor structure. Attribution is prospective, not incident-derived in aggregate: most competitor IP-theft cases involve a corporate actor directing the recruitment, but public incidents also feature rogue employees acting without employer direction \u2014 analyst-judged as competitor-directed for this archetype's primary threat scenario.",
+    "canonical_fair_gap": "FAIR's SOCIAL_ENGINEERING archetype addresses deception to gain system access. Competitor recruitment for trade-secret exfiltration is a structurally different threat: the asset at risk is the trade secrets (data) that the recruited employee carries out, the attack vector is a job offer (not a phishing email), and the primary loss is litigation + competitive-advantage destruction rather than data-breach notification costs. The control failure is in offboarding processes and data-access governance, not in technical perimeter defenses. TEF is campaign-level: one competitor recruitment campaign targeting the employee population is one TEF event; per-employee-approach frequency is NOT the TEF unit. Attribution to competitors is prospective for any individual incident \u2014 this is the analyst-judged threat_actor_type for the archetype; individual disclosed cases (Waymo/Uber) may differ in actor structure. Attribution is prospective, not incident-derived in aggregate: most competitor IP-theft cases involve a corporate actor directing the recruitment, but public incidents also feature rogue employees acting without employer direction \u2014 analyst-judged as competitor-directed for this archetype's primary threat scenario.",
     "applicable_industries": [
       "information"
     ],
@@ -4322,7 +4325,7 @@
     "slug": "financial-transaction-tampering",
     "name": "Financial Institution Transaction Tampering \u2014 Insider Unauthorized Value Transfer",
     "status": "published",
-    "threat_event_type": "data_tampering",
+    "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
     "asset_class": "cash_or_equivalent",
     "attack_vector": "insider_privileged_access",
@@ -4443,7 +4446,7 @@
     "slug": "healthcare-record-alteration",
     "name": "Healthcare EHR Record Alteration \u2014 Malicious Insider Data Integrity Tampering",
     "status": "published",
-    "threat_event_type": "data_tampering",
+    "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
     "asset_class": "data",
     "attack_vector": "insider_access_abuse",
@@ -4585,7 +4588,7 @@
     ],
     "canonical_fair_gap": "FAIR's DENIAL_OF_SERVICE archetype typically models web-tier availability loss. Retail checkout DDoS has a primary loss profile driven by revenue disruption per minute of downtime (checkout conversion rate \u00d7 average order value \u00d7 downtime), which is highly org-size-dependent and not captured by static loss distributions. The vulnerability is in the absence of DDoS mitigation (no scrubbing center, CDN without DDoS absorption capacity) and the probability that an attack volumetrically saturates the origin. TEF counts checkout-disruption DDoS events (sufficient to degrade checkout conversion or take the payment API offline), not individual packet streams.",
     "applicable_industries": [
-      "retail_trade"
+      "retail"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -5054,7 +5057,7 @@
     "status": "published",
     "threat_event_type": "social_engineering",
     "threat_actor_type": "cybercriminals",
-    "asset_class": "people",
+    "asset_class": "cash_or_equivalent",
     "attack_vector": "social_engineering",
     "tags": [
       "financial_services",
@@ -5517,7 +5520,7 @@
       "electric_utility",
       "grid"
     ],
-    "description": "A data-tampering or availability attack on the energy-trading or wholesale-settlement platform (ETRM, ISO/RTO scheduling interface, or bilateral PPA settlement system) corrupts or halts the settlement process for power-purchase agreement (PPA) or wholesale energy contracts. The offtaker or merchant counterparty loses contracted energy revenue because metered delivery cannot be confirmed, invoices are corrupted, or settlement windows expire without valid data. The generator/trader (the attacked org) faces make-whole liability or dispute-resolution costs owed to the counterparty whose settlement was corrupted \u2014 i.e. third-party revenue disruption, not the org's own generation revenue. Inherent posture assumes no immutable audit trail on ETRM settlement records, no dual-path settlement verification, and no offline backup of metering data.",
+    "description": "A state-sponsored actor (the Sandworm pattern in this entry's example incidents) mounts a data-tampering or availability attack on the energy-trading or wholesale-settlement platform (ETRM, ISO/RTO scheduling interface, or bilateral PPA settlement system) corrupts or halts the settlement process for power-purchase agreement (PPA) or wholesale energy contracts. The offtaker or merchant counterparty loses contracted energy revenue because metered delivery cannot be confirmed, invoices are corrupted, or settlement windows expire without valid data. The generator/trader (the attacked org) faces make-whole liability or dispute-resolution costs owed to the counterparty whose settlement was corrupted \u2014 i.e. third-party revenue disruption, not the org's own generation revenue. Inherent posture assumes no immutable audit trail on ETRM settlement records, no dual-path settlement verification, and no offline backup of metering data.",
     "example_incidents": "Ukraine power-grid cyberattacks (2015/2016 Sandworm \u2014 SCADA and control-centre attacks disrupting settlement-relevant dispatch data; ICS-CERT Alert ICS-ALERT-14-281-01B). FERC and NERC CIP enforcement actions for settlement-system access-control failures (publicly reported patterns). FCA (UK) supervisory notices regarding energy-trading platform integrity incidents. Specific per-org settlement-liability figures are commercially sensitive and non-public.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"

@@ -13,7 +13,7 @@ Quantitative cyber-risk analysis platform — FAIR methodology, control-aware mo
 ## What it does
 
 - **Scenarios** — FAIR-grounded risk scenarios (Threat / Asset / Method / Effect), authored via a guided SME-elicitation wizard with mixture-pooled multi-SME estimates, cloned from the curated library, imported from CSV/JSON, or drafted from an existing qualitative risk register (converter output is a prior for analyst review, never auto-final).
-- **Library** — 102 curated scenario archetypes with primary-cited FAIR distributions (IRIS sector anchors), three-tier provenance, and a per-org override layer with versioning + audit.
+- **Library** — 99 published curated scenario archetypes (102 seed rows; 3 deprecated by merges) with primary-cited FAIR distributions (IRIS sector anchors), three-tier provenance, and a per-org override layer with versioning + audit.
 - **Controls** — FAIR-CAM control modeling with sub-function assignments, framework crosswalks (NIST CSF, CIS v8, MITRE ATT&CK), an ATT&CK coverage view, and a curated control library.
 - **Analysis** — native Monte Carlo engine (single-scenario and portfolio AGGREGATE runs), full sample persistence, VaR/ES tail ladder, loss-exceedance curves, and per-control Shapley + if-removed attribution with control values reported as weight-robustness ranges.
 - **Reporting** — executive web dashboards and tiered PDF reports with snapshot provenance; audited CSV/JSON exports.

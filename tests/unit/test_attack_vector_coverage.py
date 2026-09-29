@@ -111,8 +111,16 @@ def test_must_cover_techniques_have_at_least_one_mapped_entry() -> None:
     ZERO mapped entries anywhere in the crosswalk -- this assertion is what
     would have caught that gap; post-epic all three are covered exclusively
     by data/seed_attack_avgapfill_full.json (the #529 mapping file).
+
+    Epic F (#192, A-12): only mappings whose ``entry_slug`` is a PUBLISHED
+    seed entry count. A deprecated entry (merged by deprecation, row kept)
+    still carries its mapping rows, but it is no longer offered, so it must
+    not be the sole carrier of a MUST_COVER technique.
     """
-    mapped_techniques = {m["technique_id"] for m in _all_mappings()}
+    published_slugs = {e["slug"] for e in _library_entries() if e.get("status") == "published"}
+    mapped_techniques = {
+        m["technique_id"] for m in _all_mappings() if m["entry_slug"] in published_slugs
+    }
     uncovered = MUST_COVER - mapped_techniques
     assert not uncovered, (
         f"MUST_COVER technique(s) with zero mapped library entries: {sorted(uncovered)} -- "

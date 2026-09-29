@@ -66,6 +66,15 @@ _NEW_SLUGS = {
 
 _W1_SLUG = "destructive-wiper-nationstate"
 
+# Epic F (#192, 2026-09-29): entries absorbed by a merge are deprecated in place
+# (survivors: web-app-exploitation, ddos-financial-seasonal-peak,
+# safety-system-bypass). Rows stay in the seed; only their status changes.
+DEPRECATED_SLUGS = (
+    "data-breach-notification-regulatory-tail",
+    "ddos-extortion-financial",
+    "chemical-process-safety-attack",
+)
+
 
 def _load_base() -> list[dict]:
     return json.loads(Path(_BASE).read_text(encoding="utf-8"))
@@ -218,13 +227,22 @@ def test_builder_ind2sec_matches_differentiation_guard() -> None:
 # reaction rule; ransomware-on-fileshare does not. The _PL_ALLOWLIST row went with it.
 
 
-def test_total_published_entries_is_102() -> None:
+def test_total_rows_and_published_entries() -> None:
+    """Row-count pin (31 base + 71 extension = 102 rows) plus the published
+    count. Epic F (#192) merges by deprecation, never deletion, so the row
+    count is stable while published = 102 - |DEPRECATED_SLUGS|; the explicit
+    tuple keeps a silent status flip from passing as "still 102"."""
     base = _load_base()
     ext = _load_ext()
     assert len(base) == 31
     assert len(ext) == 71
-    published = [e for e in (base + ext) if e["status"] == "published"]
-    assert len(published) == 102
+    all_rows = base + ext
+    assert len(all_rows) == 102
+    published = [e for e in all_rows if e["status"] == "published"]
+    deprecated = [e for e in all_rows if e["status"] == "deprecated"]
+    assert {e["slug"] for e in deprecated} == set(DEPRECATED_SLUGS)
+    assert len(published) == 102 - len(DEPRECATED_SLUGS)
+    assert len(published) + len(deprecated) == 102
 
 
 def test_w1_in_catastrophic_slugs() -> None:

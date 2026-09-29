@@ -66,8 +66,9 @@ def test_competitor_actor_present():
 def test_underused_asset_classes_represented():
     seen = {r["asset_class"] for r in _rows()}
     # spec §3 names BOTH business_process_revenue AND business_process_cost (plan-gate I-1)
+    # "people" floor removed by Epic F (#192): the six people rows were relabelled
+    # (people = the persons themselves; owner decision 2026-09-29).
     for ac in (
-        "people",
         "facilities",
         "business_process_revenue",
         "business_process_cost",

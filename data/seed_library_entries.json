@@ -397,12 +397,12 @@
       "triton_pattern",
       "needs_phase_1_5b_recalibration"
     ],
-    "description": "Adversary targets a Safety Instrumented System (SIS) or Emergency Shutdown Device (ESD) to disable or defeat safety functions, enabling unsafe process conditions to persist without triggering protective shutdowns. Triton/TRISIS is the canonical case: attackers reprogrammed Schneider Electric Triconex controllers to force a fail-safe state (causing unplanned shutdown) while attempting to mask the SIS from detecting abnormal process conditions. The intent was to enable a separate process upset to occur without SIS intervention, potentially causing a catastrophic explosion or toxic release.",
+    "description": "Adversary targets a Safety Instrumented System (SIS) or Emergency Shutdown Device (ESD) to disable or defeat safety functions, enabling unsafe process conditions to persist without triggering protective shutdowns. Triton/TRISIS is the canonical case: attackers reprogrammed Schneider Electric Triconex controllers to force a fail-safe state (causing unplanned shutdown) while attempting to mask the SIS from detecting abnormal process conditions. The intent was to enable a separate process upset to occur without SIS intervention, potentially causing a catastrophic explosion or toxic release. In chemical and petrochemical processes the unprotected upset takes the form of an overpressure, exotherm/runaway reaction or toxic release.",
     "example_incidents": "Triton/TRISIS 2017 at unnamed Middle Eastern petrochemical plant; attackers caused two unplanned shutdowns before discovery. No confirmed physical consequence \u2014 the attack failed before achieving final objective.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
     ],
-    "canonical_fair_gap": "FAIR has no archetype for safety-layer attacks where the primary loss is the defeat of physical safety barriers. Standard FAIR magnitude models (productivity loss, response cost, competitive advantage, legal/regulatory, reputation) do not capture the catastrophic-tail loss associated with loss of SIS protection: a major industrial accident (explosion, toxic release, fatalities) could result in losses exceeding the entire enterprise value. This archetype requires a bimodal magnitude distribution \u2014 near-zero if attack fails pre-consequence, catastrophic if process upset occurs unprotected.",
+    "canonical_fair_gap": "FAIR has no archetype for safety-layer attacks where the primary loss is the defeat of physical safety barriers. Standard FAIR magnitude models (productivity loss, response cost, competitive advantage, legal/regulatory, reputation) do not capture the catastrophic-tail loss associated with loss of SIS protection: a major industrial accident (explosion, toxic release, fatalities) could result in losses exceeding the entire enterprise value. This archetype requires a bimodal magnitude distribution \u2014 near-zero if attack fails pre-consequence, catastrophic if process upset occurs unprotected. Epic F (#192 campaign, 2026-09-29): this entry absorbed chemical-process-safety-attack (deprecated). Its TEF (PERT 0.01/0.05/0.25, mean 0.0767) supersedes the #505 chemical TEF differentiation (PERT 0.005/0.03/0.15, mean 0.0458), which was an R15 anti-templating fix rather than evidence; a chemical or process-manufacturing organisation re-selecting this entry sees inherent ALE of about 1.6x the deprecated entry's.",
     "applicable_industries": [
       "utilities",
       "manufacturing",
@@ -412,7 +412,8 @@
       "oil_and_gas",
       "chemical_manufacturing",
       "nuclear",
-      "pipeline"
+      "pipeline",
+      "process_manufacturing"
     ],
     "applicable_org_sizes": [
       "large",
@@ -451,7 +452,8 @@
       "file-integrity-monitoring",
       "user-access-control",
       "security-information-event-management",
-      "change-management"
+      "change-management",
+      "incident-response"
     ],
     "standards_references": null,
     "loss_tier": "paginated",
@@ -1000,7 +1002,7 @@
     "status": "published",
     "threat_event_type": "social_engineering",
     "threat_actor_type": "cybercriminals",
-    "asset_class": "data",
+    "asset_class": "cash_or_equivalent",
     "attack_vector": "email_social_engineering",
     "tags": [
       "bec",
@@ -1623,7 +1625,7 @@
   {
     "slug": "ddos-extortion-financial",
     "name": "DDoS Extortion \u2014 Financial and Payment Sector",
-    "status": "published",
+    "status": "deprecated",
     "threat_event_type": "denial_of_service",
     "threat_actor_type": "cybercriminals",
     "asset_class": "systems",
@@ -2378,18 +2380,18 @@
       "payment_processor",
       "high_availability"
     ],
-    "description": "Volumetric DDoS attacks targeting payment processors, online banking portals, or retail checkout systems during peak transaction periods (Black Friday, tax season, quarter-end financial close). Attackers time attacks to maximize business pressure \u2014 a 1-hour outage of a payment processor during Black Friday has a loss that is orders of magnitude higher than the same outage in January. Mirai and MerisBot botnets have demonstrated multi-terabit attack capability. The financial loss is dominated by transaction revenue foregone during the outage.",
+    "description": "Volumetric DDoS attacks targeting payment processors and online banking portals during peak transaction periods (Black Friday, tax season, quarter-end financial close), sometimes accompanied by a ransom demand to stop the attack (extortion is a motive here, not a separate loss path). Attackers time attacks to maximize business pressure \u2014 a 1-hour outage of a payment processor during Black Friday has a loss that is orders of magnitude higher than the same outage in January. Mirai and MerisBot botnets have demonstrated multi-terabit attack capability. The financial loss is dominated by transaction revenue foregone during the outage.",
     "example_incidents": "Meris botnet DDoS against Yandex 2021 (21.8M RPS peak); DDoS attacks against major US banks (Bank of America, JPMorgan, PNC, US Bank) 2012-2013 (attributed to Iran, Operation Ababil); Killnet DDoS against US banking and financial sector 2023.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
     ],
     "canonical_fair_gap": "FAIR's standard loss magnitude model for DDoS does not account for time-of-attack seasonality; the same attack on a payment processor generates 100\u00d7 the productivity loss on Black Friday versus a normal Tuesday, but the standard FAIR PERT distribution uses a fixed magnitude range that does not reflect this seasonality. Organizations with strong business seasonality need a time-conditioned loss model that adjusts primary loss magnitude based on attack timing relative to peak transaction windows.",
     "applicable_industries": [
-      "financial",
-      "retail"
+      "financial"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
+      "medium",
       "large",
       "enterprise"
     ],
@@ -2678,7 +2680,7 @@
     "slug": "credential-stuffing-consumer-portal",
     "name": "Credential Stuffing \u2014 Consumer-Facing Portal Account Takeover",
     "status": "published",
-    "threat_event_type": "malware",
+    "threat_event_type": "data_tampering",
     "threat_actor_type": "cybercriminals",
     "asset_class": "data",
     "attack_vector": "automated_credential_stuffing_from_breach_databases",
@@ -2698,8 +2700,7 @@
     "canonical_fair_gap": "FAIR does not natively distinguish a credential-stuffing campaign from a discrete unauthorized-access incident; the campaign-level model used here treats each credential-stuffing campaign as a threat event (TEF in campaigns/year) that, if it achieves material account takeover, produces a per-incident loss event (via the Retail sector loss anchor). This framing aligns with Akamai's campaign-frequency reporting and avoids the prior per-attempt model where the extremely-low per-attempt vulnerability collapsed the loss event frequency to near-zero \u2014 incoherent with the Retail per-incident anchor magnitude. The model is inherent-posture (control-naive): controls (rate-limiting, credential monitoring, MFA) reduce either the campaign success rate (vuln) or the incident frequency (TEF), but are not embedded in the seed values.",
     "applicable_industries": [
       "retail",
-      "financial",
-      "hospitality"
+      "financial"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -3081,7 +3082,7 @@
   {
     "slug": "data-breach-notification-regulatory-tail",
     "name": "Data Breach \u2014 GDPR/CCPA Regulatory Notification Tail",
-    "status": "published",
+    "status": "deprecated",
     "threat_event_type": "data_disclosure",
     "threat_actor_type": "cybercriminals",
     "asset_class": "data",
