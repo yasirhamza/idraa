@@ -704,7 +704,7 @@ def _classify_slug_group(
     drifted_columns = tuple(sorted(c for c, cls in raw_classification.items() if cls == "drift"))
     if not drifted_columns:
         return raw_classification, drifted_columns
-    final = {
+    final: dict[str, Literal["apply", "already", "drift"]] = {
         column: ("drift" if cls == "apply" else cls) for column, cls in raw_classification.items()
     }
     return final, drifted_columns

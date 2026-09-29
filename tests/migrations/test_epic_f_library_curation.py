@@ -632,6 +632,14 @@ def test_dry_run_pre_phase_clean_then_drift_then_post_phase(
         assert f"drift: {drift_slug} {column}" in out
     assert f"apply={n - 3} already=0 drift=3" in out
 
+    # R4-N2: a one-line summary names ONLY the genuinely-drifted cell (`description`),
+    # not the two siblings demoted by the atomic-group guard, and carries no value.
+    assert f"drift detail: {drift_slug} drifted column(s): {drift_column}" in out
+    for sibling in group_columns:
+        if sibling != drift_column:
+            assert f"drifted column(s): {sibling}" not in out
+    assert "DRIFT SENTINEL TEXT" not in out
+
     # Undo the drift, run the real migration, then check the post phase.
     old_val = _CHANGES_BY_KEY[(drift_slug, drift_column)][0]
     _write_column(alembic_engine, drift_slug, drift_column, old_val)

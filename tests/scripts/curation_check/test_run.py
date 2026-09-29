@@ -98,6 +98,13 @@ def test_malformed_answers_error_one_item_and_the_run_continues(tmp_path: Path) 
     assert len(lines) == 3 and "error" in json.loads(lines[0])
 
 
+def test_run_check_populates_subjects_with_every_jobs_item_key(tmp_path: Path) -> None:  # NICE-R2
+    jobs = _jobs()["scenario-labels"]
+    judge = FakeJudge(broken=frozenset({jobs[0].item_key}))  # errored item stays a subject too
+    res = run_check("scenario-labels", jobs, judge, Recorder(tmp_path / "r.jsonl"))
+    assert res.subjects == [job.item_key for job in jobs]
+
+
 def _record_all(path: Path, root: Path = ROOT) -> None:
     recorder = Recorder(path)
     for check, jobs in _jobs(root).items():

@@ -182,6 +182,35 @@ def test_status_transition_to_deprecated_is_reported_separately(tmp_path: Path) 
     assert "s1" not in result.slugs
 
 
+@pytest.mark.parametrize("mutate", ["added_already_deprecated", "edited_while_deprecated"])
+def test_added_or_edited_while_deprecated_lands_in_deprecated_not_slugs(
+    tmp_path: Path, mutate: str
+) -> None:  # NICE-R1: methodology N2 also covers these two cases, not just published->deprecated
+    root = tmp_path / "repo"
+    scenarios, extension, controls = _base3()
+    if mutate == "edited_while_deprecated":
+        scenarios = [{**scenarios[0], "status": "deprecated"}, scenarios[1], scenarios[2]]
+    _init_repo(root, scenarios=scenarios, extension=extension, controls=controls)
+
+    if mutate == "added_already_deprecated":
+        scenarios2 = [*scenarios, _scenario("s4", "S4", status="deprecated")]
+        watched_slug = "s4"
+    else:  # edited_while_deprecated
+        scenarios2 = [
+            {**scenarios[0], "description": "still deprecated, edited description."},
+            scenarios[1],
+            scenarios[2],
+        ]
+        watched_slug = "s1"
+    _write_seed(root, scenarios2, extension, controls)
+    _run_git(root, "add", "-A")
+    _run_git(root, "commit", "-qm", "c2")
+
+    result = changed_subjects(root, "HEAD~1")
+    assert result.deprecated == {watched_slug}
+    assert watched_slug not in result.slugs
+
+
 def test_uses_merge_base_not_the_ref_tip(tmp_path: Path) -> None:  # (d)
     root = tmp_path / "repo"
     scenarios, extension, controls = _base3()

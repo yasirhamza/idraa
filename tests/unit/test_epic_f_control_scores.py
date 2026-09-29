@@ -23,13 +23,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fair_cam.models.composition_topology import BooleanGroup
+from fair_cam.models.composition_topology import KAPPA_META_RELIABILITY, BooleanGroup
 from fair_cam.risk_engine.group_composition import compose_groups
 
 from idraa.services.control_library_scoring import _seed_entry_to_control, classify_entry
 
 SEED_PATH = Path(__file__).parents[2] / "data" / "seed_control_library_entries.json"
 REL = 1e-9
+
+# The plan's Task 6 hand-math table is computed at kappa = 0.5 (fair-departures-register
+# C7; fair_cam.models.composition_topology.KAPPA_META_RELIABILITY). Passed explicitly to
+# every compose_groups call below rather than relying on compose_groups' own default, so a
+# future change to that default cannot silently re-pin these values to a different kappa
+# without this suite failing loudly (task-6-spec.md NICE 2). test_kappa_matches_the_engine_
+# default pins the two constants together so this file's own assumption cannot go stale.
+KAPPA = 0.5
 
 SIEM = "security-information-event-management"
 FIM = "file-integrity-monitoring"
@@ -68,7 +76,7 @@ def _before(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _group(entries: list[dict[str, Any]], group: BooleanGroup) -> float | None:
-    result = compose_groups([_seed_entry_to_control(e) for e in entries])
+    result = compose_groups([_seed_entry_to_control(e) for e in entries], kappa=KAPPA)
     return result.group_effectiveness.get(group)
 
 
@@ -135,7 +143,7 @@ def test_siem_after_plus_sspm_plus_ir(seed: dict[str, dict[str, Any]]) -> None:
     # SIEM's: Vis 0.46045970432 -> 1 − (1 − 0.46045970432)².
     before = [seed[SIEM], _before(seed[SSPM]), seed[IR]]
     after = [seed[SIEM], seed[SSPM], seed[IR]]
-    result = compose_groups([_seed_entry_to_control(e) for e in after])
+    result = compose_groups([_seed_entry_to_control(e) for e in after], kappa=KAPPA)
     assert result.meta_strength == pytest.approx(0.22249472, rel=REL)
     # Table values are shown to 10 decimals; the literals below are the exact hand-math to
     # 12 significant digits so the rel=1e-9 pin is not eaten by display rounding.
@@ -158,7 +166,15 @@ def test_edr_plus_siem_plus_ir_detection_rises_55_percent(
     _pin(before, PAIR, 0.0478931098534)
     _pin(after, DET, 0.259895477246)
     _pin(after, PAIR, 0.0743301064925)
-    assert pytest.approx(1.552, abs=5e-4) == 0.259895477246 / 0.167458426061
+    # N6-4/task-6-spec.md NICE: the ratio comes from the two engine compositions just
+    # pinned above, not from re-typing their literals -- a regression that moved BOTH
+    # absolute pins by the same factor (so the two `_pin` calls above still passed) would
+    # still be caught here.
+    before_det = _group(before, DET)
+    after_det = _group(after, DET)
+    assert before_det is not None
+    assert after_det is not None
+    assert pytest.approx(1.552, abs=5e-4) == after_det / before_det
 
 
 def test_sra_resistance_at_coverage_0_2(seed: dict[str, dict[str, Any]]) -> None:
@@ -181,8 +197,16 @@ def test_sat_ensure_capability_dsc_prevention(seed: dict[str, dict[str, Any]]) -
         ([seed[SAT], seed[SCP]], 0.695296),
     ):
         _pin(entries, DSC, expected)
-        result = compose_groups([_seed_entry_to_control(e) for e in entries])
+        result = compose_groups([_seed_entry_to_control(e) for e in entries], kappa=KAPPA)
         assert result.meta_strength == pytest.approx(expected, rel=REL)
+
+
+def test_kappa_matches_the_engine_default() -> None:
+    # This file's hand-math and every compose_groups(..., kappa=KAPPA) call above assume
+    # kappa = 0.5 (fair-departures register C7). Pinning KAPPA to the engine's own default
+    # here means a future change to KAPPA_META_RELIABILITY fails loudly in THIS test
+    # rather than silently mis-computing every other pin in this module.
+    assert pytest.approx(KAPPA_META_RELIABILITY, rel=REL) == KAPPA
 
 
 def test_entry_level_classification_is_unchanged(seed: dict[str, dict[str, Any]]) -> None:

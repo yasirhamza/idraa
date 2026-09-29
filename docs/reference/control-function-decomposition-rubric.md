@@ -187,7 +187,7 @@ null-capability Implementation takes the 0.5 default of register C3, opeff = 0.3
 control at cap 0.5 / cov 1.0 / r0 0.5 and κ = 0.5; Task 8 fix round 1.) The second
 Correction member *lowers* `E_meta` — the C8 AND makes it non-monotone in
 Correction membership (the same class as the riskflow#453 DSC case; an engine
-follow-up, not a curation rule). None of these sets scores standalone:
+follow-up (#199), not a curation rule). None of these sets scores standalone:
 `entry_scores` composes the entry alone at κ = 0 (§2.9).
 
 ### 2.7 DSC Prevention — meta channel, composed as `max` of present members
@@ -676,6 +676,18 @@ assignment present — CSPM's own avoidance and resistance included — via
 `r_eff = r0 + (1−r0)·κ·E_meta`. The pair alone composes to 0.16384, not 0
 (§2.6), so the DSC member is not label-only and the old "1+1 = $0" reading is
 retired.
+
+The 0.59195 figure above is at the illustrative 0.8-flat capability/coverage/
+reliability used throughout §2.6/§2.7, not CSPM's own authored values. With
+CSPM's own seeded assignments (`vmc_id_control_monitoring` 0.7/0.8/0.8;
+`vmc_corr_implementation` null-capability/0.7/0.6, so its opeff takes the
+ELAPSED_TIME 0.5 default per register C3; `dsc_prev_sa_analysis` 0.7/0.7/0.7),
+the same meta set composes to `E_meta = OR(0.448 × 0.21, 0.343) = 0.40481`
+(engine-reproduced from the seeded `cloud-security-posture-management` entry
+via `compose_groups` at κ = 0.5; `meta_strength` = 0.40481056). A curator
+checking this section against a live run of the seeded entry sees 0.405, not
+0.592 — the two figures answer different questions (the illustrative default
+grid vs. this entry's own authored numbers) and neither supersedes the other.
 
 ### 7.5 I1 discriminator application
 

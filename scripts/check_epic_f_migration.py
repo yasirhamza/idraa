@@ -117,7 +117,7 @@ def _check_revision(conn: sqlite3.Connection, mod: ModuleType, phase: str) -> st
 
 def _classify_rows(
     conn: sqlite3.Connection, mod: ModuleType, phase: str
-) -> tuple[list[tuple[str, str, str]], dict[str, int]]:
+) -> tuple[list[tuple[str, str, str]], dict[str, int], list[tuple[str, tuple[str, ...]]]]:
     """Groups ``mod._CHANGES`` by slug and classifies each group with
     ``mod._classify_slug_group`` -- the same atomic-group guard ``upgrade()`` itself
     uses -- so this script's counts and report match what a real ``alembic upgrade``
@@ -127,9 +127,16 @@ def _classify_rows(
     (see module docstring). Counters are CELL-level (see the migration module
     docstring's "Counter semantics" note): a cell demoted from "apply" to "drift" by a
     poisoned sibling counts toward ``drift``, not ``apply``.
+
+    Also returns, per slug with at least one genuinely-drifted (or missing) cell, that
+    cell's column name(s) -- the same ``drifted_columns`` tuple
+    ``mod._classify_slug_group`` already computes for the migration's own WARNING, so an
+    operator reading this script's output does not have to diff every cell in a poisoned
+    slug's group to find the one that actually drifted (R4-N2). Never includes values.
     """
     mod._validate_changes(mod._CHANGES)
     report_rows: list[tuple[str, str, str]] = []
+    drifted_slugs: list[tuple[str, tuple[str, ...]]] = []
     counts = {"apply": 0, "already": 0, "drift": 0}
     omit = "apply" if phase == "pre" else "already"
     for slug, cells in mod._group_by_slug(mod._CHANGES).items():
@@ -141,12 +148,14 @@ def _classify_rows(
                 (slug,),
             ).fetchone()
             found_raw[column] = (row is not None, row[0] if row is not None else None)
-        classification, _drifted = mod._classify_slug_group(cells, found_raw)
+        classification, drifted = mod._classify_slug_group(cells, found_raw)
+        if drifted:
+            drifted_slugs.append((slug, drifted))
         for column, cls in classification.items():
             counts[cls] += 1
             if cls != omit:
                 report_rows.append((slug, column, cls))
-    return report_rows, counts
+    return report_rows, counts, drifted_slugs
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -174,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             print(precondition_error)
             return 3
 
-        report_rows, counts = _classify_rows(conn, mod, args.phase)
+        report_rows, counts, drifted_slugs = _classify_rows(conn, mod, args.phase)
     except Exception as exc:
         print(f"internal error: {type(exc).__name__}")
         return 4
@@ -184,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
 
     for slug, column, classification in report_rows:
         print(f"{classification}: {slug} {column}")
+    for slug, drifted_columns in drifted_slugs:
+        # R4-N2: names only the cell(s) that are themselves neither `old` nor `new` (or
+        # missing) within this drifted slug's atomic group -- never the whole group's
+        # columns, and never a value.
+        print(f"drift detail: {slug} drifted column(s): {', '.join(drifted_columns)}")
     print(f"apply={counts['apply']} already={counts['already']} drift={counts['drift']}")
 
     if args.phase == "pre":

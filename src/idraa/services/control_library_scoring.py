@@ -114,7 +114,10 @@ def scores_standalone(sub_function: str) -> bool:
 
     if not GROUP_NODE_MAPPING[g].targets:
         # Empty-target leaf (lec_det_*, vmc_id_*, vmc_corr_*): the node contribution
-        # is zero standalone; the effect only reaches a FAIR node via its pair group.
+        # is zero standalone. Post-#439 this leaf's pair group has no node target
+        # either (register C8/§2.6) -- the only path any effect reaches a FAIR node
+        # is the kappa reliability coupling (E_meta -> r_eff), which requires a
+        # co-present LEC channel to uplift (see this function's docstring).
         return False
 
     return GROUP_TYPE[g] == GroupType.OR

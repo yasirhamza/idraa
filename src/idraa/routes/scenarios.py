@@ -3471,7 +3471,7 @@ async def _build_readout_cfg(
     try:
         # Threadpool AND the finalize semaphore, BOTH REQUIRED (Sec-I1/Arch-I3):
         # finalize's control is run_in_threadpool + _FINALIZE_SEMAPHORE
-        # (wizard_finalize.py:54, acquired routes/scenarios.py:2774) — Sec-21
+        # (wizard_finalize.py:54, acquired routes/scenarios.py:3027) — Sec-21
         # exists precisely so concurrent scipy.optimize loops cannot saturate
         # the shared-cpu worker, and a step-4 GET is a HOTTER path than finalize.
         async with _FINALIZE_SEMAPHORE:

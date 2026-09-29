@@ -456,7 +456,7 @@ async def test_step4_get_survives_malformed_sme_row_identity(
 
     Not reachable via the normal HTTP form path (the step-4 POST handler
     normalizes a blank ``sme_id`` to ``None`` before it ever reaches
-    ``state.sme_estimates``, routes/scenarios.py:2919) -- this simulates
+    ``state.sme_estimates``, routes/scenarios.py:2660) -- this simulates
     draft corruption by mutating the persisted ``WizardDraft.state_json``
     directly, the same class of malformed-row defense the surrounding
     ``preview_means`` try/except already documents ("a step-4 GET must

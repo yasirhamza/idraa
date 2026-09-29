@@ -370,7 +370,7 @@ docstring).
   (`repositories/scenario_repo.py:57-74`, `repositories/run_repo.py:27-41`);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
-  (`routes/overlays.py:457`, `routes/scenarios.py:713,748`,
+  (`routes/overlays.py:457`, `routes/scenarios.py:718,753`,
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
