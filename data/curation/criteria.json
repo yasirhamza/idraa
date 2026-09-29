@@ -15,7 +15,8 @@
         "Decommission an unused internet-facing service",
         "Stop collecting unneeded sensitive data",
         "Allow only approved devices to join the network",
-        "Block access to known-malicious destinations"
+        "Block access to known-malicious destinations",
+        "Network segmentation"
       ]
     },
     "lec_prev_deterrence": {
@@ -133,14 +134,15 @@
       "examples": [
         "Pre-deployment testing of changes in a staging environment",
         "Automated regression tests gating each release",
-        "Automated unit tests on every code commit"
+        "Automated unit tests gating each merge",
+        "Mandatory peer code review"
       ]
     },
     "vmc_id_threat_intelligence": {
       "label": "Threat intelligence",
       "domain": "VMC",
       "what": "Identifies changes in the threat landscape that could make existing controls inadequate, so controls can be adjusted.",
-      "not_for": "Not Threat data (DSC): Threat intelligence triggers control changes, Threat data informs management decisions. Not Recognition (LEC): identifying live attacks. Vulnerability scanning of own assets is Control monitoring.",
+      "not_for": "Not Threat data (DSC): Threat intelligence triggers control changes, Threat data informs management decisions. Not Recognition (LEC): identifying live attacks. Vulnerability scanning of own assets is Control monitoring. Threat modelling of a system design is Analysis (DSC).",
       "examples": [
         "Commercial threat-intelligence feeds",
         "ISAC participation",
@@ -157,7 +159,8 @@
         "Vulnerability scanning",
         "Periodic control testing",
         "Asset-inventory reconciliation of endpoint-agent coverage",
-        "Penetration testing"
+        "Penetration testing",
+        "Policy-compliance scans"
       ]
     },
     "vmc_corr_treatment_selection": {
@@ -254,7 +257,8 @@
         "Risk assessment and risk register",
         "Scenario modelling",
         "Attack-path analysis",
-        "Business impact analysis"
+        "Business impact analysis",
+        "Periodic threat-modelling workshops"
       ]
     },
     "dsc_prev_sa_reporting": {
@@ -277,7 +281,8 @@
       "examples": [
         "Designated security leadership with authority",
         "Adequate security budget and staffing",
-        "Expert on-call rotation"
+        "Expert on-call rotation",
+        "Role-based security training"
       ]
     },
     "dsc_prev_incentives": {
@@ -389,8 +394,8 @@
         "not_for": "Not systems (IT). Not safety_systems (safety instrumented systems). Not facilities (buildings and general physical property)."
       },
       "people": {
-        "what": "Personnel as the asset at risk (the persons themselves).",
-        "not_for": "Not safety_systems (engineered safety functions). Not data when employee records are the asset; people is the persons themselves."
+        "what": "Personnel as the asset at risk: harm to the persons themselves (e.g., their safety, health or personal security).",
+        "not_for": "Not staff who are deceived, recruited or who misuse their access: they are the threat vector or actor, so choose the asset actually lost (e.g., data, cash_or_equivalent). Not data when employee records are the asset. Not safety_systems (engineered safety functions); when persons are harmed because a safety function was defeated, choose the targeted asset."
       },
       "safety_systems": {
         "what": "Safety instrumented systems and engineered safety functions that protect people, plant and environment from hazardous process conditions.",

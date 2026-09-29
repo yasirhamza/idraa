@@ -40,11 +40,15 @@ EXAMPLE_ANCHORS: dict[str, str | tuple[str, ...]] = {
     "Least-privilege access control": "user-access-control",
     "Multi-factor authentication": "multi-factor-authentication",
     "NetFlow or network tap capture": "network-detection-response",
+    "Network segmentation": "network-segmentation",
     "Patch deployment process": "patch-management",
     "Patching known software vulnerabilities": "patch-management",
     "Penetration testing": "penetration-testing",
+    "Periodic threat-modelling workshops": "threat-modeling",
+    "Policy-compliance scans": "security-configuration-assessment",
     "Quantitative (FAIR) risk analysis": "cyber-risk-quantification-management",
     "Revoke session tokens and disable a compromised account": "incident-response",
+    "Role-based security training": "security-awareness-training",
     "SIEM correlation pipeline": "security-information-event-management",
     "Security awareness communications": "security-awareness-training",
     "Software bill of materials": "software-bill-of-materials",
@@ -122,25 +126,22 @@ NO_LIBRARY_CONTROL = frozenset(
         "Visible CCTV with warning signs",
         "Emergency configuration rollback to restore a degraded control",
         "Automated regression tests gating each release",
-        "Automated unit tests on every code commit",
+        "Automated unit tests gating each merge",
         "Fix, mitigate or accept decision for each identified control variance",
+        # Secure Coding Practices lists code review as a mechanism; listing is not performing it
+        "Mandatory peer code review",
     }
 )
 
-# Examples where Idraa's enum text and the seed disagree (docs/reference/scenario-labelling-conventions.md).
+# Wording kept out of criteria after #192: rejected, or still low-confidence (docs/reference/scenario-labelling-conventions.md).
 CONTESTED_EXAMPLES = frozenset(
     {
-        "Network segmentation",
         "Restore-from-backup procedure",
         "Incident response retainer",
         "Pre-merge SAST and dependency scanning",
-        "Periodic threat-modelling workshops",
         "Internal audit of policy compliance",
-        "Policy-compliance scans",
-        "Role-based security training",
         "Audit and assessment results",
         "Pen-test findings summaries",
-        "Mandatory peer code review",
         "Secure build baselines applied at deployment",
         "Standardised, locked-down configurations",
         "Risk-based patch prioritisation",
