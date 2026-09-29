@@ -97,10 +97,15 @@ def _tally(root: Path) -> int:
     if not paths:
         print("No committed reports under docs/curation/.")
         return 0
+    try:
+        counts = tally(paths)
+    except ValueError as e:  # an edited report the parser cannot attribute
+        print(f"curation-check: {e}", file=sys.stderr)
+        return 3
     print(
         "Hit rate = accepted / decided, with 90% Wilson intervals (approximate: one curator's calls are not independent)."
     )
-    for (model, check, top), c in sorted(tally(paths).items()):
+    for (model, check, top), c in sorted(counts.items()):
         lo, hi = c["hit_interval"]
         print(
             f"{model} · {check} · top {top}: accepted {c['accepted']}, rejected {c['rejected']}, deferred {c['deferred']}, "
@@ -134,6 +139,16 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
         p.error("--top must be at least 1")
     if a.judge == "replay" and a.replay is None:
         p.error("--judge replay needs --replay PATH")
+    if a.judge == "jev" and a.replay is not None:
+        p.error("--replay is only for --judge replay")
+    previous = None  # checked before any judge call, so a bad path never wastes a paid run
+    if a.compare_to is not None:
+        try:
+            previous = json.loads((a.compare_to / "run.json").read_text(encoding="utf-8"))["queues"]
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            p.error(
+                f"--compare-to {a.compare_to}: no readable run.json with queues ({type(e).__name__})"
+            )
     api_key = None
     if a.judge == "jev":
         if a.key_stdin:
@@ -204,9 +219,6 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
         "model": ", ".join(models) or "n/a",
         "git_commit": _git_commit(a.root),
     }
-    previous = (
-        json.loads((a.compare_to / "run.json").read_text())["queues"] if a.compare_to else None
-    )
     checks_meta: dict[str, Any] = {
         c: {
             "items": r.items,

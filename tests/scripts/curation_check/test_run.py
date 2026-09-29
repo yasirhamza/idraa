@@ -168,3 +168,20 @@ def test_live_runs_need_the_key_on_stdin(tmp_path: Path) -> None:  # S-I1
 def test_tally_with_no_reports_says_so(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     assert main(["tally", "--root", str(tmp_path)]) == 0
     assert "No committed reports" in capsys.readouterr().out
+
+
+def test_tally_reports_an_unparseable_report_without_a_traceback(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    d = tmp_path / "docs" / "curation" / "x"
+    d.mkdir(parents=True)
+    (d / "report.md").write_text("## Renamed section\n\n| 1 | 0.90 | a | f | accepted | r |\n")
+    assert main(["tally", "--root", str(tmp_path)]) == 3
+    assert "outside a known section" in capsys.readouterr().err
+
+
+def test_compare_to_without_a_run_is_a_usage_error_before_any_judging(tmp_path: Path) -> None:
+    recording = tmp_path / "rec" / "responses.jsonl"
+    _record_all(recording)
+    with pytest.raises(SystemExit) as exc:
+        _replay(recording, tmp_path / "run", "--compare-to", str(tmp_path / "nowhere"))
+    assert exc.value.code == 2
+    assert not (tmp_path / "run" / "responses.jsonl").exists()
