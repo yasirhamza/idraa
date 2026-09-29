@@ -1,9 +1,11 @@
 """Tests for standalone-scoring predicate, 3-way triage, and staleness (#437 T4/T8).
 
-B1: topology-derived scores_standalone (lec_prev_* + vmc_prev_* score; detection,
-    gated-response, multi-member-AND leaves do NOT).
-B2: pair-aware entry_scores via the actual engine closed-form (a 1-of-2 VMC pair
-    = $0; a full 2-id+2-corr pair scores > $0).
+B1: topology-derived scores_standalone (lec_prev_* + the currency subtractor score;
+    detection, gated-response and every empty-target meta leaf — vmc_prev_*, vmc_id_*,
+    vmc_corr_*, dsc_* — do NOT, since Slice 2 #439 retired the meta node targets).
+B2: pair-aware entry_scores via the actual engine closed-form (a meta-only set — any
+    VMC/DSC staffing, including a full 2-id+2-corr pair — returns False at κ = 0; only
+    lec_prev_*, the currency subtractor or a fully-staffed det∧resp pair scores).
 
 T7: residual_meta_entries — slugs whose assignment SET does not score (#437 T7 → #439).
 T7-M3: residual_partition seed-data contract — partition assignment across real entries.

@@ -12,7 +12,8 @@ status: methodology-gated
 **Spec:** internal design doc 2026-06-30-library-function-completeness-design
 **Methodology gate:** required before any library entry is curated (§5 pipeline, step 1).
 
-This document governs the systematic audit of all 61 control-library entries. It
+This document governs the systematic audit of every control-library entry in
+`data/seed_control_library_entries.json` (63 published at this revision, 2026-09-29). It
 defines how to decompose a product into its FAIR-CAM sub-functions, classify each
 behavior into the correct channel, populate effectiveness values with cited evidence,
 and handle genuinely-meta products without grafting a fake scoring channel.
@@ -31,9 +32,9 @@ product — a single product (e.g., CSPM) commonly spans multiple rows.
 | Detects events — surfaces evidence of anomalous or illicit activity | LEC Detection (Visibility / Monitoring / Recognition) | LEC channel — **does NOT score standalone** | Scores only via det+resp AND-pair: **all 3 detection members** (strict AND) **+ ≥1 of {lec_resp_resilience, lec_resp_event_termination}** |
 | Contains / limits events — terminates activity or restores operations | LEC Response (EventTermination / Resilience) | LEC channel — **does NOT score standalone** | Scores only via det+resp AND-pair (all 3 det strict AND + ≥1 resp opeff member); **≥3 resp is structurally unsatisfiable** — only 2 non-currency opeff members exist |
 | Directly reduces realized losses (currency) | LEC Response (LossReduction) | LEC channel — **`lec_resp_loss_reduction` only** | **Scores standalone** (the single CURRENCY exception; see §5) |
-| Monitors / corrects **another control's** operational health or drift | VMC Identification / Correction | **meta** — couples via reliability uplift (κ coupling, Slice 2 #439, SHIPPED: `KAPPA_META_RELIABILITY` in `fair_cam/models/composition_topology.py`) | The Identification∧Correction AND-pair contributes to `E_meta` when both sides are present: Identification is OR over its present members; Correction is gated on `vmc_corr_implementation` (absent → 0, so the pair is 0; register C8, `precompose_parts` in `fair_cam/risk_engine/group_composition.py`). `E_meta` uplifts co-present LEC controls' reliability via `r_eff = r0 + (1-r0)·κ·E_meta` — NOT a direct vulnerability/magnitude multiplier of its own (that direct target was retired by Slice 2). An isolated meta-only entry with no co-present LEC control (or no r0<1 headroom) still shows $0 — correctly, not as pending future work. |
-| Reduces frequency or probability of changes that introduce control variance | VMC Variance Prevention | **meta** — the SAME κ reliability coupling; its direct Vulnerability target (the pre-#439 `Vuln×0.3` proxy) was retired in Slice 2: `GROUP_NODE_MAPPING[VMC_VARIANCE_PREVENTION]` has no targets (`fair_cam/models/composition_topology.py`) | **Does NOT score standalone.** OR group over its two members (`GROUP_TYPE`); the group value is one operand of `E_vmc = OR(E_variance_prevention, E_id∧corr_pair)` and then of `E_meta = OR(E_vmc, E_dsc)` (`precompose_parts`; register C7). A single `vmc_prev_*` member therefore moves `E_meta` on its own, realised only through co-present LEC controls with r0 < 1. |
-| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** — couples via the SAME κ reliability coupling as VMC (Slice 2 #439, SHIPPED); DSC's direct Loss-Magnitude target was retired on the same §2.2 p.5 "Indirectly Affect Risk" grounds | DSC_PREVENTION is composed by the **best-coherent-subset mean of its present members, which equals `max`** (`_best_coherent_subset_mean`, applied in `precompose_parts`; register C6) — one present member sets `E_dsc` at its own level and no member count is required. `E_dsc` feeds `E_meta`, uplifting co-present LEC controls' reliability; it produces no direct Loss-Magnitude multiplier of its own. **DSC assignments are therefore NOT label-only**: any new DSC member can move `E_meta` (§2.7, §6.5). DSC id+corr pair is **unreachable**: `dsc_corr_misaligned` is virtual (no control may claim it). |
+| Monitors / corrects **another control's** operational health or drift | VMC Identification / Correction | **meta** — couples via reliability uplift (κ coupling, Slice 2 #439, SHIPPED: `KAPPA_META_RELIABILITY` in `fair_cam/models/composition_topology.py`) | The Identification∧Correction AND-pair contributes to `E_meta` when both sides are present: Identification is OR over its present members; Correction is gated on `vmc_corr_implementation` (absent → 0, so the pair is 0; register C8, `precompose_parts` in `fair_cam/risk_engine/group_composition.py`). `E_meta` uplifts the reliability of every LEC assignment present in the run (including the entry's own) via `r_eff = r0 + (1-r0)·κ·E_meta` — NOT a direct vulnerability/magnitude multiplier of its own (that direct target was retired by Slice 2). An isolated meta-only entry with no co-present LEC control (or no r0<1 headroom) still shows $0 — correctly, not as pending future work. |
+| Reduces frequency or probability of changes that introduce control variance | VMC Variance Prevention | **meta** — the SAME κ reliability coupling; its direct Vulnerability target (the pre-#439 `Vuln×0.3` proxy) was retired in Slice 2: `GROUP_NODE_MAPPING[VMC_VARIANCE_PREVENTION]` has no targets (`fair_cam/models/composition_topology.py`) | **Does NOT score standalone.** OR group over its two members (`GROUP_TYPE`); the group value is one operand of `E_vmc = OR(E_variance_prevention, E_id∧corr_pair)` and then of `E_meta = OR(E_vmc, E_dsc)` (`precompose_parts`; register C7). A single `vmc_prev_*` member therefore moves `E_meta` on its own, realised only through the LEC assignments present in the run (including the entry's own) with r0 < 1. |
+| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** — couples via the SAME κ reliability coupling as VMC (Slice 2 #439, SHIPPED); DSC's direct Loss-Magnitude target was retired on the same §2.2 p.5 "Indirectly Affect Risk" grounds | DSC_PREVENTION is composed by the **best-coherent-subset mean of its present members, which equals `max`** (`_best_coherent_subset_mean`, applied in `precompose_parts`; register C6) — one present member sets `E_dsc` at its own level and no member count is required. `E_dsc` feeds `E_meta`, uplifting the reliability of every LEC assignment present in the run (including the entry's own); it produces no direct Loss-Magnitude multiplier of its own. **DSC assignments are therefore NOT label-only**: any new DSC member can move `E_meta` (§2.7, §6.5). DSC id+corr pair is **unreachable**: `dsc_corr_misaligned` is virtual (no control may claim it). |
 
 **Key principle — scoring ≠ channel (B1).** Channel is where the effect routes
 (direct/meta). Whether an entry produces `v(S) > 0` is a separate, topology-derived
@@ -50,7 +51,8 @@ is structurally unsatisfiable — only 2 non-currency response opeff members exi
 No meta-only assignment set — VMC Variance Prevention, a VMC
 Identification∧Correction pair, or DSC_PREVENTION at any staffing — scores
 standalone: their direct node targets were retired in Slice 2 (#439), so their
-value exists only as the κ uplift of co-present LEC controls in a live run (§6.3).
+value exists only as the κ uplift of the LEC assignments present in a live run,
+including the entry's own (§6.3).
 
 ---
 
@@ -133,8 +135,9 @@ in `fair_cam/models/composition_topology.py` carries empty `targets` (the earlie
 `Vuln×0.3` proxy was retired by Slice 2, #439; register C7). Its OR-composed value
 is one operand of `E_vmc = OR(E_variance_prevention, E_id∧corr_pair)` and then of
 `E_meta = OR(E_vmc, E_dsc)` (`precompose_parts`,
-`fair_cam/risk_engine/group_composition.py`), which uplifts co-present LEC
-controls' reliability via `r_eff = r0 + (1−r0)·κ·E_meta` (`finalize_composition`).
+`fair_cam/risk_engine/group_composition.py`), which uplifts the reliability of
+every LEC assignment present in the run, including the entry's own, via
+`r_eff = r0 + (1−r0)·κ·E_meta` (`finalize_composition`).
 So a `vmc_prev_*` claim never scores on its own, but a single member does move
 `E_meta`. Assignment is valid only where the product genuinely reduces the
 *frequency* or *probability* of changes that degrade controls — not as an
@@ -142,7 +145,9 @@ So a `vmc_prev_*` claim never scores on its own, but a single member does move
 
 ### 2.5 VMC Identification — meta, no standalone score
 
-Group: `vmc_identification` | Type: **AND** | Targets: *(none — contributes only via pair)*
+Group: `vmc_identification` | Type: **OR** (`GROUP_TYPE`; §4.2 p.25 prescribes no
+operator between the two members, and v3 chose OR because they identify different
+variance sources — register C8) | Targets: *(none — contributes only via the pair)*
 
 | Sub-function | UnitType | Scores standalone |
 |---|---|---|
@@ -158,9 +163,32 @@ Group: `vmc_correction` | Type: **AND** | Targets: *(none — contributes only v
 | `vmc_corr_implementation` | ELAPSED_TIME | **No** |
 | `vmc_corr_treatment_selection` | PROBABILITY | **No** |
 
-The VMC Identification+Correction AND-pair group (`vmc_identification_correction_pair`,
-targets: `vulnerability`) scores when **fully staffed** (≥2 Identification + ≥2
-Correction members). A partial pair (1+1) composes to $0 (empirically verified).
+The VMC Identification∧Correction pair group (`vmc_identification_correction_pair`)
+has no FAIR-node target: `GROUP_NODE_MAPPING` carries empty `targets` for it (the
+direct Vulnerability target was retired in Slice 2 #439). `precompose_parts`
+(`fair_cam/risk_engine/group_composition.py`) composes it as
+`AND(E_identification, E_correction)`, where Identification is OR over its present
+members and Correction is **gated on `vmc_corr_implementation`**: absent → 0.0, so
+the pair is 0 whatever else is present; present → AND over the present Correction
+members (register C8). The pair's value is one operand of
+`E_vmc = OR(E_variance_prevention, E_pair)` and so of `E_meta` (κ path, §2.4;
+register C7). No member count is required, and adding members is not monotone.
+At the 0.8 defaults (a PROBABILITY member's opeff = 0.8·0.8·0.8 = 0.512; a
+null-capability Implementation takes the 0.5 default of register C3, opeff = 0.32):
+
+| Set | E_meta (hand) | E_meta (engine) | `entry_scores` | Δ v(S) in a run |
+|---|---|---|---|---|
+| 1 Identification + Implementation | 0.512 × 0.32 = 0.16384 | 0.16384 | False | +$38.0k |
+| 2 Identification + Implementation + Treatment selection | (1 − 0.488²) × (0.32 × 0.512) = 0.12482 | 0.12482 | False | +$29.0k |
+| 1 Identification + Treatment selection (no Implementation) | 0 (gate) | 0.0 | False | $0 |
+
+(Δ v(S) measured on the catalog's representative scenario, `_REPRESENTATIVE_RP` in
+`src/idraa/services/control_library_scoring.py`, with one co-present Resistance
+control at cap 0.5 / cov 1.0 / r0 0.5 and κ = 0.5; Task 8 fix round 1.) The second
+Correction member *lowers* `E_meta` — the C8 AND makes it non-monotone in
+Correction membership (the same class as the riskflow#453 DSC case; an engine
+follow-up, not a curation rule). None of these sets scores standalone:
+`entry_scores` composes the entry alone at κ = 0 (§2.9).
 
 ### 2.7 DSC Prevention — meta channel, composed as `max` of present members
 
@@ -188,8 +216,9 @@ maximum over k of the top-k mean, which is identically `max` of the present
 members (register C6, riskflow#453). One present member therefore sets `E_dsc`
 at its own level; no member count is required, and a weaker extra member neither
 helps nor dilutes. `E_dsc = OR(E_dsc_prevention, E_dsc_id∧corr_pair)` enters
-`E_meta = OR(E_vmc, E_dsc)`, which uplifts co-present LEC controls' reliability
-via `r_eff = r0 + (1−r0)·κ·E_meta` (`finalize_composition`; register C7). The DSC
+`E_meta = OR(E_vmc, E_dsc)`, which uplifts the reliability of every LEC assignment
+present in the run, including the entry's own, via `r_eff = r0 + (1−r0)·κ·E_meta`
+(`finalize_composition`; register C7). The DSC
 contribution is a labelled v3 proxy: the Standard frames DSC as improving
 decisions, not other controls' reliability.
 
@@ -199,7 +228,7 @@ several controls on the same sub-function OR together first (register C11), whic
 can raise it further. Do not author DSC assignments chasing `E_meta` — classify
 where the behavior is genuinely attested (§3, §6.1) and put every new DSC
 assignment through a score-delta audit in the §6.5 spirit (its `E_meta` delta in a
-run with co-present LEC controls, even when the entry's standalone v(S) stays $0).
+run with LEC assignments present, even when the entry's standalone v(S) stays $0).
 The one score-neutral DSC claim is `dsc_id_misaligned`: its pair partner is
 virtual (§2.8), so the pair's AND is always 0. The per-sub-function
 `scores_standalone` predicate (§2.9) returns **No** for every DSC member, and the
@@ -208,20 +237,24 @@ DSC-only entry is a non-scoring residual (§6.3), never a standalone scorer.
 
 ### 2.8 DSC Identification+Correction pair — unreachable in authoring
 
-Group: `dsc_identification_correction_pair` | Type: **AND** |
-Targets: `secondary_loss`, `primary_loss`
+Group: `dsc_identification_correction_pair` | Type: **AND** (a leaf group over its
+two members, `GROUP_MEMBERSHIP`; an absent member is padded 0.0) |
+Targets: *(none — the direct Loss-Magnitude target was retired in Slice 2 #439;
+`GROUP_NODE_MAPPING` carries empty `targets`)*
 
 | Sub-function | UnitType | Scores standalone |
 |---|---|---|
 | `dsc_id_misaligned` | PROBABILITY | **No** |
 | `dsc_corr_misaligned` | PROBABILITY | **No** |
 
-This pair maps to magnitude weights and would score if fully staffed. However,
-it is **unreachable in authoring**: `dsc_corr_misaligned` is a virtual
-sub-function — `ControlLibraryAssignmentSeed` raises a validation error if any
-control attempts to claim it ("sub_function dsc_corr_misaligned is virtual; no
-control may claim it"). No real library entry can score via this pair, and no
-score-rescue guard is needed for it.
+If both members were present, the pair's AND would be one operand of
+`E_dsc = OR(E_dsc_prevention, E_pair)` → `E_meta` (§2.7). It is **unreachable in
+authoring**: `dsc_corr_misaligned` is a virtual sub-function —
+`ControlLibraryAssignmentSeed` raises a validation error if any control attempts
+to claim it ("sub_function dsc_corr_misaligned is virtual; no control may claim
+it"). A lone `dsc_id_misaligned` therefore composes to `AND(0.512, 0.0) = 0`
+(engine: `E_meta` 0.0 at the 0.8 defaults), which is why it is the one
+score-neutral DSC claim (§2.7). No score-rescue guard is needed for it.
 
 ### 2.9 Summary: scores_standalone predicate
 
@@ -481,32 +514,34 @@ a scoring-channel assignment.
 
 If, after completing the blind-to-score decomposition, an entry has:
 - No `lec_prev_*` assignments (no direct asset hardening).
-- No `vmc_prev_*` assignments (no direct variance prevention).
 - No `lec_resp_loss_reduction` assignment.
 - No fully-staffed detection+response pair (all 3 det members + ≥1 resp opeff member).
-- No fully-staffed identification+correction pair (≥2 id + ≥2 corr members).
-- No all-9-staffed DSC_PREVENTION group (rare).
 
-...then the entry is **genuinely meta**. Slice 2 (#439) SHIPPED the κ
-reliability coupling (`KAPPA_META_RELIABILITY`,
-`fair_cam/models/composition_topology.py:301`): a fully-staffed
-identification+correction or DSC_PREVENTION group now contributes to
-`E_meta`, which uplifts the reliability of co-present LEC controls via
-`r_eff = r0 + (1-r0)·κ·E_meta` — it no longer produces a standalone dollar
-value the way the pre-Slice-2 direct vulnerability/magnitude multiplier did
-(the old "v(S) ≈ $1k" DSC_PREVENTION figure no longer applies). This means the
-entry is NOT necessarily a permanent $0: in a scenario alongside other LEC
-controls with r0 < 1 headroom, its attributed value (Shapley/LOO) is > $0. In
-isolation, or alongside only r0 = 1 (already-perfect) LEC controls, it
-correctly shows $0 — that is the engine's real behavior, not a gap awaiting
-future coupling math. The authoritative residual predicate is the
-engine-based `entry_scores` (Task 4); this prose list is illustrative. The
-correct outcome to record for a standalone/isolated genuinely-meta entry is:
+...then the entry is **genuinely meta**, whatever VMC or DSC members it carries
+(`vmc_prev_*`, an Identification∧Correction pair at any staffing, DSC_PREVENTION
+at any staffing): none of those has a FAIR-node target of its own. Slice 2
+(#439) SHIPPED the κ reliability coupling (`KAPPA_META_RELIABILITY`,
+`fair_cam/models/composition_topology.py`): the entry's meta members contribute
+to `E_meta` — one `vmc_prev_*` member, one Identification member plus
+Implementation, or one DSC member is enough (§2.4, §2.6, §2.7; register
+C6/C7/C8) — which uplifts the reliability of every LEC assignment present in the
+run, including the entry's own, via `r_eff = r0 + (1-r0)·κ·E_meta`. It no longer
+produces a standalone dollar value the way the pre-Slice-2 direct
+vulnerability/magnitude multiplier did (the old "v(S) ≈ $1k" DSC_PREVENTION
+figure no longer applies). This means the entry is NOT necessarily a permanent
+$0: in a scenario alongside LEC controls with r0 < 1 headroom, its attributed
+value (Shapley/LOO) is > $0. In isolation, or alongside only r0 = 1
+(already-perfect) LEC controls, it correctly shows $0 — that is the engine's
+real behavior, not a gap awaiting future coupling math. The authoritative
+residual predicate is the engine-based `entry_scores` (Task 4), which composes
+the entry alone at κ = 0 and so returns False for every meta-only set; this
+prose list is illustrative. The correct outcome to record for a
+standalone/isolated genuinely-meta entry is:
 
 > "This product's value is genuinely meta. Its FAIR-CAM node targets were
 > retired by Slice 2 (#439); it credits only through the κ reliability
-> coupling onto co-present LEC controls, so it shows $0 in isolation by
-> design — not a scoring gap."
+> coupling onto the LEC assignments present in a run, so it shows $0 in
+> isolation by design — not a scoring gap."
 
 This is a first-class outcome — not a failure state. **Never graft a scoring
 sub-function onto a genuinely-meta control to rescue it from $0.**
@@ -516,7 +551,8 @@ sub-function onto a genuinely-meta control to rescue it from $0.**
 Every meta path — the Variance Prevention OR group, the Identification∧Correction
 pair and DSC Prevention — contributes to `E_meta` and to nothing else (§2.4,
 §2.7; register C7), so the pressure it invites is not a standalone v(S) but an
-`E_meta` uplift of co-present LEC controls in a run. Each may only be assigned
+`E_meta` uplift of the LEC assignments present in a run (including the entry's
+own). Each may only be assigned
 where the product **genuinely** performs the behavior:
 
 - `vmc_prev_*` (OR, PERCENT_REDUCTION): only where the product demonstrably
@@ -605,7 +641,9 @@ sections, MITRE ATT&CK Cloud Matrix, and NIST SP 800-53 CA/CM control families:
 
 5. **Provides a continuous posture report feeding analyst decisions** (compliance
    dashboard, risk prioritization feeds, executive posture score).
-   → Behavior: improves decision quality. Channel: **DSC** (curation-policy label-only for this entry — CSPM assigns only 1 of 9 DSC_PREVENTION members; partial = $0).
+   → Behavior: improves decision quality. Channel: **DSC** (`dsc_prev_sa_analysis`;
+   not label-only — as CSPM's only DSC member it sets `E_dsc` at its own opeff,
+   §2.7, so it is part of CSPM's `E_meta` in a run; it is not a standalone scorer).
 
 ### 7.2 Channel mapping
 
@@ -613,9 +651,9 @@ sections, MITRE ATT&CK Cloud Matrix, and NIST SP 800-53 CA/CM control families:
 |---|---|---|---|
 | Removes public asset exposure (avoidance-dominant) | `lec_prev_avoidance` | lec_prevention (OR, direct) | **Yes** |
 | Enforces encryption / hardening / patching | `lec_prev_resistance` | lec_prevention (OR, direct) | **Yes** |
-| Monitors other controls' configuration drift | `vmc_id_control_monitoring` | vmc_identification (AND, meta) | No |
-| Auto-remediates detected control drift | `vmc_corr_implementation` | vmc_correction (AND, meta) | No |
-| Posture reporting → analyst situational awareness | `dsc_prev_sa_analysis` | dsc_prevention (AND, curation-policy label-only for this entry) | No (partial DSC: 1 of 9 members; $0) |
+| Monitors other controls' configuration drift | `vmc_id_control_monitoring` | vmc_identification (OR, meta) | No (κ path only) |
+| Auto-remediates detected control drift | `vmc_corr_implementation` | vmc_correction (AND, Implementation-gated, meta) | No (κ path only) |
+| Posture reporting → analyst situational awareness | `dsc_prev_sa_analysis` | dsc_prevention (max of present members, meta; not label-only) | No (κ path only) |
 
 ### 7.3 Why avoidance is dominant
 
@@ -625,13 +663,19 @@ issues. Avoidance (removing contact) is the primary CSPM value; resistance (redu
 exploit probability after contact) is secondary. The avoidance assignment therefore
 carries the higher capability value.
 
-### 7.4 Why the VMC pair does not score for CSPM
+### 7.4 Why CSPM's VMC and DSC members do not score standalone
 
-CSPM at the standard single-product deployment provides **1 Identification +
-1 Correction** member. The VMC pair requires ≥2 id + ≥2 corr members (both groups
-fully staffed) to score via the pair channel. A 1+1 partial pair composes to $0
-(verified empirically). **CSPM scores via `lec_prev_avoidance` and
-`lec_prev_resistance` only** — not via the VMC pair.
+CSPM's meta set is **1 Identification + Implementation + 1 DSC member**. None of
+it scores standalone: the meta groups have no FAIR-node target (Slice 2 #439) and
+`entry_scores` composes the entry alone at κ = 0 (§2.9). **CSPM scores standalone
+via `lec_prev_avoidance` and `lec_prev_resistance` only.** The reason is the
+retired targets and κ = 0, not a partial-pair collapse: in a run the same meta
+set composes to `E_meta = OR(0.512 × 0.32, 0.512) = 0.59195` at the 0.8 defaults
+(engine-reproduced; §2.6, §2.7), which uplifts the reliability of every LEC
+assignment present — CSPM's own avoidance and resistance included — via
+`r_eff = r0 + (1−r0)·κ·E_meta`. The pair alone composes to 0.16384, not 0
+(§2.6), so the DSC member is not label-only and the old "1+1 = $0" reading is
+retired.
 
 ### 7.5 I1 discriminator application
 
