@@ -114,3 +114,7 @@ scripts/lint_specs.py
 # Keep local copies; new worktrees need them copied from the main checkout.
 CLAUDE.md
 docs/superpowers/
+
+# Curation checker run folders: model doubts about the library stay local until a
+# curator has dispositioned them (then the run is committed under docs/curation/).
+curation-runs/

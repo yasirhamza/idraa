@@ -27,6 +27,7 @@ DENY_PREFIXES: tuple[str, ...] = (
     ".memsearch/",
     ".design-sync/",
     "docs/memory/",  # committed agent memory is never appropriate
+    "curation-runs/",  # curation checker run folders stay local until dispositioned
 )
 
 # Filename globs that must never be tracked (anywhere in the tree).
@@ -74,6 +75,26 @@ ALLOW: frozenset[str] = frozenset(
     }
 )
 
+# Curation reports are committed as exactly these files; anything else under docs/curation/
+# (for example an intake file, which may hold licensed text) is refused.
+CURATION_DOCS_PREFIX = "docs/curation/"
+CURATION_DOCS_ALLOWED = frozenset({"report.md", "run.json", "responses.jsonl"})
+
+
+def find_offenders(tracked: list[str]) -> list[str]:
+    offenders: list[str] = []
+    for path in tracked:
+        if path in ALLOW:
+            continue
+        basename = path.rsplit("/", 1)[-1]
+        if (
+            any(path.startswith(prefix) for prefix in DENY_PREFIXES)
+            or (path.startswith(CURATION_DOCS_PREFIX) and basename not in CURATION_DOCS_ALLOWED)
+            or any(fnmatch.fnmatch(basename, pattern) for pattern in DENY_GLOBS)
+        ):
+            offenders.append(path)
+    return offenders
+
 
 def main() -> int:
     tracked = subprocess.run(
@@ -83,16 +104,7 @@ def main() -> int:
         check=True,
     ).stdout.splitlines()
 
-    offenders: list[str] = []
-    for path in tracked:
-        if path in ALLOW:
-            continue
-        if any(path.startswith(prefix) for prefix in DENY_PREFIXES):
-            offenders.append(path)
-            continue
-        basename = path.rsplit("/", 1)[-1]
-        if any(fnmatch.fnmatch(basename, pattern) for pattern in DENY_GLOBS):
-            offenders.append(path)
+    offenders = find_offenders(tracked)
 
     if offenders:
         print("Denylisted path(s) are tracked — these must never be committed:")

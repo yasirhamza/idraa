@@ -77,6 +77,12 @@ dev = [
   "pytest-xdist>=3.6",
 ]
 
+curation = [
+  # Dev-only curation checker judge (scripts/curation_check). Pinned. Outside
+  # sca_gate like `dev`; covered by Dependabot + dependency-review (docs/supply-chain.md).
+  "typesafe-sdk==0.7.2",
+]
+
 [project.scripts]
 idraa = "idraa.tasks.__main__:main"
 
@@ -138,6 +144,10 @@ ignore = [
 "scripts/*.py" = [
   "N999",  # script filenames use kebab-case by convention (not importable as modules)
   "S607",  # scripts invoke trusted external CLIs (gh, git) via partial path; not user-controlled
+]
+"scripts/curation_check/__main__.py" = [
+  "S603",  # git subprocess with a fixed argv plus a repo path; never a shell
+  "S607",  # runs `git` by partial path for provenance and ignore checks; not user-controlled
 ]
 
 [tool.ruff.format]
@@ -353,4 +363,10 @@ ignore_missing_imports = true
 # used by the harness) DOES ship stubs, so it needs no override.
 [[tool.mypy.overrides]]
 module = ["schemathesis.*"]
+ignore_missing_imports = true
+
+# Optional `curation` extra (dev-only scripts/curation_check). The default
+# `--extra dev` sync does not install it, so mypy must not require it.
+[[tool.mypy.overrides]]
+module = ["typesafe_sdk.*", "httpx2.*"]
 ignore_missing_imports = true
