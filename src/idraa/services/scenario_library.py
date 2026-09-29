@@ -515,7 +515,10 @@ class ScenarioLibraryService:
         Raises:
             LibraryOverrideAlreadyExistsError: if an active (non-tombstoned)
                 override already exists for this (org, entry) pair.
-            LibraryEntryNotFoundError: if the library entry does not exist.
+            LibraryEntryNotFoundError: if the library entry does not exist,
+                or is not published (Epic F: deprecated/draft entries are not
+                offered for new overrides — same 404-no-oracle shape as
+                "doesn't exist", so a caller can't distinguish the two).
         """
         existing = await self.repo.get_override(organization_id, entry_id)
         if existing is not None:
@@ -526,6 +529,8 @@ class ScenarioLibraryService:
 
         entry = await self._get_entry_by_id(entry_id)
         if entry is None:
+            raise LibraryEntryNotFoundError(f"library entry {entry_id} not found")
+        if entry.status != "published":
             raise LibraryEntryNotFoundError(f"library entry {entry_id} not found")
 
         # #333: gate override writes through validate_fair_distributions —

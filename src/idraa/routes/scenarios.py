@@ -2735,12 +2735,22 @@ _FIELDSET_LABELS = {
 def _step3_flash_message(exc: Exception) -> str:
     """Format a step-3 parse failure into a banner-friendly message.
 
-    Pydantic ``ValidationError`` errors carry ``loc`` and ``msg`` per
-    issue; we lift the first few into a single line so the analyst gets
-    an actionable hint without paging through a stack trace. KeyError /
-    ValueError fall back to a generic "Please review your inputs" line
-    (these only arise from hand-crafted POSTs in practice).
+    ``LibraryEntryStatusError`` (Epic F) always maps to one constant
+    "no longer offered" line — never the exception text. Pydantic
+    ``ValidationError`` errors carry ``loc`` and ``msg`` per issue; we lift
+    the first few into a single line so the analyst gets an actionable
+    hint without paging through a stack trace. KeyError / ValueError fall
+    back to a generic "Please review your inputs" line (these only arise
+    from hand-crafted POSTs in practice).
     """
+    if isinstance(exc, LibraryEntryStatusError):
+        # Epic F TOCTOU guard (services/scenarios.py create_from_wizard):
+        # the library entry pinned at step-1 was deprecated before finalize.
+        # Constant string; never str(exc) (would embed the status/version).
+        return (
+            "The library entry this draft was started from is no longer "
+            "offered; cancel and start from a current entry."
+        )
     if isinstance(exc, PydanticValidationError):
         parts: list[str] = []
         for err in exc.errors()[:3]:  # cap at 3 to keep the flash banner short

@@ -19,7 +19,7 @@
       <tbody>
         {% for o in overrides %}
         <tr>
-          <td><a href="/library/entries/{{ o.library_entry_id }}" class="link">{{ o.library_entry_id }}</a></td>
+          <td><a href="/library/entries/{{ o.library_entry_id }}?version={{ o.library_entry_version }}" class="link">{{ o.library_entry_id }}</a></td>
           <td class="font-mono">v{{ o.version }}</td>
           <td class="text-sm">{{ o.reason[:80] }}{% if o.reason|length > 80 %}...{% endif %}</td>
           <td class="text-sm">{{ o.updated_at | format_date }}</td>

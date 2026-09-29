@@ -3,7 +3,8 @@
   kind="risk":    low/moderate/high/critical
   kind="run":     queued/running/completed/failed/cancelled
   kind="control": active/maintenance/inactive
-  kind="entity":  draft/active/deprecated/deleted (EntityStatus)
+  kind="entity":  draft/active/deprecated/deleted (EntityStatus); also
+                  "published" for library-entry status (ScenarioLibraryEntry).
   Dot + text — never colour alone (a11y).
 #}
 {% set _map_risk = {
@@ -27,12 +28,14 @@
 } %}
 {# EntityStatus lifecycle (draft/active/deprecated/deleted) — distinct from the
    control operational map, which lacks the draft/deprecated/deleted keys and
-   so dropped them to neutral grey (issue #265). #}
+   so dropped them to neutral grey (issue #265). Also carries "published" for
+   ScenarioLibraryEntry status (library entry detail page, Epic F). #}
 {% set _map_entity = {
   'draft':      ('status-info',     '●'),
   'active':     ('status-success',  '●'),
   'deprecated': ('status-warning',  '●'),
   'deleted':    ('status-critical', '○'),
+  'published':  ('status-success',  '●'),
 } %}
 
 {% macro status_pill(value, kind) -%}
