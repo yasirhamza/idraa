@@ -9,6 +9,7 @@ to git (S2-1).
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import uuid
@@ -17,8 +18,10 @@ from types import ModuleType
 from typing import cast
 
 import sqlalchemy as sa
+from alembic.config import Config
 from pytest_alembic import MigrationContext
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import idraa
 from idraa.schemas.control_library import ControlLibraryAssignmentSeed, ControlLibraryEntrySeed
@@ -66,19 +69,40 @@ _EPIC_F_ADDED_CIS_TAGS: dict[str, tuple[str, ...]] = {
 _DRIFT_SLUG = "security-conscious-personnel"
 _DRIFT_DROPPED_CIS_TAG = "14.2"
 
-_PARENT_COLUMNS_EXCLUDING_TAGS_VERSION_ID_TIMESTAMPS: tuple[str, ...] = (
-    "slug",
-    "name",
-    "description",
-    "control_type",
-    "reference_annual_cost",
-    "compliance_mappings",
-    "applicable_industries",
-    "applicable_org_sizes",
-    "tags",
-    "source_citations",
-    "status",
-    "row_version",
+# N-1 (methodology NICE): a second, prod-observed drift shape on a DIFFERENT tag
+# column (nist_csf_subcategories, not cis_safeguards) and a different slug -- EDR
+# is missing RS.MI-2 on a real prod-shaped DB (Task 7 review I-1 probe).
+_NIST_DRIFT_SLUG = "endpoint-detection-response"
+_NIST_DRIFT_DROPPED_TAG = "RS.MI-2"
+
+# Spec NICE: the (c) snapshot compares every parent column EXCEPT these -- derived
+# by exclusion from the actual row dict below, not a hardcoded inclusion list, so a
+# future new column is covered automatically instead of silently skipped.
+_EXCLUDED_PARENT_COLUMNS: frozenset[str] = frozenset(
+    {
+        "id",
+        "version",
+        "created_at",
+        "updated_at",
+        "nist_csf_subcategories",
+        "cis_safeguards",
+        "iso_27001_controls",
+    }
+)
+
+# Spec IMPORTANT: captured via `git show 8ccac47e:data/seed_control_library_entries.json`
+# (the merge-base before Task 6's citation edit) -- a literal, not a git call in this
+# test (S2-1). Used to dirty SAT's Communication citation back to its PRE-Epic-F text
+# so the post-upgrade "non-scoring label is gone" assertion is not vacuous.
+_SAT_PRE_EPIC_F_COMMUNICATION_CITATION = (
+    "Mechanism (DSC, non-scoring): Security-awareness training communicates expected "
+    "secure behaviors and threat recognition to the workforce, improving human decision "
+    "quality. FAIR-CAM home = Decision Support Control (situational-awareness "
+    "communication). Primary source: CIS Controls v8 Safeguards 14.1/14.2; NIST CSF "
+    "PR.AT-1/PR.AT-2; cross-referenced MITRE ATT&CK M1017 (User Training), "
+    "https://attack.mitre.org/mitigations/M1017/ (accessed 2026-06-30). Value 0.7 expert "
+    "estimate — no population efficacy figure; awareness is decision-support, "
+    "deliberately NOT modeled as a vulnerability-reducing LEC scorer."
 )
 
 
@@ -262,6 +286,20 @@ def _dirty_epic_f_slugs(
             assert len(pre_assignments) == len(seed.assignments) - 1, (
                 f"{slug}: dropped sub_function {dropped!r} not found in seed assignments"
             )
+            if slug == "security-awareness-training":
+                # Spec IMPORTANT: also roll the Communication citation back to its
+                # pre-Epic-F text (the stale "(DSC, non-scoring)" label) -- the JSON's
+                # assignment minus the Epic F member alone still carries the CURRENT
+                # (already-fixed) citation, which would make the post-upgrade
+                # "label is gone" assertion vacuous.
+                pre_assignments = [
+                    a.model_copy(
+                        update={"capability_citations": [_SAT_PRE_EPIC_F_COMMUNICATION_CITATION]}
+                    )
+                    if a.sub_function.value == "dsc_prev_communication"
+                    else a
+                    for a in pre_assignments
+                ]
             conn.execute(
                 sa.text(
                     "DELETE FROM control_library_entry_assignments "
@@ -285,24 +323,34 @@ def _dirty_epic_f_slugs(
     return before
 
 
-def _dirty_t2_drift_entry(
-    engine: Engine, validated: dict[str, ControlLibraryEntrySeed]
+_TAG_COLUMNS: tuple[str, ...] = ("nist_csf_subcategories", "cis_safeguards", "iso_27001_controls")
+
+
+def _dirty_tag_drift(
+    engine: Engine,
+    validated: dict[str, ControlLibraryEntrySeed],
+    slug: str,
+    column: str,
+    dropped: str,
 ) -> tuple[str, int]:
-    """Reproduce the pre-existing #437 tranche-2 drift on an UNTOUCHED entry
-    (security-conscious-personnel): drop "14.2" from its stored cis_safeguards, which
-    the JSON still carries. Returns (id, version) (version is unchanged by dirtying)."""
-    entry_id, version = _latest_version(engine, _DRIFT_SLUG)
-    seed = validated[_DRIFT_SLUG]
-    assert _DRIFT_DROPPED_CIS_TAG in seed.cis_safeguards
-    drifted_cis = [t for t in seed.cis_safeguards if t != _DRIFT_DROPPED_CIS_TAG]
-    assert len(drifted_cis) == len(seed.cis_safeguards) - 1
+    """Drop `dropped` from `slug`'s stored `column` (one of the three framework-tag
+    columns), reproducing a pre-existing pilot/T1/T2 grounding-tag drift the JSON
+    still carries (migration docstring, effect 2). Returns (id, version) -- version is
+    unchanged by dirtying, since this repair never bumps."""
+    assert column in _TAG_COLUMNS, column
+    entry_id, version = _latest_version(engine, slug)
+    seed = validated[slug]
+    current = list(getattr(seed, column))
+    assert dropped in current, f"{slug}.{column}: {dropped!r} not in the current seed value"
+    drifted = [t for t in current if t != dropped]
+    assert len(drifted) == len(current) - 1
     with engine.begin() as conn:
         conn.execute(
             sa.text(
-                "UPDATE control_library_entries SET cis_safeguards = :cis "
-                "WHERE id = :eid AND version = :v"
+                f"UPDATE control_library_entries SET {column} = :v "  # noqa: S608 - column is asserted against the fixed _TAG_COLUMNS allowlist above, never externally supplied
+                "WHERE id = :eid AND version = :ver"
             ),
-            {"cis": json.dumps(drifted_cis), "eid": entry_id, "v": version},
+            {"v": json.dumps(drifted), "eid": entry_id, "ver": version},
         )
     return entry_id, version
 
@@ -320,7 +368,23 @@ def test_dirty_then_upgrade_bumps_and_reinserts_epic_f_assignments(
     alembic_runner.migrate_up_to(PRE)
     validated = _validated_seed()
     before = _dirty_epic_f_slugs(alembic_engine, validated)
-    _dirty_t2_drift_entry(alembic_engine, validated)
+    _dirty_tag_drift(
+        alembic_engine, validated, _DRIFT_SLUG, "cis_safeguards", _DRIFT_DROPPED_CIS_TAG
+    )
+
+    # Spec IMPORTANT: prove the dirtied PRE-state actually carries the stale
+    # "(DSC, non-scoring)" label -- otherwise the post-upgrade "label is gone"
+    # assertion below would be vacuous (it would pass even if the migration never
+    # touched the citation).
+    sat_old_id, sat_old_version = before["security-awareness-training"]
+    pre_sat_rows = {
+        r[1]: _assignment_row_to_comparable(r)
+        for r in _assignment_rows(alembic_engine, sat_old_id, sat_old_version)
+    }
+    pre_comm_citations = cast("tuple[str, ...]", pre_sat_rows["dsc_prev_communication"][5])
+    assert any("non-scoring" in c for c in pre_comm_citations), (
+        "dirtying must plant the stale (DSC, non-scoring) label before the upgrade"
+    )
 
     alembic_runner.migrate_up_to(REV)
 
@@ -346,21 +410,22 @@ def test_dirty_then_upgrade_bumps_and_reinserts_epic_f_assignments(
         for sf, want_tuple in want.items():
             assert got[sf] == want_tuple, f"{slug}/{sf}: assignment values diverge from JSON"
 
-        # All (re-)inserted ids are 32-char no-hyphen hex.
+        # All (re-)inserted ids are 32 lowercase hex chars (uuid4().hex form).
         for row in _assignment_rows(alembic_engine, new_id, new_version):
             rid = str(row[0])
-            assert len(rid) == 32 and "-" not in rid, f"{slug}: bad id format {rid!r}"
+            assert rid == uuid.UUID(hex=rid).hex, f"{slug}: not 32 lowercase hex chars: {rid!r}"
 
-    # SAT's Communication citation no longer carries the stale "non-scoring" label.
+    # SAT's Communication citation no longer carries the stale "non-scoring" label
+    # (the pre-upgrade presence check above proves this assertion is not vacuous).
     sat_id, sat_version = _latest_version(alembic_engine, "security-awareness-training")
-    sat_rows = {
+    post_sat_rows = {
         r[1]: _assignment_row_to_comparable(r)
         for r in _assignment_rows(alembic_engine, sat_id, sat_version)
     }
-    comm_citations = cast(
-        "tuple[str, ...]", sat_rows["dsc_prev_communication"][5]
+    post_comm_citations = cast(
+        "tuple[str, ...]", post_sat_rows["dsc_prev_communication"][5]
     )  # capability_citations tuple
-    assert not any("non-scoring" in c for c in comm_citations)
+    assert not any("non-scoring" in c for c in post_comm_citations)
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +443,9 @@ def test_dirty_then_upgrade_syncs_all_parent_tags_and_repairs_t2_drift(
     alembic_runner.migrate_up_to(PRE)
     validated = _validated_seed()
     epic_f_before = _dirty_epic_f_slugs(alembic_engine, validated)
-    drift_id, drift_version = _dirty_t2_drift_entry(alembic_engine, validated)
+    drift_id, drift_version = _dirty_tag_drift(
+        alembic_engine, validated, _DRIFT_SLUG, "cis_safeguards", _DRIFT_DROPPED_CIS_TAG
+    )
 
     # Snapshot every OTHER slug's version, and the five slugs' non-tag columns, before
     # the upgrade (post-dirty).
@@ -388,7 +455,7 @@ def test_dirty_then_upgrade_syncs_all_parent_tags_and_repairs_t2_drift(
         slug: {
             k: v
             for k, v in _parent_row_dict(alembic_engine, *epic_f_before[slug]).items()
-            if k in _PARENT_COLUMNS_EXCLUDING_TAGS_VERSION_ID_TIMESTAMPS
+            if k not in _EXCLUDED_PARENT_COLUMNS
         }
         for slug in EPIC_F_SLUGS
     }
@@ -423,6 +490,41 @@ def test_dirty_then_upgrade_syncs_all_parent_tags_and_repairs_t2_drift(
                 f"{slug}.{column}: changed by the re-curation bump (id {old_id}, "
                 f"{old_version}->{new_version})"
             )
+
+
+# ---------------------------------------------------------------------------
+# N-1 (methodology NICE): a second, prod-observed drift shape -- a NIST-column drift
+# on a slug outside EPIC_F_SLUGS -- is synced with no version bump.
+# ---------------------------------------------------------------------------
+
+
+def test_dirty_then_upgrade_repairs_nist_drift_without_bump(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+) -> None:
+    """Pins the prod-observed case directly (Task 7 review I-1 probe): EDR's stored
+    nist_csf_subcategories is missing RS.MI-2 (a T2-era grounding-tag addition the
+    prior re-curation migrations never synced to the stored column). The migration
+    must repair it in place and must NOT bump EDR's version -- EDR is explicitly not
+    one of the five re-curated slugs."""
+    alembic_runner.migrate_up_to(PRE)
+    validated = _validated_seed()
+    entry_id, version = _dirty_tag_drift(
+        alembic_engine,
+        validated,
+        _NIST_DRIFT_SLUG,
+        "nist_csf_subcategories",
+        _NIST_DRIFT_DROPPED_TAG,
+    )
+
+    alembic_runner.migrate_up_to(REV)
+
+    new_id, new_version = _latest_version(alembic_engine, _NIST_DRIFT_SLUG)
+    assert new_id == entry_id, "NIST-drift repair must not move the parent row"
+    assert new_version == version, f"{_NIST_DRIFT_SLUG}: tag-only repair must not bump version"
+    nist, _cis, _iso = _parent_tags(alembic_engine, new_id, new_version)
+    assert nist == validated[_NIST_DRIFT_SLUG].nist_csf_subcategories
+    assert _NIST_DRIFT_DROPPED_TAG in nist
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +590,9 @@ def test_downgrade_is_a_documented_noop(
     alembic_runner.migrate_up_to(PRE)
     validated = _validated_seed()
     _dirty_epic_f_slugs(alembic_engine, validated)
-    _dirty_t2_drift_entry(alembic_engine, validated)
+    _dirty_tag_drift(
+        alembic_engine, validated, _DRIFT_SLUG, "cis_safeguards", _DRIFT_DROPPED_CIS_TAG
+    )
     alembic_runner.migrate_up_to(REV)
 
     entries_before, assignments_before = _dump_all_rows(alembic_engine)
@@ -498,3 +602,130 @@ def test_downgrade_is_a_documented_noop(
     entries_after, assignments_after = _dump_all_rows(alembic_engine)
     assert entries_after == entries_before
     assert assignments_after == assignments_before
+
+
+# ---------------------------------------------------------------------------
+# N-2 (methodology NICE): an adopted org control pinned to a bumped Epic F entry
+# keeps its own stored values (and function assignments) byte-identical across the
+# upgrade, and is resync-stale afterwards (the #438 consequence the docstring
+# documents). Uses the REAL adopt_from_library / resync_info service calls (not a
+# hand-rolled insert) via a short-lived AsyncSession bound to the SAME sqlite file
+# the sync alembic_engine reads -- alembic's own migration runner already drives an
+# async engine through asyncio.run() per step (alembic/env.py), so these helpers
+# spin up their OWN separate asyncio.run() call rather than making the test function
+# itself async (which would nest event loops under pytest-asyncio's auto mode and
+# collide with alembic_runner.migrate_up_to's asyncio.run()).
+# ---------------------------------------------------------------------------
+
+
+def _row_dict(engine: Engine, table: str, id_hex: str) -> dict[str, object]:
+    """Raw-SQL whole-row fetch by id. `table` is always one of the fixed literals this
+    test module passes, never externally supplied."""
+    with engine.connect() as conn:
+        row = (
+            conn.execute(
+                sa.text(f"SELECT * FROM {table} WHERE id = :id"),  # noqa: S608 - table is a fixed literal, see docstring
+                {"id": id_hex},
+            )
+            .mappings()
+            .first()
+        )
+    assert row is not None, f"{table}: no row with id={id_hex}"
+    return dict(row)
+
+
+def _control_function_assignment_rows(engine: Engine, control_id: str) -> list[tuple[object, ...]]:
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.text(
+                "SELECT * FROM control_function_assignments WHERE control_id = :cid "
+                "ORDER BY sub_function"
+            ),
+            {"cid": control_id},
+        ).fetchall()
+    return [tuple(r) for r in rows]
+
+
+async def _adopt_control_for_probe(async_url: str, entry_id_hex: str, version: int) -> str:
+    """Adopt `entry_id_hex`@`version` via the REAL adopt_from_library service call (not
+    a hand-rolled insert), so the probe exercises production behaviour. A fresh
+    Organization satisfies the RESTRICT FK; Task 7 never touches organizations or
+    controls, so this is otherwise isolated from the migration under test. Returns the
+    new Control's id (hex)."""
+    from idraa.db import _install_sqlite_pragmas, strict_json_dumps
+    from idraa.models.enums import IndustryType, OrganizationSize
+    from idraa.models.organization import Organization
+    from idraa.services.controls import adopt_from_library
+
+    engine = create_async_engine(async_url, json_serializer=strict_json_dumps)
+    _install_sqlite_pragmas(engine)
+    try:
+        sm = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with sm() as db:
+            org = Organization(
+                name="Epic F N-2 probe org",
+                industry_type=IndustryType.INFORMATION,
+                organization_size=OrganizationSize.MEDIUM,
+            )
+            db.add(org)
+            await db.flush()
+            control = await adopt_from_library(
+                db,
+                org_id=org.id,
+                user_id=None,
+                entry_id=uuid.UUID(hex=entry_id_hex),
+                version=version,
+            )
+            await db.commit()
+            return control.id.hex
+    finally:
+        await engine.dispose()
+
+
+async def _resync_stale_for_control(async_url: str, control_id_hex: str) -> bool:
+    """resync_info(...).stale for the adopted control, via the REAL service call."""
+    from idraa.db import _install_sqlite_pragmas, strict_json_dumps
+    from idraa.models.control import Control
+    from idraa.services.control_resync import resync_info
+
+    engine = create_async_engine(async_url, json_serializer=strict_json_dumps)
+    _install_sqlite_pragmas(engine)
+    try:
+        sm = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with sm() as db:
+            control = await db.get(Control, uuid.UUID(hex=control_id_hex))
+            assert control is not None
+            info = await resync_info(db, control)
+            assert info is not None
+            return info.stale
+    finally:
+        await engine.dispose()
+
+
+def test_adopted_control_survives_upgrade_unchanged_and_goes_resync_stale(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    alembic_config: Config,
+) -> None:
+    alembic_runner.migrate_up_to(PRE)
+    entry_id, pre_version = _latest_version(alembic_engine, "security-information-event-management")
+    async_url = alembic_config.get_main_option("sqlalchemy.url")
+    assert async_url is not None
+
+    control_id = asyncio.run(_adopt_control_for_probe(async_url, entry_id, pre_version))
+    controls_before = _row_dict(alembic_engine, "controls", control_id)
+    assignments_before = _control_function_assignment_rows(alembic_engine, control_id)
+
+    # Sanity control: not yet stale (pinned version == entry's current version).
+    assert asyncio.run(_resync_stale_for_control(async_url, control_id)) is False
+
+    alembic_runner.migrate_up_to(REV)
+
+    controls_after = _row_dict(alembic_engine, "controls", control_id)
+    assignments_after = _control_function_assignment_rows(alembic_engine, control_id)
+    assert controls_after == controls_before, "controls row mutated by the library migration"
+    assert assignments_after == assignments_before, (
+        "control_function_assignments mutated by the library migration"
+    )
+
+    assert asyncio.run(_resync_stale_for_control(async_url, control_id)) is True

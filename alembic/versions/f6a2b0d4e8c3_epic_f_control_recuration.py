@@ -28,19 +28,27 @@ Two independent effects, both driven by ``data/seed_control_library_entries.json
    In the SAME loop as the bump, this migration also UPDATEs each of these five
    parents' three framework-tag columns (``nist_csf_subcategories``,
    ``cis_safeguards``, ``iso_27001_controls``) to the current JSON (the
-   ``d4f6a2b9c8e1`` serialiser, ``json.dumps(seed.<field>)``) -- SIEM and SSPM gain
-   CIS 8.2/8.10 and 8.12 respectively; FIM/SRA/SAT tags are unchanged by Epic F.
+   ``d4f6a2b9c8e1`` serialiser, ``json.dumps(seed.<field>)``) -- SIEM gains CIS
+   8.2/8.10, SSPM gains CIS 8.12 for Epic F AND (on a prod-shaped DB) also converges
+   CIS 3.3, a T1 (``d4fc657eb424``) grounding-tag addition that never reached SSPM's
+   stored row (see effect 2); FIM/SRA/SAT tags are otherwise unchanged by Epic F.
 
 2. **Parent-tag convergence for every OTHER seed entry, IN PLACE, NO version bump.**
    For every seed entry not in ``_EPIC_F_SLUGS``, this migration compares the
    latest-version row's three tag columns against the current JSON and UPDATEs them
-   in place where they differ. This repairs the pre-existing #437 tranche-2 drift:
-   the REVIEWED crosswalk-seed extensions landed in ``c7e2a9b4f1d6`` (CIS 4.8 ->
-   avoidance, CIS 14.2 -> resistance, CIS 16.1 -> resistance) were never propagated
-   into the tranche-2 entries' own parent-tag columns by any re-curation migration
-   (commit ``4348859c``), so e.g. ``security-conscious-personnel`` can be missing
-   CIS 14.2 on its stored row despite carrying it in the seed. Framework tags are
-   NOT a scoring input (the FAIR-CAM engine reads only ``control_library_entry_
+   in place where they differ. This repairs pre-existing drift: the pilot
+   (``a7c3f9b21e60``), T1 (``d4fc657eb424``) and T2 (``b8d3f6a1c4e7``) re-curations
+   all added GROUNDING TAGS to the JSON (their own docstrings say so, e.g. "grounded
+   by ... RS.MI-2", "PR.AC-5 + CIS 3.3") without ever syncing the stored parent-tag
+   columns -- no re-curation migration before this one wrote to
+   ``nist_csf_subcategories`` / ``cis_safeguards`` / ``iso_27001_controls`` at all.
+   On a prod-shaped DB this adds tags to ~10 entries besides the five bumped ones
+   (e.g. NIST RS.MI-2 on endpoint-detection-response / network-detection-response /
+   host-intrusion-detection-prevention / ddos-protection; CIS 3.3 on
+   cloud-security-posture-management / hardened-cloud / hardened-saas-application /
+   security-configuration-assessment; CIS 14.2 on security-conscious-personnel) --
+   Task 7 review I-1. Tags are only ADDED, never removed. Framework tags are NOT a
+   scoring input (the FAIR-CAM engine reads only ``control_library_entry_
    assignments``), so this repair deliberately does NOT bump ``version`` -- a bump
    would mark every control already adopted from an otherwise-unaffected entry
    resync-stale (#438) for a tag-only change that cannot move its score.
@@ -57,7 +65,12 @@ Two independent effects, both driven by ``data/seed_control_library_entries.json
 Downgrade is a documented no-op, following the ``b8d3f6a1c4e7`` precedent: the JSON
 seed is the single source of truth, and pre-curation assignment/tag payloads are
 recoverable from git history only -- restoring them inline would dual-source the
-data and invert that guarantee.
+data and invert that guarantee. Downgrade followed by a re-upgrade is therefore NOT
+a true round trip: the five slugs are bumped a SECOND time (e.g. SIEM v1->v2->v3),
+re-marking their adopted controls resync-stale with identical values -- harmless
+(the assignment set still converges to the same JSON; N-3) but worth knowing before
+downgrading on a live DB. Effect 2 (the tag sync) IS naturally idempotent -- it only
+writes where stored differs from JSON, so re-running it is always safe.
 """
 
 from __future__ import annotations
