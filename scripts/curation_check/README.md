@@ -25,6 +25,7 @@ scripts/curation-check tally                                          # hit rate
 
 **Setup:**
 - macOS, one time, in your own terminal: `security add-generic-password -s idraa-typesafe-key -a typesafe -U -w`.
+- An existing item named `jev-eval-typesafe-key` (from the Jev trial) is also accepted: run with `CURATION_KEYCHAIN_SERVICE=jev-eval-typesafe-key`.
 - Elsewhere (Linux), set `TYPESAFE_API_KEY` for that one command only, typed in your own terminal with a leading
   space (` TYPESAFE_API_KEY=... scripts/curation-check ...`; `HISTCONTROL=ignorespace` then keeps it out of shell
   history, for that one command only); never export it in a shell an agent inherits.

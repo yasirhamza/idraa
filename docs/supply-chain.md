@@ -196,3 +196,8 @@ closed on a mismatch.
   window. They are dev-only and optional: CI and the runtime export never install them. No live run with the
   key may happen before 2026-10-03; on that date re-check PyPI (not yanked, same sha256 digests as `uv.lock`)
   and GitHub advisories for all three (typesafe-sdk, httpx2, httpcore2) before the first run.
+- **2026-09-29, owner override of the remaining cooldown.** The owner waived the rest of the window (to
+  2026-10-03) for the curation pilot. The re-check the exception requires was run the same day: none of
+  typesafe-sdk 0.7.2, httpx2 2.13.1 or httpcore2 2.13.1 is yanked; every sha256 digest in `uv.lock` for them
+  matches PyPI; and no GitHub advisory affects the locked versions (httpx2's five advisories cover versions below
+  2.12.0, and httpcore2's one covers versions below 2.10.0).
