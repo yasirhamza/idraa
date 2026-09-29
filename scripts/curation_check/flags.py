@@ -26,6 +26,9 @@ class CheckResult:
     items: int = 0
     input_tokens: list[int] = field(default_factory=list)
     models: set[str] = field(default_factory=set)
+    subjects: list[str] = field(default_factory=list)  # every job's item_key submitted to this
+    # check (both errored and successfully judged) — lets a view distinguish "judged, zero flags"
+    # from "never judged" without re-deriving it from res.flags/res.errored alone (methodology M1)
 
     @property
     def error_share(self) -> float:

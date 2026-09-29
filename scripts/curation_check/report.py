@@ -70,6 +70,15 @@ def queue_keys(results: dict[str, CheckResult], top: int) -> dict[str, list[str]
     }
 
 
+def _queue_positions(res: CheckResult, top: int) -> dict[str, str]:
+    """flag.key -> its position label in the ranked queue, e.g. '#3' or 'Possibly wrong #2'."""
+    pos: dict[str, str] = {}
+    for sub, queue, _ in queues(res, top):
+        for i, f in enumerate(queue, 1):
+            pos[f.key] = f"{SUB_TITLES[sub]} #{i}" if sub else f"#{i}"
+    return pos
+
+
 def _table(queue: list[Flag]) -> list[str]:
     if not queue:
         return ["_No candidates._"]
@@ -80,34 +89,77 @@ def _table(queue: list[Flag]) -> list[str]:
     ]
 
 
-def _changed_table(res: CheckResult, changed: ChangedSince) -> list[str]:
-    """Every flag of `res` whose key names a changed subject (all scores, not ranked), a 'no flag'
-    row for a changed subject this check ran (it errored, so it produced zero flags) but did not
-    flag, and a 'deprecated — not checked' row per subject deprecated since the merge base. No
-    extra judging: purely a view over `res.flags`/`res.errored` already produced (spec §4.5.2)."""
-    flagged = sorted(
-        (f for f in res.flags if set(f.key.split(":")[1:]) & changed.slugs),
+CHANGED_ENTRIES_CHECKS = tuple(c for c in CHECK_ORDER if c != "gaps")
+# N4: gaps subjects are intake items, never library slugs — `key.split(":")[1:]` for a gaps flag is
+# an intake id, so intersecting it against `changed.slugs` (library slugs) could only ever produce a
+# coincidental id collision, never a real "this gaps row is about a changed entry" signal. gaps is
+# therefore left out of the Changed-entries view entirely rather than rendering a spurious match.
+
+
+def _changed_table(res: CheckResult, changed: ChangedSince, pos: dict[str, str]) -> list[str]:
+    """A view over `res.flags` / `res.errored` / `res.subjects` already produced — no extra judging.
+    Four tiers, in that order:
+    1. live (non-suppressed) flags whose key names a changed subject, ranked-queue score order.
+       A flag that is ALSO in this check's ranked queue (`pos`) carries `see <queue> #n` as its
+       Disposition instead of a blank cell (M3): that ranked row is the one a curator must actually
+       disposition, so this copy is never double-dispositioned or silently left blank while the
+       ranked one is.
+    2. suppressed (deliberately dropped, seed `_meta.claim_drops`) flags on a changed subject,
+       suffixed with the drop reason — never presented as live candidates (M2).
+    3. `errored — not judged` for a changed subject whose judge call failed: distinct from a true
+       zero-flag result (M1) — a reader must never take "the judge answered and found nothing" from
+       a row where the judge never answered at all.
+    4. `no flag` only for a subject this check actually judged (in `res.subjects`, not in
+       `res.errored`) that produced zero flags."""
+    live = sorted(
+        (
+            f
+            for f in res.flags
+            if not f.detail.get("suppressed") and set(f.key.split(":")[1:]) & changed.slugs
+        ),
+        key=lambda f: (-f.score, f.subject),
+    )
+    suppressed = sorted(
+        (
+            f
+            for f in res.flags
+            if f.detail.get("suppressed") and set(f.key.split(":")[1:]) & changed.slugs
+        ),
         key=lambda f: (-f.score, f.subject),
     )
     flagged_subjects = {seg for f in res.flags for seg in f.key.split(":")[1:]}
-    errored_subjects = {seg for key, _ in res.errored for seg in key.split(":")[1:]}
-    no_flag = sorted((errored_subjects & changed.slugs) - flagged_subjects)
-    deprecated = sorted(changed.deprecated)
-    if not flagged and not no_flag and not deprecated:
+    errored_keys = {key for key, _ in res.errored}
+    errored_subjects = {seg for key in errored_keys for seg in key.split(":")[1:]}
+    judged_subjects = {
+        seg for key in res.subjects if key not in errored_keys for seg in key.split(":")[1:]
+    }
+    errored_changed = sorted(errored_subjects & changed.slugs)
+    no_flag = sorted((judged_subjects & changed.slugs) - flagged_subjects)
+    if not live and not suppressed and not errored_changed and not no_flag:
         return ["_No candidates._"]
     rows = ["| # | Score | Subject | Finding | Disposition | Reason |", "|---|---|---|---|---|---|"]
     i = 0
-    for f in flagged:
+    for f in live:
         i += 1
-        rows.append(f"| {i} | {f.score:.2f} | {md_cell(f.subject)} | {md_cell(f.finding)} |  |  |")
+        disposition = f"see {CHECK_TITLES[res.check]} {pos[f.key]}" if f.key in pos else ""
+        rows.append(
+            f"| {i} | {f.score:.2f} | {md_cell(f.subject)} | {md_cell(f.finding)} "
+            f"| {md_cell(disposition)} |  |"
+        )
+    for f in suppressed:
+        i += 1
+        finding = (
+            f"{f.finding} (suppressed: deliberately dropped claim — {f.detail.get('reason', '')})"
+        )
+        rows.append(f"| {i} | {f.score:.2f} | {md_cell(f.subject)} | {md_cell(finding)} |  |  |")
+    for slug in errored_changed:
+        i += 1
+        rows.append(
+            f"| {i} | — | {md_cell(slug)} | errored — not judged (run.json errored_items) |  |  |"
+        )
     for slug in no_flag:
         i += 1
         rows.append(f"| {i} | — | {md_cell(slug)} | no flag |  |  |")
-    for slug in deprecated:
-        i += 1
-        rows.append(
-            f"| {i} | — | {md_cell(slug)} | deprecated — not checked (published-only) |  |  |"
-        )
     return rows
 
 
@@ -189,15 +241,30 @@ def render(
         lines += [
             f"## {CHANGED_ENTRIES_TITLE}",
             "",
-            f"Every entry whose seed record differs from merge base `{changed.merge_base[:10]}`; "
-            "listed in full, not ranked, excluded from tally.",
+            f"Every entry whose seed record differs from merge base `{changed.merge_base[:10]}`. "
+            "Selected by what changed, not by score — it includes rows where the judge agrees. It "
+            "is not a sample of the queues, so do not compute hit rates from it. Its dispositions "
+            "here are optional and never tallied; the ranked queue above is the row that must carry "
+            "the disposition (see its `see <queue> #n` cross-reference where one applies).",
             "",
         ]
-        for check in CHECK_ORDER:
+        for check in CHANGED_ENTRIES_CHECKS:
             if check not in results:
                 continue
+            res = results[check]
+            pos = _queue_positions(res, top)
             lines += [f"### {CHECK_TITLES[check]}", ""]
-            lines += _changed_table(results[check], changed)
+            lines += _changed_table(res, changed, pos)
+            lines.append("")
+        if changed.deprecated:
+            lines += [
+                "### Not checked (not published)",
+                "",
+                "Deprecated (or otherwise not published, as of the working tree) and changed since "
+                "the merge base; never judged, under any check.",
+                "",
+            ]
+            lines += [f"- `{md_cell(slug)}`" for slug in sorted(changed.deprecated)]
             lines.append("")
     if previous is not None:
         now_keys = queue_keys(results, top)
@@ -205,10 +272,7 @@ def render(
         for check in CHECK_ORDER:
             if check not in results or check not in previous:
                 continue
-            pos: dict[str, str] = {}
-            for sub, queue, _ in queues(results[check], top):
-                for i, f in enumerate(queue, 1):
-                    pos[f.key] = f"{SUB_TITLES[sub]} #{i}" if sub else f"#{i}"
+            pos = _queue_positions(results[check], top)
             gone = [k for k in previous[check] if k not in pos]
             still = [f"{k} (now {pos[k]})" for k in previous[check] if k in pos]
             new = [k for k in now_keys[check] if k not in previous[check]]

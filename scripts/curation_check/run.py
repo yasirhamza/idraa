@@ -120,7 +120,7 @@ def build_jobs(
 
 def run_check(check: str, jobs: list[Job], judge: Judge, recorder: Recorder) -> CheckResult:
     """Judge every job; per-item failures are recorded and skipped. JudgeFatalError propagates."""
-    res = CheckResult(check=check, items=len(jobs))
+    res = CheckResult(check=check, items=len(jobs), subjects=[job.item_key for job in jobs])
     for job in jobs:
         qhash = question_hash(job.state, job.questions)
         try:

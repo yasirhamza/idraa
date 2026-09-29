@@ -32,12 +32,20 @@ scripts/curation-check tally                                          # hit rate
 **`--changed-since <git-ref>`:** lists, in full, every published entry whose parsed seed record (or,
 for a control, its `_meta.claim_drops` rows) differs at `git merge-base <ref> HEAD` (not the ref's own
 tip) from the working tree, or is absent at that merge base. The `## Changed entries` section is a view
-over the flags the checks already produced — it never makes extra judge calls. Rows are listed in full,
-not ranked (the ranked queues above it, `run.json`'s `queues` and the `## Before / after` section are
-unaffected), and are excluded from `tally` (a curator dispositioning a changed-entries row does not
-double-count it). An entry deprecated since the merge base gets a "deprecated — not checked
-(published-only)" row instead of being judged. `run.json` records `changed_since: {ref_sha, merge_base,
-subjects}` — resolved commit shas, never the raw ref text.
+over the flags the checks already produced — it never makes extra judge calls, and gaps is left out of
+it (gaps subjects are intake items, never library slugs, so a key match there would only ever be a
+coincidental id collision). Selected by what changed, not by score, so it includes rows where the judge
+agrees; it is not a sample of the queues, and `tally` never counts it. Per check, a row is one of: a
+live flag (if that same flag is also in the ranked queue above, its Disposition cell reads `see <queue>
+#n` instead of being blank — **that ranked row, not this one, is the one to disposition**, so a flag is
+never dispositioned twice or silently left blank in one copy while decided in the other); a suppressed
+(deliberately dropped) flag, suffixed with its drop reason, never presented as a live candidate; an
+`errored — not judged` row for a subject whose judge call failed (never rendered as a plain "no flag" —
+that would misstate a failed call as a clean answer); or a true `no flag` row for a subject that actually
+was judged and produced zero flags. A changed entry that is deprecated (or otherwise not published) as
+of the working tree is listed once, under `### Not checked (not published)`, not per check, and is never
+judged. `run.json` records `changed_since: {ref_sha, merge_base, subjects}` — resolved commit shas, never
+the raw ref text.
 
 **Setup:**
 - macOS, one time, in your own terminal: `security add-generic-password -s idraa-typesafe-key -a typesafe -U -w`.
@@ -57,7 +65,7 @@ The wrapper runs in a clean environment and passes the key on stdin. Proxy, base
 
 ## Dispositions
 
-- In `report.md`, set every row's **Disposition** to `accepted`, `rejected` or `deferred`, with a one-line **Reason**. `## Changed entries` rows take a disposition too, for the record, but `tally` never counts them.
+- In `report.md`, set every row's **Disposition** to `accepted`, `rejected` or `deferred`, with a one-line **Reason**. `## Changed entries` dispositions are optional and never tallied; where a row cross-references a ranked queue (`see <queue> #n`), the ranked row is the one that must carry the disposition.
 - Accepted flags become seed changes through the normal campaign process: research, adversarial verification, methodology gate.
 - When every row is dispositioned, commit `report.md` and `run.json` under `docs/curation/<date>-<campaign>/` with the campaign PR; commit `responses.jsonl` too only if it is 500 KB or smaller — otherwise archive it outside the repo and record its sha256 in the report's provenance line. `scripts/lint_tracked_paths.py` refuses anything else there (a pre-commit hook; CI does not run it).
 - An intake item's id, source and a title of at most 80 characters are published in the report.

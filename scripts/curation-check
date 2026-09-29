@@ -11,6 +11,8 @@
 #     appears in an argument, an environment variable, a file or the terminal.
 #   * Only the tool's own commands and flags are accepted, and the run is refused when the
 #     code that executes with the key has uncommitted changes.
+#   * A --changed-since ref is shape-checked here and then resolved with `git rev-parse` before the
+#     Keychain block, so an unresolvable ref never costs a Keychain read (security N2).
 # Defends against accidental exposure; it does not stop a user or agent who deliberately reads
 # Keychain themselves (see the spec's threat stance).
 #
@@ -73,6 +75,7 @@ case "$cmd" in
 esac
 
 args=()
+changed_since_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --campaign)
@@ -88,7 +91,9 @@ while [[ $# -gt 0 ]]; do
       args+=("$1" "$path"); shift 2 ;;
     --changed-since)
       ref_re='^[A-Za-z0-9._/~^@{}][A-Za-z0-9._/~^@{}-]*$'
-      [[ $# -ge 2 && "$2" =~ $ref_re && "$2" != *..* ]] || { echo "scripts/curation-check: --changed-since needs a git ref (letters, digits and ._/~^@{}-; no leading '-', ':', whitespace or '..')" >&2; exit 2; }
+      # 200-char cap matches library.py's _REF_MAX_LEN (security N3: parity with the Python-side gate).
+      [[ $# -ge 2 && "$2" =~ $ref_re && "$2" != *..* && ${#2} -le 200 ]] || { echo "scripts/curation-check: --changed-since needs a git ref (letters, digits and ._/~^@{}-; no leading '-', ':', whitespace or '..'; at most 200 characters)" >&2; exit 2; }
+      changed_since_ref="$2"
       args+=("$1" "$2"); shift 2 ;;
     --force)
       args+=("$1"); shift ;;
@@ -131,6 +136,17 @@ fi
 if [[ -n "$flags" ]] && /usr/bin/grep -qv '^H ' <<<"$flags"; then  # a here-string: no pipe for pipefail to misread
   echo "scripts/curation-check: guarded files are marked assume-unchanged or skip-worktree (hidden changes); refusing" >&2
   exit 1
+fi
+
+# security N2: a well-formed but unresolvable --changed-since ref would otherwise cost a Keychain
+# read (and possibly a prompt) for a run that Python was always going to refuse. Resolve it here,
+# before the Keychain block, using the same argv-only, DEVNULL-stdin git call shape as the checks
+# above (fd 3, which may hold the key on Linux, is explicitly closed for this call too).
+if [[ -n "$changed_since_ref" ]]; then
+  if ! "${GIT[@]}" rev-parse --verify --quiet --end-of-options "$changed_since_ref^{commit}" >/dev/null 3<&-; then
+    echo "scripts/curation-check: --changed-since ref '$changed_since_ref' does not resolve to a commit; refusing" >&2
+    exit 2
+  fi
 fi
 
 if [[ "$(/usr/bin/uname -s)" == "Darwin" ]]; then

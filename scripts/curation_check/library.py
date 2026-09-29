@@ -130,7 +130,9 @@ def _git_env() -> dict[str, str]:
 
 def _git(root: Path, *args: str) -> str:
     """Run git and return its stdout; raise ValueError on a non-zero exit."""
-    result = subprocess.run(
+    # Fixed argv (never a shell), the executable is the literal "git", and every path element is
+    # either a module constant or the caller-validated `ref`/`base` — S603 is a false positive here.
+    result = subprocess.run(  # noqa: S603
         ["git", "-c", "core.fsmonitor=false", *args],
         cwd=root,
         env=_git_env(),
@@ -148,7 +150,7 @@ def _git(root: Path, *args: str) -> str:
 def _git_rc(root: Path, *args: str) -> int:
     """The non-raising sibling of `_git`: returns the exit code instead of raising on non-zero.
     Lets `OSError` (e.g. the git executable missing) propagate."""
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 (same rationale as `_git` above)
         ["git", "-c", "core.fsmonitor=false", *args],
         cwd=root,
         env=_git_env(),
@@ -165,8 +167,12 @@ def _git_rc(root: Path, *args: str) -> int:
 class ChangedSince:
     ref_sha: str
     merge_base: str
-    slugs: frozenset[str]
-    deprecated: frozenset[str]
+    slugs: frozenset[str]  # published (working-tree status) entries whose record changed
+    deprecated: frozenset[str]  # changed entries whose CURRENT working-tree status is not
+    # "published" (deprecated, or any other non-published status) — never judged, so never
+    # in `slugs` (methodology N2: classified by the new record, not by whether it just
+    # transitioned, so an added-already-deprecated or still-deprecated-but-edited entry also
+    # lands here instead of silently vanishing from the report while still showing in run.json)
 
 
 def _blob_text(root: Path, base: str, rel: Path) -> str | None:
@@ -200,19 +206,19 @@ def _diff_records(
     new_drops: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     """A deleted slug (present at the base, absent now) is silently dropped: it never counts as
-    changed. A slug newly published→deprecated since the base goes to `deprecated`, never `changed`;
-    every other differing slug (added, edited, or edited while already deprecated) goes to `changed`."""
+    changed. Classification is by the CURRENT (working-tree) record's status, not by whether it
+    just transitioned (methodology N2): any changed slug whose new status is not "published" goes
+    to `deprecated`, never `changed` — an added-already-deprecated entry, an edited-while-still-
+    deprecated entry, and a published→deprecated transition are all "not published now", so all
+    three are never judged. A published→published edit (added or content-changed) goes to
+    `changed`."""
     for slug, new_record in new_by_slug.items():
         old_record = old_by_slug.get(slug)
         same_record = old_record == new_record
         same_drops = (old_drops or {}).get(slug, []) == (new_drops or {}).get(slug, [])
         if same_record and same_drops:
             continue
-        if (
-            old_record is not None
-            and old_record.get("status") != "deprecated"
-            and new_record.get("status") == "deprecated"
-        ):
+        if new_record.get("status") != "published":
             deprecated.add(slug)
         else:
             changed.add(slug)

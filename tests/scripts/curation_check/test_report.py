@@ -164,23 +164,93 @@ def test_before_after_numbers_positions_within_control_sub_queues() -> None:  # 
     assert "control-functions:siem:m (now Possibly wrong #1)" in text
 
 
-def test_changed_entries_section_lists_matches_no_flag_and_deprecated_rows() -> None:
+def test_changed_entries_distinguishes_errored_from_a_true_no_flag_result() -> None:  # M1
     results = _results()
     results["control-functions"].errored = [("control-functions:missing-ctrl", "boom")]
+    results["control-functions"].subjects = ["control-functions:missing-ctrl"]
+    # a genuinely-judged, zero-flag subject (overlap's score_overlap returns [] only with an empty
+    # choice set) — a real, if rare, case distinct from "errored"
+    results["overlap"] = CheckResult(
+        check="overlap", items=1, subjects=["overlap:lonely-scenario"], flags=[], errored=[]
+    )
     changed = ChangedSince(
         ref_sha="a" * 40,
         merge_base="b" * 40,
-        slugs=frozenset({"fraud", "missing-ctrl"}),
-        deprecated=frozenset({"old-scenario"}),
+        slugs=frozenset({"fraud", "missing-ctrl", "lonely-scenario"}),
+        deprecated=frozenset(),
     )
     text = render(META, results, top=15, changed=changed)
     assert "## Changed entries" in text
-    assert "### Scenario label audit" in text
     section = text.split("## Changed entries", 1)[1]
+    control_section = section.split("### Control function audit", 1)[1].split(
+        "### Scenario overlap", 1
+    )[0]
     assert "fraud · asset_class" in section  # matched flag (key intersects the changed slugs)
-    assert "missing-ctrl" in section and "no flag" in section  # errored item, zero flags
-    assert "old-scenario" in section
-    assert "deprecated — not checked (published-only)" in section
+    assert "errored — not judged" in control_section and "missing-ctrl" in control_section
+    assert "no flag" not in control_section  # M1: an error is never rendered as "no flag"
+    overlap_section = section.split("### Scenario overlap", 1)[1]
+    assert "lonely-scenario" in overlap_section and "no flag" in overlap_section
+    assert "### Coverage gaps" not in section  # N4: gaps is excluded from this view entirely
+
+
+def test_changed_entries_suppressed_flag_is_not_a_live_candidate() -> None:  # M2
+    results = _results()
+    changed = ChangedSince(
+        ref_sha="a" * 40,
+        merge_base="b" * 40,
+        slugs=frozenset({"siem"}),
+        deprecated=frozenset(),
+    )
+    text = render(META, results, top=15, changed=changed)
+    control_section = text.split("### Control function audit", 1)[1].split(
+        "### Scenario overlap", 1
+    )[0]
+    # siem · Incentives is suppressed (detail suppressed=True, reason="r" in _results()); its
+    # finding must carry the suppression suffix, distinguishing it from a live candidate, and sort
+    # after siem's live (non-suppressed) rows (Visibility, Monitoring)
+    assert "(suppressed: deliberately dropped claim — r)" in control_section
+    assert control_section.index("siem · Visibility") < control_section.index("siem · Incentives")
+    assert control_section.index("siem · Monitoring") < control_section.index("siem · Incentives")
+
+
+def test_changed_entries_ranked_flag_cross_references_the_queue_row() -> None:  # M3
+    changed = ChangedSince(
+        ref_sha="a" * 40, merge_base="b" * 40, slugs=frozenset({"fraud"}), deprecated=frozenset()
+    )
+    # top=1: "fraud · asset_class" (score 0.95) is the #1 ranked scenario-labels flag
+    text = render(META, _results(), top=1, changed=changed)
+    section = text.split("## Changed entries", 1)[1]
+    scenario_section = section.split("### Scenario label audit", 1)[1].split(
+        "### Control function audit", 1
+    )[0]
+    assert "see Scenario label audit #1" in scenario_section
+
+
+def test_changed_entries_never_includes_a_gaps_sub_heading() -> None:  # N4
+    # "A1" collides with a gaps intake id in _results() — even a coincidental id/slug match must
+    # never surface a Coverage-gaps row, since gaps subjects are intake items, not library slugs.
+    changed = ChangedSince(
+        ref_sha="a" * 40, merge_base="b" * 40, slugs=frozenset({"A1"}), deprecated=frozenset()
+    )
+    text = render(META, _results(), top=15, changed=changed)
+    section = text.split("## Changed entries", 1)[1]
+    assert "### Coverage gaps" not in section
+
+
+def test_changed_entries_deprecated_rows_are_emitted_once_not_per_check() -> None:  # N1
+    results = _results()
+    changed = ChangedSince(
+        ref_sha="a" * 40,
+        merge_base="b" * 40,
+        slugs=frozenset(),
+        deprecated=frozenset({"old-scenario"}),
+    )
+    text = render(META, results, top=15, changed=changed)
+    assert "### Not checked (not published)" in text
+    assert text.count("old-scenario") == 1
+    section = text.split("## Changed entries", 1)[1]
+    per_check = section.split("### Not checked (not published)", 1)[0]
+    assert "old-scenario" not in per_check  # never repeated under a per-check sub-heading
 
 
 def test_changed_section_leaves_the_ranked_queue_rendering_untouched() -> None:  # (iii)
