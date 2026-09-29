@@ -40,16 +40,20 @@ def score_overlap(
     top_p = others[0][1]
     if top_p < MATCH_NAME_MIN:
         # no partner stands out (a thin spread over the library): flag the entry itself, never 100 partners
+        if p_distinct >= 0.5:
+            finding = f"from {item.slug}: judge's top score is 'distinct' ({p_distinct:.2f}); no other scenario scored {MATCH_NAME_MIN:.2f} or more"
+        else:
+            finding = (
+                f"from {item.slug}: judge's distinct-score {p_distinct:.2f}; no single scenario scored "
+                f"{MATCH_NAME_MIN:.2f} or more: sharpen the description, or keep"
+            )
         return [
             Flag(
                 check="overlap",
                 key=f"overlap:{item.slug}",
                 subject=item.slug,
                 score=1.0 - p_distinct,
-                finding=(
-                    f"from {item.slug}: judge's distinct-score {p_distinct:.2f}; no single scenario scored "
-                    f"{MATCH_NAME_MIN:.2f} or more: sharpen the description, or keep"
-                ),
+                finding=finding,
                 detail={"top2": [[n, p] for n, p in others[:2]], "from": item.slug},
             )
         ]
@@ -62,7 +66,11 @@ def score_overlap(
         lead = f"from {item.slug}: judge's top score is 'distinct' ({p_distinct:.2f}); closest: {names} ({top_p:.2f}{tie})"
     else:
         lead = f"from {item.slug}: judge's top score is {names} ({top_p:.2f}{tie}); distinct-score {p_distinct:.2f}"
-    also = f"; also **{rest[0][0]}** ({rest[0][1]:.2f})" if rest else ""
+    also = (
+        f"; also **{rest[0][0]}** ({rest[0][1]:.2f})"
+        if rest and rest[0][1] >= MATCH_NAME_MIN
+        else ""
+    )
     flags = []
     for name in tied[:MAX_NAMED]:
         a, b = sorted((item.slug, name_to_slug[name]))

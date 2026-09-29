@@ -97,6 +97,16 @@ def test_scenario_named_ties_at_display_precision_claim_no_preference() -> None:
     )
 
 
+def test_prefers_names_a_tie_with_not_enough_information() -> None:  # PR-gate re-gate
+    answers = {
+        "threat_event_type": {"social_engineering": 0.2, "malware": 0.4, NONE_FITS: 0.4},
+        "asset_class": {"people": 1.0},
+        "threat_actor_type": {"cybercriminals": 1.0},
+    }
+    [te] = [f for f in score_scenario(SCEN, answers) if f.key.endswith(":threat_event_type")]
+    assert "judge prefers **malware** (0.40, tied with 'not enough information')" in te.finding
+
+
 def test_control_flags_carry_direction_and_suppress_dropped_claims() -> None:  # M-I3
     item = ControlItem(
         "siem",

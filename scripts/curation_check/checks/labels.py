@@ -48,7 +48,8 @@ def score_scenario(item: ScenarioItem, answers: Answers) -> list[Flag]:
                 f"curated **{curated}** score {p:.2f}"
             )
         elif len(named_tied) == 1:
-            finding = f"curated **{curated}** score {p:.2f}; judge prefers **{named_tied[0]}** ({top_p:.2f})"
+            tie = ", tied with 'not enough information'" if NONE_FITS in tied else ""
+            finding = f"curated **{curated}** score {p:.2f}; judge prefers **{named_tied[0]}** ({top_p:.2f}{tie})"
         else:
             finding = f"judge's top scores tie: {name_list(named_tied)} ({top_p:.2f}); curated **{curated}** score {p:.2f}"
         flags.append(

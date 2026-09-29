@@ -162,7 +162,15 @@ def test_overlap_thin_spread_names_nobody_at_library_scale() -> None:  # final r
     dist, names = _flat(101, NONE_DISTINCT, 0.95)
     [flag] = score_overlap(_scen("wiper", "Wiper"), {"match": dist}, name_to_slug=names)
     assert flag.key == "overlap:wiper" and flag.score == pytest.approx(0.05)
-    assert "no single scenario scored 0.05 or more" in flag.finding and len(flag.finding) < 200
+    assert "no other scenario scored 0.05 or more" in flag.finding and len(flag.finding) < 200
+
+
+def test_overlap_thin_spread_with_low_distinct_asks_to_sharpen() -> None:  # PR-gate re-gate
+    dist, names = _flat(101, NONE_DISTINCT, 0.30)
+    [flag] = score_overlap(_scen("wiper", "Wiper"), {"match": dist}, name_to_slug=names)
+    assert (
+        "no single scenario scored 0.05 or more: sharpen the description, or keep" in flag.finding
+    )
 
 
 def test_overlap_caps_named_ties() -> None:  # final review I-1

@@ -50,7 +50,7 @@ The wrapper runs in a clean environment and passes the key on stdin. Proxy, base
 
 - `tally` pools every committed report per model, check and queue length (`--top`). Each subject counts once across all campaigns: the latest decision wins, and a later blank never erases an earlier decision. A rejected flag that re-queues every campaign is therefore not counted again each time.
 - No rule fires until a check has at least 10 decided rows (accepted + rejected). Deferred rows are shown, not counted.
-- **Raise `--top`** when the 90% Wilson interval for the lowest-ranked third's hit rate lies wholly above 50%. The lowest third is `floor(n/3)` rows of each queue.
+- **Raise `--top`** when the 90% Wilson interval for the lowest-ranked third's hit rate lies wholly above 50%. The lowest third is `max(1, floor(n/3))` rows of each queue.
 - **Shrink `--top` or retire the check** when the 90% interval for its overall hit rate lies wholly below 20%.
 - Hit rates are never pooled across models (`run.json` → `model`).
 
