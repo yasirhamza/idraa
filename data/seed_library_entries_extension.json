@@ -725,7 +725,7 @@
     "slug": "accidental-insider-exposure",
     "name": "Accidental Insider Data Exposure (Misdelivery / Misconfig)",
     "status": "published",
-    "threat_event_type": "insider_misuse",
+    "threat_event_type": "data_disclosure",
     "threat_actor_type": "insider_accidental",
     "asset_class": "data",
     "attack_vector": "privileged_access_misuse",
@@ -771,15 +771,15 @@
     },
     "primary_loss": {
       "distribution": "PERT",
-      "low": 4079.8104862974,
-      "mode": 4079.8104862974,
-      "high": 1095047.33489989
+      "low": 3399.842071894,
+      "mode": 3399.842071894,
+      "high": 912539.4457443901
     },
     "secondary_loss": {
       "distribution": "PERT",
-      "low": 9519.5578014825,
-      "mode": 9519.5578014825,
-      "high": 2555110.4481324335
+      "low": 10199.5262160072,
+      "mode": 10199.5262160072,
+      "high": 2737618.337320474
     },
     "calibration_anchor": {
       "industry": "healthcare",
@@ -803,8 +803,8 @@
         "magnitude_basis": "envelope-share (analyst-judged, vulnerability-grade; per loss-form-share-rubric.md)",
         "citations": [],
         "verified": false,
-        "composition_role": "dominant",
-        "share": 0.12
+        "composition_role": "contributing",
+        "share": 0.1
       },
       {
         "form": "reputation",
@@ -831,7 +831,7 @@
         "citations": [],
         "verified": false,
         "composition_role": "contributing",
-        "share": 0.06
+        "share": 0.08
       }
     ],
     "loss_shape": "capped"

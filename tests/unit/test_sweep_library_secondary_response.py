@@ -24,6 +24,28 @@ OLD = (40000.0, 3400000.0)  # synthetic "pre-change seeded pair"
 NEW = (36000.0, 3000000.0)  # synthetic "post-change seeded pair"
 LIB = "a" * 32
 
+# Epic F (2026-09-29, #192): accidental-insider-exposure's threat_event_type moved
+# insider_misuse -> data_disclosure, so its #175 split moved 1/3 -> 3/7 and its seed
+# nodes legitimately moved on. The #175 NEW_* tables stay the #175 post-change values
+# (this script classifies #175 adoptions; Epic F adoptions are classified by
+# scripts/sweep_epic_f_adopted_rows.py), so the two current-seed pins skip these slugs
+# and test_superseded_slugs_now_carry_the_epic_f_nodes pins their Epic F nodes instead.
+SUPERSEDED_BY_EPIC_F: frozenset[str] = frozenset({"accidental-insider-exposure"})
+
+# Epic F nodes for the superseded slug: healthcare envelope mu 13.2303205189, sigma 1.7,
+# capped PERT low = mode = exp(mu + ln(sum) - 1.6449 * 1.7), high = exp(mu + ln(sum) +
+# 1.6449 * 1.7); sum(primary) 0.12 -> 0.10, sum(secondary) 0.28 -> 0.30, so each node's
+# location is the #175 node's x share-sum ratio (up to the builder's 10-dp mu rounding).
+_EPIC_F_NODES: dict[str, dict[str, dict[str, float]]] = {
+    "accidental-insider-exposure": {
+        "pl": {"low": 3399.842071894, "mode": 3399.842071894, "high": 912539.4457443901},
+        "sl": {"low": 10199.5262160072, "mode": 10199.5262160072, "high": 2737618.337320474},
+    }
+}
+# Inherent E[PL] + E[SL] of the entry, PERT mean (5 * low + high) / 6 at low == mode; a
+# within-budget split leaves it unchanged (register B5), up to the node rounding (8.9e-12).
+_EPIC_F_PL_PLUS_SL_MEAN: dict[str, float] = {"accidental-insider-exposure": 619692.4374}
+
 
 def test_pair_tables_cover_the_24_slugs() -> None:
     assert set(mod.OLD_PAIRS) == set(mod.NEW_PAIRS)
@@ -109,6 +131,8 @@ def test_new_nodes_are_the_shipped_seed_nodes() -> None:
     by_slug = {e["slug"]: e for e in entries}
     assert set(mod.NEW_NODES) == set(mod.OLD_NODES)
     for slug, d in mod.NEW_NODES.items():
+        if slug in SUPERSEDED_BY_EPIC_F:
+            continue  # pinned by test_superseded_slugs_now_carry_the_epic_f_nodes
         assert d["pl"] == by_slug[slug]["primary_loss"], slug
         assert d["sl"] == by_slug[slug]["secondary_loss"], slug
         assert d["pl"] != mod.OLD_NODES[slug]["pl"] and d["sl"] != mod.OLD_NODES[slug]["sl"], slug
@@ -281,10 +305,48 @@ def test_new_pairs_are_the_seeded_pairs_of_the_shipped_seed() -> None:
     )
     by_slug = {e["slug"]: e for e in entries}
     for slug, d in mod.NEW_PAIRS.items():
+        if slug in SUPERSEDED_BY_EPIC_F:
+            continue  # pinned by test_superseded_slugs_now_carry_the_epic_f_nodes
         for fs, key in (("pl", "primary_loss"), ("sl", "secondary_loss")):
             assert tuple(d[fs]) == pytest.approx(
                 reclass.seeded_pair(by_slug[slug][key]), rel=1e-12
             ), (slug, fs)  # 1e-12 relative: cross-platform libm ulp differences
+
+
+def _pert_mean_low_eq_mode(node: dict) -> float:
+    assert node["distribution"] == "PERT" and node["low"] == node["mode"]
+    return (5 * node["low"] + node["high"]) / 6
+
+
+def test_superseded_slugs_now_carry_the_epic_f_nodes() -> None:
+    """The slugs the two current-seed pins skip: the seed carries the Epic F nodes, and
+    the inherent PL+SL mean identity holds for the seed's CURRENT nodes and for the
+    pre-Epic-F #175 node in NEW_NODES alike -- a later hand edit that moves one node but
+    not the other fails here (M2-5)."""
+    root = Path(__file__).resolve().parents[2]
+    entries = json.loads((root / "data" / "seed_library_entries.json").read_text()) + json.loads(
+        (root / "data" / "seed_library_entries_extension.json").read_text()
+    )
+    by_slug = {e["slug"]: e for e in entries}
+    assert set(mod.NEW_NODES) >= SUPERSEDED_BY_EPIC_F  # the skip set never goes dead
+    assert set(_EPIC_F_NODES) == SUPERSEDED_BY_EPIC_F == set(_EPIC_F_PL_PLUS_SL_MEAN)
+    for slug in sorted(SUPERSEDED_BY_EPIC_F):
+        seed_nodes = {"pl": by_slug[slug]["primary_loss"], "sl": by_slug[slug]["secondary_loss"]}
+        for fs in ("pl", "sl"):
+            node = seed_nodes[fs]
+            assert node["distribution"] == "PERT", (slug, fs)
+            for k in ("low", "mode", "high"):
+                # 1e-12 relative: exp/log-derived, cross-platform libm ulp differences
+                assert node[k] == pytest.approx(_EPIC_F_NODES[slug][fs][k], rel=1e-12), (
+                    slug,
+                    fs,
+                    k,
+                )
+            assert node != mod.NEW_NODES[slug][fs], (slug, fs)  # it did move on
+        for label, nodes in (("epic-f seed", seed_nodes), ("#175 NEW_NODES", mod.NEW_NODES[slug])):
+            total = _pert_mean_low_eq_mode(nodes["pl"]) + _pert_mean_low_eq_mode(nodes["sl"])
+            # 1e-10, not tighter: the builder rounds mu to 10 dp per node (8.9e-12 observed)
+            assert total == pytest.approx(_EPIC_F_PL_PLUS_SL_MEAN[slug], rel=1e-10), (slug, label)
 
 
 def test_classify_pristine_matches_old_pair_within_a_cent() -> None:
