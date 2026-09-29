@@ -1,0 +1,136 @@
+{
+  "campaign": "epic-f",
+  "date": "2026-09-29",
+  "judge": "jev",
+  "git_commit": "25b33ace2916a83e2f70a5a118136489841a0e79",
+  "model": "jev-1.13.0",
+  "pinned_model": "jev-1.13.0",
+  "top": 15,
+  "seed_sha256": {
+    "data/seed_library_entries.json": "a971838b71363004128c8f958a7421b3e520d093e4866a799c05799db807e271",
+    "data/seed_library_entries_extension.json": "53dc55b5b9c1424e359d430e575e09d4dd76dc2d724e4bf20f664dd6aa361433",
+    "data/seed_control_library_entries.json": "8e02a07fa993dd76399864c685730c8d976a31721b5bf1854e4dfe5dda6ff33f"
+  },
+  "criteria_sha256": "8ad84afdbcd130f6260781c881549fe793fa4a1fc9979d858be024dc9a1f8a7f",
+  "checks": {
+    "scenario-labels": {
+      "items": 99,
+      "scored_rows": 297,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 3503,
+      "input_tokens_median": 3413.0
+    },
+    "control-functions": {
+      "items": 63,
+      "scored_rows": 1556,
+      "suppressed": 19,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 8072,
+      "input_tokens_median": 7744.0
+    },
+    "overlap": {
+      "items": 99,
+      "scored_rows": 74,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 13342,
+      "input_tokens_median": 13342.0
+    }
+  },
+  "failed_checks": [],
+  "warnings": [
+    "gaps skipped: no --intake"
+  ],
+  "queues": {
+    "scenario-labels": [
+      "scenario-labels:cloud-account-takeover:threat_event_type",
+      "scenario-labels:food-recall-data-tampering:asset_class",
+      "scenario-labels:hmi-credential-compromise:threat_event_type",
+      "scenario-labels:hospitality-pos-card-skimming:asset_class",
+      "scenario-labels:manufacturing-billing-fraud:asset_class",
+      "scenario-labels:ot-network-scanning-reconnaissance:threat_event_type",
+      "scenario-labels:unauthorized-plc-modification:threat_event_type",
+      "scenario-labels:edge-device-orb-foothold:threat_actor_type",
+      "scenario-labels:food-recall-data-tampering:threat_event_type",
+      "scenario-labels:grid-protective-relay-manipulation:threat_event_type",
+      "scenario-labels:it-ot-bridge-compromise:threat_event_type",
+      "scenario-labels:law-enforcement-records-extortion-breach:threat_event_type",
+      "scenario-labels:ransomware-on-historian:threat_event_type",
+      "scenario-labels:field-instrument-spoofing:threat_actor_type",
+      "scenario-labels:hospitality-pos-card-skimming:threat_event_type"
+    ],
+    "control-functions": [
+      "control-functions:cloud-security-posture-management:lec_det_monitoring",
+      "control-functions:patch-management:vmc_prev_reduce_variance_prob",
+      "control-functions:security-configuration-assessment:dsc_prev_sa_reporting",
+      "control-functions:email-security-protection:lec_det_recognition",
+      "control-functions:external-attack-surface-management:lec_det_visibility",
+      "control-functions:secure-web-gateway:lec_det_recognition",
+      "control-functions:application-performance-monitoring:lec_det_recognition",
+      "control-functions:cloud-security-posture-management:dsc_prev_sa_reporting",
+      "control-functions:host-intrusion-detection-prevention:lec_resp_resilience",
+      "control-functions:third-party-risk-management:dsc_prev_sa_data_threat",
+      "control-functions:network-detection-response:lec_resp_resilience",
+      "control-functions:endpoint-detection-response:lec_resp_resilience",
+      "control-functions:user-access-control:vmc_corr_implementation",
+      "control-functions:third-party-risk-management:dsc_prev_incentives",
+      "control-functions:secure-remote-access:lec_prev_avoidance"
+    ],
+    "overlap": [
+      "overlap:agri-coop-bec-fraud:bec-fraud-financial",
+      "overlap:competitor-trade-secret-recruit:ip-theft-by-competitor",
+      "overlap:credential-stuffing-consumer-portal:hospitality-loyalty-account-takeover",
+      "overlap:ddos-financial-seasonal-peak:retail-ecommerce-checkout-ddos",
+      "overlap:education-student-records-insider:hospitality-guest-data-insider",
+      "overlap:financial-transaction-tampering:manufacturing-billing-fraud",
+      "overlap:food-recall-data-tampering:healthcare-record-alteration",
+      "overlap:hmi-credential-compromise:oem-remote-maintenance-abuse",
+      "overlap:hospitality-booking-ddos-peak-season:retail-ecommerce-checkout-ddos",
+      "overlap:hospitality-guest-data-insider:insider-data-theft-financial",
+      "overlap:hospitality-pos-card-skimming:retail-pos-card-skimming",
+      "overlap:insider-ip-theft-manufacturing:ip-theft-by-competitor",
+      "overlap:it-ot-bridge-compromise:ransomware-on-historian",
+      "overlap:k12-edtech-vendor-breach:third-party-processor-breach",
+      "overlap:nation-state-ics-supply-chain:solarwinds-class-supply-chain"
+    ]
+  },
+  "changed_since": {
+    "ref_sha": "8ccac47ee416bef9454c45902c395eb7ddf1c267",
+    "merge_base": "8ccac47ee416bef9454c45902c395eb7ddf1c267",
+    "subjects": [
+      "accidental-insider-exposure",
+      "bec-fraud-financial",
+      "chemical-process-safety-attack",
+      "competitor-trade-secret-recruit",
+      "credential-stuffing-consumer-portal",
+      "data-breach-notification-regulatory-tail",
+      "ddos-extortion-financial",
+      "ddos-financial-seasonal-peak",
+      "education-student-records-insider",
+      "energy-billing-system-tamper",
+      "energy-settlement-platform-tampering-offtaker-liability",
+      "file-integrity-monitoring",
+      "financial-call-center-social-eng",
+      "financial-transaction-tampering",
+      "gov-citizen-portal-ddos",
+      "gov-employee-insider-leak",
+      "gov-records-tampering",
+      "grid-protective-relay-manipulation",
+      "healthcare-record-alteration",
+      "healthcare-staff-credential-phish",
+      "professional-payroll-bec",
+      "retail-ecommerce-checkout-ddos",
+      "saas-security-posture-management",
+      "safety-system-bypass",
+      "secure-remote-access",
+      "security-awareness-training",
+      "security-information-event-management",
+      "telecom-sim-swap-fraud",
+      "web-app-exploitation"
+    ]
+  }
+}
