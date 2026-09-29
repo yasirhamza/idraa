@@ -59,16 +59,31 @@ Sections printed:
    ``copy-current*`` additionally still carries a surviving pre-Epic-F SME
    identity that a future re-estimation would rehydrate and re-fit (fix round 1
    / M9-2, mirrors #175's ``copy_current_stale_rows`` -- ``aie_copy_current_
-   stale_rows`` in the SUMMARY counts scenarios, not fieldsets).
+   stale_rows`` in the SUMMARY counts scenarios, not fieldsets). Fix round 2
+   (R9-N1): unlike #175 (which short-circuits a pinned scenario BEFORE this
+   check, so it never reaches ``copy_current_stale_rows``), this counter
+   INCLUDES a pinned scenario whose non-pinned side is ``copy-current*`` --
+   such a scenario increments both ``aie_pinned_stale_side`` and
+   ``aie_copy_current_stale_rows`` at once. Deliberately not changed: a
+   pinned scenario's stale side is real regardless of the pin, and the gate
+   result is identical either way (both keys already gate); read the printed
+   per-row class (which still shows ``pinned`` as the overall class) rather
+   than assuming ``aie_copy_current_stale_rows`` means "non-pinned only".
    Fix round 1 (M9-1) additionally counts rows this section cannot classify --
    an unparsable ``library_pin``/loss-node JSON, or a pin whose ``version`` is
-   not 1 -- as ``aie_skipped_unparsable`` / ``aie_skipped_pin_version`` rather
-   than silently dropping them; both gate (see below). Fix round 1 (M9-3a) also
-   counts ``aie_pinned_stale_side``: a scenario whose overall class is ``pinned``
-   (D23 -- the app refuses to refresh the WHOLE scenario when either field is
-   analyst-pinned) but whose OTHER field is ``pristine``/``copy-stale``/
-   ``copy-current*`` -- the repair PR needs this count even though a pinned
-   scenario is never itself a repair candidate.
+   not 1 -- as ``scenario_skipped_unparsable`` / ``aie_skipped_pin_version``
+   rather than silently dropping them; both gate (see below). Fix round 2
+   (R9-N2): ``scenario_skipped_unparsable`` (renamed from ``aie_skipped_
+   unparsable`` -- the old name implied AIE-only scope) counts a corrupt
+   ``library_pin`` on ANY scenario, not only one that would have resolved to
+   accidental-insider-exposure -- the slug can't be determined once the pin
+   itself fails to parse, so this sweep fails closed and counts it anyway
+   (mirrors #175's own ``skipped_unparsable``, which does the same). Fix
+   round 1 (M9-3a) also counts ``aie_pinned_stale_side``: a scenario whose
+   overall class is ``pinned`` (D23 -- the app refuses to refresh the WHOLE
+   scenario when either field is analyst-pinned) but whose OTHER field is
+   ``pristine``/``copy-stale``/``copy-current*`` -- the repair PR needs this
+   count even though a pinned scenario is never itself a repair candidate.
 2. Scenarios pinned to each of the three deprecated entries
    (``data-breach-notification-regulatory-tail``, ``ddos-extortion-financial``,
    ``chemical-process-safety-attack``) -- ids only, plus (addendum M5-1) the
@@ -83,7 +98,12 @@ Sections printed:
    AIE's response share from PL to SL, so a one-sided override now combines
    with the moved canonical side and its adoptions/refreshes are no longer
    mean-neutral (hand-math: a PL-only override raises the SL PERT mean by
-   about $30,985, ~5.0% of the $619,692 inherent PL+SL mean).
+   about $30,985, ~5.0% of the $619,692 inherent PL+SL mean). Fix round 2
+   (R9-1): an AIE override with an unparsable primary_loss/secondary_loss leg
+   cannot be classified one-sided or two-sided -- it is folded into
+   ``scenario_skipped_unparsable`` (same gate key as section 1's unparsable
+   rows) rather than silently dropped, mirroring the #175 sweep's own
+   treatment of the identical leg shape (:1152-1153 there).
 5. Adopted controls on the five re-curated entries (``RECURATED_CONTROL_SLUGS``)
    whose ``library_pin`` version is behind the entry's current version
    (resync-stale, #438) -- listed (id, slug, pinned version, current version);
@@ -102,20 +122,34 @@ Sections printed:
    never gated.
 
 ``--gate`` exits 1 iff any AIE gate key is nonzero: ``aie_pristine``,
-``aie_copy_stale``, ``aie_skipped_unparsable``, ``aie_skipped_pin_version``,
-``aie_pinned_stale_side``, ``aie_copy_current_stale_rows``, ``aie_override_
-one_sided`` -- the trigger for a SEPARATE repair migration, never applied
-inline by this script. This now mirrors the #175 sweep's own ``GATE_KEYS`` set
-(scoped to the one AIE slug instead of all 24) -- fix round 1 corrects the
-original docstring's "mirrors the #175 gate rationale" claim, which was true in
-spirit but the original gate covered only 2 of the 7 keys #175 gates on. A
-pre-#175 AIE adoption (a scenario still on the pre-#175 node/pair, never
-touched since) lands in ``aie_stale``, not the gate -- correct for THIS
-campaign because the #175 sweep's own gate already covers it (N9-3). Every
-section besides 1 is informational: read the printed rows, not just the gate
-exit code. A pin with no ``version`` key (``None``) is treated the same as a
-wrong version (skipped, counted, gated) -- the writer always sets an int
-version, so this is a defensive default, not an observed real shape (N9-4).
+``aie_copy_stale``, ``scenario_skipped_unparsable``, ``aie_skipped_pin_
+version``, ``aie_pinned_stale_side``, ``aie_copy_current_stale_rows``,
+``aie_override_one_sided`` -- the trigger for a SEPARATE repair migration,
+never applied inline by this script. This now mirrors the #175 sweep's own
+``GATE_KEYS`` set (scoped to the one AIE slug instead of all 24) -- fix round 1
+corrects the original docstring's "mirrors the #175 gate rationale" claim,
+which was true in spirit but the original gate covered only 2 of the 7 keys
+#175 gates on; fix round 2 (R9-1) closes the last gap (an unparsable AIE
+override leg, folded into ``scenario_skipped_unparsable`` above). A pre-#175
+AIE adoption (a scenario still on the pre-#175 node/pair, never touched since)
+lands in ``aie_stale``, not the gate -- correct for THIS campaign because the
+#175 sweep's own gate already covers it (N9-3). Every section besides 1 is
+informational: read the printed rows, not just the gate exit code. A pin with
+no ``version`` key (``None``) is treated the same as a wrong version (skipped,
+counted, gated) -- the writer always sets an int version, so this is a
+defensive default, not an observed real shape (N9-4).
+
+An EMPTY-STRING ``library_pin`` (``''``) is treated as malformed (counted in
+``scenario_skipped_unparsable``, gated) rather than as absent/unpinned, a
+DELIBERATE divergence from the #175 sweep (fix round 2, R9-N3; that sweep's
+``if pin else None`` treats any falsy value, including ``''``, the same as
+NULL). The ORM never writes ``''`` for a JSON column -- it is either NULL or a
+real JSON payload -- so an empty string can only reach this table out of band
+(a hand edit, a bulk-import bug, a hostile write). This sweep's whole purpose
+is to surface exactly that kind of anomaly before a repair migration runs;
+silently treating it as "no pin" (like #175 does) would defeat the M9-1 fix
+this divergence sits next to. Fail-closed is kept on purpose here, tested by
+``test_empty_string_pin_is_malformed_not_absent``.
 
 ``library_pin`` / ``adopted_snapshot`` ``entry_id`` values are normalised with
 ``uuid.UUID(x).hex`` before comparison -- ``services/controls.py``'s
@@ -262,7 +296,12 @@ def _pin_status(raw: object) -> tuple[str, dict[str, Any] | None]:
     towards a skip counter by callers that track one; ``("ok", dict)``
     otherwise. Mirrors the #175 sweep's own absent/malformed split
     (``_override_leg``), applied to the scenario/control pin column instead of
-    an override leg."""
+    an override leg -- with ONE deliberate divergence (fix round 2, R9-N3): an
+    empty string (``''``) is ``"malformed"`` here, not ``"absent"``. #175's
+    ``if pin else None`` treats any falsy value the same as NULL; the ORM never
+    writes ``''`` for a JSON column (only NULL or a real payload), so a stored
+    ``''`` can only be out-of-band corruption -- exactly what this sweep exists
+    to surface, so it fails closed instead of silently treating it as unpinned."""
     if raw is None:
         return "absent", None
     try:
@@ -430,14 +469,25 @@ def sweep_accidental_insider_exposure(conn: sqlite3.Connection) -> dict[str, int
     return counts
 
 
-def sweep_aie_override_one_sided(conn: sqlite3.Connection) -> int:
+def sweep_aie_override_one_sided(conn: sqlite3.Connection) -> tuple[int, int]:
     """M9-3b: org overrides on accidental-insider-exposure (not soft-deleted)
     that author only ONE of primary_loss/secondary_loss. Epic F moved AIE's
     response share from PL to SL, so a one-sided override now combines with
-    the moved canonical side -- no longer mean-neutral."""
+    the moved canonical side -- no longer mean-neutral.
+
+    Returns (one_sided, skipped_unparsable). Fix round 2 (R9-1): an override
+    with an unparsable leg cannot be classified one-sided or two-sided -- the
+    #175 sweep this was ported from sends the identical leg shape to its own
+    ``skipped_unparsable`` (":1152-1153" there), which gates; the round-1
+    version here instead `continue`d past it silently, the same defect class
+    as M9-1. ``skipped_unparsable`` is folded into the caller's
+    ``scenario_skipped_unparsable`` (which already gates) rather than given
+    its own gate key -- one unparsable-row counter for the whole sweep,
+    covering scenarios, loss JSON and override legs alike."""
     slug_by_entry_hex = _scenario_library_slugs(conn)
     aie_hexes = {h for h, s in slug_by_entry_hex.items() if s == AIE_SLUG}
-    count = 0
+    one_sided = 0
+    skipped_unparsable = 0
     for eid, pl_raw, sl_raw in conn.execute(
         "SELECT library_entry_id, primary_loss, secondary_loss FROM scenario_library_overrides "
         "WHERE deleted_at IS NULL"
@@ -450,11 +500,14 @@ def sweep_aie_override_one_sided(conn: sqlite3.Connection) -> int:
             continue
         legs = (_override_leg(pl_raw), _override_leg(sl_raw))
         if "unparsable" in legs:
+            skipped_unparsable += 1
             continue
         if legs[0] != legs[1]:
-            count += 1
-    print(f"aie_override_one_sided={count}")
-    return count
+            one_sided += 1
+    print(
+        f"aie_override_one_sided={one_sided} aie_override_skipped_unparsable={skipped_unparsable}"
+    )
+    return one_sided, skipped_unparsable
 
 
 # ---------------------------------------------------------------------------
@@ -643,7 +696,7 @@ def sweep(db_path: Path) -> dict[str, int]:
     conn = _connect_ro(db_path)
     try:
         aie = sweep_accidental_insider_exposure(conn)
-        aie_override_one_sided = sweep_aie_override_one_sided(conn)
+        aie_override_one_sided, aie_override_skipped_unparsable = sweep_aie_override_one_sided(conn)
         _by_slug, deprecated_orgs = sweep_deprecated_entries(conn)
         people = sweep_people_asset_class(conn)
         deprecated_overrides = sweep_deprecated_overrides(conn)
@@ -662,7 +715,11 @@ def sweep(db_path: Path) -> dict[str, int]:
         "aie_pinned": aie["pinned"],
         "aie_pinned_stale_side": aie["pinned_stale_side"],
         "aie_copy_current_stale_rows": aie["copy_current_stale_rows"],
-        "aie_skipped_unparsable": aie["skipped_unparsable"],
+        # Fix round 2 (R9-N2 rename + R9-1 fold): NOT AIE-scoped alone -- covers
+        # any scenario with an unparsable library_pin (slug unknown, so it can't
+        # be narrowed to AIE), an AIE-confirmed scenario's unparsable loss JSON
+        # or id, AND an AIE override's unparsable leg (R9-1).
+        "scenario_skipped_unparsable": aie["skipped_unparsable"] + aie_override_skipped_unparsable,
         "aie_skipped_pin_version": aie["skipped_pin_version"],
         "aie_override_one_sided": aie_override_one_sided,
         "deprecated_orgs": deprecated_orgs,
@@ -681,7 +738,7 @@ def sweep(db_path: Path) -> dict[str, int]:
 GATE_KEYS = (
     "aie_pristine",
     "aie_copy_stale",
-    "aie_skipped_unparsable",
+    "scenario_skipped_unparsable",
     "aie_skipped_pin_version",
     "aie_pinned_stale_side",
     "aie_copy_current_stale_rows",

@@ -152,7 +152,7 @@ def test_clean_db_gate_exit_zero_all_counters_zero(tmp_path: Path) -> None:
     try:
         summary = {
             "aie": mod.sweep_accidental_insider_exposure(conn),
-            "aie_override_one_sided": mod.sweep_aie_override_one_sided(conn),
+            "aie_override": mod.sweep_aie_override_one_sided(conn),
             "deprecated": mod.sweep_deprecated_entries(conn),
             "people": mod.sweep_people_asset_class(conn),
             "overrides": mod.sweep_deprecated_overrides(conn),
@@ -162,7 +162,7 @@ def test_clean_db_gate_exit_zero_all_counters_zero(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert all(v == 0 for v in summary["aie"].values())
-    assert summary["aie_override_one_sided"] == 0
+    assert summary["aie_override"] == (0, 0)  # (one_sided, skipped_unparsable)
     assert summary["deprecated"] == ({s: [] for s in sorted(mod.DEPRECATED_SCENARIO_SLUGS)}, 0)
     assert summary["people"] == 0
     assert summary["overrides"] == 0
@@ -317,9 +317,33 @@ def test_aie_one_sided_override_counted_and_gates(tmp_path: Path) -> None:
     c.commit()
     c.close()
     conn = mod._connect_ro(db)
-    count = mod.sweep_aie_override_one_sided(conn)
+    one_sided, skipped_unparsable = mod.sweep_aie_override_one_sided(conn)
     conn.close()
-    assert count == 1
+    assert one_sided == 1
+    assert skipped_unparsable == 0
+    assert mod.main(["--db", str(db), "--gate"]) == 1
+
+
+def test_aie_override_unparsable_leg_counts_skipped_unparsable_and_gates(
+    tmp_path: Path,
+) -> None:
+    """R9-1: an override leg that fails to parse can't be classified one-sided
+    or two-sided -- it must be counted (and gate), not silently dropped, the
+    same defect class as M9-1."""
+    db = tmp_path / "aie_override_unparsable.db"
+    c = _empty_db(db)
+    aie_eid = _entry(c, AIE_SLUG)
+    c.execute(
+        "INSERT INTO scenario_library_overrides VALUES (?, ?, ?, ?, NULL)",
+        (uuid.uuid4().hex, aie_eid, "{bad", "null"),
+    )
+    c.commit()
+    c.close()
+    conn = mod._connect_ro(db)
+    one_sided, skipped_unparsable = mod.sweep_aie_override_one_sided(conn)
+    conn.close()
+    assert one_sided == 0
+    assert skipped_unparsable == 1
     assert mod.main(["--db", str(db), "--gate"]) == 1
 
 
@@ -435,6 +459,75 @@ def test_control_non_int_pin_version_counts_but_does_not_gate(tmp_path: Path) ->
     assert counts["skipped_pin_version"] == 1
     assert counts["resync_stale"] == 0 and counts["current"] == 0
     assert mod.main(["--db", str(db), "--gate"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 NICEs (R9-N1, R9-N2, R9-N3)
+# ---------------------------------------------------------------------------
+
+
+def test_pinned_and_copy_current_stale_increments_both_counters(tmp_path: Path) -> None:
+    """R9-N1: unlike #175 (which short-circuits a pinned scenario before ever
+    reaching the copy-current* check), this sweep's aie_copy_current_
+    stale_rows counter INCLUDES a pinned scenario whose other side is
+    copy-current*. Deliberately unchanged (see the module docstring) -- this
+    test locks in and documents the overlap rather than treating it as a bug."""
+    db = tmp_path / "pinned_and_copy_current_stale.db"
+    c = _empty_db(db)
+    eid = _entry(c, AIE_SLUG)
+    old_pl = mod.EPIC_F_OLD_PAIRS["pl"]
+    sid = _scenario(c, eid, pl=dict(PINNED_NODE), sl=dict(NEW_SL))
+    _sme(c, sid, "pl", round(old_pl[0], 2), round(old_pl[1], 2))  # ignored: pl is pinned
+    # sl is copy-current with a surviving OLD seed row -> copy-current*
+    old_sl = mod.EPIC_F_OLD_PAIRS["sl"]
+    _sme(c, sid, "sl", round(old_sl[0], 2), round(old_sl[1], 2))
+    c.commit()
+    c.close()
+    conn = mod._connect_ro(db)
+    counts = mod.sweep_accidental_insider_exposure(conn)
+    conn.close()
+    assert counts["pinned"] == 1
+    assert counts["pinned_stale_side"] == 1
+    assert counts["copy_current_stale_rows"] == 1  # both counters move together
+    assert mod.main(["--db", str(db), "--gate"]) == 1
+
+
+def test_empty_string_pin_is_malformed_not_absent(tmp_path: Path) -> None:
+    """R9-N3: a deliberate divergence from #175 (which treats '' the same as
+    NULL via `if pin else None`). The ORM never writes '' for a JSON column,
+    so a stored '' can only be out-of-band corruption -- this sweep fails
+    closed and counts/gates it, rather than silently treating it as unpinned."""
+    assert mod._pin_status("") == ("malformed", None)
+
+    db = tmp_path / "empty_pin.db"
+    c = _empty_db(db)
+    _scenario(c, None, pin_raw="")
+    c.commit()
+    c.close()
+    conn = mod._connect_ro(db)
+    counts = mod.sweep_accidental_insider_exposure(conn)
+    conn.close()
+    assert counts["skipped_unparsable"] == 1
+    assert mod.main(["--db", str(db), "--gate"]) == 1
+
+
+def test_summary_uses_scope_neutral_unparsable_counter_name(tmp_path: Path) -> None:
+    """R9-N2: the top-level/GATE_KEYS counter is scenario_skipped_unparsable,
+    not aie_skipped_unparsable -- it counts a corrupt pin on ANY scenario
+    (slug unknown once the pin itself fails to parse), not only ones that
+    would have resolved to accidental-insider-exposure."""
+    assert "scenario_skipped_unparsable" in mod.GATE_KEYS
+    assert "aie_skipped_unparsable" not in mod.GATE_KEYS
+
+    db = tmp_path / "non_aie_corrupt_pin.db"
+    c = _empty_db(db)
+    other_eid = _entry(c, "web-app-exploitation")
+    _scenario(c, other_eid, pin_raw="{not json")
+    c.commit()
+    c.close()
+    summary = mod.sweep(db)  # sweep() manages its own connection
+    assert summary["scenario_skipped_unparsable"] == 1
+    assert mod.main(["--db", str(db), "--gate"]) == 1
 
 
 # ---------------------------------------------------------------------------
