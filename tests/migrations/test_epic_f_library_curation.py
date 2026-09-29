@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import re
 import sqlite3
 from pathlib import Path
@@ -111,6 +112,30 @@ def _db_path_from_config(alembic_config: Config) -> Path:
     return Path(url[len(prefix) :])
 
 
+def _exact_equal(a: object, b: object) -> bool:
+    """Type-strict, bitwise-exact equality (methodology NICE M4-2). Plain `==` treats
+    1 == 1.0 == True, so a `new`/`old` literal that silently changed a JSON number's
+    type (int<->float) or a bool<->int would still pass a loose comparison. Recurses
+    into dict/list; floats are compared via `float.hex()` for bit-exactness (avoids
+    relying on float `==`'s NaN/subnormal edge cases and shows the literal bit pattern
+    on failure)."""
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, float):
+        assert isinstance(b, float)
+        return a.hex() == b.hex()
+    if isinstance(a, dict):
+        assert isinstance(b, dict)
+        return a.keys() == b.keys() and all(_exact_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list):
+        assert isinstance(b, list)
+        return len(a) == len(b) and all(_exact_equal(x, y) for x, y in zip(a, b, strict=True))
+    return bool(a == b)
+
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
 # ---------------------------------------------------------------------------
 # (a) old written first, upgrade converges to new
 # ---------------------------------------------------------------------------
@@ -128,6 +153,49 @@ def test_old_written_first_then_upgrade_converges_to_new(
         raw = _read_column(alembic_engine, slug, column)
         actual = mod._decode(column, raw)
         assert actual == new, f"{slug}.{column}: expected {new!r}, got {actual!r}"
+
+
+def test_upgrade_touches_only_the_changed_cell_set(
+    alembic_runner: MigrationContext, alembic_engine: Engine
+) -> None:
+    """Methodology M4-2 (2nd NICE): on a full table (every column, every one of the 102
+    rows -- not just the touched slugs), nothing outside `_CHANGES`' (slug, column) set
+    changes across the upgrade. This is the reviewer's own check (`git archive
+    origin/main` -> fresh DB -> upgrade -> diff every column of every row), reproduced
+    without shelling out to git: the plan's S2-1 rule ("no migration test shells out to
+    git") exists because CI's gate job checks out with fetch-depth: 1, so origin/main /
+    a merge-base would not reliably resolve there. This test instead builds its DB
+    through the real migration chain (alembic_runner, same as test (a)/(f)) -- which is
+    "prod-shaped" in the sense that mirrors a real deploy path -- and does a raw
+    before/after diff of literally every stored byte, so no JSON decode step could hide
+    a false negative."""
+    alembic_runner.migrate_up_to(PRE)
+    _write_all_old(alembic_engine)
+    with alembic_engine.connect() as conn:
+        before_rows = conn.execute(
+            sa.text("SELECT * FROM scenario_library_entries ORDER BY id, version")
+        ).mappings()
+        before = {(r["id"], r["version"]): dict(r) for r in before_rows}
+
+    alembic_runner.migrate_up_to(REV)
+
+    with alembic_engine.connect() as conn:
+        after_rows = conn.execute(
+            sa.text("SELECT * FROM scenario_library_entries ORDER BY id, version")
+        ).mappings()
+        after = {(r["id"], r["version"]): dict(r) for r in after_rows}
+
+    assert before.keys() == after.keys()
+    changed_keys = {(slug, column) for slug, column, _old, _new in mod._CHANGES}
+    for pk, before_row in before.items():
+        after_row = after[pk]
+        slug = before_row["slug"]
+        for column in before_row:
+            if column == "slug" or (slug, column) in changed_keys:
+                continue  # (slug, column) in changed_keys is verified by test (a) above
+            assert before_row[column] == after_row[column], (
+                f"{slug}.{column} changed but is not in _CHANGES"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -201,10 +269,20 @@ def test_drift_row_skipped_others_applied(
     alembic_engine: Engine,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Single-cell-slug drift (grid-protective-relay-manipulation has exactly one
+    _CHANGES cell, description -- a free-text column with no CHECK constraint, unlike
+    an enum-typed column such as asset_class/status): the atomic-group guard (M4-1) is
+    a no-op here -- there is no sibling to poison -- so this stays the brief's original
+    "one row drifts, every other row (cell) applies" scenario. See
+    test_atomic_group_skips_whole_slug_on_partial_drift below for the multi-cell-slug
+    case."""
     alembic_runner.migrate_up_to(PRE)
     _write_all_old(alembic_engine)
 
-    drift_slug, drift_column = "web-app-exploitation", "description"
+    drift_slug, drift_column = "grid-protective-relay-manipulation", "description"
+    assert sum(1 for s, _c, _o, _n in mod._CHANGES if s == drift_slug) == 1, (
+        "test assumes a single-cell slug"
+    )
     third_value = "DRIFT SENTINEL — neither old nor new"
     _write_column(alembic_engine, drift_slug, drift_column, third_value)
 
@@ -229,6 +307,134 @@ def test_drift_row_skipped_others_applied(
 
 
 # ---------------------------------------------------------------------------
+# (d-atomic) M4-1 (methodology IMPORTANT, controller ruling): per-slug atomicity --
+# a drift on ONE cell of a multi-cell slug must skip the WHOLE slug, never a partial
+# convergence.
+# ---------------------------------------------------------------------------
+
+
+def test_atomic_group_skips_whole_slug_on_partial_drift(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reproduces the methodology reviewer's exact probe: a 1-ulp nudge to
+    accidental-insider-exposure's secondary_loss.high. primary_loss, loss_form_profile
+    and threat_event_type are one calibration unit with secondary_loss (the PL/SL
+    envelope split by the profile's shares, register B5) -- applying them while
+    secondary_loss stays drifted would leave the entry's calibration incoherent (the
+    exact failure M4-1 found), so ALL FOUR must stay at `old`, not just the drifted
+    cell. Other slugs (no relation to this group) must still apply normally."""
+    alembic_runner.migrate_up_to(PRE)
+    _write_all_old(alembic_engine)
+
+    slug = "accidental-insider-exposure"
+    group_columns = ("primary_loss", "secondary_loss", "loss_form_profile", "threat_event_type")
+    assert {c for s, c, _o, _n in mod._CHANGES if s == slug} == set(group_columns)
+
+    old_secondary_loss = _CHANGES_BY_KEY[(slug, "secondary_loss")][0]
+    assert isinstance(old_secondary_loss, dict)
+    poisoned = dict(old_secondary_loss)
+    # math.nextafter, not a hand-typed decimal literal: two different-looking decimal
+    # literals this close together can round to the SAME float64 (verified: the
+    # reviewer's own "...4336" probe parses equal to "...4335" here), which would
+    # silently turn this into a no-drift test.
+    poisoned["high"] = math.nextafter(old_secondary_loss["high"], math.inf)
+    assert poisoned != old_secondary_loss
+    _write_column(alembic_engine, slug, "secondary_loss", poisoned)
+
+    capsys.readouterr()
+    alembic_runner.migrate_up_to(REV)
+    err = capsys.readouterr().err
+
+    # The whole group stays at `old` (secondary_loss keeps the poisoned value -- it was
+    # never going to be reverted, only left alone).
+    for column in group_columns:
+        raw = _read_column(alembic_engine, slug, column)
+        actual = mod._decode(column, raw)
+        if column == "secondary_loss":
+            assert _exact_equal(actual, poisoned)
+        else:
+            old_val = _CHANGES_BY_KEY[(slug, column)][0]
+            assert _exact_equal(actual, old_val), (
+                f"{slug}.{column} applied despite a poisoned sibling"
+            )
+
+    # Every other slug's cells still converge normally.
+    for other_slug, column, _old, new in mod._CHANGES:
+        if other_slug == slug:
+            continue
+        raw = _read_column(alembic_engine, other_slug, column)
+        assert _exact_equal(mod._decode(column, raw), new)
+
+    # Exactly one warning for this slug, naming ONLY the genuinely-drifted column.
+    warning_lines = [line for line in err.splitlines() if "WARNI" in line and slug in line]
+    assert len(warning_lines) == 1, warning_lines
+    assert "secondary_loss" in warning_lines[0]
+    assert "primary_loss" not in warning_lines[0]
+    assert "loss_form_profile" not in warning_lines[0]
+    assert "threat_event_type" not in warning_lines[0]
+
+    # Summary counters are CELL-level: all 4 group members count toward drift (3
+    # apply-eligible cells demoted by the group guard + the 1 genuinely drifted cell).
+    n = len(mod._CHANGES)
+    group_size = len(group_columns)
+    assert (
+        f"epic-f library curation: applied={n - group_size} already_new=0 drift={group_size}" in err
+    )
+
+
+# ---------------------------------------------------------------------------
+# _classify_slug_group / _group_by_slug: pure-function unit tests (no DB)
+# ---------------------------------------------------------------------------
+
+
+def test_classify_slug_group_applies_cleanly_when_no_drift() -> None:
+    cells = (("a", 1, 2), ("b", 10, 20))
+    found_raw = {
+        "a": (True, 1),
+        "b": (True, 20),
+    }  # a: current==old (apply); b: current==new (already)
+    classification, drifted = mod._classify_slug_group(cells, found_raw)
+    assert drifted == ()
+    assert classification == {"a": "apply", "b": "already"}
+
+
+def test_classify_slug_group_poisons_apply_cells_on_sibling_drift() -> None:
+    cells = (("a", 1, 2), ("b", 10, 20))
+    found_raw = {"a": (True, 1), "b": (True, 999)}  # b is neither old nor new
+    classification, drifted = mod._classify_slug_group(cells, found_raw)
+    assert drifted == ("b",)  # only the genuinely-drifted column is named
+    assert classification == {"a": "drift", "b": "drift"}  # a demoted from apply to drift
+
+
+def test_classify_slug_group_already_cells_unaffected_by_sibling_drift() -> None:
+    cells = (("a", 1, 2), ("b", 10, 20))
+    found_raw = {"a": (True, 2), "b": (True, 999)}  # a is already at `new`; b is drifted
+    classification, drifted = mod._classify_slug_group(cells, found_raw)
+    assert drifted == ("b",)
+    assert classification == {"a": "already", "b": "drift"}  # a stays "already", not reclassified
+
+
+def test_classify_slug_group_missing_row_counts_as_drift() -> None:
+    cells = (("a", 1, 2),)
+    found_raw = {"a": (False, None)}
+    classification, drifted = mod._classify_slug_group(cells, found_raw)
+    assert drifted == ("a",)
+    assert classification == {"a": "drift"}
+
+
+def test_group_by_slug_preserves_all_cells_and_slug_order() -> None:
+    groups = mod._group_by_slug(mod._CHANGES)
+    assert sum(len(cells) for cells in groups.values()) == len(mod._CHANGES)
+    assert list(groups) == sorted(groups)  # _CHANGES is sorted by (slug, column)
+    for slug, cells in groups.items():
+        # old/new may be unhashable (list/dict cells) -- compare as ordered lists, not sets.
+        expected = [(c, o, n) for s, c, o, n in mod._CHANGES if s == slug]
+        assert list(cells) == expected
+
+
+# ---------------------------------------------------------------------------
 # (e) drift guard on `new`: every new (not superseded) equals current seed JSON
 # ---------------------------------------------------------------------------
 
@@ -239,10 +445,37 @@ def test_new_literals_pin_to_current_seed_json_except_superseded() -> None:
         if (slug, column) in SUPERSEDED:
             continue
         current = seed[slug][column]
-        assert current == new, (
+        # M4-2: type + value, not plain `==` (which would accept 1 == 1.0 == True).
+        assert _exact_equal(current, new), (
             f"{slug}.{column}: _CHANGES 'new' literal ({new!r}) no longer matches the "
             f"current seed JSON ({current!r}); if a later migration changed this cell on "
             "purpose, add it to SUPERSEDED"
+        )
+
+
+def test_old_literals_pin_to_a_committed_merge_base_snapshot() -> None:
+    """Methodology M4-3 (NICE): `old` is otherwise pinned only by the generator
+    (scripts/build_epic_f_migration_table.py), a dev tool not re-run in CI -- a hand
+    edit of an `old` literal in `_CHANGES` would only surface as prod drift at dry-run
+    time. `tests/migrations/fixtures/epic_f_merge_base_old_values.json` is an
+    INDEPENDENT, committed snapshot of the merge-base (8ccac47e) values, extracted when
+    this fix round was authored and cross-checked against the spec-compliance
+    reviewer's own independent re-run of `build_changes()` against that merge-base
+    (which matched `_CHANGES` cell-for-cell) -- so it catches a FUTURE hand-edit of an
+    `old` literal. No git call here: the plan's S2-1 rule ("no migration test shells
+    out to git") exists because CI's gate job checks out with fetch-depth: 1, so
+    origin/main / a merge-base would not reliably resolve there; this test reads only
+    the committed fixture file (chosen over re-running the generator in a fixture, per
+    that same rule)."""
+    fixture = json.loads(
+        (_FIXTURES / "epic_f_merge_base_old_values.json").read_text(encoding="utf-8")
+    )
+    fixture_by_key = {(row["slug"], row["column"]): row["old"] for row in fixture}
+    assert set(fixture_by_key) == {(s, c) for s, c, _o, _n in mod._CHANGES}
+    for slug, column, old, _new in mod._CHANGES:
+        assert _exact_equal(fixture_by_key[(slug, column)], old), (
+            f"{slug}.{column}: _CHANGES 'old' literal ({old!r}) no longer matches the "
+            f"committed merge-base snapshot ({fixture_by_key[(slug, column)]!r})"
         )
 
 
@@ -279,8 +512,9 @@ def test_fresh_db_migrates_to_head_with_expected_counters(
             continue
         raw = _read_column(alembic_engine, slug, column)
         actual = mod._decode(column, raw)
-        assert actual == new
-        assert actual == seed[slug][column]
+        # M4-2: type + value, not plain `==`.
+        assert _exact_equal(actual, new)
+        assert _exact_equal(actual, seed[slug][column])
 
     for slug in (
         "data-breach-notification-regulatory-tail",
@@ -383,13 +617,20 @@ def test_dry_run_pre_phase_clean_then_drift_then_post_phase(
     assert rc == 0
     assert f"apply={n} already=0 drift=0" in out
 
+    # web-app-exploitation has 3 _CHANGES cells (applicable_industries, description,
+    # suggested_control_ids) -- drifting just `description` must report the WHOLE slug
+    # as drifted (M4-1 atomicity), not just the one cell.
     drift_slug, drift_column = "web-app-exploitation", "description"
+    group_columns = sorted(c for s, c, _o, _n in mod._CHANGES if s == drift_slug)
+    assert len(group_columns) == 3, "test assumes a 3-cell slug"
     _write_column(alembic_engine, drift_slug, drift_column, "DRIFT SENTINEL TEXT")
 
     rc = check_epic_f_migration.main(["--db", str(db_path)])
     out = capsys.readouterr().out
     assert rc == 1
-    assert f"drift: {drift_slug} {drift_column}" in out
+    for column in group_columns:
+        assert f"drift: {drift_slug} {column}" in out
+    assert f"apply={n - 3} already=0 drift=3" in out
 
     # Undo the drift, run the real migration, then check the post phase.
     old_val = _CHANGES_BY_KEY[(drift_slug, drift_column)][0]
@@ -449,6 +690,38 @@ def test_missing_db_path_exits_2_and_creates_nothing(tmp_path: Path) -> None:
     assert not db_path.exists()
 
 
+def test_sqlite_error_after_first_query_exits_4_not_2(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    alembic_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Spec NICE N-3 (tightened per controller ruling): exit 2 is scoped to
+    _connect_ro + the first query (the alembic_version read inside _check_revision); a
+    sqlite3.Error raised LATER (during _classify_rows) is an unexpected mid-run failure
+    and maps to exit 4 instead, with the same redacted message as any other unexpected
+    exception."""
+    alembic_runner.migrate_up_to(PRE)
+    _write_all_old(alembic_engine)
+    db_path = _db_path_from_config(alembic_config)
+
+    def _boom(*_a: object, **_kw: object) -> None:
+        raise sqlite3.OperationalError("simulated mid-run failure naming a real column")
+
+    monkeypatch.setattr(check_epic_f_migration, "_classify_rows", _boom)
+
+    capsys.readouterr()
+    rc = check_epic_f_migration.main(["--db", str(db_path)])
+    out, err = capsys.readouterr()
+    assert rc == 4
+    assert out.strip() == "internal error: OperationalError"
+    assert "simulated mid-run failure" not in out
+    assert "simulated mid-run failure" not in err
+    assert "Traceback" not in out
+    assert "Traceback" not in err
+
+
 # ---------------------------------------------------------------------------
 # (j') revision precondition
 # ---------------------------------------------------------------------------
@@ -500,10 +773,13 @@ def test_revision_precondition_post_phase_unknown_revision(
 
     db_path = _db_path_from_config(alembic_config)
     rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out = capsys.readouterr().out
+    out, err = capsys.readouterr()
     assert rc == 3
     assert "revision precondition failed" in out
+    assert f"expected {REV} (or a descendant of it)" in out  # spec N-2 tightening
+    assert "found 'deadbeef0000'" in out
     assert "Traceback" not in out
+    assert "Traceback" not in err  # spec N-2 tightening (was only checked on stdout)
 
 
 def test_revision_precondition_resolves_from_different_cwd(

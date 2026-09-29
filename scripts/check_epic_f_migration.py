@@ -4,32 +4,45 @@
 
 Opens a SQLite DB URI-mode read-only (never writes -- ``_connect_ro`` uses the
 same ``?mode=ro`` idiom as ``scripts/sweep_library_secondary_response.py``)
-and classifies every ``_CHANGES`` row against the DB's current values,
-printing a one-line-per-non-apply-row report plus a summary, without ever
-touching the DB. Intended for a read-only pass against a production BACKUP
-copy before a real deploy -- never run against a live production DB or its
-volume directly; only a local copy under ``~/idraa-backups/``.
+and classifies every ``_CHANGES`` cell against the DB's current values,
+grouped per slug with the same atomic-group guard the migration itself uses
+(spec §4.1 amendment, M4-1: a slug with any drifted cell is reported as
+drifted in full -- see the migration's module docstring "Per-slug atomicity"
+/ "Counter semantics" sections, which this script shares via
+``mod._group_by_slug`` / ``mod._classify_slug_group``). Prints a report line
+per notable cell plus a summary, without ever writing to the DB. Intended
+for a read-only pass against a production BACKUP copy before a real deploy
+-- never run against a live production DB or its volume directly; only a
+local copy under ``~/idraa-backups/``.
 
 Phases:
   - ``pre`` (default): the DB must be stamped at exactly this migration's
     ``down_revision`` (the state before it has run). Reports what the real
-    ``alembic upgrade`` would do: exit 0 if every row would cleanly apply or
-    is already at ``new``; exit 1 if any row is drifted.
+    ``alembic upgrade`` would do: exit 0 if every cell would cleanly apply or
+    is already at ``new``; exit 1 if any cell (or its slug sibling) is
+    drifted. Prints every non-"apply" cell ("already" and "drift") -- "apply"
+    is the expected default before a deploy, so it is the one phase omits.
   - ``post``: the DB must be stamped at this migration's own revision or any
     descendant of it (the state after it has run, or after it plus later
-    migrations). Every row must classify as "already" (at ``new``); exit 1
-    otherwise -- a row still needing "apply" post-deploy means the real
-    migration didn't converge it (or drifted since).
+    migrations). Every cell must classify as "already" (at ``new``); exit 1
+    otherwise -- a cell still needing "apply" post-deploy means the real
+    migration didn't converge it (or drifted since). Prints every
+    non-"already" cell ("apply" and "drift") -- "already" is the expected
+    default after a deploy, so it is the one phase omits.
 
 Exit codes:
   0  clean (see phase semantics above)
   1  drift (pre) or not-all-already (post)
-  2  DB unreadable (missing file, missing alembic_version table, or any
-     other sqlite3.Error)
+  2  DB unreadable -- scoped to opening the DB and its FIRST query (the
+     ``alembic_version`` read): a missing file, a missing ``alembic_version``
+     table, or any other ``sqlite3.Error`` raised by ``_connect_ro`` or that
+     first query. A ``sqlite3.Error`` raised LATER (during classification) is
+     an unexpected mid-run failure and maps to exit 4 instead (Sec3-2).
   3  revision precondition failed (wrong phase, or an alembic_version value
      unknown to this checkout's script directory)
-  4  any other exception (message and traceback are never printed -- only
-     the exception's type name, so a monkeypatched/corrupted internal state
+  4  any other exception, including a ``sqlite3.Error`` raised after the
+     first query (message and traceback are never printed -- only the
+     exception's type name, so a monkeypatched/corrupted internal state
      can't leak cell values into the log)
 
 Usage: ``uv run python scripts/check_epic_f_migration.py --db PATH [--phase pre|post]``
@@ -103,26 +116,37 @@ def _check_revision(conn: sqlite3.Connection, mod: ModuleType, phase: str) -> st
 
 
 def _classify_rows(
-    conn: sqlite3.Connection, mod: ModuleType
+    conn: sqlite3.Connection, mod: ModuleType, phase: str
 ) -> tuple[list[tuple[str, str, str]], dict[str, int]]:
+    """Groups ``mod._CHANGES`` by slug and classifies each group with
+    ``mod._classify_slug_group`` -- the same atomic-group guard ``upgrade()`` itself
+    uses -- so this script's counts and report match what a real ``alembic upgrade``
+    would do. Classification always uses the forward (old, new) direction regardless of
+    `phase` (the dry-run never simulates a downgrade); `phase` only controls which
+    classification is considered "expected" and thus omitted from the printed report
+    (see module docstring). Counters are CELL-level (see the migration module
+    docstring's "Counter semantics" note): a cell demoted from "apply" to "drift" by a
+    poisoned sibling counts toward ``drift``, not ``apply``.
+    """
     mod._validate_changes(mod._CHANGES)
-    non_apply: list[tuple[str, str, str]] = []
+    report_rows: list[tuple[str, str, str]] = []
     counts = {"apply": 0, "already": 0, "drift": 0}
-    for slug, column, old, new in mod._CHANGES:
-        row = conn.execute(
-            f"SELECT {column} FROM scenario_library_entries "  # noqa: S608 - column is a vetted literal, validated above
-            "WHERE slug = ? AND version = 1 AND source = 'seed'",
-            (slug,),
-        ).fetchone()
-        if row is None:
-            counts["drift"] += 1
-            non_apply.append((slug, column, "drift"))
-            continue
-        classification = mod._classify(column, row[0], old, new)
-        counts[classification] += 1
-        if classification != "already":
-            non_apply.append((slug, column, classification))
-    return non_apply, counts
+    omit = "apply" if phase == "pre" else "already"
+    for slug, cells in mod._group_by_slug(mod._CHANGES).items():
+        found_raw: dict[str, tuple[bool, object]] = {}
+        for column, _old, _new in cells:
+            row = conn.execute(
+                f"SELECT {column} FROM scenario_library_entries "  # noqa: S608 - column is a vetted literal, validated above
+                "WHERE slug = ? AND version = 1 AND source = 'seed'",
+                (slug,),
+            ).fetchone()
+            found_raw[column] = (row is not None, row[0] if row is not None else None)
+        classification, _drifted = mod._classify_slug_group(cells, found_raw)
+        for column, cls in classification.items():
+            counts[cls] += 1
+            if cls != omit:
+                report_rows.append((slug, column, cls))
+    return report_rows, counts
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -131,26 +155,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--phase", choices=("pre", "post"), default="pre")
     args = parser.parse_args(argv)
 
+    conn: sqlite3.Connection | None = None
     try:
-        conn = _connect_ro(args.db)
+        # Exit 2 is scoped to opening the DB and its FIRST query (the alembic_version
+        # read inside _check_revision). A sqlite3.Error from a LATER query (inside
+        # _classify_rows) is an unexpected mid-run failure, not "the DB file itself is
+        # unreadable", so it falls through to the generic `except Exception` below and
+        # maps to exit 4 instead (Sec3-2 / spec N-3).
         try:
+            conn = _connect_ro(args.db)
             mod = _load_migration()
             precondition_error = _check_revision(conn, mod, args.phase)
-            if precondition_error is not None:
-                print(precondition_error)
-                return 3
+        except sqlite3.Error as exc:
+            print(f"cannot read database: {exc}")
+            return 2
 
-            non_apply, counts = _classify_rows(conn, mod)
-        finally:
-            conn.close()
-    except sqlite3.Error as exc:
-        print(f"cannot read database: {exc}")
-        return 2
+        if precondition_error is not None:
+            print(precondition_error)
+            return 3
+
+        report_rows, counts = _classify_rows(conn, mod, args.phase)
     except Exception as exc:
         print(f"internal error: {type(exc).__name__}")
         return 4
+    finally:
+        if conn is not None:
+            conn.close()
 
-    for slug, column, classification in non_apply:
+    for slug, column, classification in report_rows:
         print(f"{classification}: {slug} {column}")
     print(f"apply={counts['apply']} already={counts['already']} drift={counts['drift']}")
 

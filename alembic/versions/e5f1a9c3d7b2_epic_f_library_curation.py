@@ -24,22 +24,50 @@ than shipping a migration that converges to an already-superseded value.
 working tree against ``git merge-base HEAD origin/main`` and prints this
 table; re-run and re-paste it after any rebase that moves ``origin/main``.
 
-Comparison semantics (spec §4.1.7), applied per ``(slug, column)`` row:
+Comparison semantics (spec §4.1.7), applied per ``(slug, column)`` cell:
   - current DB value == ``new`` (parsed-equal for JSON columns, exact for
-    text/enum columns) -> "already": no-op, the row already holds the
+    text/enum columns) -> "already": no-op, the cell already holds the
     target value (a second run of this migration, or a fresh DB whose
     earlier insert already read the edited seed JSON, both land here).
-  - current DB value == ``old`` -> "apply": UPDATE to ``new``.
-  - current DB value is neither -> "drift": the row was changed out of
-    band (a hotfix, a hand edit, a since-superseded prior migration); the
-    row is left untouched and a WARNING names the slug + column (never the
-    cell values -- they may be long free text). Drift never crashes the
-    migration and never overwrites; it is only counted and logged, so a
-    deploy against a DB with local drift always completes.
+  - current DB value == ``old`` -> "apply": UPDATE to ``new`` (unless the
+    cell's slug-group is poisoned by a sibling drift -- see below).
+  - current DB value is neither -> "drift": the cell was changed out of
+    band (a hotfix, a hand edit, a since-superseded prior migration).
 A missing seed row (no ``slug``/``version=1``/``source='seed'`` match) is
-also counted as drift, with its own warning, rather than raising -- an org
-that deleted or never seeded a row must not block every other row's
-convergence.
+also counted as drift, rather than raising -- an org that deleted or never
+seeded a row must not block every other row's convergence.
+
+**Per-slug atomicity (spec §4.1 amendment, methodology finding M4-1).**
+``_CHANGES`` cells are grouped by slug (``_group_by_slug``) and classified as
+a unit (``_classify_slug_group``) before any write: if ANY cell in a slug's
+group is "drift" (or its row is missing), the WHOLE group is skipped -- an
+"apply"-eligible cell in a poisoned group is counted and logged as "drift"
+too, not applied, and only ONE warning is logged per poisoned slug, naming
+the slug and the genuinely-drifted column(s) (never cell values). An
+"already" cell is unaffected either way (it needs no write regardless of its
+siblings). This applies to every slug uniformly, not only calibration-
+coupled ones: ``accidental-insider-exposure``'s ``primary_loss``/
+``secondary_loss``/``loss_form_profile``/``threat_event_type`` are one
+calibration unit (the PL/SL envelope split by the profile's shares, per
+register B5's within-budget-split-conserves-inherent-mean invariant), and a
+partial convergence there would leave the entry's PL/SL split incoherent
+with its own ``loss_form_profile`` shares even though each cell's own drift
+check passed. Rather than special-case that one slug, every slug gets the
+same atomic-group treatment -- simpler to reason about and a uniform
+defense-in-depth for any future coupled cells. Downgrade mirrors this with
+``old``/``new`` swapped (same grouping, same guard).
+
+**Counter semantics: cells, not slugs.** The logged summary
+(``applied=<A> already_new=<M> drift=<K>``, or ``already_old`` on downgrade)
+counts *cells* (rows of ``_CHANGES``), not slugs: ``A + M + K`` always equals
+``len(_CHANGES)``. Because of the atomic-group rule above, ``K`` (drift) can
+exceed the number of cells that are themselves individually off-script -- a
+single genuinely-drifted cell in a 4-cell slug poisons all 4, so all 4 count
+toward ``drift`` even though only 1 differs from both ``old`` and ``new``.
+The dry-run script (``scripts/check_epic_f_migration.py``) reports the same
+way, using the same shared ``_group_by_slug``/``_classify_slug_group``
+functions, so its counts and per-row report match what a real
+``alembic upgrade`` would do.
 
 Adopted rows (mirrors ``b5e2c7a9d413``'s adopted-rows paragraph): no
 org-owned row (``scenarios``, ``scenario_library_overrides``, SME estimates)
@@ -641,57 +669,103 @@ def _classify(
     return "drift"
 
 
+def _group_by_slug(
+    changes: tuple[tuple[str, str, object, object], ...],
+) -> dict[str, tuple[tuple[str, object, object], ...]]:
+    """Groups `changes` by slug, preserving each cell's (column, old, new) and the
+    slugs' first-appearance order (== alphabetical, since `_CHANGES` is sorted by
+    (slug, column))."""
+    groups: dict[str, list[tuple[str, object, object]]] = {}
+    for slug, column, old, new in changes:
+        groups.setdefault(slug, []).append((column, old, new))
+    return {slug: tuple(cells) for slug, cells in groups.items()}
+
+
+def _classify_slug_group(
+    cells: tuple[tuple[str, object, object], ...],
+    found_raw: dict[str, tuple[bool, object]],
+) -> tuple[dict[str, Literal["apply", "already", "drift"]], tuple[str, ...]]:
+    """Per-slug atomicity (spec §4.1 amendment, M4-1): classifies every cell of one
+    slug's group first (`cells` as (column, target_from, target_to) -- already
+    direction-adjusted by the caller), then enforces the group guard: if ANY cell is
+    genuinely "drift" (found but neither `target_from` nor `target_to`) or its row is
+    missing (`found_raw[column][0]` is False), every "apply"-eligible cell in the group
+    is reclassified to "drift" too (an "already" cell is left as "already" -- it needs
+    no write regardless of its siblings). Returns (final per-column classification,
+    the columns that were genuinely drifted/missing -- the latter is what a caller logs
+    in its one-per-slug warning, never the full reclassified set, so the message names
+    only the true anomaly)."""
+    raw_classification: dict[str, Literal["apply", "already", "drift"]] = {}
+    for column, target_from, target_to in cells:
+        found, raw = found_raw[column]
+        raw_classification[column] = (
+            "drift" if not found else _classify(column, raw, target_from, target_to)
+        )
+    drifted_columns = tuple(sorted(c for c, cls in raw_classification.items() if cls == "drift"))
+    if not drifted_columns:
+        return raw_classification, drifted_columns
+    final = {
+        column: ("drift" if cls == "apply" else cls) for column, cls in raw_classification.items()
+    }
+    return final, drifted_columns
+
+
 def _run(reverse: bool) -> None:
     _validate_changes(_CHANGES)
     bind = op.get_bind()
     applied = already = drift = 0
     label = "downgrade" if reverse else "upgrade"
-    for slug, column, old, new in _CHANGES:
-        target_from, target_to = (new, old) if reverse else (old, new)
-        row = bind.execute(
-            sa.select(_TABLE.c[column]).where(
-                _TABLE.c.slug == slug,
-                _TABLE.c.version == 1,
-                _TABLE.c.source == "seed",
-            )
-        ).first()
-        if row is None:
-            logger.warning(
-                "epic-f library curation %s: no seed row for slug=%s column=%s",
-                label,
-                slug,
-                column,
-            )
-            drift += 1
-            continue
-        classification = _classify(column, row[0], target_from, target_to)
-        if classification == "already":
-            already += 1
-            continue
-        if classification == "drift":
-            logger.warning(
-                "epic-f library curation %s: drift on slug=%s column=%s "
-                "(current value is neither the expected old nor new)",
-                label,
-                slug,
-                column,
-            )
-            drift += 1
-            continue
-        bind.execute(
-            sa.update(_TABLE)
-            .where(
-                _TABLE.c.slug == slug,
-                _TABLE.c.version == 1,
-                _TABLE.c.source == "seed",
-            )
-            .values(**{column: _encode(column, target_to)})
+    for slug, cells in _group_by_slug(_CHANGES).items():
+        dir_cells = tuple(
+            (column, (new, old) if reverse else (old, new)) for column, old, new in cells
         )
-        applied += 1
+        found_raw: dict[str, tuple[bool, object]] = {}
+        for column, (_target_from, _target_to) in dir_cells:
+            row = bind.execute(
+                sa.select(_TABLE.c[column]).where(
+                    _TABLE.c.slug == slug,
+                    _TABLE.c.version == 1,
+                    _TABLE.c.source == "seed",
+                )
+            ).first()
+            found_raw[column] = (row is not None, row[0] if row is not None else None)
+
+        classify_input = tuple(
+            (column, target_from, target_to) for column, (target_from, target_to) in dir_cells
+        )
+        classification, drifted_columns = _classify_slug_group(classify_input, found_raw)
+
+        if drifted_columns:
+            logger.warning(
+                "epic-f library curation %s: drift in slug=%s; skipping whole slug "
+                "(atomic group) -- drifted column(s): %s",
+                label,
+                slug,
+                ", ".join(drifted_columns),
+            )
+
+        for column, (_target_from, target_to) in dir_cells:
+            cls = classification[column]
+            if cls == "already":
+                already += 1
+            elif cls == "drift":
+                drift += 1
+            else:  # "apply"
+                bind.execute(
+                    sa.update(_TABLE)
+                    .where(
+                        _TABLE.c.slug == slug,
+                        _TABLE.c.version == 1,
+                        _TABLE.c.source == "seed",
+                    )
+                    .values(**{column: _encode(column, target_to)})
+                )
+                applied += 1
     # Forward (upgrade) summary line format is pinned by test (b)/(d):
     # "epic-f library curation: applied=<N> already_new=<M> drift=<K>" (no
     # direction suffix). Downgrade mirrors the wording with "already_old" since
-    # "already" there means the row already holds `old`, not `new`.
+    # "already" there means the row already holds `old`, not `new`. Counters are
+    # CELL-level, not slug-level -- see the module docstring's "Counter semantics" note.
     if reverse:
         logger.info(
             "epic-f library curation downgrade: applied=%d already_old=%d drift=%d",
