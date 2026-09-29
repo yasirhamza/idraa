@@ -1,0 +1,131 @@
+#!/bin/bash -p
+# scripts/curation-check: run the curation checker with the TypeSafe key.
+#
+# Hardening (spec §6):
+#   * `bash -p` (shebang) ignores BASH_ENV, SHELLOPTS and inherited functions; the script then
+#     re-executes itself under `env -i` with PATH=/usr/bin:/bin, so nothing from the caller's
+#     environment (PYTHONPATH, proxies, TYPESAFE_BASE_URL, ...) survives.
+#   * The key is read from macOS Keychain (service $CURATION_KEYCHAIN_SERVICE, default and
+#     allowlist: idraa-typesafe-key[-suffix]) or, where there is no Keychain, from
+#     TYPESAFE_API_KEY, and piped to Python on stdin. It never appears in an argument, an
+#     environment variable, a file or the terminal.
+#   * Only the tool's own commands and flags are accepted, and the run is refused when the
+#     code that executes with the key has uncommitted changes.
+# Defends against accidental exposure; it does not stop a user or agent who deliberately reads
+# Keychain themselves (see the spec's threat stance).
+#
+# One-time setup on macOS, in your OWN terminal (the prompt keeps the key out of history):
+#   security add-generic-password -s idraa-typesafe-key -a typesafe -U -w
+#
+# Usage: scripts/curation-check <all|labels|controls|overlap|gaps|tally>
+#          [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--force]
+
+set -euo pipefail
+set +x
+
+if [[ $- != *p* ]]; then
+  echo "scripts/curation-check: run it directly (scripts/curation-check ...), not via 'bash scripts/curation-check'" >&2
+  exit 2
+fi
+
+if [[ -z "${_CC_CLEAN:-}" ]]; then
+  service="${CURATION_KEYCHAIN_SERVICE:-idraa-typesafe-key}"
+  if [[ ! "$service" =~ ^idraa-typesafe-key(-[a-z0-9-]+)?$ ]]; then
+    echo "scripts/curation-check: CURATION_KEYCHAIN_SERVICE must be idraa-typesafe-key or idraa-typesafe-key-<suffix>" >&2
+    exit 2
+  fi
+  if [[ "$(/usr/bin/uname -s)" != "Darwin" && -n "${TYPESAFE_API_KEY:-}" ]]; then
+    # No Keychain: hand the key to the clean stage on fd 3 (never argv, never the clean environment).
+    exec 3< <(printf '%s\n' "$TYPESAFE_API_KEY")
+  else
+    exec 3<&-  # never hand an inherited descriptor 3 to the clean stage
+  fi
+  exec /usr/bin/env -i _CC_CLEAN=1 _CC_SERVICE="$service" HOME="${HOME:-/nonexistent}" PATH=/usr/bin:/bin LANG=C.UTF-8 \
+    /bin/bash --noprofile --norc -p "$0" "$@"
+fi
+
+# Stage 2 trusts nothing it did not set itself: a caller could export _CC_CLEAN to skip stage 1 (I-1r2).
+if [[ ! "${_CC_SERVICE:-}" =~ ^idraa-typesafe-key(-[a-z0-9-]+)?$ || "${PATH:-}" != "/usr/bin:/bin" ]]; then
+  echo "scripts/curation-check: unexpected environment; run scripts/curation-check directly" >&2
+  exit 2
+fi
+for name in $(compgen -e); do
+  case "$name" in
+    _CC_CLEAN|_CC_SERVICE|HOME|PATH|LANG|PWD|OLDPWD|SHLVL|_) ;;
+    *) echo "scripts/curation-check: unexpected environment variable '$name'; run scripts/curation-check directly" >&2; exit 2 ;;
+  esac
+done
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+usage() {
+  echo "usage: scripts/curation-check <all|labels|controls|overlap|gaps|tally> [--campaign NAME] [--top N] [--intake PATH] [--compare-to DIR] [--force]" >&2
+  exit 2
+}
+
+[[ $# -ge 1 ]] || usage
+cmd="$1"
+shift
+case "$cmd" in
+  all|labels|controls|overlap|gaps|tally) ;;
+  *) echo "scripts/curation-check: unknown command '$cmd'" >&2; usage ;;
+esac
+
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --campaign)
+      [[ $# -ge 2 && "$2" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "scripts/curation-check: --campaign needs lowercase letters, digits and hyphens" >&2; exit 2; }
+      args+=("$1" "$2"); shift 2 ;;
+    --top)
+      [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] || { echo "scripts/curation-check: --top needs a positive whole number" >&2; exit 2; }
+      args+=("$1" "$2"); shift 2 ;;
+    --intake|--compare-to)
+      [[ $# -ge 2 && -e "$2" ]] || { echo "scripts/curation-check: $1 needs an existing path" >&2; exit 2; }
+      path="$2"
+      [[ "$path" == /* ]] || path="$PWD/$path"  # resolve against the caller's directory, before the cd below
+      args+=("$1" "$path"); shift 2 ;;
+    --force)
+      args+=("$1"); shift ;;
+    *)
+      echo "scripts/curation-check: refusing argument '$1'" >&2; exit 2 ;;
+  esac
+done
+
+cd "$ROOT"
+PY="$ROOT/.venv/bin/python"
+
+if [[ "$cmd" == "tally" ]]; then
+  exec "$PY" -E -s -m scripts.curation_check tally
+fi
+
+GUARDED=(scripts/curation-check scripts/__init__.py scripts/curation_check data/curation/criteria.json)
+# git (and any hook or fsmonitor it starts) never sees fd 3, which holds the key on Linux.
+if ! dirty="$(/usr/bin/git status --porcelain -- "${GUARDED[@]}" 3<&-)"; then
+  echo "scripts/curation-check: could not check for uncommitted changes; refusing" >&2
+  exit 1
+fi
+if [[ -n "$dirty" ]]; then
+  echo "scripts/curation-check: uncommitted changes in code that runs with the key; refusing:" >&2
+  /usr/bin/git status --short -- "${GUARDED[@]}" >&2 3<&-
+  exit 1
+fi
+
+if [[ "$(/usr/bin/uname -s)" == "Darwin" ]]; then
+  if ! key="$(/usr/bin/security find-generic-password -s "$_CC_SERVICE" -w 2>/dev/null)"; then
+    echo "scripts/curation-check: no Keychain item '$_CC_SERVICE'. One-time setup, in your own terminal:" >&2
+    echo "  security add-generic-password -s $_CC_SERVICE -a typesafe -U -w" >&2
+    exit 1
+  fi
+else
+  key=""
+  { IFS= read -r key <&3; } 2>/dev/null || true
+  exec 3<&-
+  [[ -n "$key" ]] || { echo "scripts/curation-check: set TYPESAFE_API_KEY (no macOS Keychain on this platform)" >&2; exit 1; }
+fi
+
+# ${args[@]+...} keeps `set -u` happy on macOS's bash 3.2 when no flags were given.
+status=0
+printf '%s\n' "$key" | "$PY" -E -s -m scripts.curation_check "$cmd" --judge jev --key-stdin ${args[@]+"${args[@]}"} || status=$?
+unset key
+exit "$status"
