@@ -33,8 +33,11 @@ plan's Task 9 brief):
   That script's own ``NEW_NODES`` / ``NEW_PAIRS`` for ``accidental-insider-
   exposure`` are frozen at the PRE-Epic-F (post-#175) values -- exactly
   ``EPIC_F_OLD_NODES`` / the pairs ``seeded_pair`` derives from them -- because
-  Epic F's own re-split superseded that slug (see that script's
-  ``SUPERSEDED_BY_EPIC_F`` docstring note, which points here). Fix round 1 (M9-4
+  Epic F's own re-split superseded that slug. The ``SUPERSEDED_BY_EPIC_F`` skip
+  set that pins this equivalence lives in ``tests/unit/
+  test_sweep_library_secondary_response.py``, not in the #175 script itself --
+  ``scripts/sweep_library_secondary_response.py`` carries no Epic F mention
+  (grep: 0 hits). Fix round 1 (M9-4
   / spec I-1) added a test pinning both directions: ``EPIC_F_OLD_*`` to that
   script's frozen ``NEW_*`` tables, and ``EPIC_F_NEW_*`` to the current seed JSON
   via ``seeded_pair``.
@@ -164,10 +167,11 @@ convention; Sec2-2/Sec3-2).
 Usage:
     uv run python scripts/sweep_epic_f_adopted_rows.py --db /path/to/idraa.db [--gate]
 
-Run against a clean online-backup copy or the live DB, not a raw cp of a WAL
-database. Output carries production ids -- keep it in the operator's terminal or
-a private note (beside the backup, ``~/idraa-backups/``); only the summary
-counters belong in a PR or issue body (Sec2-2).
+Run against a clean online-backup copy only -- never the live DB -- and never
+a raw cp of a WAL database. Output carries production ids -- keep it in the
+operator's terminal or a private note (beside the backup,
+``~/idraa-backups/``); only the summary counters belong in a PR or issue body
+(Sec2-2).
 """
 
 from __future__ import annotations

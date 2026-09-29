@@ -45,6 +45,15 @@ Exit codes:
      exception's type name, so a monkeypatched/corrupted internal state
      can't leak cell values into the log)
 
+Lagging-prod procedure: if the backup's ``alembic_version`` predates this
+migration's ``down_revision`` (``08e3f1cd45b8``), run
+``alembic upgrade 08e3f1cd45b8`` on this checkout first, then re-run this
+dry-run. ``already=3`` afterward is expected, not drift: that catch-up run
+includes ``b5e2c7a9d413``, which converges accidental-insider-exposure's
+``primary_loss``/``secondary_loss``/``loss_form_profile`` straight from the
+(already Epic-F) seed JSON, leaving only its 4th cell, ``threat_event_type``,
+to ``apply`` here.
+
 Usage: ``uv run python scripts/check_epic_f_migration.py --db PATH [--phase pre|post]``
 """
 
@@ -111,7 +120,7 @@ def _check_revision(conn: sqlite3.Connection, mod: ModuleType, phase: str) -> st
 
     return (
         f"revision precondition failed: expected {expected}, found {found!r} — "
-        "see spec §8 for the lagging-prod procedure"
+        'see this module docstring\'s "Lagging-prod procedure" section for the fix'
     )
 
 
