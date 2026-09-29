@@ -1,0 +1,101 @@
+{
+  "campaign": "pilot",
+  "date": "2026-09-29",
+  "judge": "jev",
+  "git_commit": "e67f53e605873a1a5a7c81e502616add20add10c",
+  "model": "jev-1.13.0",
+  "pinned_model": "jev-1.13.0",
+  "top": 15,
+  "seed_sha256": {
+    "data/seed_library_entries.json": "a5397c1b64a484411e12a7e79be168418e4a98265129ae0c72cef30034990718",
+    "data/seed_library_entries_extension.json": "89de2fa8e7fa2f2049d16d2de07dc89f9192e67e1e802970e08e25c57592b076",
+    "data/seed_control_library_entries.json": "73fe32968fb597fc1f950afb78f32b03d182ba28356b3f42ebbd25ec333b1d9e"
+  },
+  "criteria_sha256": "6a0028593840ea814604f9294a2339b2bbc3c82c7a90da5062a591f2790c84f0",
+  "checks": {
+    "scenario-labels": {
+      "items": 102,
+      "scored_rows": 306,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 3436,
+      "input_tokens_median": 3348.0
+    },
+    "control-functions": {
+      "items": 63,
+      "scored_rows": 1556,
+      "suppressed": 19,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 8032,
+      "input_tokens_median": 7704.0
+    },
+    "overlap": {
+      "items": 102,
+      "scored_rows": 77,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 13582,
+      "input_tokens_median": 13582.0
+    }
+  },
+  "failed_checks": [],
+  "warnings": [
+    "gaps skipped: no --intake"
+  ],
+  "queues": {
+    "scenario-labels": [
+      "scenario-labels:accidental-insider-exposure:threat_event_type",
+      "scenario-labels:bec-fraud-financial:asset_class",
+      "scenario-labels:cloud-account-takeover:threat_event_type",
+      "scenario-labels:competitor-trade-secret-recruit:asset_class",
+      "scenario-labels:credential-stuffing-consumer-portal:threat_event_type",
+      "scenario-labels:education-student-records-insider:asset_class",
+      "scenario-labels:energy-billing-system-tamper:asset_class",
+      "scenario-labels:energy-settlement-platform-tampering-offtaker-liability:threat_actor_type",
+      "scenario-labels:financial-call-center-social-eng:asset_class",
+      "scenario-labels:financial-transaction-tampering:threat_event_type",
+      "scenario-labels:food-recall-data-tampering:asset_class",
+      "scenario-labels:gov-citizen-portal-ddos:asset_class",
+      "scenario-labels:gov-employee-insider-leak:asset_class",
+      "scenario-labels:gov-records-tampering:threat_event_type",
+      "scenario-labels:healthcare-record-alteration:threat_event_type"
+    ],
+    "control-functions": [
+      "control-functions:security-information-event-management:lec_det_visibility",
+      "control-functions:file-integrity-monitoring:lec_det_visibility",
+      "control-functions:cloud-security-posture-management:lec_det_monitoring",
+      "control-functions:saas-security-posture-management:lec_det_visibility",
+      "control-functions:secure-remote-access:lec_prev_resistance",
+      "control-functions:patch-management:vmc_prev_reduce_variance_prob",
+      "control-functions:security-configuration-assessment:dsc_prev_sa_reporting",
+      "control-functions:email-security-protection:lec_det_recognition",
+      "control-functions:host-intrusion-detection-prevention:lec_resp_resilience",
+      "control-functions:third-party-risk-management:dsc_prev_sa_data_threat",
+      "control-functions:network-detection-response:lec_resp_resilience",
+      "control-functions:endpoint-detection-response:lec_resp_resilience",
+      "control-functions:secure-remote-access:lec_prev_avoidance",
+      "control-functions:third-party-risk-management:dsc_prev_incentives",
+      "control-functions:user-access-control:vmc_corr_implementation"
+    ],
+    "overlap": [
+      "overlap:agri-coop-bec-fraud:bec-fraud-financial",
+      "overlap:bec-fraud-financial:professional-payroll-bec",
+      "overlap:chemical-process-safety-attack:safety-system-bypass",
+      "overlap:competitor-trade-secret-recruit:ip-theft-by-competitor",
+      "overlap:credential-stuffing-consumer-portal:hospitality-loyalty-account-takeover",
+      "overlap:crop-science-ip-exfiltration:ip-theft-by-competitor",
+      "overlap:data-breach-notification-regulatory-tail:web-app-exploitation",
+      "overlap:ddos-extortion-financial:ddos-financial-seasonal-peak",
+      "overlap:ddos-financial-seasonal-peak:retail-ecommerce-checkout-ddos",
+      "overlap:denial-of-control:grid-protective-relay-manipulation",
+      "overlap:education-student-records-insider:hospitality-guest-data-insider",
+      "overlap:energy-settlement-platform-tampering-offtaker-liability:pipeline-nomination-scada-curtailment-shipper-penalty",
+      "overlap:financial-transaction-tampering:manufacturing-billing-fraud",
+      "overlap:food-cold-chain-ransomware:tolling-plant-ransomware-customer-liability",
+      "overlap:hmi-credential-compromise:oem-remote-maintenance-abuse"
+    ]
+  }
+}
