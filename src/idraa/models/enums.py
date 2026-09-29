@@ -304,8 +304,12 @@ class AssetClass(StrEnum):
       after UAT surfaced "no way to express cash/cash-equivalent scenarios."
 
     v3-only additions beyond FAIR canonical:
-    - PEOPLE: not in FAIR canonical; retained as a v3 convenience for HR /
-      insider-risk scenarios that don't map cleanly to a FAIR business-process.
+    - PEOPLE: not in FAIR canonical; the organisation's personnel as the
+      asset at risk (the persons themselves, e.g. their safety, health or
+      personal security). Staff who are deceived, recruited or who misuse
+      access are the threat vector or actor, not the asset: label the asset
+      actually lost (data, cash_or_equivalent, ...). Employee records are
+      data. Owner decision 2026-09-29 (#192).
     - OT_SYSTEMS / SAFETY_SYSTEMS: OT-first commitment (spec §3.1).
     - OTHER: catch-all sentinel.
     """
@@ -459,11 +463,13 @@ SUB_FUNCTION_UNITS: dict[FairCamSubFunction, UnitType] = {
 SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
     # LEC — Loss Event Control (manages threat events directly)
     FairCamSubFunction.LEC_PREV_AVOIDANCE: (
-        "Avoidance — remove the opportunity for a threat event entirely. "
-        "Examples: decommission the service, take a system off-network, "
-        "stop collecting sensitive data, choose a non-vulnerable design. "
-        "Measured as probability [0, 1] that the opportunity is removed "
-        "from the threat actor. FAIR-CAM §3.1.1."
+        "Avoidance — reduce how often threat actors come into contact with the "
+        "asset: remove the exposure, or prevent a party from reaching the "
+        "asset's interface at all. Examples: decommission the service, take a "
+        "system off-network, stop collecting sensitive data, network "
+        "segmentation, network access control, blocking known-malicious "
+        "destinations. Measured as a proportion [0, 1]: the reduction in how "
+        "often threat actors contact the asset. FAIR-CAM §3.1.1."
     ),
     FairCamSubFunction.LEC_PREV_DETERRENCE: (
         "Deterrence — discourage threat actors from initiating the event. "
@@ -474,10 +480,10 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
     ),
     FairCamSubFunction.LEC_PREV_RESISTANCE: (
         "Resistance — withstand the threat's force once the actor initiates. "
-        "Examples: MFA, encryption at rest + in transit, network segmentation, "
-        "least-privilege IAM, EDR with kernel-level enforcement, patched OS, "
-        "WAF rules. Measured as probability [0, 1] the control resists when "
-        "triggered (1.0 = always resists). FAIR-CAM §3.1.3."
+        "Examples: MFA, encryption at rest + in transit, least-privilege IAM, "
+        "EDR with kernel-level enforcement, patched OS, WAF rules. Measured as "
+        "probability [0, 1] the control resists when triggered (1.0 = always "
+        "resists). FAIR-CAM §3.1.3."
     ),
     FairCamSubFunction.LEC_DET_VISIBILITY: (
         "Visibility — make threat-relevant activity observable. "
@@ -503,21 +509,21 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
     FairCamSubFunction.LEC_RESP_EVENT_TERMINATION: (
         "Event termination — stop the in-progress threat event. Examples: "
         "kill malicious process, block source IP at firewall, isolate "
-        "compromised host, revoke session tokens, disable compromised account. "
-        "Measured as ELAPSED_TIME (days) — mean-time-to-contain. Shorter = "
-        "less damage accumulated. FAIR-CAM §3.3.1."
+        "compromised host, revoke session tokens, disable compromised account, "
+        "containment by retained third-party IR responders. Measured as "
+        "ELAPSED_TIME (days) — mean-time-to-contain. Shorter = less damage "
+        "accumulated. FAIR-CAM §3.3.1."
     ),
     FairCamSubFunction.LEC_RESP_RESILIENCE: (
         "Resilience — keep operating during a loss event. Examples: hot/warm "
         "DR site, multi-region failover, redundant providers, documented BCP "
-        "with tested runbooks, automated DB replication. Measured as "
-        "probability [0, 1] of continued operation during the event "
-        "(uptime fraction). FAIR-CAM §3.3.2."
+        "with tested runbooks, automated DB replication, tested restore from "
+        "backups. Measured as probability [0, 1] of continued operation during "
+        "the event (uptime fraction). FAIR-CAM §3.3.2."
     ),
     FairCamSubFunction.LEC_RESP_LOSS_REDUCTION: (
         "Loss reduction — reduce per-event dollar loss. Examples: cyber "
-        "insurance payout, restore-from-backup procedure, third-party IR "
-        "retainer, breach-notification template, legal hold tooling. "
+        "insurance payout, breach-notification template, legal hold tooling. "
         "Measured as CURRENCY — dollar reduction per loss event "
         "(subtractor against secondary loss). FAIR-CAM §3.3.3."
     ),
@@ -526,51 +532,56 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
         "Reduce change frequency — minimise how often the protected environment "
         "changes, so there are fewer chances for a change to introduce a "
         "vulnerability. Examples: change-management boards, blackout windows, "
-        "code-freeze periods, infra-as-code review gates. Measured as "
-        "probability [0, 1] a proposed change is deferred / batched. FAIR-CAM §4.1.1."
+        "code-freeze periods. Measured as probability [0, 1] a proposed change "
+        "is deferred / batched. FAIR-CAM §4.1.1."
     ),
     FairCamSubFunction.VMC_PREV_REDUCE_VARIANCE_PROB: (
         "Reduce variance probability — lower the chance any given change "
-        "introduces a vulnerability. Examples: pre-merge SAST + dependency "
-        "scanning, mandatory code review, automated security tests in CI, "
-        "configuration-as-code linting. Measured as probability [0, 1] a "
-        "change passes WITHOUT introducing variance. FAIR-CAM §4.1.2."
+        "introduces a vulnerability. Examples: mandatory peer code review, "
+        "infra-as-code review gates, pre-deployment testing of changes in "
+        "staging, automated tests (including security tests) that gate each "
+        "merge or release. Measured as probability [0, 1] a change passes "
+        "WITHOUT introducing variance. FAIR-CAM §4.1.2."
     ),
     FairCamSubFunction.VMC_ID_THREAT_INTELLIGENCE: (
         "Threat intelligence — identify new threats via external + internal "
         "intel. Examples: commercial TI feeds, ISAC participation, internal "
-        "honeypot telemetry, vendor security bulletins, threat-modelling "
-        "workshops. Measured as probability [0, 1] a novel threat is "
-        "identified within the relevant intel cycle. FAIR-CAM §4.2.1."
+        "honeypot telemetry, vendor security bulletins. Measured as "
+        "probability [0, 1] a novel threat is identified within the relevant "
+        "intel cycle. FAIR-CAM §4.2.1."
     ),
     FairCamSubFunction.VMC_ID_CONTROL_MONITORING: (
         "Control monitoring — detect when an existing control has failed, "
-        "degraded, or drifted from baseline. Examples: control-effectiveness "
-        "dashboards, configuration-drift detection, periodic control testing, "
-        "EDR-coverage gap reports. Measured as probability [0, 1] a control "
-        "failure is detected within a meaningful window. FAIR-CAM §4.2.2."
+        "degraded, or drifted from baseline. Examples: configuration-drift "
+        "detection, vulnerability scanning, SAST/DAST and dependency scanning, "
+        "policy-compliance (configuration-baseline) scans, periodic control "
+        "testing, penetration testing, EDR-coverage gap reports. Measured as "
+        "probability [0, 1] a control failure is detected within a meaningful "
+        "window. FAIR-CAM §4.2.2."
     ),
     FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION: (
         "Treatment selection — choose the right corrective action for an "
         "identified variance. Examples: severity-based playbooks, risk-based "
-        "patch prioritisation, vulnerability-management workflow, exception "
-        "process with sign-off. Measured as probability [0, 1] the selected "
-        "treatment actually addresses the variance. FAIR-CAM §4.3.1."
+        "patch prioritisation, fix / mitigate / accept decision per identified "
+        "variance, exception process with sign-off. Measured as probability "
+        "[0, 1] the selected treatment actually addresses the variance. "
+        "FAIR-CAM §4.3.1."
     ),
     FairCamSubFunction.VMC_CORR_IMPLEMENTATION: (
         "Implementation — execute the chosen correction. Examples: patch "
         "deployment pipeline, hotfix release process, configuration push, "
-        "vulnerability-remediation SLAs. Measured as ELAPSED_TIME (days) — "
-        "mean-time-to-remediate from when treatment is selected. Shorter = "
-        "smaller exposure window. FAIR-CAM §4.3.2."
+        "emergency rollback to restore a degraded control. Measured as "
+        "ELAPSED_TIME (days) — mean-time-to-remediate from when treatment is "
+        "selected. Shorter = smaller exposure window. FAIR-CAM §4.3.2."
     ),
     # DSC — Decision Support Control (manages alignment between decisions and risk)
     FairCamSubFunction.DSC_PREV_DEFINED_EXPECTATIONS: (
         "Defined expectations — set explicit, written behaviour standards "
         "for decision-makers. Examples: acceptable-use policy, data-handling "
         "standards, vendor-selection criteria, risk-tolerance statements, "
-        "code-of-conduct. Measured as probability [0, 1] a decision has an "
-        "applicable, current expectation to anchor on. FAIR-CAM §5.1.1."
+        "code-of-conduct, vulnerability-remediation SLAs. Measured as "
+        "probability [0, 1] a decision has an applicable, current expectation "
+        "to anchor on. FAIR-CAM §5.1.1."
     ),
     FairCamSubFunction.DSC_PREV_COMMUNICATION: (
         "Communication — convey expectations to decision-makers so they "
@@ -597,16 +608,18 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
     FairCamSubFunction.DSC_PREV_SA_DATA_CONTROLS: (
         "Situational awareness · controls data — collect data about existing "
         "controls. Examples: control-catalogue with effectiveness ratings, "
-        "control-coverage maps, recent audit results, pen-test findings. "
-        "Measured as probability [0, 1] the decision-maker can see the "
-        "current control state. FAIR-CAM §5.1.3.1.3."
+        "control-coverage maps, GRC control-status register, "
+        "control-effectiveness scorecard for management. Measured as "
+        "probability [0, 1] the decision-maker can see the current control "
+        "state. FAIR-CAM §5.1.3.1.3."
     ),
     FairCamSubFunction.DSC_PREV_SA_ANALYSIS: (
         "Situational awareness · analysis — turn raw data into risk insights. "
         "Examples: FAIR quantitative risk analyses, qualitative risk register, "
-        "scenario modelling, Monte Carlo simulation, attack-path analysis. "
-        "Measured as probability [0, 1] available data is converted into an "
-        "actionable insight. FAIR-CAM §5.1.3.2."
+        "scenario modelling, Monte Carlo simulation, attack-path analysis, "
+        "threat modelling of system designs. Measured as probability [0, 1] "
+        "available data is converted into an actionable insight. "
+        "FAIR-CAM §5.1.3.2."
     ),
     FairCamSubFunction.DSC_PREV_SA_REPORTING: (
         "Situational awareness · reporting — deliver insights to "
@@ -631,11 +644,12 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
         "FAIR-CAM §5.1.5."
     ),
     FairCamSubFunction.DSC_ID_MISALIGNED: (
-        "Identify misalignment — detect when actual decisions deviate from "
-        "expectations. Examples: audit reviews, exception-tracking, policy-"
-        "compliance scans, governance committee review cycles. Measured as "
-        "probability [0, 1] a misaligned decision is identified within a "
-        "meaningful window. FAIR-CAM §5.2."
+        "Identify misalignment — detect when actual decisions or behaviour "
+        "deviate from expectations. Examples: exception and waiver tracking, "
+        "compliance audits of adherence to policy, review of management "
+        "decisions and risk acceptances against the risk appetite, governance "
+        "committee review cycles. Measured as probability [0, 1] a misaligned "
+        "decision is identified within a meaningful window. FAIR-CAM §5.2."
     ),
     FairCamSubFunction.DSC_CORR_MISALIGNED: (
         "Correct misalignment — re-align decision-makers when their decisions "
