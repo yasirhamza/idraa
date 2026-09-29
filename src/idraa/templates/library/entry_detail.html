@@ -26,7 +26,7 @@
 
 <div class="max-w-4xl mx-auto">
 
-  {% if entry.status != "published" %}
+  {% if entry.status == "deprecated" %}
   <p class="text-meta text-ink-2">Deprecated: kept for scenarios already derived from it; not offered for new scenarios.</p>
   {% endif %}
 

@@ -36,6 +36,7 @@ from idraa.models.enums import (
     ThreatCategory,
 )
 from idraa.models.organization import Organization
+from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry, ScenarioLibraryOverride
 from idraa.models.wizard_draft import WizardDraft
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
@@ -204,11 +205,17 @@ async def test_library_entry_detail_no_version_404_for_deprecated_entry(
 
 @pytest.mark.asyncio
 async def test_deprecated_entry_version_detail_200_hides_wizard_and_create_override(
-    analyst_client: AsyncClient,
+    admin_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
+    """Spec-compliance fix round 1: the Create/Edit-override actions only
+    render for ``current_user.role == "admin"`` (entry_detail.html), so an
+    ``analyst_client`` run of this test is vacuous — "Create org override"
+    never appears for an analyst regardless of the deprecated-entry gate.
+    Must run as admin, no existing override, so the ``elif entry.status ==
+    "published"`` branch is actually exercised."""
     _published, deprecated = await _seed_pair(db_session, tag="detail-version")
-    r = await analyst_client.get(f"/library/entries/{deprecated.id}?version={deprecated.version}")
+    r = await admin_client.get(f"/library/entries/{deprecated.id}?version={deprecated.version}")
     assert r.status_code == 200
     assert "Deprecated" in r.text
     assert "Use in wizard" not in r.text
@@ -216,6 +223,22 @@ async def test_deprecated_entry_version_detail_200_hides_wizard_and_create_overr
     assert (
         "Deprecated: kept for scenarios already derived from it; not offered for new scenarios."
     ) in r.text
+
+
+@pytest.mark.asyncio
+async def test_published_entry_version_detail_shows_both_admin_actions(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Positive control for the test above: a published entry, viewed as
+    admin with no existing override, shows BOTH "Use in wizard" and "Create
+    org override" — proves the gate is status-conditional, not a blanket
+    admin-only suppression."""
+    published, _deprecated = await _seed_pair(db_session, tag="detail-version-positive")
+    r = await admin_client.get(f"/library/entries/{published.id}?version={published.version}")
+    assert r.status_code == 200
+    assert "Use in wizard" in r.text
+    assert "Create org override" in r.text
 
 
 @pytest.mark.asyncio
@@ -234,6 +257,27 @@ async def test_status_pill_colours_published_success_deprecated_warning(
     )
     assert r_dep.status_code == 200
     assert "text-status-warning" in r_dep.text
+
+
+@pytest.mark.asyncio
+async def test_draft_entry_detail_omits_deprecated_notice(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Spec-compliance NICE fix round 1: the notice text says "Deprecated",
+    so it must render only for ``entry.status == "deprecated"`` — a draft
+    entry (reached via ?version=, which is status-agnostic) must not show
+    it even though it also hides the wizard/override actions."""
+    draft = _make_entry(slug="draft-no-notice", status="draft")
+    db_session.add(draft)
+    await db_session.commit()
+    await db_session.refresh(draft)
+
+    r = await admin_client.get(f"/library/entries/{draft.id}?version={draft.version}")
+    assert r.status_code == 200
+    assert "Deprecated:" not in r.text
+    assert "Use in wizard" not in r.text
+    assert "Create org override" not in r.text
 
 
 @pytest.mark.asyncio
@@ -277,12 +321,29 @@ async def test_deprecated_entry_detail_keeps_edit_override_link_when_override_ex
 
 @pytest.mark.asyncio
 async def test_wizard_deep_link_deprecated_entry_no_prefill_no_500(
-    analyst_client: AsyncClient,
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,
 ) -> None:
+    """Methodology NICE fix round 1 (M5-N4): pin that the wizard state is
+    actually left un-prefilled, not just that the response is 200 — the
+    ``contextlib.suppress(LibraryEntryNotFoundError, LibraryEntryStatusError)``
+    guard (routes/scenarios.py) must fire BEFORE any ``state.*`` assignment."""
+    client, org_id = authed_analyst
     _published, deprecated = await _seed_pair(db_session, tag="deep-link")
-    r = await analyst_client.get(f"/scenarios/new/wizard?library_entry_id={deprecated.id}")
+    r = await client.get(f"/scenarios/new/wizard?library_entry_id={deprecated.id}")
     assert r.status_code == 200
+    assert deprecated.name not in r.text
+
+    user_id = await _resolve_user_id(db_session, "analyst@test.local")
+    draft = (
+        await db_session.execute(select(WizardDraft).where(WizardDraft.user_id == user_id))
+    ).scalar_one_or_none()
+    assert draft is not None, "GET deep-link still persists a draft row (advance_step)"
+    assert draft.organization_id == org_id
+    assert draft.state_json.get("library_entry_id") is None
+    assert draft.state_json.get("threat_event_frequency") is None
+    assert draft.state_json.get("vulnerability") is None
+    assert draft.state_json.get("primary_loss") is None
 
 
 @pytest.mark.asyncio
@@ -424,16 +485,35 @@ async def test_refresh_from_library_flashes_then_scenario_detail_still_200(
     db_session.add(entry)
     await db_session.commit()
 
+    scenario_id = scenario.id  # captured BEFORE expire_all() below
+    before_tef = scenario.threat_event_frequency
+    before_vuln = scenario.vulnerability
+    before_pl = scenario.primary_loss
+    before_sl = scenario.secondary_loss
+    before_row_version = scenario.row_version
+
     r = await csrf_post(
         client,
-        f"/scenarios/{scenario.id}/loss/refresh",
-        {"expected_row_version": str(scenario.row_version)},
+        f"/scenarios/{scenario_id}/loss/refresh",
+        {"expected_row_version": str(before_row_version)},
         follow_redirects=False,
     )
     assert r.status_code == 422, r.text
     assert "no longer available" in r.text
 
-    r_detail = await client.get(f"/scenarios/{scenario.id}")
+    # Methodology NICE fix round 1 (M5-N4): the soft-fail must not write
+    # anything — pin the scenario's stored parameters byte-identical, not
+    # just "no 500".
+    db_session.expire_all()
+    refreshed = await db_session.get(Scenario, scenario_id)
+    assert refreshed is not None
+    assert refreshed.threat_event_frequency == before_tef
+    assert refreshed.vulnerability == before_vuln
+    assert refreshed.primary_loss == before_pl
+    assert refreshed.secondary_loss == before_sl
+    assert refreshed.row_version == before_row_version
+
+    r_detail = await client.get(f"/scenarios/{scenario_id}")
     assert r_detail.status_code == 200
 
 
