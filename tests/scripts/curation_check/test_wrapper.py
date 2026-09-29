@@ -55,6 +55,7 @@ def _run(
         ("labels", "--top", "abc"),
         ("labels", "--campaign", "Bad Name"),
         ("gaps", "--intake", "/definitely/not/here.jsonl"),
+        ("tally", "--top", "5"),
         (),
     ],
 )

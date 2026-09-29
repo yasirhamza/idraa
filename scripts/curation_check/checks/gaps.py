@@ -5,16 +5,18 @@ INTAKE_TITLE_MAX characters reach a committed report."""
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.curation_check.config import INTAKE_TITLE_MAX
+from scripts.curation_check.config import INTAKE_TITLE_MAX, MATCH_NAME_MIN, MAX_NAMED
 from scripts.curation_check.criteria import NONE_COVERED
-from scripts.curation_check.flags import Flag
+from scripts.curation_check.flags import Flag, name_list, tied_with
 from scripts.curation_check.judge import Answers
 
 INTAKE_SOURCE_MAX = 40  # the source is published in the queue row, like the title
+_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 GAP_QUESTION = "Which library scenario covers the threat described in the state?"
 NONE_COVERED_TEXT = "No library scenario covers this threat."
@@ -59,6 +61,8 @@ def load_intake(path: Path) -> list[IntakeItem]:
             if not isinstance(row.get(f), str) or not row[f].strip():
                 raise ValueError(f"{path}: line {n}: missing or empty '{f}'")
         clean = {f: " ".join(row[f].split()) for f in _FIELDS}
+        if not _ID_RE.fullmatch(clean["id"]):
+            raise ValueError(f"{path}: line {n}: id must be 1-64 letters, digits or . _ : -")
         if clean["id"] in seen:
             raise ValueError(f"{path}: line {n}: duplicate id {clean['id']!r}")
         seen.add(clean["id"])
@@ -83,23 +87,24 @@ def score_gap(item: IntakeItem, answers: Answers, *, name_to_slug: dict[str, str
         key=lambda t: (-t[1], t[0]),
     )
     closest_p = ranked[0][1] if ranked else 0.0
-    tied = [
-        k for k, p in ranked if round(p, 2) == round(closest_p, 2)
-    ]  # Task-5 review: a tie never names one entry
-    closest = tied[0] if tied else "(none)"
-    label = "closest (tied)" if len(tied) > 1 else "closest"
-    names = ", ".join(f"**{k}**" for k in tied) or "**(none)**"
+    if closest_p < MATCH_NAME_MIN:
+        tied: list[str] = []
+        named = f"closest: none scored {MATCH_NAME_MIN:.2f} or more"
+    else:
+        tied = tied_with(ranked, closest_p)  # Task-5 review: a tie never names one entry
+        named = f"{'closest (tied)' if len(tied) > 1 else 'closest'}: {name_list(tied)} ({closest_p:.2f})"
     return [
         Flag(
             check="gaps",
             key=f"gaps:{item.id}",
             subject=f"{item.id} · {item.title} ({item.source})",
             score=p_none,
-            finding=f"judge's none-score {p_none:.2f}; {label}: {names} ({closest_p:.2f})",
+            finding=f"judge's none-score {p_none:.2f}; {named}",
             detail={
-                "closest": closest,
+                "closest": tied[0] if tied else "(none)",
                 "closest_p": closest_p,
-                "closest_tied": tied,
+                "closest_tied": tied[:MAX_NAMED],
+                "closest_tied_more": max(0, len(tied) - MAX_NAMED),
                 "top2": [[k, p] for k, p in ranked[:2]],
                 "source": item.source,
             },

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from scripts.curation_check.config import BELOW_CUT_WINDOW
+from scripts.curation_check.config import BELOW_CUT_WINDOW, MAX_NAMED
 
 
 @dataclass(frozen=True)
@@ -47,3 +47,16 @@ def rank(flags: list[Flag], top: int, window: float = BELOW_CUT_WINDOW) -> tuple
         return [], 0
     cut = queue[-1].score - window
     return queue, sum(1 for f in ordered[top:] if f.score >= cut)
+
+
+DISPLAY_DP = 2  # findings print scores to 2 decimals, so ties are judged at that precision
+
+
+def tied_with(ranked: list[tuple[str, float]], p: float) -> list[str]:
+    """Names in `ranked` (sorted by -score, name) whose score equals p at the displayed precision."""
+    return [n for n, q in ranked if round(q, DISPLAY_DP) == round(p, DISPLAY_DP)]
+
+
+def name_list(names: list[str], cap: int = MAX_NAMED) -> str:
+    shown = ", ".join(f"**{n}**" for n in names[:cap])
+    return shown + (f" +{len(names) - cap} more" if len(names) > cap else "")

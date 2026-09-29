@@ -6,8 +6,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
+from scripts.curation_check.config import MATCH_NAME_MIN, MAX_NAMED
 from scripts.curation_check.criteria import NONE_DISTINCT
-from scripts.curation_check.flags import Flag
+from scripts.curation_check.flags import Flag, name_list, tied_with
 from scripts.curation_check.judge import Answers
 from scripts.curation_check.library import ScenarioItem
 
@@ -36,13 +37,26 @@ def score_overlap(
     )
     if not others:
         return []
-    # Task-5 review: a tie never picks one partner, and the copy never claims a match 'distinct' outscored
     top_p = others[0][1]
-    tied = [
-        n for n, p in others if round(p, 2) == round(top_p, 2)
-    ]  # a tie at the displayed precision
+    if top_p < MATCH_NAME_MIN:
+        # no partner stands out (a thin spread over the library): flag the entry itself, never 100 partners
+        return [
+            Flag(
+                check="overlap",
+                key=f"overlap:{item.slug}",
+                subject=item.slug,
+                score=1.0 - p_distinct,
+                finding=(
+                    f"from {item.slug}: judge's distinct-score {p_distinct:.2f}; no single scenario scored "
+                    f"{MATCH_NAME_MIN:.2f} or more: sharpen the description, or keep"
+                ),
+                detail={"top2": [[n, p] for n, p in others[:2]], "from": item.slug},
+            )
+        ]
+    # Task-5 review: a tie never picks one partner, and the copy never claims a match 'distinct' outscored
+    tied = tied_with(others, top_p)
     rest = [(n, p) for n, p in others if n not in tied]
-    names = ", ".join(f"**{n}**" for n in tied)
+    names = name_list(tied)
     tie = ", tied" if len(tied) > 1 else ""
     if round(p_distinct, 2) >= round(top_p, 2):
         lead = f"from {item.slug}: judge's top score is 'distinct' ({p_distinct:.2f}); closest: {names} ({top_p:.2f}{tie})"
@@ -50,7 +64,7 @@ def score_overlap(
         lead = f"from {item.slug}: judge's top score is {names} ({top_p:.2f}{tie}); distinct-score {p_distinct:.2f}"
     also = f"; also **{rest[0][0]}** ({rest[0][1]:.2f})" if rest else ""
     flags = []
-    for name in tied:
+    for name in tied[:MAX_NAMED]:
         a, b = sorted((item.slug, name_to_slug[name]))
         flags.append(
             Flag(

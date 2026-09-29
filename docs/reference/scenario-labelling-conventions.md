@@ -28,8 +28,8 @@ class (insider misuse), so a scenario can fit several values. Pick by this prece
      `ot_integrity` when the process keeps running in a manipulated state or the operator's view is falsified.
 
    If no OT effect is described, continue.
-2. **Mechanism:** `ransomware`, `supply_chain`, `social_engineering`, `physical_tampering`, `denial_of_service`
-   (flooding or resource exhaustion; not sabotage by an insider) or `malware`.
+2. **Mechanism** (not ranked; the option texts separate them): `ransomware`, `supply_chain`, `social_engineering`,
+   `physical_tampering`, `denial_of_service` or `malware`.
 3. **Insider misuse,** if no mechanism fits and a malicious insider abused access they already held. Accidental
    exposure is not misuse.
 4. **Otherwise** `data_disclosure` or `data_tampering` if the effect is on data; if none fits, `miscellaneous`.
@@ -66,6 +66,7 @@ All are tracked in a follow-up issue.
 | Secure build baselines | Reduce variance probability example (criteria-authored) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
 | Standardised, locked-down configurations | Reduce change frequency example (criteria-authored) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
 | Risk-based patch prioritisation, vulnerability-management workflow | Treatment selection examples | Patch Management, Vulnerability Assessment: no Treatment selection; no seed control carries it |
+| `people` asset class | "employee safety or HR/insider-risk scenarios" | 4 of 6 `people` entries are staff targeted by social engineering; one is an insider leak of employee records (data under the `not_for` text) |
 
 Also for the reconciliation: the patching and vulnerability-scanning examples treat asset CVEs as variance
 management (VMC). Rubric §4 Example 3 routes patching an asset CVE to Resistance, and the seed carries both.

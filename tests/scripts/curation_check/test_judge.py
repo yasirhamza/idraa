@@ -32,11 +32,15 @@ def test_valid_answers_pass() -> None:
     ("answers", "message"),
     [
         ({"pick": {"a": 1.0}}, "missing"),
-        ({"pick": {"a": 0.5, "zzz": 0.5}, "yes": 0.1}, "unknown options"),
+        ({"pick": {"a": 0.5, "zzz": 0.5}, "yes": 0.1}, r"1 unknown option\(s\)"),
         ({"pick": {"a": 0.5, "b": 0.2}, "yes": 0.1}, "sum to 1"),
         ({"pick": {"a": 1.0}, "yes": 1.5}, r"\[0, 1\]"),
         ({"pick": {"a": 1.0}, "yes": True}, r"\[0, 1\]"),
         ({"pick": 0.3, "yes": 0.1}, "map options"),
+        (
+            {"pick": {"a": "0.7", "b": 0.3}, "yes": 0.1},
+            "probabilities must be numbers",
+        ),  # PR-gate review (C4)
     ],
 )
 def test_invalid_answers_raise_item_errors(answers: dict[str, Any], message: str) -> None:
@@ -82,6 +86,16 @@ def test_replay_reraises_recorded_errors_and_missing_items(tmp_path: Path) -> No
         judge.ask("scenario-labels:y", STATE, QUESTIONS)
     with pytest.raises(JudgeError, match="no recording"):
         judge.ask("scenario-labels:z", STATE, QUESTIONS)
+
+
+def test_replay_refuses_a_malformed_recording_line(tmp_path: Path) -> None:  # PR-gate review (C4)
+    path = tmp_path / "responses.jsonl"
+    path.write_text(
+        json.dumps({"item_key": "scenario-labels:x", "qhash": question_hash(STATE, QUESTIONS)})
+        + "\nnot json at all\n"
+    )
+    with pytest.raises(JudgeFatalError, match="line 2 is malformed"):
+        ReplayJudge(path)
 
 
 def test_replay_refuses_stale_recordings(tmp_path: Path) -> None:

@@ -80,6 +80,23 @@ def test_scenario_missing_curated_option_scores_as_full_disagreement() -> None:
     assert all(f.score == pytest.approx(1.0) for f in score_scenario(SCEN, answers))
 
 
+def test_scenario_named_ties_at_display_precision_claim_no_preference() -> None:  # PR-gate review
+    answers = {
+        "threat_event_type": {"social_engineering": 0.2, "malware": 0.4, "supply_chain": 0.4},
+        "asset_class": {"people": 0.441, "systems": 0.444, "data": 0.115},
+        "threat_actor_type": {"cybercriminals": 1.0},
+    }
+    flags = {f.key.rsplit(":", 1)[1]: f for f in score_scenario(SCEN, answers)}
+    assert (
+        "top scores tie: **malware**, **supply_chain** (0.40)" in flags["threat_event_type"].finding
+    )
+    assert "prefers" not in flags["asset_class"].finding
+    assert (
+        "agrees with curated **people** (0.44), tied with **systems**"
+        in flags["asset_class"].finding
+    )
+
+
 def test_control_flags_carry_direction_and_suppress_dropped_claims() -> None:  # M-I3
     item = ControlItem(
         "siem",

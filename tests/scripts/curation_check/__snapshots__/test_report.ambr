@@ -11,7 +11,7 @@
   
   ## Scenario label audit
   
-  2 candidates from 2 items.
+  2 scored rows from 2 items.
   
   Top 2; 0 more scored within 0.10 below the cut.
   
@@ -26,7 +26,7 @@
   
   ## Control function audit
   
-  2 candidates from 1 item; 1 suppressed as deliberately dropped claims (seed `_meta.claim_drops`).
+  2 scored rows from 1 item; 1 suppressed as deliberately dropped claims (seed `_meta.claim_drops`).
   
   ### Possibly missing
   
@@ -52,7 +52,7 @@
   
   ## Coverage gaps
   
-  2 candidates from 2 items.
+  2 scored rows from 2 items.
   
   Top 2; 0 more scored within 0.10 below the cut.
   

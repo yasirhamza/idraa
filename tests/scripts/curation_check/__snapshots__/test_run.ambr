@@ -8,7 +8,7 @@
   
   ## Scenario label audit
   
-  9 candidates from 3 items.
+  9 scored rows from 3 items.
   
   Top 5; 3 more scored within 0.10 below the cut.
   
@@ -22,7 +22,7 @@
   
   ## Control function audit
   
-  74 candidates from 3 items; 1 suppressed as deliberately dropped claims (seed `_meta.claim_drops`).
+  74 scored rows from 3 items; 1 suppressed as deliberately dropped claims (seed `_meta.claim_drops`).
   
   ### Possibly missing
   
@@ -51,7 +51,7 @@
   
   ## Scenario overlap
   
-  2 candidates from 3 items.
+  2 scored rows from 3 items.
   
   Top 2; 0 more scored within 0.10 below the cut.
   
@@ -62,7 +62,7 @@
   
   ## Coverage gaps
   
-  2 candidates from 2 items.
+  2 scored rows from 2 items.
   
   Top 2; 0 more scored within 0.10 below the cut.
   

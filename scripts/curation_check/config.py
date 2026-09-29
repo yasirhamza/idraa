@@ -21,3 +21,8 @@ WILSON_Z = 1.645  # two-sided 90% interval
 
 GAP_COVERED_NONE_MAX = 0.10
 GAP_COVERED_CLOSEST_MIN = 0.80  # gaps: below/above these, show the judge's unreviewed closest match
+
+MATCH_NAME_MIN = (
+    0.05  # overlap/gaps name a match only when its score reaches this; a thin spread names nobody
+)
+MAX_NAMED = 3  # at most this many tied names per finding; the rest show as "+N more"

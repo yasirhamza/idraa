@@ -156,6 +156,13 @@ def test_before_after_section_classifies_flags() -> None:
     assert "left the queue: `scenario-labels:old:asset_class`" in text
 
 
+def test_before_after_numbers_positions_within_control_sub_queues() -> None:  # final review M-2
+    text = render(
+        META, _results(), top=15, previous={"control-functions": ["control-functions:siem:m"]}
+    )
+    assert "control-functions:siem:m (now Possibly wrong #1)" in text
+
+
 def _report(
     tmp_path: Path, folder: str, run: dict[str, str], sections: dict[str, list[tuple[str, str]]]
 ) -> Path:

@@ -102,6 +102,6 @@ class JevJudge:
         return JudgeResult(
             answers=answers,
             input_tokens=getattr(usage, "input_tokens", None),
-            model=getattr(resp, "model", None),
+            model=(str(m)[:40] if (m := getattr(resp, "model", None)) is not None else None),
             ms=(time.perf_counter() - start) * 1000,
         )

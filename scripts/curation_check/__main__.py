@@ -148,6 +148,11 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
             p.error(
                 f"--compare-to {a.compare_to}: no readable run.json with queues ({type(e).__name__})"
             )
+        if not isinstance(previous, dict) or not all(
+            isinstance(k, str) and isinstance(v, list) and all(isinstance(i, str) for i in v)
+            for k, v in previous.items()
+        ):
+            p.error(f"--compare-to {a.compare_to}: run.json queues are malformed")
     api_key = None
     if a.judge == "jev":
         if a.key_stdin:
@@ -215,13 +220,13 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
         "campaign": a.campaign,
         "date": date,
         "judge": judge.name,
-        "model": ", ".join(models) or "n/a",
         "git_commit": _git_commit(a.root),
+        "model": ", ".join(models) or "n/a",
     }
     checks_meta: dict[str, Any] = {
         c: {
             "items": r.items,
-            "candidates": len(r.flags) - r.suppressed,
+            "scored_rows": len(r.flags) - r.suppressed,
             "suppressed": r.suppressed,
             "errored": len(r.errored),
             "errored_items": [k for k, _ in r.errored],
@@ -234,6 +239,7 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
     }
     run = {
         **meta,
+        "pinned_model": JEV_MODEL if a.judge == "jev" else None,
         "top": a.top,
         "seed_sha256": seed_hashes(a.root),
         "criteria_sha256": criteria.sha256,
@@ -247,7 +253,7 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
 
     for c, r in results.items():
         print(
-            f"{c}: {r.items} items, {len(r.flags) - r.suppressed} candidates, {len(r.errored)} errored"
+            f"{c}: {r.items} items, {len(r.flags) - r.suppressed} scored rows, {len(r.errored)} errored"
         )
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)

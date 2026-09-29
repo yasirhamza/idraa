@@ -114,6 +114,8 @@ def test_load_intake_caps_long_titles(tmp_path: Path) -> None:  # S-I3: titles a
             [json.dumps(ROW), json.dumps({**ROW, "id": " AA24-001 "})],
             r"line 2: duplicate id 'AA24-001'",
         ),
+        ([json.dumps({**ROW, "id": "x" * 65})], r"line 1: id must be 1-64"),
+        ([json.dumps({**ROW, "id": "a b"})], r"line 1: id must be 1-64"),
     ],
 )
 def test_load_intake_rejects_malformed_files(
@@ -148,3 +150,35 @@ def test_gap_tie_names_every_tied_entry(tmp_path: Path) -> None:  # Task-5 revie
 def test_load_intake_missing_file_is_a_value_error(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="not readable"):
         load_intake(tmp_path / "missing.jsonl")
+
+
+def _flat(n: int, none_key: str, none_p: float) -> tuple[dict[str, float], dict[str, str]]:
+    names = {f"Scenario {i:03d}": f"scenario-{i:03d}" for i in range(n)}
+    rest = (1.0 - none_p) / n
+    return {**dict.fromkeys(names, rest), none_key: none_p}, names
+
+
+def test_overlap_thin_spread_names_nobody_at_library_scale() -> None:  # final review I-1
+    dist, names = _flat(101, NONE_DISTINCT, 0.95)
+    [flag] = score_overlap(_scen("wiper", "Wiper"), {"match": dist}, name_to_slug=names)
+    assert flag.key == "overlap:wiper" and flag.score == pytest.approx(0.05)
+    assert "no single scenario scored 0.05 or more" in flag.finding and len(flag.finding) < 200
+
+
+def test_overlap_caps_named_ties() -> None:  # final review I-1
+    dist, names = _flat(60, NONE_DISTINCT, 0.40)  # 60 x 0.01 each
+    dist.update(
+        {"Scenario 000": 0.1, "Scenario 001": 0.1, "Scenario 002": 0.1, "Scenario 003": 0.1}
+    )
+    total = sum(dist.values())
+    dist = {k: v / total for k, v in dist.items()}
+    flags = score_overlap(_scen("wiper", "Wiper"), {"match": dist}, name_to_slug=names)
+    assert len(flags) == 3 and all("+1 more" in f.finding for f in flags)
+
+
+def test_gap_thin_spread_names_nobody(tmp_path: Path) -> None:  # final review I-1
+    [item] = load_intake(_write_intake(tmp_path, [json.dumps(ROW)]))
+    dist, names = _flat(101, NONE_COVERED, 0.97)
+    [flag] = score_gap(item, {"match": dist}, name_to_slug=names)
+    assert flag.finding == "judge's none-score 0.97; closest: none scored 0.05 or more"
+    assert flag.detail["closest"] == "(none)" and flag.detail["closest_tied"] == []

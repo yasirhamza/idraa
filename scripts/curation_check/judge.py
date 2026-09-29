@@ -60,7 +60,11 @@ def validate_answers(questions: dict[str, Question], answers: Answers) -> None:
             raise JudgeError(f"{qid}: choice answer must map options to probabilities")
         unknown = sorted(set(a) - set(q["criteria"]))
         if unknown:
-            raise JudgeError(f"{qid}: unknown options {unknown[:3]}")
+            raise JudgeError(
+                f"{qid}: {len(unknown)} unknown option(s), e.g. {[k[:40] for k in unknown[:3]]}"
+            )
+        if any(isinstance(v, bool) or not isinstance(v, int | float) for v in a.values()):
+            raise JudgeError(f"{qid}: probabilities must be numbers in [0, 1] that sum to 1")
         if any(not 0.0 <= float(v) <= 1.0 for v in a.values()) or abs(sum(a.values()) - 1.0) > 0.02:
             raise JudgeError(f"{qid}: probabilities must be in [0, 1] and sum to 1")
 

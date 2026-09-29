@@ -100,7 +100,7 @@ def render(
             continue
         res = results[check]
         live = len(res.flags) - res.suppressed
-        summary = f"{live} candidates from {res.items} item{'s' if res.items != 1 else ''}"
+        summary = f"{live} scored rows from {res.items} item{'s' if res.items != 1 else ''}"
         if res.suppressed:
             summary += f"; {res.suppressed} suppressed as deliberately dropped claims (seed `_meta.claim_drops`)"
         lines += [f"## {CHECK_TITLES[check]}", "", summary + ".", ""]
@@ -157,9 +157,12 @@ def render(
         for check in CHECK_ORDER:
             if check not in results or check not in previous:
                 continue
-            pos = {k: i for i, k in enumerate(now_keys[check], 1)}
+            pos: dict[str, str] = {}
+            for sub, queue, _ in queues(results[check], top):
+                for i, f in enumerate(queue, 1):
+                    pos[f.key] = f"{SUB_TITLES[sub]} #{i}" if sub else f"#{i}"
             gone = [k for k in previous[check] if k not in pos]
-            still = [f"{k} (now #{pos[k]})" for k in previous[check] if k in pos]
+            still = [f"{k} (now {pos[k]})" for k in previous[check] if k in pos]
             new = [k for k in now_keys[check] if k not in previous[check]]
             lines += [
                 f"**{CHECK_TITLES[check]}:** {len(gone)} left the queue (fixed, outranked or renamed), "
@@ -232,9 +235,10 @@ def tally(paths: Iterable[Path]) -> dict[tuple[str, str, int], dict[str, Any]]:
     for p in paths:
         meta_path = p.parent / "run.json"
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-        runs.append(
-            (meta.get("date", ""), str(p), meta.get("model", "unknown"), int(meta.get("top", 0)), p)
-        )
+        model = meta.get("model") or ""
+        if model in ("", "n/a"):
+            model = meta.get("pinned_model") or "unknown"
+        runs.append((meta.get("date", ""), str(p), model, int(meta.get("top", 0)), p))
     latest: dict[tuple[str, str, int, str], tuple[int, int, str]] = {}
     for _date, _name, model, top, p in sorted(runs):
         for check, rows in parse_dispositions(p.read_text(encoding="utf-8"), str(p)).items():

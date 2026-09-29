@@ -15,10 +15,20 @@ class ReplayJudge:
 
     def __init__(self, path: Path) -> None:
         self._records: dict[str, dict[str, Any]] = {}
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
                 row = json.loads(line)
-                self._records[row["item_key"]] = row
+                if (
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("item_key"), str)
+                    or not isinstance(row.get("qhash"), str)
+                ):
+                    raise ValueError("missing item_key or qhash")
+            except (json.JSONDecodeError, ValueError) as e:
+                raise JudgeFatalError(f"recording {path}: line {n} is malformed") from e
+            self._records[row["item_key"]] = row
 
     def stale_items(self, expected: dict[str, str]) -> list[str]:
         """Item keys whose recorded question hash differs from the current one."""

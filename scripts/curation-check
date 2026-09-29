@@ -93,6 +93,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$cmd" == "tally" && ${#args[@]} -gt 0 ]]; then
+  echo "scripts/curation-check: tally takes no flags" >&2
+  exit 2
+fi
+
 cd "$ROOT"
 PY="$ROOT/.venv/bin/python"
 
