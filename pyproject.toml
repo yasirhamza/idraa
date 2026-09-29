@@ -364,3 +364,9 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["schemathesis.*"]
 ignore_missing_imports = true
+
+# Optional `curation` extra (dev-only scripts/curation_check). The default
+# `--extra dev` sync does not install it, so mypy must not require it.
+[[tool.mypy.overrides]]
+module = ["typesafe_sdk.*", "httpx2.*"]
+ignore_missing_imports = true

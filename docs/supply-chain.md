@@ -185,3 +185,11 @@ Neither mechanism substitutes for upstream-signed provenance (not offered by
 Tailwind's release process or the vendored CDNs today); both are the best
 verification achievable against what's actually published, and both fail
 closed on a mismatch.
+
+## 8. Recorded exceptions
+
+- **2026-09-29, `curation` extra inside the 7-day release-age cooldown.** `typesafe-sdk` 0.7.2 (uploaded
+  2026-09-26) and `httpx2`/`httpcore2` 2.13.1 (uploaded 2026-09-23) were locked by hand, before the cooldown
+  that Dependabot enforces had passed. They are dev-only and optional: CI and the runtime export never install
+  them. No live run with the key may happen before 2026-10-03; on that date re-check PyPI (not yanked, same
+  sha256 digests as `uv.lock`) and GitHub advisories for all three before the first run.

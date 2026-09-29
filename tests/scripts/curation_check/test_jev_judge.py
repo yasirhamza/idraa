@@ -88,6 +88,7 @@ def test_from_sdk_pins_the_endpoint_and_ignores_environment(
         return object()
 
     fake_ts = SimpleNamespace(
+        RetryPolicy=lambda **kw: ("retry", kw),
         TypeSafeClient=fake_client,
         TypeSafeError=FakeTypeSafeError,
         TypeSafeAuthenticationError=type("Auth", (FakeTypeSafeError,), {}),
@@ -102,6 +103,27 @@ def test_from_sdk_pins_the_endpoint_and_ignores_environment(
     assert captured["client"]["api_key"] == "k-123"
     assert captured["client"]["model"] == "jev-1.13.0"
     assert captured["http"]["trust_env"] is False
+    assert captured["client"]["retry"] == ("retry", {"max_retries": 2, "api_timeout_error": False})
+
+
+def test_real_sdk_client_is_pinned_and_env_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # S-B1: guards SDK upgrades
+    pytest.importorskip("typesafe_sdk")  # runs only where the curation extra is installed
+    monkeypatch.setenv("TYPESAFE_BASE_URL", "http://127.0.0.1:9999")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:8888")
+    judge = JevJudge.from_sdk(
+        "jev-1.13.0", api_key="not-a-real-key"
+    )  # builds the client; sends nothing
+    try:
+        sdk = judge._client
+        assert sdk._config.base_url == "https://api.typesafe.ai"
+        assert sdk._http_client.trust_env is False
+        assert [
+            t for t in sdk._http_client._mounts.values() if t is not None
+        ] == []  # no proxy transports
+    finally:
+        judge.close()
 
 
 def test_from_sdk_without_the_sdk_is_fatal_with_install_hint(

@@ -62,6 +62,8 @@ class JevJudge:
                 model=model,
                 base_url=JEV_BASE_URL,
                 http_client=httpx2.Client(trust_env=False, timeout=JEV_TIMEOUT_S),
+                # explicit, so an SDK upgrade cannot silently change cost; a timed-out request is never re-sent
+                retry=ts.RetryPolicy(max_retries=2, api_timeout_error=False),
             )
         except ts.TypeSafeError as e:
             raise JudgeFatalError(
