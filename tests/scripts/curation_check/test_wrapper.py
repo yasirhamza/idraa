@@ -24,8 +24,9 @@ def _safe_env(
     shell exports) and drop any real key, so no regression can ever read or send a real secret."""
     out = dict(os.environ if env is None else env)
     out.pop("TYPESAFE_API_KEY", None)
-    if "_CC_CLEAN" not in out:
-        out["CURATION_KEYCHAIN_SERVICE"] = service
+    out["CURATION_KEYCHAIN_SERVICE"] = (
+        service  # also on forged-stage runs: an exported real name never survives
+    )
     return out
 
 
