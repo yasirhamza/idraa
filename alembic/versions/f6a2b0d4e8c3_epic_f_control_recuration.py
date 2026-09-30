@@ -47,7 +47,10 @@ Two independent effects, both driven by ``data/seed_control_library_entries.json
    host-intrusion-detection-prevention / ddos-protection; CIS 3.3 on
    cloud-security-posture-management / hardened-cloud / hardened-saas-application /
    security-configuration-assessment; CIS 14.2 on security-conscious-personnel) --
-   Task 7 review I-1. Tags are only ADDED, never removed. Framework tags are NOT a
+   Task 7 review I-1. The UPDATE overwrites each stored tag column wholesale with
+   the current JSON list, so stored tags CONVERGE to the JSON -- on today's data
+   every drift is additive (stored is always a subset of JSON), but a future JSON
+   edit that drops a tag would remove it here too. Framework tags are NOT a
    scoring input (the FAIR-CAM engine reads only ``control_library_entry_
    assignments``), so this repair deliberately does NOT bump ``version`` -- a bump
    would mark every control already adopted from an otherwise-unaffected entry
