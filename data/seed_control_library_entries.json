@@ -1428,6 +1428,20 @@
           "capability_default": 0.7,
           "coverage_default": 0.8,
           "reliability_default": 0.8
+        },
+        {
+          "sub_function": "lec_det_visibility",
+          "coverage_default": 0.8,
+          "reliability_default": 0.8,
+          "coverage_provenance": "expert-estimate",
+          "coverage_citations": [],
+          "reliability_provenance": "expert-estimate",
+          "reliability_citations": [],
+          "capability_default": 0.7,
+          "capability_provenance": "expert-estimate",
+          "capability_citations": [
+            "Mechanism (expert-estimate; CIS grounds channel, not magnitude): FIM generates the integrity signal itself (checksums, permissions, sizes and timestamps of critical files compared against a baseline), so unauthorised modification of monitored system, configuration or application files (the contact vector: a threat actor altering files on the host) becomes visible (CIS Controls v8 Safeguards 3.14 and 8.5; FAIR Institute crosswalk -> lec_det_visibility). Magnitude 0.7 (coverage 0.8, reliability 0.8) is an expert estimate at the library's uniform Visibility default; no primary source maps integrity baselining to a measured [0,1] signal probability."
+          ]
         }
       ]
     },
@@ -2397,7 +2411,8 @@
       "cis_safeguards": [
         "4.1",
         "4.2",
-        "3.3"
+        "3.3",
+        "8.12"
       ],
       "iso_27001_controls": [
         "A.12.6.1"
@@ -2465,6 +2480,20 @@
           "capability_provenance": "expert-estimate",
           "capability_citations": [
             "Mechanism (expert-estimate; MITRE/NIST grounds channel, not magnitude): SSPM enforces encryption, MFA, and least-privilege configuration on SaaS applications, reducing exploitability after contact. Asset = SaaS apps / data; susceptibility = weak-auth / over-permissioned config; threat = credential abuse / data theft. Channel grounding: MITRE ATT&CK mitigations M1041 (Encrypt Sensitive Information) + M1032 (Multi-factor Authentication) + M1018 (User Account Management). Crosswalk grounding: NIST CSF PR.PT-3 (least functionality, already tagged). Magnitude 0.5 conservative expert estimate (secondary to avoidance)."
+          ]
+        },
+        {
+          "sub_function": "lec_det_visibility",
+          "coverage_default": 0.8,
+          "reliability_default": 0.8,
+          "coverage_provenance": "expert-estimate",
+          "coverage_citations": [],
+          "reliability_provenance": "expert-estimate",
+          "reliability_citations": [],
+          "capability_default": 0.7,
+          "capability_provenance": "expert-estimate",
+          "capability_citations": [
+            "Mechanism (expert-estimate; CIS grounds channel, not magnitude): SSPM ingests SaaS user-activity records (logins, file access, downloads, sharing) that its monitoring reviews, so threat activity inside the SaaS tenant (the contact vector: credential abuse and data access or exfiltration through SaaS applications) becomes visible (CIS Controls v8 Safeguard 8.12; FAIR Institute crosswalk -> lec_det_visibility). Magnitude 0.7 (coverage 0.8, reliability 0.8) is an expert estimate at the library's uniform Visibility default; no primary source maps SaaS log ingestion to a measured [0,1] signal probability."
           ]
         }
       ]
@@ -2570,6 +2599,22 @@
           "capability_default": 0.7,
           "coverage_default": 0.8,
           "reliability_default": 0.8
+        },
+        {
+          "sub_function": "lec_prev_resistance",
+          "coverage_default": 0.2,
+          "reliability_default": 0.8,
+          "coverage_provenance": "expert-estimate",
+          "coverage_citations": [
+            "expert-estimate; coverage scoped to the share of threat contact that is interception of remote-session traffic (ATT&CK T1040/T1557, mitigation M1041); none of the library scenarios that suggest this control has that vector, so the value is deliberately low; no primary source measures it."
+          ],
+          "reliability_provenance": "expert-estimate",
+          "reliability_citations": [],
+          "capability_default": 0.7,
+          "capability_provenance": "expert-estimate",
+          "capability_citations": [
+            "Mechanism (expert-estimate; NIST/MITRE ground channel, not magnitude): the remote-access tunnel's encryption makes interception of remote-session traffic fail (contact vector: ATT&CK T1040 Network Sniffing / T1557 Adversary-in-the-Middle, https://attack.mitre.org/versions/v19/techniques/T1040/, https://attack.mitre.org/versions/v19/techniques/T1557/; mitigation M1041 Encrypt Sensitive Information, https://attack.mitre.org/versions/v19/mitigations/M1041/ (accessed 2026-09-29); NIST CSF PR.AC-3, FAIR Institute crosswalk -> lec_prev_resistance). Magnitude 0.7 (coverage 0.2, reliability 0.8) is an expert estimate at the library's Resistance default capability; no primary source maps remote-session tunnel encryption to a measured [0,1] defeat probability."
+          ]
         }
       ]
     },
@@ -2717,7 +2762,7 @@
           "capability_default": 0.7,
           "capability_provenance": "expert-estimate",
           "capability_citations": [
-            "Mechanism (DSC, non-scoring): Security-awareness training communicates expected secure behaviors and threat recognition to the workforce, improving human decision quality. FAIR-CAM home = Decision Support Control (situational-awareness communication). Primary source: CIS Controls v8 Safeguards 14.1/14.2; NIST CSF PR.AT-1/PR.AT-2; cross-referenced MITRE ATT&CK M1017 (User Training), https://attack.mitre.org/mitigations/M1017/ (accessed 2026-06-30). Value 0.7 expert estimate — no population efficacy figure; awareness is decision-support, deliberately NOT modeled as a vulnerability-reducing LEC scorer."
+            "Mechanism (DSC): Security-awareness training communicates expected secure behaviors and threat recognition to the workforce, improving human decision quality. FAIR-CAM home = Decision Support Control (situational-awareness communication). Primary source: CIS Controls v8 Safeguards 14.1/14.2; NIST CSF PR.AT-1/PR.AT-2; cross-referenced MITRE ATT&CK M1017 (User Training), https://attack.mitre.org/mitigations/M1017/ (accessed 2026-06-30). Value 0.7 expert estimate — no population efficacy figure; awareness is decision-support, deliberately NOT modeled as a vulnerability-reducing LEC scorer."
           ]
         },
         {
@@ -2732,6 +2777,20 @@
           "capability_provenance": "expert-estimate",
           "capability_citations": [
             "Mechanism (meta, non-scoring): SAT runs simulated phishing exercises that measure whether staff vigilance (the awareness 'control') is operating — i.e. it monitors the operational health of the human control and surfaces drift. FAIR-CAM home = VMC Identification (control-monitoring); non-scoring alone (partial VMC pair = $0). Grounded by CIS Safeguard 14.1. Value 0.7 expert estimate."
+          ]
+        },
+        {
+          "sub_function": "dsc_prev_ensure_capability",
+          "coverage_default": 0.8,
+          "reliability_default": 0.8,
+          "coverage_provenance": "expert-estimate",
+          "coverage_citations": [],
+          "reliability_provenance": "expert-estimate",
+          "reliability_citations": [],
+          "capability_default": 0.7,
+          "capability_provenance": "expert-estimate",
+          "capability_citations": [
+            "Mechanism (DSC): role-tailored security training builds the skills staff need to act in line with security expectations in their role (secure data-handling procedures, correct incident-reporting and escalation steps) — FAIR-CAM §5.1.4 Ensure Capability (skills), distinct from Communication (knowing the rules); threat-recognition training is credited as LEC Resistance on Security Conscious Personnel (CIS 14.2 extension, #437 T2), not here. Grounded by NIST CSF PR.AT-1 and CIS Controls v8 Safeguards 14.1/14.2 (FAIR Institute crosswalk -> dsc_prev_ensure_capability), all already carried. Value 0.7 expert estimate (no population efficacy figure)."
           ]
         }
       ]
@@ -2880,7 +2939,9 @@
       ],
       "cis_safeguards": [
         "8.9",
-        "8.11"
+        "8.11",
+        "8.2",
+        "8.10"
       ],
       "iso_27001_controls": [
         "A.12.4.1"
@@ -2921,6 +2982,20 @@
           "capability_default": 0.7,
           "coverage_default": 0.8,
           "reliability_default": 0.8
+        },
+        {
+          "sub_function": "lec_det_visibility",
+          "coverage_default": 0.8,
+          "reliability_default": 0.8,
+          "coverage_provenance": "expert-estimate",
+          "coverage_citations": [],
+          "reliability_provenance": "expert-estimate",
+          "reliability_citations": [],
+          "capability_default": 0.7,
+          "capability_provenance": "expert-estimate",
+          "capability_citations": [
+            "Mechanism (expert-estimate; CIS grounds channel, not magnitude): SIEM contributes centralised collection and retention of identity, application and server audit logs not already produced by a co-deployed host, application or network Visibility carrier (CIS Controls v8 Safeguards 8.2 and 8.10; FAIR Institute crosswalk -> lec_det_visibility), so threat activity that lands in those logs (the contact vector: authentication, application and server events of a threat actor acting against the asset) becomes visible; telemetry it re-ingests from such carriers (EDR, NDR, HIDS, NIDS, firewall, WAF, APM) is the same signal those carriers produce; the engine nonetheless composes SIEM's Visibility channel as an independent OR against those carriers' (register C11), so a co-present carrier and SIEM's re-ingest of its telemetry can both count toward Detection -- a known correlation gap, tracked as an engine follow-up (#199), not a curation rule. Magnitude 0.7 (coverage 0.8, reliability 0.8) is an expert estimate at the library's uniform Visibility default; no primary source maps centralised audit-log collection and retention to a measured [0,1] signal probability."
+          ]
         }
       ]
     },

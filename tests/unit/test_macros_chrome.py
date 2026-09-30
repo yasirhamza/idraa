@@ -189,7 +189,7 @@ def test_status_pill_confirmed_maps_to_success() -> None:
     assert "●" in html
 
 
-@pytest.mark.parametrize("status", ["draft", "active", "deprecated", "deleted"])
+@pytest.mark.parametrize("status", ["draft", "active", "deprecated", "deleted", "published"])
 def test_status_pill_entity_kind_renders_non_neutral(status: str) -> None:
     """Issue #265: EntityStatus (draft/active/deprecated/deleted) rendered via
     the ``entity`` pill-kind must NOT fall through to the neutral grey default.

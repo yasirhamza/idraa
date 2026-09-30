@@ -10,12 +10,12 @@ import argparse
 import json
 import re
 import statistics
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
+from scripts.curation_check import library
 from scripts.curation_check.checks.gaps import load_intake
 from scripts.curation_check.checks.overlap import merge_pairs
 from scripts.curation_check.config import (
@@ -27,7 +27,14 @@ from scripts.curation_check.config import (
 )
 from scripts.curation_check.criteria import load_criteria
 from scripts.curation_check.judge import Judge, JudgeFatalError, Recorder, question_hash
-from scripts.curation_check.library import load_controls, load_scenarios, seed_hashes
+from scripts.curation_check.library import (
+    ChangedSince,
+    _git_rc,
+    changed_subjects,
+    load_controls,
+    load_scenarios,
+    seed_hashes,
+)
 from scripts.curation_check.report import queue_keys, render, tally
 from scripts.curation_check.run import Job, build_jobs, run_check
 
@@ -40,27 +47,27 @@ CHECKS_FOR = {
 }
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
-
-
 def _git_commit(root: Path) -> str:
     try:
-        out = _git(root, "rev-parse", "HEAD")
-    except OSError:
+        sha = library._git(root, "rev-parse", "HEAD").strip()
+    except (ValueError, OSError):
         return "unknown"
-    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else "unknown"
+    return sha if sha else "unknown"
 
 
 def _intake_is_safe(path: Path, root: Path) -> bool:
-    """Intake files may hold licensed text: outside the repo, or inside it only when git ignores them."""
+    """Intake files may hold licensed text: outside the repo, or inside it only when git ignores
+    them. Fail-closed (the only guard keeping licensed intake text out of the committed public
+    report): block 1's `ValueError` means "safe" only because it means "outside the repo"; block 2's
+    `_git_rc` never raises `ValueError` in practice, but any failure there (or an `OSError`) means
+    "not safe" (Sec3-1)."""
     try:
         path.resolve().relative_to(root.resolve())
     except ValueError:
         return True
     try:
-        return _git(root, "check-ignore", "-q", str(path.resolve())).returncode == 0
-    except OSError:
+        return _git_rc(root, "check-ignore", "-q", str(path.resolve())) == 0
+    except (ValueError, OSError):
         return False
 
 
@@ -123,6 +130,7 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
     p.add_argument("--intake", type=Path)
     p.add_argument("--out", type=Path)
     p.add_argument("--compare-to", type=Path)
+    p.add_argument("--changed-since", default=None, metavar="REF")
     p.add_argument(
         "--force", action="store_true", help="overwrite an existing report in the output folder"
     )
@@ -153,6 +161,12 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
             for k, v in previous.items()
         ):
             p.error(f"--compare-to {a.compare_to}: run.json queues are malformed")
+    changed: ChangedSince | None = None
+    if a.changed_since is not None:
+        try:
+            changed = changed_subjects(a.root, a.changed_since)
+        except ValueError as e:
+            p.error(str(e))
     api_key = None
     if a.judge == "jev":
         if a.key_stdin:
@@ -247,9 +261,20 @@ def main(argv: list[str] | None = None, stdin: TextIO | None = None) -> int:
         "failed_checks": failed,
         "warnings": warnings,
         "queues": queue_keys(results, a.top),
+        "changed_since": (
+            {
+                "ref_sha": changed.ref_sha,
+                "merge_base": changed.merge_base,
+                "subjects": sorted(changed.slugs | changed.deprecated),
+            }
+            if changed is not None
+            else None
+        ),
     }
     (out / "run.json").write_text(json.dumps(run, indent=2) + "\n", encoding="utf-8")
-    (out / "report.md").write_text(render(meta, results, a.top, previous), encoding="utf-8")
+    (out / "report.md").write_text(
+        render(meta, results, a.top, previous, changed), encoding="utf-8"
+    )
 
     for c, r in results.items():
         print(

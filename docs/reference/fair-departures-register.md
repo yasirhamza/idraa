@@ -372,7 +372,15 @@ the rationale; where it lives; how to evaluate it.
   `data_disclosure` entry with no `fines` share, rubric §4), 5 justified.
   Adopted scenarios are not rewritten by the migration; a read-only sweep
   classifies them, and any pristine or copy-stale scenario triggers a separate
-  repair PR.
+  repair PR. Epic F (2026-09-29, #192): `accidental-insider-exposure` moved
+  `insider_misuse` → `data_disclosure`, so its fraction moved 1/3 → 3/7 (0.06
+  → 0.08 of its 0.18 budget; PL share 0.12 → 0.10, SL 0.28 → 0.30); it
+  remains one of the 24 rule-derived entries (its per-rubric
+  reputation/fines re-judgement under `data_disclosure` is deferred, owner
+  decision O7, tracked in #198). Two of the 24
+  (`data-breach-notification-regulatory-tail`,
+  `chemical-process-safety-attack`) are deprecated by Epic F merges and stay
+  in these statistics because they stay in the seed.
 
 ### B6. Qualitative likelihood and impact bands map to FAIR ranges
 

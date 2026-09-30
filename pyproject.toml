@@ -145,10 +145,6 @@ ignore = [
   "N999",  # script filenames use kebab-case by convention (not importable as modules)
   "S607",  # scripts invoke trusted external CLIs (gh, git) via partial path; not user-controlled
 ]
-"scripts/curation_check/__main__.py" = [
-  "S603",  # git subprocess with a fixed argv plus a repo path; never a shell
-  "S607",  # runs `git` by partial path for provenance and ignore checks; not user-controlled
-]
 
 [tool.ruff.format]
 quote-style = "double"

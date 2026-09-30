@@ -5,7 +5,9 @@ Single source of truth; callers import ``classify_entry`` / ``entry_scores``;
 DERIVED from the fair_cam topology so it tracks #439's channel changes instead of
 drifting. A sub-function scores standalone in the current v(S) iff it is the currency
 subtractor, OR its leaf group is an OR group with non-empty node targets. Detection
-(empty targets), gated Response, and multi-member AND leaves (VMC id/corr, DSC) do NOT.
+(empty targets), gated Response, and every meta leaf (vmc_prev_*, vmc_id_*, vmc_corr_*,
+dsc_* — all empty targets since Slice 2 #439, whatever their operator: VMC Identification
+is OR, DSC Prevention is WEAK_AND composed as max of present members) do NOT.
 """
 
 from __future__ import annotations
@@ -112,7 +114,10 @@ def scores_standalone(sub_function: str) -> bool:
 
     if not GROUP_NODE_MAPPING[g].targets:
         # Empty-target leaf (lec_det_*, vmc_id_*, vmc_corr_*): the node contribution
-        # is zero standalone; the effect only reaches a FAIR node via its pair group.
+        # is zero standalone. Post-#439 this leaf's pair group has no node target
+        # either (register C8/§2.6) -- the only path any effect reaches a FAIR node
+        # is the kappa reliability coupling (E_meta -> r_eff), which requires a
+        # co-present LEC channel to uplift (see this function's docstring).
         return False
 
     return GROUP_TYPE[g] == GroupType.OR
@@ -162,9 +167,10 @@ def entry_scores(entry: dict[str, Any]) -> bool:
 
     An entry scores iff its assignment SET yields v(S) > 0 in the CURRENT engine.
     Computed via the actual closed form (compose_groups → reduction_from_composition),
-    NOT a re-implementation of the topology — so VMC id∧corr and LEC det∧resp
-    pair-completion are handled exactly, INCLUDING the multi-member AND 0-collapse
-    (verified: a 1-of-2 VMC pair = $0; a full 2-id+2-corr pair scores > $0).
+    NOT a re-implementation of the topology — so LEC det∧resp pair-completion is
+    handled exactly, and every meta-only set (any VMC/DSC staffing, including a full
+    2-id + 2-corr VMC pair) returns False: the meta groups have no node targets
+    (Slice 2 #439) and κ = 0 here (verified on the engine, Epic F Task 8).
 
     `scores_standalone` (above) stays for the rubric CATALOG only; entry-level
     decisions MUST use this function.

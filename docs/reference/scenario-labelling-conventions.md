@@ -38,35 +38,50 @@ Existing library entries that disagree are expected findings for the next curati
 document. An accepted relabel never re-applies the new type's default share profile: the entry's loss-form profile is
 re-judged per `docs/reference/loss-form-share-rubric.md`, not copied from the type default.
 
-## Where Idraa's enum text and the seed disagree
+## Placements settled in #192 (methodology review 2026-09-29)
 
-`SUB_FUNCTION_DESCRIPTIONS` (in `src/idraa/models/enums.py`) and the control library disagree on these placements.
-All are tracked in #192.
+`SUB_FUNCTION_DESCRIPTIONS` (`src/idraa/models/enums.py`), the control library and `criteria.json` now agree on these.
+Every #192 item is decided; none remains open. Two placements are kept at low confidence (their contested wording
+stays out of `criteria.json`, so the audit keeps surfacing them).
 
-**Decided in `criteria.json`.** These follow the decomposition rubric; the enum text still needs aligning.
-
-| Topic | Enum text says | Seed labels | Criteria follow |
+| Topic | Placement | Seed | Criteria |
 |---|---|---|---|
-| Network segmentation | Resistance example | Avoidance | Avoidance: preventing a party from reaching the asset's interface |
-| Avoidance scope | "remove the opportunity entirely" | Avoidance also for limiting contact (NAC, SWG, email security, firewall) | contact-frequency definition |
-| Restore from backup | Loss reduction example | Data Backup and Recovery: Resilience | Resilience ("restores operations") |
-| Remediation SLAs | Implementation example | (no seed control) | Defined expectations: requiring remediation is not performing it |
+| Network segmentation | Avoidance (prevents reaching the interface) | Avoidance | example, anchored to Network Segmentation |
+| Avoidance scope | reduces contact frequency: removes exposure or blocks reaching the interface | NAC, SWG, email security, firewall: Avoidance | definition |
+| Restore from backup | Resilience (restores operations) | Data Backup and Recovery: Resilience | "Tested restore from backups" |
+| Remediation SLAs | Defined expectations (requiring is not performing) | none | none |
+| IR retainer | Event termination (retained responders contain the event) — low confidence; alternative Loss reduction, which would need a cited currency value | Incident Response: Event termination | kept out |
+| Threat-modelling workshops | Analysis (+ Threat data), DSC | Threat Modeling | example |
+| SAST, DAST, dependency scanning | Control monitoring when the scan reports (as SAST/DAST are seeded); a scan or test that blocks the merge is Reduce variance probability (gating vs reporting; A8 uses the same hinge) — low confidence | SAST, DAST: Control monitoring | kept out |
+| Policy-compliance scans | Control monitoring (drifted configurations) | Security Configuration Assessment | example |
+| Audit | of decisions, behaviour or policy adherence (non-compliance): Identify misalignment; of control gaps and configurations: Control monitoring | Compliance Audit: Control monitoring + Reporting (its policy-adherence review is Identify misalignment, not claimable: no genuine grounding tag; score-neutral) | "Periodic review of management decisions…" |
+| Security training | Ensure capability (skills); policy induction is Communication | Security Awareness and Training: Communication + Ensure capability + Control monitoring | example |
+| Audit results, pen-test findings | Control monitoring outputs; Controls data only when compiled into a decision-grade record (GRC register, scorecard) | Penetration Testing: Control monitoring | kept out |
+| Mandatory code review, IaC review gates | Reduce variance probability | none (Secure Coding Practices only lists reviews) | "Mandatory peer code review" (no library control) |
+| Secure build baselines, locked-down configurations | Hardening is Resistance / Avoidance; only golden-image pipelines (variance probability) or technical change-locks (change frequency) are VMC | Hardened OS / Cloud / SaaS: Resistance + Avoidance | kept out |
+| Risk-based patch prioritisation | Treatment selection ("Treatment Selection and Prioritization", §4.3.1) | none; whether Patch Management performs it is low confidence | kept out |
 
-**Open.** Examples are left out of `criteria.json` until reconciled, so the audit surfaces the conflict.
+**Patching and scanning (per behaviour).** The asset's own resistance (its patch level and hardened configuration) is
+the LEC control. A newly disclosed CVE is variance in it:
+- finding the CVE (vulnerability scanning, penetration testing, SAST/DAST) is Control monitoring;
+- deploying the fix is Implementation;
+- the patched state is Resistance (rubric §4 Example 3).
 
-| Topic | Enum text says | Seed labels |
-|---|---|---|
-| IR retainer | Loss reduction example | Incident Response: Event termination only |
-| Threat-modelling workshops | Threat intelligence example | Threat Modeling: analysis + threat data (DSC) |
-| Pre-merge SAST | Reduce variance probability example | SAST: Control monitoring |
-| Audit reviews, policy-compliance scans | Identify misalignment examples | Compliance Audit, Security Configuration Assessment: no Identify misalignment |
-| Security training programme | Ensure capability example | Security Awareness and Training: Communication + Control monitoring |
-| Audit results, pen-test findings | Controls data examples | no seed control carries Controls data |
-| Mandatory code review | Reduce variance probability example | Secure Coding Practices: Defined expectations + Resistance; no seed control carries Reduce variance probability |
-| Secure build baselines | Reduce variance probability example (criteria-authored) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
-| Standardised, locked-down configurations | Reduce change frequency example (criteria-authored) | Hardened OS / Cloud / SaaS: Resistance + Avoidance only |
-| Risk-based patch prioritisation, vulnerability-management workflow | Treatment selection examples | Patch Management, Vulnerability Assessment: no Treatment selection; no seed control carries it |
-| `people` asset class | "employee safety or HR/insider-risk scenarios" | 4 of 6 `people` entries are staff targeted by social engineering; one is an insider leak of employee records (data under the `not_for` text) |
+A control that does both, such as Patch Management, carries both. The channels are distinct in the engine (effect level
+vs reliability via κ), but not independent in meaning: the Resistance assignment's authored reliability and the VMC
+pair's uplift both reflect patch cadence. Accepted as the seed's status quo (#437 T1); revisit if Patch Management's r0
+is ever re-anchored on patch-latency data.
 
-Also for the reconciliation: the patching and vulnerability-scanning examples treat asset CVEs as variance
-management (VMC). Rubric §4 Example 3 routes patching an asset CVE to Resistance, and the seed carries both.
+## Asset class `people` (owner decision 2026-09-29, #192)
+
+`people` means the persons themselves as the asset at risk (e.g. their safety, health or personal security). Staff who
+are deceived, recruited or who misuse access are the threat vector or actor, not the asset, so label the asset actually
+lost (data, cash_or_equivalent, …). Employee records are `data`. When persons are harmed because a safety function was
+defeated, the targeted asset (`safety_systems`) is the label.
+
+The six former `people` entries were relabelled: education-student-records-insider, gov-employee-insider-leak,
+healthcare-staff-credential-phish and competitor-trade-secret-recruit → `data`; financial-call-center-social-eng and
+telecom-sim-swap-fraud → `cash_or_equivalent` (telecom at low confidence: its only calibrated loss form is the
+transferred funds; `business_process_cost` is the alternative if a loss-form re-judgement leaves process remediation as
+the primary loss). That leaves none, and the `people ≥ 1` coverage floor was removed because only mislabels satisfied
+it. `AssetClass.PEOPLE` is allowlisted in `test_library_taxonomy_coverage.py` (zero published entries by design).

@@ -20,6 +20,14 @@ down_revision = "b8e0334b7f43"
 branch_labels = None
 depends_on = None
 
+# Epic F (#192): fresh-path-only. The assetclass CHECK at this revision is
+# the b8e0334b7f43 7-value set; cash_or_equivalent arrives with bf920a18ef0c.
+# Insert the pre-widening value here; migration e5f1a9c3d7b2 converges it on
+# every DB. No DB that already applied this revision re-runs it.
+_PRE_WIDENING: dict[tuple[str, str], str] = {
+    ("bec-fraud-financial", "asset_class"): "data",
+}
+
 
 def upgrade() -> None:
     bind = op.get_bind()
@@ -49,6 +57,9 @@ def upgrade() -> None:
     validated = [LibraryEntrySeed.model_validate(e).model_dump() for e in entries]
     now = datetime.now(UTC).isoformat()
     for entry in validated:
+        for (slug, col), val in _PRE_WIDENING.items():
+            if entry["slug"] == slug:
+                entry[col] = val
         bind.execute(
             sa.text(
                 """

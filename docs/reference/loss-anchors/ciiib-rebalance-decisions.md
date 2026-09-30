@@ -285,6 +285,8 @@ Telecom, hospitality, and food_agriculture are previously-unrepresented sectors;
 | business_process_revenue | 6 | telecom-ddos-core-network, hospitality-booking-ddos-peak-season, food-cold-chain-ransomware, gov-citizen-portal-ddos, retail-ecommerce-checkout-ddos, saas-revenue-outage-sabotage | ✓ |
 | business_process_cost | 4 | food-recall-data-tampering, logistics-tms-data-tampering, manufacturing-billing-fraud, energy-billing-system-tamper | ✓ |
 
+> Superseded (#192, Epic F 2026-09-29): people now means the persons themselves; all six entries were relabelled and the people ≥ 1 floor was removed.
+
 **All 5 underused asset classes: SATISFIED.** All entries satisfying these cells come from new archetypes (the existing 44 had zero entries in any of these asset classes).
 
 ### Competitors threat actor coverage (≥1 entry)
@@ -315,6 +317,8 @@ Telecom, hospitality, and food_agriculture are previously-unrepresented sectors;
 | competitors actor ≥1 entry | FAIL (0) | 3 entries | ✓ |
 | OT share ≤32% | FAIL (36.4%) | 19.5% | ✓ |
 | Total entries ∈ [70, 90] | OK (44) | 82 | ✓ |
+
+> Superseded (#192, Epic F 2026-09-29): people now means the persons themselves; all six entries were relabelled and the people ≥ 1 floor was removed.
 
 **All §3 coverage-matrix cells: SATISFIED. No NEEDS_CONTEXT gaps.**
 
