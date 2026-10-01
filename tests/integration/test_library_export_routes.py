@@ -31,6 +31,10 @@ from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_import import _validate_entries, parse_bundle
 
+# Published-community allowlist for the mechanical _validate_entries(published_slugs=...)
+# rule (brief Task 5 §5).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists", "third_party"}
+
 
 async def _insert_entry(
     db_session: AsyncSession,
@@ -159,7 +163,7 @@ async def test_exported_bytes_reimport_cleanly(
     assert pairs is not None
     assert len(pairs) >= 2
 
-    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set())
+    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set(), published_slugs=_PUB)
     assert errors == []
     assert all(p["action"] == "add" for p in preview)
     assert all(s is not None for s in seeds)

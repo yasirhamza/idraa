@@ -11,7 +11,9 @@ allowlist with per-entry justification.
 
 Guarded dimensions (fully-covered scalar taxonomies):
   - AssetClass       (JSON field: "asset_class")
-  - ThreatActorType  (JSON field: "threat_actor_type")
+  - threat_community (JSON field: "threat_community"; canonical slugs from
+                       CANONICAL_THREAT_COMMUNITY_SLUGS — Threat Agent Library,
+                       replaces the retired ThreatActorType dimension)
   - ThreatCategory   (JSON field: "threat_event_type")
 
 NOT hard-guarded (open taxonomies with many legitimately-uncovered values):
@@ -27,7 +29,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
+from idraa.models.threat_community import CANONICAL_THREAT_COMMUNITY_SLUGS
 
 # ---------------------------------------------------------------------------
 # Seed loading
@@ -60,7 +63,7 @@ def _build_coverage(entries: list[dict]) -> dict[str, Counter]:
     pub = _published(entries)
     return {
         "asset_class": Counter(e.get("asset_class") for e in pub),
-        "threat_actor_type": Counter(e.get("threat_actor_type") for e in pub),
+        "threat_community": Counter(e.get("threat_community") for e in pub),
         "threat_event_type": Counter(e.get("threat_event_type") for e in pub),
         "applicable_industries": Counter(
             ind for e in pub for ind in (e.get("applicable_industries") or [])
@@ -96,6 +99,11 @@ def _build_coverage(entries: list[dict]) -> dict[str, Counter]:
 #       entries by design; the library browse facet stops offering "People"
 #       until a genuine people scenario (harm to persons) is authored.
 #
+#   "third_party" (threat_community slug)
+#       Task 1 decision: no existing seed entry describes a vendor's own
+#       personnel acting through granted access. Zero published entries by
+#       design until a genuine third-party-access scenario is authored.
+#
 # ---------------------------------------------------------------------------
 
 ALLOWLIST: dict[object, str] = {
@@ -111,6 +119,10 @@ ALLOWLIST: dict[object, str] = {
         "open catch-all for import round-trips / future edge cases; "
         "every curated seed scenario maps to a named FAIR threat category"
     ),
+    "third_party": (
+        "Task 1 decision: no existing seed entry describes a vendor's own personnel "
+        "acting through granted access; zero published entries by design"
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -119,8 +131,8 @@ ALLOWLIST: dict[object, str] = {
 
 
 def test_every_scalar_taxonomy_value_has_coverage_or_is_allowlisted() -> None:
-    """Every AssetClass / ThreatActorType / ThreatCategory member must have
-    ≥ 1 published seed entry, OR appear in the closed ALLOWLIST with a
+    """Every AssetClass / threat_community slug / ThreatCategory member must
+    have ≥ 1 published seed entry, OR appear in the closed ALLOWLIST with a
     one-line justification.
 
     Failure means: either author a seed entry for the uncovered value, or
@@ -141,13 +153,13 @@ def test_every_scalar_taxonomy_value_has_coverage_or_is_allowlisted() -> None:
                 "seed entries — author a seed entry or add to ALLOWLIST with justification"
             )
 
-    # --- ThreatActorType ---
-    for member in ThreatActorType:
-        if member in ALLOWLIST:
+    # --- threat_community (canonical Threat Agent Library slugs) ---
+    for slug in CANONICAL_THREAT_COMMUNITY_SLUGS:
+        if slug in ALLOWLIST:
             continue
-        if cov["threat_actor_type"].get(member.value, 0) == 0:
+        if cov["threat_community"].get(slug, 0) == 0:
             uncovered.append(
-                f"ThreatActorType.{member.name} (value={member.value!r}) has 0 published "
+                f"threat_community {slug!r} has 0 published "
                 "seed entries — author a seed entry or add to ALLOWLIST with justification"
             )
 
@@ -186,18 +198,24 @@ def test_allowlist_has_no_stale_entries() -> None:
         if isinstance(member, AssetClass):
             count = cov["asset_class"].get(member.value, 0)
             field = "asset_class"
-        elif isinstance(member, ThreatActorType):
-            count = cov["threat_actor_type"].get(member.value, 0)
-            field = "threat_actor_type"
+            label = f"AssetClass.{member.name}"
         elif isinstance(member, ThreatCategory):
             count = cov["threat_event_type"].get(member.value, 0)
             field = "threat_event_type"
+            label = f"ThreatCategory.{member.name}"
+        elif isinstance(member, str):
+            # Plain-str ALLOWLIST keys are threat_community slugs (AssetClass /
+            # ThreatCategory StrEnum members are ALSO str instances, but those
+            # are caught by the more specific branches above first).
+            count = cov["threat_community"].get(member, 0)
+            field = "threat_community"
+            label = f"threat_community {member!r}"
         else:
             continue
 
         if count > 0:
             stale.append(
-                f"{type(member).__name__}.{member.name} is allowlisted but now has "
+                f"{label} is allowlisted but now has "
                 f"{count} published seed entries (field={field!r}). "
                 "Remove it from ALLOWLIST — the coverage guard will pass automatically."
             )

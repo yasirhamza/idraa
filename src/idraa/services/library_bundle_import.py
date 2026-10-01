@@ -21,6 +21,7 @@ per-field length / list-size caps and a ``status == 'published'`` guard
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -33,7 +34,6 @@ from idraa.errors import NotFoundError
 from idraa.models.csv_import_preview import PREVIEW_TTL_SECONDS, CSVImportPreview
 from idraa.models.enums import (
     AssetClass,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import ScenarioLibraryEntry
@@ -45,6 +45,9 @@ from idraa.services.fair_cam_validation import (
 )
 from idraa.services.scenario_import import _structural_dist_problem
 from idraa.services.seed_library_loader import LibraryEntrySeed
+from idraa.services.threat_communities import ENUM_TO_COMMUNITY_SLUG, ThreatCommunityService
+
+logger = logging.getLogger(__name__)
 
 ENTITY_TYPE = "library_bundle"
 
@@ -114,6 +117,7 @@ _MAX_LEN = {
     "description": 4000,
     "canonical_fair_gap": 2000,
     "example_incidents": 4000,
+    "threat_community": 64,
 }
 _MAX_LIST = {
     "tags": 32,
@@ -165,10 +169,18 @@ def _bounds_and_status_errors(
     return errs
 
 
+def resolve_entry_threat_community(seed: dict[str, Any]) -> str:
+    """Slug from ``threat_community``; else map the legacy ``threat_actor_type`` (KeyError if unknown)."""
+    if seed.get("threat_community"):
+        return str(seed["threat_community"])
+    return ENUM_TO_COMMUNITY_SLUG[str(seed.get("threat_actor_type") or "")]
+
+
 def _validate_entries(
     pairs: list[tuple[int, dict[str, Any]]],
     *,
     existing_slugs: set[str],
+    published_slugs: set[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any] | None]]:
     """Per-entry validation (pure, no DB). Returns ``(preview, errors, seeds)``.
 
@@ -177,7 +189,10 @@ def _validate_entries(
     validated ``LibraryEntrySeed.model_dump()`` ONLY when ``action == "add"``,
     else ``None``. ``"skip"`` == slug already in ``existing_slugs`` OR an
     intra-bundle duplicate; ``"error"`` == any validation failure (with one or
-    more dicts appended to ``errors``).
+    more dicts appended to ``errors``). ``published_slugs`` is the caller-supplied
+    set of currently-published ``ThreatCommunity`` slugs (a pure helper cannot
+    query the DB itself) -- an entry whose resolved community is not a member is
+    an error, same as any other validation failure.
     """
     preview: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -213,12 +228,49 @@ def _validate_entries(
             seeds.append(None)
             continue
 
+        # 1c. Threat Agent Library (Task 5): resolve threat_community, mapping the
+        #     legacy threat_actor_type via ENUM_TO_COMMUNITY_SLUG when threat_community
+        #     is absent. An unknown legacy value or a resolved slug that is not
+        #     currently published are both per-entry errors, never a silent default.
+        try:
+            tc_slug = resolve_entry_threat_community(seed)
+        except KeyError:
+            errors.append(
+                {
+                    "index": idx,
+                    "field": "threat_actor_type",
+                    "reason": f"{seed.get('threat_actor_type')!r} is not a recognised legacy threat actor type",
+                }
+            )
+            preview.append({"index": idx, "slug": slug, "name": name, "action": "error"})
+            seeds.append(None)
+            continue
+        if tc_slug not in published_slugs:
+            errors.append(
+                {
+                    "index": idx,
+                    "field": "threat_community",
+                    "reason": f"{tc_slug!r} is not a published threat community",
+                }
+            )
+            preview.append({"index": idx, "slug": slug, "name": name, "action": "error"})
+            seeds.append(None)
+            continue
+        if not seed.get("threat_community"):
+            logger.info(
+                "library bundle: entry %r legacy %r -> %s",
+                slug,
+                seed.get("threat_actor_type"),
+                tc_slug,
+            )
+        seed["threat_community"] = tc_slug
+        seed.pop("threat_actor_type", None)
+
         # 2. Enum membership (defense-in-depth — LibraryEntrySeed types these as
         #    plain str, so it does NOT enforce the enum value-set itself).
         bad_enum = None
         for col, enum_cls in (
             ("threat_event_type", ThreatCategory),
-            ("threat_actor_type", ThreatActorType),
             ("asset_class", AssetClass),
         ):
             if seed[col] not in {m.value for m in enum_cls}:
@@ -359,7 +411,11 @@ async def validate_upload(
         return token, [], hard_stop
 
     existing = await _existing_slugs(db)
-    preview, errors, _ = _validate_entries(pairs, existing_slugs=existing)
+    rows = await ThreatCommunityService(db, organization_id=org_id).list_published()
+    published = {r.slug for r in rows}
+    preview, errors, _ = _validate_entries(
+        pairs, existing_slugs=existing, published_slugs=published
+    )
     token = await _store_preview(db, org_id=org_id, user_id=user_id, data=data)
     return token, preview, errors
 
@@ -374,7 +430,7 @@ _INSERT_LIBRARY_ENTRY = text(
     """
     INSERT INTO scenario_library_entries
       (id, version, slug, name, status, threat_event_type,
-       threat_actor_type, asset_class, attack_vector, tags,
+       threat_community_id, threat_community_version, asset_class, attack_vector, tags,
        description, example_incidents, source_citations,
        canonical_fair_gap, applicable_industries,
        applicable_sub_sectors, applicable_org_sizes,
@@ -383,7 +439,7 @@ _INSERT_LIBRARY_ENTRY = text(
        calibration_anchor, loss_tier, loss_shape, loss_form_profile, source, row_version, created_at, updated_at)
     VALUES
       (:id, 1, :slug, :name, :status, :tet,
-       :tat, :ac, :av, :tags,
+       :tc_id, :tc_ver, :ac, :av, :tags,
        :desc, :ex, :cit,
        :gap, :ind,
        :sub, :sizes,
@@ -394,26 +450,33 @@ _INSERT_LIBRARY_ENTRY = text(
 )
 
 
-def _insert_params(seed: dict[str, Any], now: str) -> dict[str, Any]:
+def _insert_params(
+    seed: dict[str, Any], now: str, *, resolved: dict[str, tuple[uuid.UUID, int]]
+) -> dict[str, Any]:
     """Build the bind params for one library-entry INSERT.
 
     ``json.dumps`` every list/dict column (the JSON columns are TEXT under
     SQLite; the raw INSERT bypasses SQLAlchemy's JSON serialization). ``id`` is
     a fresh no-hyphen ``uuid4().hex`` — the recurring foot-gun: the column's
     ``UuidType(as_uuid=True)`` adapter binds ids as 32-char no-hyphen hex, so a
-    hyphenated ``str(uuid4())`` would 404 every id-based ORM query.
+    hyphenated ``str(uuid4())`` would 404 every id-based ORM query. ``resolved``
+    maps a published threat-community slug to its ``(id, version)`` -- built
+    ONLY by ``apply_validated_preview`` (never ``validate_upload``, which never
+    inserts a row).
     """
 
     def j(v: Any) -> Any:
         return json.dumps(v) if isinstance(v, (list, dict)) else v
 
+    tc_id, tc_ver = resolved[seed["threat_community"]]
     return {
         "id": uuid.uuid4().hex,
         "slug": seed["slug"],
         "name": seed["name"],
         "status": seed["status"],
         "tet": seed["threat_event_type"],
-        "tat": seed["threat_actor_type"],
+        "tc_id": tc_id.hex,
+        "tc_ver": tc_ver,
         "ac": seed["asset_class"],
         "av": seed.get("attack_vector"),
         "tags": j(seed.get("tags", [])),
@@ -489,14 +552,19 @@ async def apply_validated_preview(
         return 0, 0, hard_stop
 
     existing = await _existing_slugs(db)
-    preview, errors, seeds = _validate_entries(pairs, existing_slugs=existing)
+    rows = await ThreatCommunityService(db, organization_id=org_id).list_published()
+    published = {r.slug for r in rows}
+    resolved = {r.slug: (r.id, r.version) for r in rows}
+    preview, errors, seeds = _validate_entries(
+        pairs, existing_slugs=existing, published_slugs=published
+    )
     skipped = sum(1 for p in preview if p["action"] == "skip")
     imported = 0
     now = datetime.now(UTC).isoformat()
     for seed in seeds:
         if seed is None:
             continue
-        await db.execute(_INSERT_LIBRARY_ENTRY, _insert_params(seed, now))
+        await db.execute(_INSERT_LIBRARY_ENTRY, _insert_params(seed, now, resolved=resolved))
         imported += 1
 
     await _finalise_apply(
@@ -554,7 +622,7 @@ def generate_template_json() -> bytes:
             "name": "Example imported scenario",
             "status": "published",
             "threat_event_type": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
             "attack_vector": "phishing_then_lateral_movement",
             "tags": ["example"],
