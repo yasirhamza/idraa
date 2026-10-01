@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterable
 from typing import Any
@@ -11,6 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.errors import ConflictError, ValidationError
 from idraa.models.threat_community import ThreatCommunity
+
+# Shared slug-shape guard: defence in depth at every route boundary that accepts a
+# threat-community slug (path param or query param) -- a lookup miss is also 404, but a
+# regex mismatch short-circuits before a DB round trip. Hoisted here from
+# routes/library.py and routes/threat_communities.py (both previously held identical
+# copies) so there is exactly one pattern to keep in sync with the seed slugs.
+SLUG_RE = re.compile(r"^[a-z0-9_]{1,64}$")
 
 # Legacy threat_actor_type enum value -> canonical slug. Used by import paths for pre-P1
 # files (the migration carries its own frozen copy).

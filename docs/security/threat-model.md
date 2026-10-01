@@ -359,10 +359,10 @@ docstring).
   undercount): 4 inline in `routes/library.py:96,145,266,389` and 3 via the
   `_VIEWER_PLUS` allowlist (`routes/control_library.py:45`, applied at
   `:154,210,249`), plus 2 new Threat Agent Library read-only pages behind
-  their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:23`,
-  applied at `GET /library/threat-communities` (`:27`, role dependency
-  `:31`) and `GET /library/threat-communities/{slug}` (`:43`, role
-  dependency `:48`). Separately, `scenario_export_routes.py:51` deliberately
+  their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:20`,
+  applied at `GET /library/threat-communities` (`:24`, role dependency
+  `:28`) and `GET /library/threat-communities/{slug}` (`:40`, role
+  dependency `:45`). Separately, `scenario_export_routes.py:51` deliberately
   uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
   admins and analysts, per its inline comment. Never a security defect, only
   a doc-accuracy one; CLAUDE.md now names all four roles with an inline
@@ -493,7 +493,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   #349) auto-links `https://` URLs inside free-text citation strings, used
   in `templates/library/entry_detail.html`'s citations block; and
   `formatting.safe_https_href` (`formatting.py:62`, issue #349/Sec-I5),
-  registered as the Jinja filter `https_href` (`app.py:502`), gates a
+  registered as the Jinja filter `https_href` (`app.py:503`), gates a
   citation URL used directly as an `href=` attribute value — e.g. the
   Threat Agent Library's community detail page
   (`templates/library/threat_community_detail.html:73`:
@@ -506,7 +506,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
   plus a route-level end-to-end check that a stored `javascript:` citation
   URL actually renders as inert text on a real response body
-  (`tests/routes/test_threat_community_pages.py:108`,
+  (`tests/routes/test_threat_community_pages.py:127`,
   `test_javascript_citation_url_renders_as_text`).
 - **Template injection (SSTI)** — the distinct, more severe class: attacker
   text becoming the template *source* (`Environment.from_string()`,
@@ -585,9 +585,9 @@ live query, `ThreatCommunityService(db, organization_id=org_id)
 `library_bundle_import.py:419-420`) — constructed with the caller's required
 `organization_id`, but that parameter is **unused in P1** against the
 canonical catalog (`_latest_seed()` filters only `source == "seed"`,
-`services/threat_communities.py:51-65`, never `self._organization_id`); it
+`services/threat_communities.py:59-73`, never `self._organization_id`); it
 is the hook that keeps P2's org-authored union (§7's new bullet) from ever
-running unscoped (`services/threat_communities.py:43-45`). An
+running unscoped (`services/threat_communities.py:51-53`). An
 unrecognized slug is a per-row `422`-shaped preview error, never a silent
 pass-through or a foreign-key constraint violation surfacing as a 500. The
 **either-of header rule** (`services/scenario_import.py:276-281`): a row may carry
@@ -797,7 +797,7 @@ backfill writes no audit rows (the `vuln_framing` precedent). Write
 amplification: analyst/admin + CSRF; at most one confirm row per scenario,
 because an already-`assigned` scenario returns 409 with no audit — absent a
 concurrent race (SQLite; accepted, see the service docstring at
-`services/scenarios.py:799-803`: two in-flight confirms can both pass the
+`services/scenarios.py:815-819`: two in-flight confirms can both pass the
 review check, so the later one overwrites or fails `BUSY`, and both writes
 are audited).
 

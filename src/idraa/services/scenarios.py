@@ -560,6 +560,17 @@ class ScenarioService:
                 "status cannot be changed here — use Promote on the scenario page"
             )
 
+        # Threat Agent Library P1 fix-wave: service-level required-on-edit.
+        # Unlike create (where a None slug resolves to "unassigned" via
+        # _resolve_threat_community), an edit must never silently clear an
+        # existing assignment. The HTML form parser already guards this
+        # (scenario_form_helpers.py's ScenarioFormValidationError), but a
+        # caller that bypasses it (API, test, future entry point) must not
+        # be able to null out threat_community through this service method.
+        # BEFORE any mutation — nothing applied, nothing autoflushed.
+        if form.threat_community is None:
+            raise ValidationError("threat_community is required on edit")
+
         # Threat Agent Library: resolve BEFORE any before-dict capture / FAIRCAM
         # validation / field assignment (resolve-before-apply) — an unknown slug
         # must 422 with nothing applied, nothing autoflushed, nothing committed.
@@ -666,6 +677,11 @@ class ScenarioService:
             raise ValidationError(
                 "status cannot be changed here — use Promote on the scenario page"
             )
+        # Threat Agent Library P1 fix-wave: service-level required-on-edit
+        # (see update()'s matching guard for the full rationale). BEFORE any
+        # mutation — nothing applied, nothing autoflushed.
+        if form.threat_community is None:
+            raise ValidationError("threat_community is required on edit")
         # Threat Agent Library: resolve BEFORE any before-dict capture / FAIRCAM
         # validation / field assignment (resolve-before-apply).
         threat_community_row = await self._resolve_threat_community(

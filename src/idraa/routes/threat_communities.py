@@ -3,8 +3,6 @@ org-scoped and shows all statuses by design (matches /scenarios)."""
 
 from __future__ import annotations
 
-import re
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -16,10 +14,9 @@ from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 from idraa.routes.deps import get_db, require_role
-from idraa.services.threat_communities import ThreatCommunityService
+from idraa.services.threat_communities import SLUG_RE, ThreatCommunityService
 
 router = APIRouter()
-_SLUG_RE = re.compile(r"^[a-z0-9_]{1,64}$")  # defence in depth; a lookup miss is also 404
 _ALL_ROLES = require_role(UserRole.VIEWER, UserRole.ANALYST, UserRole.REVIEWER, UserRole.ADMIN)
 _SCENARIO_CAP = 200
 
@@ -47,7 +44,7 @@ async def threat_community_detail(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(_ALL_ROLES),
 ) -> HTMLResponse:
-    if not _SLUG_RE.fullmatch(slug):
+    if not SLUG_RE.fullmatch(slug):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="threat community not found"
         )

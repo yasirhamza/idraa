@@ -1398,6 +1398,9 @@ async def test_build_dashboard_populates_threat_communities_cold_start(
     assert (
         "Shares of the summed per-scenario residual ALE means from the latest aggregate run" in page
     )
+    # Caption also carries the FAIR-CAM non-overclaim disclosure (matches
+    # the PDF wording, pdf_report.py's "scenarios by threat community" page).
+    assert "not FAIR-grounded" in page
 
 
 async def test_dashboard_threat_communities_from_producer_snapshot(

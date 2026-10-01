@@ -56,10 +56,6 @@ CANONICAL_THREAT_COMMUNITY_SLUGS: tuple[str, ...] = (
 )
 
 # App-enforced value sets (no DB CHECK — #303 foot-gun).
-THREAT_COMMUNITY_ORIGINS = ("internal", "external")
-THREAT_COMMUNITY_INTENTS = ("malicious", "non_malicious")
-THREAT_COMMUNITY_SOURCES = ("seed",)
-LANDMARK_BASIS_CLASSES = ("cited", "derived", "convention")
 THREAT_COMMUNITY_PROVENANCE_VALUES = PROVENANCE_VALUES
 THREAT_COMMUNITY_REVIEW_PROVENANCES = REVIEW_PROVENANCES
 

@@ -38,6 +38,7 @@ class ThreatCommunitySummaryRow:
     residual_ale: float  # sum of per-scenario residual ALE means (mean basis)
     residual_ale_share: float
     library_coverage: CoverageResult
+    is_needs_review: bool  # True only for the trailing NEEDS_REVIEW_SLUG row
 
 
 def _ale_by_scenario(run: Any) -> dict[str, float]:
@@ -98,6 +99,7 @@ async def build_threat_community_summary(
             residual_ale=v,
             residual_ale_share=(v / total) if total > 0 else 0.0,
             library_coverage=coverage(entries_by_slug.get(slug, []), pinned),
+            is_needs_review=False,
         )
 
     # Display = the SMALLEST snapshot name seen for the slug (deterministic; the PDF's rule
@@ -118,6 +120,7 @@ async def build_threat_community_summary(
             residual_ale=v,
             residual_ale_share=(v / total) if total > 0 else 0.0,
             library_coverage=coverage([], pinned),
+            is_needs_review=True,
         )
     )
     return rows

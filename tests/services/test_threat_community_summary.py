@@ -71,6 +71,11 @@ async def test_rows_from_snapshot_with_needs_review_row_summing_to_one(
     )
     assert by["hacktivists"].scenario_count == 1 and by["hacktivists"].residual_ale == 250.0
     assert abs(sum(r.residual_ale_share for r in rows) - 1.0) < 1e-9
+    # is_needs_review is true ONLY on the trailing needs-review row, never
+    # on a canonical or stale-slug row (dashboard template keys its
+    # warning-color bar off this flag, not a slug string comparison).
+    assert rows[-1].is_needs_review is True
+    assert all(not r.is_needs_review for r in rows[:-1])
 
 
 async def test_summary_pre_p1_snapshot_and_stale_slug_shares_sum_to_one(

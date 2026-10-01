@@ -5,7 +5,6 @@ Spec §8.1 §8.3.
 
 from __future__ import annotations
 
-import re
 import uuid
 from enum import StrEnum
 
@@ -48,6 +47,7 @@ from idraa.services.scenario_library import (
     ScenarioLibraryService,
     available_facets,
 )
+from idraa.services.threat_communities import SLUG_RE
 from idraa.utils.csv_export import csv_response
 
 router = APIRouter(tags=["library"])
@@ -62,8 +62,8 @@ _VALID_VALUES: dict[type[StrEnum], frozenset[str]] = {
 }
 
 # threat_community querystring values are slugs, not an enum — allowlisted by
-# shape (lowercase alnum/underscore), deduped, and capped at 16 values.
-_SLUG_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+# shape (lowercase alnum/underscore, via the shared idraa.services.threat_communities
+# .SLUG_RE), deduped, and capped at 16 values.
 _MAX_THREAT_COMMUNITY_SLUGS = 16
 
 
@@ -77,7 +77,7 @@ def _parse_browse_filters(request: Request) -> BrowseFilters:
 
     return BrowseFilters(
         threat_community_slugs=list(
-            dict.fromkeys(v for v in qp.getlist("threat_community") if _SLUG_RE.fullmatch(v))
+            dict.fromkeys(v for v in qp.getlist("threat_community") if SLUG_RE.fullmatch(v))
         )[:_MAX_THREAT_COMMUNITY_SLUGS],
         threat_event_types=_multi("threat_event_type", ThreatCategory),  # type: ignore[arg-type]
         asset_classes=_multi("asset_class", AssetClass),  # type: ignore[arg-type]

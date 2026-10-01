@@ -159,14 +159,14 @@ re-curation inserts `(id, version+1)`. Canonical ids are deterministic
 | `id`, `version` | UUID, int | composite PK (`pk_threat_communities`); canonical id = `uuid5(THREAT_COMMUNITY_NAMESPACE, slug)`; UNIQUE (`slug`, `version`) `uq_threat_community_slug_version`; index `ix_threat_communities_slug` |
 | `slug` | str | stable across versions; one of the nine `CANONICAL_THREAT_COMMUNITY_SLUGS` in P1 |
 | `name`, `summary` | str / text | display name and the profile's lead paragraph |
-| `source` | str | `"seed"` in P1 (`THREAT_COMMUNITY_SOURCES`); P2 org-authored communities live in their own org-scoped table (spec §9) |
+| `source` | str | `"seed"` in P1 (hardcoded column default; not schema-validated — P1 has no other value); P2 org-authored communities live in their own org-scoped table (spec §9) |
 | `origin` | str | `"internal"` / `"external"` |
 | `intent` | str | `"malicious"` / `"non_malicious"` |
 | `motive`, `primary_intent`, `sponsorship`, `preferred_target_characteristics`, `preferred_targets`, `capability`, `personal_risk_tolerance`, `collateral_damage_concern` | text | the eight profile attribute columns |
 | `threat_event_definition` | text | the community's counting rule |
 | `tef_basis` | text | prose basis for the TEF landmark (reference organisation, scope) |
 | `reference_org` | dict (JSON) | `{size, sector}` — the reference organisation the TEF landmark is scaled to |
-| `tef_landmark` | dict (JSON) | `{low, mode, high, basis_class, source_event_level, assumed_conversion, derivation}` — `basis_class` ∈ `LANDMARK_BASIS_CLASSES` (`cited` / `derived` / `convention`); display-only, never read by the engine (register A2/B-note) |
+| `tef_landmark` | dict (JSON) | `{low, mode, high, basis_class, source_event_level, assumed_conversion, derivation}` — `basis_class` is `LandmarkTriple.basis_class` (`schemas/threat_community.py`), a `Literal["cited", "derived", "convention"]`; display-only, never read by the engine (register A2/B-note) |
 | `tcap_landmark` | dict (JSON) \| None | `{low, mode, high, basis_class, derivation}` on a 0–100 percentile-rank scale (no `source_event_level` / `assumed_conversion`); `none_as_null=True` so Python `None` stores SQL NULL; NULL iff `intent == "non_malicious"` — enforced by the seed schema and its tests, not by the database (an error is not a capability contest) |
 | `rationale` | text | |
 | `citations` | list[dict] (JSON) | `{title, url, locator?, edition_year?}` |
