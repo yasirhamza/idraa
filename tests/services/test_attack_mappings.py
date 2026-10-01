@@ -59,8 +59,9 @@ async def library_entry_factory(db_session: AsyncSession):
     ``ScenarioLibraryEntry`` construction in
     ``tests/routes/test_scenario_detail_recommendations.py``.
     """
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(**overrides) -> ScenarioLibraryEntry:
         base = {
@@ -70,7 +71,8 @@ async def library_entry_factory(db_session: AsyncSession):
             "name": "Ransomware on EHR",
             "status": "published",
             "threat_event_type": ThreatCategory.RANSOMWARE,
-            "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+            "threat_community_id": canonical_threat_community_id("cybercriminals"),
+            "threat_community_version": 1,
             "asset_class": AssetClass.SYSTEMS,
             "tags": [],
             "description": "d" * 25,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 def test_loss_form_profile_column_present_and_json() -> None:
@@ -19,7 +20,8 @@ def test_loss_form_profile_defaults_empty_list() -> None:
         description="x" * 25,
         canonical_fair_gap="y" * 25,
         threat_event_type="ransomware",
-        threat_actor_type="cybercriminals",
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class="data",
         threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 2.0},
         vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.3, "high": 0.6},

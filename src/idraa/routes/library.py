@@ -170,7 +170,11 @@ async def library_export_csv(
         user_id=user.id,
         ip_address=audit_client_ip(request),
     )
-    header = ["id", "name", "threat_event_type", "threat_actor_type", "asset_class", "status"]
+    # TAL bridge: threat_actor_type column removed (Task 3); list_published()
+    # entries are query-loaded (threat_community is lazy="joined"), so the
+    # relationship is already populated here -- this is the direct successor
+    # column, not a lazy-load risk.
+    header = ["id", "name", "threat_event_type", "threat_community", "asset_class", "status"]
     rows = (
         (
             str(e.id),
@@ -178,9 +182,7 @@ async def library_export_csv(
             e.threat_event_type.value
             if hasattr(e.threat_event_type, "value")
             else str(e.threat_event_type),
-            e.threat_actor_type.value
-            if hasattr(e.threat_actor_type, "value")
-            else str(e.threat_actor_type),
+            e.threat_community.slug,
             e.asset_class.value if hasattr(e.asset_class, "value") else str(e.asset_class),
             e.status if isinstance(e.status, str) else str(e.status),
         )

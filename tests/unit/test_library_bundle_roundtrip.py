@@ -24,8 +24,10 @@ from typing import Any
 
 from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_export import entry_to_seed_obj
 from idraa.services.library_bundle_import import _validate_entries, parse_bundle
+from idraa.services.threat_communities import legacy_slug_for
 
 # Three entries; mixed int/float in distributions to pin JSON numeric fidelity.
 _SOURCES: list[dict[str, Any]] = [
@@ -186,7 +188,21 @@ _DIST_FIELDS = ("threat_event_frequency", "vulnerability", "primary_loss", "seco
 
 
 def _entries() -> list[ScenarioLibraryEntry]:
-    return [ScenarioLibraryEntry(id=uuid.uuid4(), version=1, **src) for src in _SOURCES]
+    """Build ORM fixtures from ``_SOURCES`` without mutating that dict — its
+    ``threat_actor_type`` key is also read directly by the round-trip
+    assertions (TAL: ScenarioLibraryEntry constructor branch, Task 3)."""
+    entries = []
+    for src in _SOURCES:
+        kwargs = dict(src)
+        legacy_value = kwargs.pop("threat_actor_type")
+        slug, _provenance = legacy_slug_for(
+            legacy_value.value if hasattr(legacy_value, "value") else legacy_value
+        )
+        assert slug is not None
+        kwargs["threat_community_id"] = canonical_threat_community_id(slug)
+        kwargs["threat_community_version"] = 1
+        entries.append(ScenarioLibraryEntry(id=uuid.uuid4(), version=1, **kwargs))
+    return entries
 
 
 def test_export_import_round_trip_all_add_zero_errors() -> None:

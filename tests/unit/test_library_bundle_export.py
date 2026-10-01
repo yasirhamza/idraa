@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import uuid
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_export import (
     EXPORT_FIELDS,
     entry_to_seed_obj,
@@ -38,7 +39,8 @@ def _entry(**overrides: object) -> ScenarioLibraryEntry:
         "name": "Export Unit A",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "attack_vector": "phishing",
         "tags": ["a", "b"],

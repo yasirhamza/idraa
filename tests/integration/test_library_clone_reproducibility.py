@@ -14,9 +14,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.models.enums import AssetClass, ScenarioSource, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ScenarioSource, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario_library import ScenarioLibraryEntry, ScenarioLibraryOverride
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 from idraa.schemas.scenario import ScenarioForm
@@ -69,11 +70,11 @@ def _form_from_entry(
             if hasattr(entry.threat_event_type, "value")
             else entry.threat_event_type
         ),
-        "threat_actor_type": (
-            entry.threat_actor_type.value
-            if hasattr(entry.threat_actor_type, "value")
-            else entry.threat_actor_type
-        ),
+        # TAL bridge: entry no longer carries threat_actor_type; the relationship
+        # (entry.threat_community) is never loaded on an instance built from FK
+        # columns, so reading it here would trigger a lazy SELECT under the async
+        # session. Every entry in this file is cybercriminals.
+        "threat_community": "cybercriminals",
         "asset_class": (
             entry.asset_class.value if hasattr(entry.asset_class, "value") else entry.asset_class
         ),
@@ -122,7 +123,8 @@ async def test_library_clone_hash_match_after_entry_version_bump(
         name="Repro test",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",
@@ -168,7 +170,8 @@ async def test_library_clone_hash_match_after_entry_version_bump(
         name="Repro test",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d v2",

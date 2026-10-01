@@ -12,10 +12,11 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.models.wizard_draft import WizardDraft
 from idraa.services.calibration import WITHIN_SCENARIO_SIGMA_DEFAULT
@@ -161,7 +162,8 @@ async def test_catastrophic_library_entry_prechecks_toggle(
         name="Catastrophic toggle repro",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",

@@ -37,12 +37,12 @@ from idraa.models.audit_log import AuditLog
 from idraa.models.enums import (
     AssetClass,
     IndustryType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.models.wizard_draft import WizardDraft
 from tests.conftest import csrf_post
@@ -60,7 +60,8 @@ def _entry_kwargs(**overrides: Any) -> dict[str, Any]:
         "name": "F6 Test",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "d",
@@ -396,7 +397,7 @@ async def test_expert_form_create_with_library_entry_id_records_calibration_in_a
         name="Expert-form test",
         description="d",
         threat_category="ransomware",
-        threat_actor_type="cybercriminals",
+        threat_community="cybercriminals",
         asset_class="systems",
         attack_vector="email_phishing",
         threat_event_frequency=entry.threat_event_frequency,

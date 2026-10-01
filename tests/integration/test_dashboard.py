@@ -25,13 +25,13 @@ from idraa.models.enums import (
     ControlType,
     FairCamSubFunction,
     IndustrySubSector,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.framework_crosswalk import FrameworkControl
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RunStatus
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.dashboard import build_dashboard
 from idraa.services.fx_rates import FxRateService
@@ -971,7 +971,8 @@ def _make_library_entry(
         name=slug,
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",

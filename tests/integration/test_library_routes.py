@@ -13,8 +13,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 @pytest.mark.asyncio
@@ -28,50 +29,6 @@ async def test_get_library_returns_card_grid(
     assert seed_library_entry.name in r.text
     # Has the filter sidebar
     assert "filter" in r.text.lower()
-
-
-@pytest.mark.asyncio
-async def test_get_library_filters_by_threat_actor(
-    analyst_client: AsyncClient,
-    seed_library_entry: Any,
-    db_session: AsyncSession,
-) -> None:
-    """F14 carryover C: seed a second entry with a DIFFERENT actor type,
-    filter by cybercriminals, and assert only the matching entry appears."""
-    # seed_library_entry is threat_actor_type=CYBERCRIMINALS.
-    # Add a nation_state entry that should be excluded by the filter.
-    nation_state_entry = ScenarioLibraryEntry(
-        id=uuid.uuid4(),
-        version=1,
-        slug="nation-state-entry-carryover-c",
-        name="Nation State Entry — carryover C",
-        status="published",
-        threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.NATION_STATE,
-        asset_class=AssetClass.SYSTEMS,
-        tags=[],
-        description="Nation-state actor entry for filter-exclusion test.",
-        canonical_fair_gap="Nation-state FAIR gap test.",
-        source_citations=[],
-        threat_event_frequency={"distribution": "PERT", "low": 1.0, "mode": 4.0, "high": 12.0},
-        vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
-        primary_loss={
-            "distribution": "PERT",
-            "low": 100_000.0,
-            "mode": 750_000.0,
-            "high": 5_000_000.0,
-        },
-        suggested_control_ids=[],
-    )
-    db_session.add(nation_state_entry)
-    await db_session.commit()
-
-    r = await analyst_client.get("/library?threat_actor_type=cybercriminals")
-    assert r.status_code == 200
-    # Matching entry appears in results
-    assert seed_library_entry.name in r.text
-    # Non-matching nation-state entry must NOT appear
-    assert nation_state_entry.name not in r.text
 
 
 @pytest.mark.asyncio
@@ -258,7 +215,8 @@ async def test_filter_sidebar_offers_ot_integrity_option(
         name="OT Integrity Sidebar Smoke",
         status="published",
         threat_event_type=ThreatCategory.OT_INTEGRITY,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.OT_SYSTEMS,
         tags=[],
         description="OT integrity entry for sidebar facet test.",
@@ -299,7 +257,8 @@ async def test_get_library_filters_by_ot_integrity(
         name="OT Integrity Filter Smoke",
         status="published",
         threat_event_type=ThreatCategory.OT_INTEGRITY,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.OT_SYSTEMS,
         tags=[],
         description="Manipulation-of-view integrity entry for filter smoke.",
@@ -343,7 +302,8 @@ async def test_library_entry_detail_shows_lognormal_distribution_type(
         name="Lognormal Display Smoke",
         status="published",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="Native-lognormal primary-loss entry for display smoke test.",
@@ -382,7 +342,8 @@ async def test_entry_detail_shows_vendor_confidence_badge(
         name="Vendor Badge Smoke",
         status="published",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="Vendor-tier entry for confidence badge smoke test.",
@@ -436,7 +397,8 @@ async def test_entry_detail_no_badge_for_non_vendor_tiers(
         name=name,
         status="published",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description=f"{loss_tier}-tier entry — no confidence badge expected.",
@@ -482,7 +444,8 @@ async def test_entry_detail_citations_linkify_https_sec_i1(
         name="Citation Linkify Sec-I1 Smoke",
         status="published",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="Entry for citation linkify Sec-I1 regression test.",
@@ -565,7 +528,8 @@ async def test_sidebar_no_dead_end_filter_business_process_third_party_revenue(
         name="OT WS1 BPTR Guard",
         status="published",
         threat_event_type=ThreatCategory.OT_AVAILABILITY,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.OT_SYSTEMS,
         tags=[],
         description="OT entry for WS1 dead-end filter guard.",
@@ -615,7 +579,8 @@ async def test_sidebar_shows_facet_count(
                 name=f"Count Smoke {i}",
                 status="published",
                 threat_event_type=ThreatCategory.MALWARE,
-                threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+                threat_community_id=canonical_threat_community_id("cybercriminals"),
+                threat_community_version=1,
                 asset_class=AssetClass.DATA,
                 tags=[],
                 description=f"Count smoke entry {i}.",

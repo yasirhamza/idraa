@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import (
     AssetClass,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 def _new_entry(
@@ -31,7 +31,8 @@ def _new_entry(
         name="Ransomware on EHR",
         status=status,
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         attack_vector="email_phishing",
         tags=["healthcare", "ot-relevant"],
@@ -135,4 +136,64 @@ async def test_canonical_fair_gap_required_at_db_level(db_session: AsyncSession)
     db_session.add(entry)
     with pytest.raises(IntegrityError):
         await db_session.commit()
+    await db_session.rollback()
+
+
+def _entry_kwargs(slug: str, tc: str) -> dict:
+    import uuid
+
+    from idraa.models.threat_community import canonical_threat_community_id
+
+    return {  # dict literal (ruff C408)
+        "id": uuid.uuid4(),
+        "version": 1,
+        "slug": slug,
+        "name": slug,
+        "status": "published",
+        "threat_event_type": "ransomware",
+        "asset_class": "systems",
+        "threat_community_id": canonical_threat_community_id(tc),
+        "threat_community_version": 1,
+        "description": "Fixture entry for the community FK, long enough.",
+        "canonical_fair_gap": "Fixture gap description long enough.",
+        "threat_event_frequency": {"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+        "vulnerability": {"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        "primary_loss": {"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+    }
+
+
+async def test_entry_links_to_threat_community(db_session, seed_threat_communities) -> None:
+    from sqlalchemy import select
+
+    from idraa.models.scenario_library import ScenarioLibraryEntry
+
+    db_session.add(ScenarioLibraryEntry(**_entry_kwargs("tc-link", "cybercriminals")))
+    await db_session.flush()
+    loaded = (
+        await db_session.execute(
+            select(ScenarioLibraryEntry).where(ScenarioLibraryEntry.slug == "tc-link")
+        )
+    ).scalar_one()
+    assert loaded.threat_community.slug == "cybercriminals"
+    assert "threat_actor_type" not in ScenarioLibraryEntry.__table__.columns
+
+
+async def test_referenced_community_row_cannot_be_deleted(
+    db_session, seed_threat_communities
+) -> None:
+    """Review Focus #3: no ON DELETE on the composite FK — a referenced canonical row fails loud."""
+    import pytest
+    from sqlalchemy import delete
+    from sqlalchemy.exc import IntegrityError
+
+    from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import ThreatCommunity
+
+    db_session.add(ScenarioLibraryEntry(**_entry_kwargs("tc-ref", "hacktivists")))
+    await db_session.flush()
+    with pytest.raises(IntegrityError):
+        await db_session.execute(
+            delete(ThreatCommunity).where(ThreatCommunity.slug == "hacktivists")
+        )
+        await db_session.flush()
     await db_session.rollback()

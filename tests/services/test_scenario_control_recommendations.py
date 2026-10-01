@@ -15,10 +15,10 @@ from idraa.models.enums import (
     AssetClass,
     ControlSource,
     ControlType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.scenario_control_recommendations import recommended_controls_for
 from tests.factories import create_org
 
@@ -52,7 +52,8 @@ async def _entry(db, suggested):
         name="R",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         description="d" * 25,
         source_citations=[],

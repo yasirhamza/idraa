@@ -35,9 +35,10 @@ import pytest_asyncio
 from sqlalchemy import func, select
 
 from idraa.models.csv_import_preview import CSVImportPreview
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_import import (
     PreviewExpiredError,
     apply_validated_preview,
@@ -124,7 +125,8 @@ async def test_existing_seed_slug_is_skipped(db_session, organization, admin_use
         status="published",
         source="seed",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="A seed entry to collide against.",

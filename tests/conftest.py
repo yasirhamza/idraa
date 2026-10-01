@@ -1017,8 +1017,9 @@ async def seed_library_entry(db_session: AsyncSession) -> _Any:
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     entry = ScenarioLibraryEntry(
         id=_uuid.uuid4(),
@@ -1027,7 +1028,8 @@ async def seed_library_entry(db_session: AsyncSession) -> _Any:
         name="Test Library Entry",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="A fixture entry for unit tests.",
@@ -1060,8 +1062,9 @@ async def seed_library_entries_factory(
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(count: int) -> list[_Any]:
         entries: list[_Any] = []
@@ -1073,7 +1076,8 @@ async def seed_library_entries_factory(
                 name=f"Library Entry {i:03d}",
                 status="published",
                 threat_event_type=ThreatCategory.RANSOMWARE,
-                threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+                threat_community_id=canonical_threat_community_id("cybercriminals"),
+                threat_community_version=1,
                 asset_class=AssetClass.SYSTEMS,
                 tags=[],
                 description=f"Factory entry {i:03d} for pagination tests.",

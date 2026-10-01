@@ -13,13 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.models.enums import (
     AssetClass,
     IndustrySubSector,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 
 
@@ -38,7 +38,8 @@ def _entry(
         name=slug,
         status=status,
         threat_event_type=threat_event_type,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",
@@ -72,22 +73,6 @@ async def test_list_published_returns_only_published_latest_version(
     versions = {r.id: r.version for r in rows}
     assert slugs == ["a"]
     assert versions[e1.id] == 2
-
-
-@pytest.mark.asyncio
-async def test_list_published_filters_by_threat_actor(
-    db_session: AsyncSession,
-) -> None:
-    repo = ScenarioLibraryRepo(db_session)
-    a = _entry(slug="a")
-    a.threat_actor_type = ThreatActorType.NATION_STATE
-    b = _entry(slug="b")
-    b.threat_actor_type = ThreatActorType.CYBERCRIMINALS
-    db_session.add_all([a, b])
-    await db_session.commit()
-
-    rows = await repo.list_published(threat_actor_types=[ThreatActorType.NATION_STATE])
-    assert {r.slug for r in rows} == {"a"}
 
 
 @pytest.mark.asyncio

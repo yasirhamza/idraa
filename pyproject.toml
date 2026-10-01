@@ -363,7 +363,14 @@ allowlist = [
     "row_version",   # internal — optimistic-lock counter
     "created_at",    # TimestampMixin
     "updated_at",    # TimestampMixin
+    "threat_community_id",       # TAL composite FK resolved from the seed's slug
+    "threat_community_version",  # TAL composite FK resolved from the seed's slug
 ]
+# TAL: fields that exist on exactly one side on purpose. threat_community is a
+# DTO-only seed field (resolved to the ORM's threat_community_id/_version FK at
+# insert time); threat_actor_type is a DTO-only LEGACY field (back-compat parse
+# of pre-P1 bundles, never read by the insert path; see LEGACY_SEED_FIELDS).
+dto_only_allowlist = ["threat_community", "threat_actor_type"]
 
 [[tool.mypy.overrides]]
 module = ["pyotp", "segno"]

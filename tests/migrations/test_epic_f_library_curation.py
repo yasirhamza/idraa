@@ -533,19 +533,57 @@ def test_fresh_db_migrates_to_head_with_expected_counters(
 
 
 def test_allowed_and_json_columns_match_orm_dto_intersection() -> None:
-    from idraa.models.scenario_library import ScenarioLibraryEntry
-    from idraa.services.seed_library_loader import LibraryEntrySeed
-
-    expected_allowed = (
-        set(ScenarioLibraryEntry.__table__.columns.keys()) & set(LibraryEntrySeed.model_fields)
-    ) - {"slug"}
+    # historical ORM∩DTO intersection at e5f1a9c3d7b2; the ORM has since dropped
+    # threat_actor_type (TAL P1)
+    expected_allowed = frozenset(
+        {
+            "applicable_industries",
+            "applicable_org_sizes",
+            "applicable_sub_sectors",
+            "asset_class",
+            "attack_vector",
+            "calibration_anchor",
+            "canonical_fair_gap",
+            "description",
+            "example_incidents",
+            "loss_form_profile",
+            "loss_shape",
+            "loss_tier",
+            "name",
+            "primary_loss",
+            "secondary_loss",
+            "source_citations",
+            "standards_references",
+            "status",
+            "suggested_control_ids",
+            "tags",
+            "threat_actor_type",
+            "threat_event_frequency",
+            "threat_event_type",
+            "vulnerability",
+        }
+    )
     assert expected_allowed == mod._ALLOWED_COLUMNS
 
-    expected_json = {
-        c
-        for c in expected_allowed
-        if isinstance(ScenarioLibraryEntry.__table__.columns[c].type, sa.JSON)
-    }
+    # historical ORM∩DTO intersection at e5f1a9c3d7b2; the ORM has since dropped
+    # threat_actor_type (TAL P1)
+    expected_json = frozenset(
+        {
+            "applicable_industries",
+            "applicable_org_sizes",
+            "applicable_sub_sectors",
+            "calibration_anchor",
+            "loss_form_profile",
+            "primary_loss",
+            "secondary_loss",
+            "source_citations",
+            "standards_references",
+            "suggested_control_ids",
+            "tags",
+            "threat_event_frequency",
+            "vulnerability",
+        }
+    )
     assert expected_json == mod._JSON_COLUMNS
 
 

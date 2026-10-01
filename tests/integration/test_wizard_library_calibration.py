@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.models.enums import (
     AssetClass,
     IndustryType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.organization import Organization
@@ -25,6 +24,7 @@ from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.wizard_draft import WizardDraft
 from tests.conftest import csrf_post
 
@@ -37,7 +37,8 @@ def _seed_entry_kwargs(**overrides: object) -> dict[str, object]:
         "name": "F4 Test Entry",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "d",

@@ -28,8 +28,9 @@ from tests.integration._wizard_step3_test_helpers import (
 
 def _make_lib_entry(slug: str) -> Any:
     """Minimal-valid published library entry for the wizard-picker paging test."""
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     return ScenarioLibraryEntry(
         id=uuid.uuid4(),
@@ -38,7 +39,8 @@ def _make_lib_entry(slug: str) -> Any:
         name=slug,
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",
@@ -980,8 +982,9 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, IndustryType, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, IndustryType, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     # Seed a PROFESSIONAL-industry entry (cross-industry from MANUFACTURING org).
     cross_industry_entry = ScenarioLibraryEntry(
@@ -991,7 +994,8 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
         name="Professional Services Payroll BEC",
         status="published",
         threat_event_type=ThreatCategory.SOCIAL_ENGINEERING,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.CASH_OR_EQUIVALENT,
         tags=[],
         description="Business email compromise targeting payroll for professional services firms.",
@@ -1076,8 +1080,13 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
     seed_library_entry: Any,
     db_session: AsyncSession,
 ) -> None:
-    """WS4: GET deep-link must also seed threat_category, threat_actor_type,
-    and attack_vector — not just asset_class.
+    """WS4: GET deep-link must also seed threat_category and attack_vector —
+    not just asset_class.
+
+    TAL bridge: threat_actor_type is no longer carried on the entry (replaced
+    by the threat_community FK in Task 3); the deep-link no longer seeds it
+    (routes/scenario_wizard_seeding.py sets it to None pending Task 6), so the
+    enum-purpose assertion that pinned it here is deleted.
     """
     client, org_id = authed_analyst
     entry_id = str(seed_library_entry.id)
@@ -1096,11 +1105,6 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
         f"GET deep-link must seed threat_category; "
         f"got {state.get('threat_category')!r}, "
         f"expected {seed_library_entry.threat_event_type.value!r}"
-    )
-    assert state.get("threat_actor_type") == seed_library_entry.threat_actor_type.value, (
-        f"GET deep-link must seed threat_actor_type; "
-        f"got {state.get('threat_actor_type')!r}, "
-        f"expected {seed_library_entry.threat_actor_type.value!r}"
     )
 
 

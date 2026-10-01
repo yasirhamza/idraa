@@ -80,6 +80,37 @@ ORG_SCOPED_MODELS: frozenset[str] = frozenset(
     }
 )
 
+# Mapped models WITHOUT an organization_id column, each with its reason. The parity contract
+# test (tests/contracts/test_org_scoped_models_parity.py) asserts every mapper is in exactly
+# one of the two lists. P2's org-authored threat-community table MUST go in ORG_SCOPED_MODELS.
+NON_ORG_COLUMN_MODELS: frozenset[str] = frozenset(
+    {
+        # canonical, not org-scoped
+        "AttackTactic",
+        "AttackTechnique",
+        "FrameworkControl",
+        "FrameworkControlFairCam",
+        "ScenarioLibraryEntry",
+        "ScenarioLibraryEntryAttackMapping",
+        "ControlLibraryEntry",
+        "ControlLibraryEntryAssignment",
+        "QualitativeMappingBand",
+        "ThreatCommunity",
+        # the org itself
+        "Organization",
+        # user-scoped auth tables (org reached via User)
+        "AuthSession",
+        "LoginAttempt",
+        "RecoveryCode",
+        "UserTotp",
+        "WebAuthnCredential",
+        "WebAuthnChallengeConsumed",
+        # org-child join/revision tables (org reached via the parent row)
+        "ScenarioControl",
+        "OverlayDefinitionRevision",
+    }
+)
+
 # Directories walked by --all. Repositories are included because a new
 # repo-method implementation is exactly where a fresh bare .get() would be
 # introduced under the guise of "internal, trusted" access.

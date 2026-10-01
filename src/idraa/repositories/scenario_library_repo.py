@@ -108,8 +108,9 @@ class ScenarioLibraryRepo:
             ),
         )
 
-        if threat_actor_types:
-            stmt = stmt.where(ScenarioLibraryEntry.threat_actor_type.in_(threat_actor_types))
+        # TAL bridge: threat_actor_type column removed (Task 3's FK migration to
+        # threat_communities); the parameter is accepted but is a no-op pending
+        # the threat_community-based facet/filter rebuild (Task 4+).
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:
@@ -302,8 +303,9 @@ class ScenarioLibraryRepo:
             )
         )
 
-        if threat_actor_types:
-            stmt = stmt.where(ScenarioLibraryEntry.threat_actor_type.in_(threat_actor_types))
+        # TAL bridge: threat_actor_type column removed (Task 3's FK migration to
+        # threat_communities); the parameter is accepted but is a no-op pending
+        # the threat_community-based facet/filter rebuild (Task 4+).
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:

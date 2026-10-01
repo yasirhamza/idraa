@@ -33,12 +33,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.audit_log import AuditLog
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -51,7 +52,8 @@ def _entry_kwargs(*, slug: str, name: str, source: str) -> dict[str, Any]:
         "status": "published",
         "source": source,
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "A provenance-test entry. " * 4,
@@ -466,7 +468,7 @@ async def test_clone_from_imported_records_source_provenance(
         name="Cloned from imported",
         description="d",
         threat_category="ransomware",
-        threat_actor_type="cybercriminals",
+        threat_community="cybercriminals",
         asset_class="systems",
         attack_vector="email_phishing",
         threat_event_frequency=entry.threat_event_frequency,
