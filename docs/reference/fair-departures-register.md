@@ -146,12 +146,15 @@ the rationale; where it lives; how to evaluate it.
 - **Evaluate.** Raw-sample export lets a reader re-sum with any correlation
   they prefer.
 - **Note (Range-lumping not adopted).** The book allows lumping threat
-  communities whose ranges overlap into one scenario. Idraa does not: every
-  scenario names exactly one community, pinned by a composite foreign key to
-  one community version, and an aggregate run sums scenarios as A4 states.
-  Class IMPLEMENTATION-DEFINED. Evaluate: the composite FK pair on
-  `scenarios` (`ck_scenario_threat_community_pair`) and the migration
-  invariant tests in `tests/migrations/test_threat_communities_migration.py`.
+  communities into one scenario by combining their ranges. Idraa does not:
+  a scenario names at most one community, pinned by a composite foreign key
+  to one community version (a scenario carried over without one names none
+  and is reported under "Needs review / unassigned", D10), and an aggregate
+  run sums scenarios as A4 states. Class IMPLEMENTATION-DEFINED. Evaluate:
+  the composite FK `fk_scenario_threat_community` and the both-or-neither
+  CHECK `ck_scenario_threat_community_pair` on `scenarios`, and the
+  migration invariant tests in
+  `tests/migrations/test_threat_communities_migration.py`.
 
 ### A5. Primary and Secondary Loss are sampled independently within one event
 
@@ -191,22 +194,23 @@ the rationale; where it lives; how to evaluate it.
 > an incident or loss statistic divides by `assumed_conversion`, the
 > controlled-world attempt→source-event conversion rate matching
 > `source_event_level` (attempt→incident or attempt→loss event), which is a
-> curator convention and **not** the inherent Vulnerability of A2. A derived
-> landmark is a MEAN rate placed as the PERT mean (mode solved from it,
-> spread by a stated curator factor); it is biased LOW by at least four
-> mechanisms: the p→λ = −ln(1−p) step assumes Poisson-distributed counts and
-> under-states the mean under clustering (`industry_calibration.py:46-48` is
-> the identity in fair_cam); λ from a population-mean p under-states the
-> mean λ across heterogeneous organisations (−ln(1−·) is convex, Jensen); a
-> conversion value that omits TEF-side prevention (C4) over-states the
-> conversion; and dividing by a single point value of an uncertain
-> conversion under-states the result (1/c is convex). The p→λ step is NOT a
-> probability↔frequency conversion in the sense §E forbids — p is P(N ≥ 1)
-> of the same annual count variable whose mean is λ, so §E ("neither is
-> converted into the other", Vulnerability ↔ TEF) still holds. The
-> landmarks are not identifiable from any organisation's data; in P1 they
-> are display-only and enter no calculation. P3 (wizard landmark → row)
-> must add the CALIBRATION entry when it lands. Where:
+> curator convention and **not** the inherent Vulnerability of A2 (and
+> distinct from the `TEF = LEF / vuln` translation in
+> `fair-cam-methodology.md`). A derived landmark is a MEAN rate placed as the
+> PERT mean (mode solved from it, spread by a stated curator factor); it is
+> biased LOW by at least four mechanisms: the p→λ = −ln(1−p) step assumes
+> Poisson-distributed counts and under-states the mean under clustering
+> (`industry_calibration.py:46-48` is the identity in fair_cam); λ from a
+> population-mean p under-states the mean λ across heterogeneous organisations
+> (−ln(1−·) is convex, Jensen); a conversion value that omits TEF-side
+> prevention (C4) over-states the conversion; and dividing by a single point
+> value of an uncertain conversion under-states the result (1/c is convex).
+> The p→λ step is NOT a probability↔frequency conversion in the sense §E
+> forbids — p is P(N ≥ 1) of the same annual count variable whose mean is λ,
+> so §E ("neither is converted into the other", Vulnerability ↔ TEF) still
+> holds. The landmarks are not identifiable from any organisation's data; in
+> P1 they are display-only and enter no calculation. P3 (wizard landmark →
+> row) must add the CALIBRATION entry when it lands. Where:
 > `data/seed_threat_communities.json`, `schemas/threat_community.py`,
 > `tests/unit/test_threat_community_seed.py` (tripwires).
 
@@ -700,7 +704,7 @@ help articles rather than labelled on every screen that shows them.
 | **D7. ATT&CK coverage ratios** | Share of a scenario's mapped techniques covered by present controls. Labelled "not FAIR-grounded" in code. | none | `services/attack_coverage.py` |
 | **D8. Appetite verdict and headroom** | Dashboard comparison of the loss-exceedance curve against a stated appetite. The headroom strip is labelled "not FAIR-grounded" in code; the verdict functions rely on this register. | interpolation on the LEC | `services/dashboard_view_model.py` |
 | **D9. Expected-shortfall sampling error** | Monte Carlo sampling standard error of the sample Expected Shortfall at each tail level (first-order influence-function estimator, Scaillet 2004 / Manistre & Hancock 2005), shown as a 95% interval beside ES so a reader can judge iteration count. A property of the simulation, not of FAIR. | z = 1.96 normal band; reported as unavailable when fewer than two samples lie at or above VaR | `services/run_executor.py` (`_es_standard_error`), `services/_view_model_helpers.py` (`ES_CI_Z_95`) |
-| **D10. Residual ALE share and library coverage by threat community** | Sums of per-scenario residual ALE means grouped by the community recorded in the latest aggregate run's inputs snapshot (mean-additive, no per-group tails; not FAIR-grounded), plus the share of the org's applicable published library entries each community has in the run. | Review-state and unassigned scenarios grouped under "Needs review / unassigned"; grouping by slug with display by the snapshot's smallest name; a stale slug keeps its own row; a `per_scenario` row whose id does not parse, and any row whose residual ALE is not finite, is dropped on both surfaces; basis = the latest aggregate run's snapshot; coverage reference = the org's sub-sector-applicable published entries (capped by `_LIBRARY_REFERENCE_LIMIT`). | `services/threat_community_summary.py`, `services/reports.build_threat_community_groups`, `idraa/threat_community_provenance.py` |
+| **D10. Residual ALE share and library coverage by threat community** | Sums of per-scenario residual ALE means grouped by the community recorded in the latest aggregate run's inputs snapshot (mean-additive, no per-group tails; not FAIR-grounded), plus, per community, the share of the org's applicable published library entries (grouped by each entry's current community) that an active scenario pins — a library-coverage figure independent of any run. | Review-state and unassigned scenarios grouped under "Needs review / unassigned"; grouping by slug with display by the snapshot's smallest name; a stale slug keeps its own row; a `per_scenario` row whose id does not parse, and any row whose residual ALE is not finite, is dropped on both surfaces; ALE basis = the latest aggregate run's snapshot; coverage basis = library pins of the org's active scenarios against the org's sub-sector-applicable published entries, or all published entries when no sub-sector is set (capped by `_LIBRARY_REFERENCE_LIMIT`). | `services/threat_community_summary.py`, `services/reports.build_threat_community_groups`, `idraa/threat_community_provenance.py` |
 
 ---
 

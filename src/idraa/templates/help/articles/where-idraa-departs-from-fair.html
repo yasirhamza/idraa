@@ -73,11 +73,11 @@
   directly and resistance strength is not elicited.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  <strong>Communities are not lumped (implementation-defined).</strong> The
-  book permits merging threat communities whose ranges overlap into one
-  scenario. Idraa keeps one community per scenario, pinned to a specific
-  profile version, and aggregates by summing scenarios; pooling happens
-  across experts within a scenario, never across communities.
+  <strong>Communities are not lumped (implementation-defined).</strong> The book
+  permits merging threat communities into one scenario by combining their
+  ranges. Idraa allows a scenario at most one community, pinned to a specific
+  profile version, and aggregates by summing scenarios; pooling happens across
+  experts within a scenario, never across communities.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="distribution-choices">Distribution choices</h2>
@@ -153,14 +153,13 @@
   Each profile&rsquo;s frequency and capability ranges carry a stated basis:
   cited from a named source, derived from a cited figure with a stated
   conversion, or a curator convention &mdash; never &ldquo;calibrated&rdquo;,
-  which Idraa reserves for values fitted to data. A frequency recovered from
-  an incident or loss statistic was divided by a controlled-world conversion
-  rate that is a curator convention, not the inherent Vulnerability you
-  author, and such a range is biased in one direction: it understates the
-  attempt rate for several reasons the profile spells out (an optimistic
-  bias, not a safe one).
-  None of these ranges is read by the engine; they are shown on the profile
-  page and in the help only. See
+  which Idraa reserves for values fitted to data. A frequency recovered from an
+  incident or loss statistic was divided by a controlled-world conversion rate
+  that is a curator convention, not the inherent Vulnerability you author, and
+  such a range is biased in one direction: it understates the attempt rate for
+  several reasons the profile spells out (an optimistic bias, not a safe one).
+  None of these ranges is read by the engine; they are shown on the library
+  pages only. See
   <a class="text-brand hover:underline" href="/help/threat-agent-library#landmarks-not-inputs">Threat Agent Library</a>.
 </p>
 
@@ -239,31 +238,30 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="outside-fair">Outside FAIR</h2>
 <p class="text-body text-ink-2 mb-6">
-  Control attribution (the fair-share and if-removed figures), the
-  robustness ranges, the mean-based ALE headline, the run-level return on
-  investment ratio, the ATT&amp;CK coverage percentages, the dashboard
-  appetite verdict, and the sampling-error interval shown beside expected
-  shortfall are reporting
-  derivations, not FAIR nodes. The return-on-investment figure in particular
-  is shown as a single number while resting on the same uncertain weights
-  that give control value its range. They are computed outside the FAIR maths;
-  the attribution table carries an explicit &ldquo;not FAIR-grounded&rdquo;
-  methodology note, and the rest are documented as derivations here and in
-  the public register rather than on every screen that shows them. The
-  robustness ranges rest on their own conventions (how far the weights are
-  varied, how many draws, what counts as stable), none of which is validated;
-  widening the variation only makes the verdicts more cautious. The tail
-  statistics (value at risk, expected shortfall, the exceedance curve) are
-  standard readings of the sampled distribution; because risk is sampled as
-  frequency times magnitude per iteration, FAIR&rsquo;s own form, their
-  tails are an approximation once the loss-event frequency exceeds one per
-  year. That is a disclosure, not a departure.
-  The dashboard&rsquo;s and PDF&rsquo;s &ldquo;by threat community&rdquo; breakdown
-  is the same kind of reporting derivation: it sums each scenario&rsquo;s
-  mean residual loss by the community recorded in the run&rsquo;s inputs
-  snapshot, with scenarios still awaiting review grouped under
-  &ldquo;Needs review / unassigned&rdquo;; it has no per-group tail and is
-  not a FAIR quantity.
+  Control attribution (the fair-share and if-removed figures), the robustness
+  ranges, the mean-based ALE headline, the run-level return on investment ratio,
+  the ATT&amp;CK coverage percentages, the dashboard appetite verdict, and the
+  sampling-error interval shown beside expected shortfall are reporting
+  derivations, not FAIR nodes. The return-on-investment figure in particular is
+  shown as a single number while resting on the same uncertain weights that give
+  control value its range. They are computed outside the FAIR maths; the
+  attribution table carries an explicit &ldquo;not FAIR-grounded&rdquo;
+  methodology note, and the rest are documented as derivations here and in the
+  public register rather than on every screen that shows them. The robustness
+  ranges rest on their own conventions (how far the weights are varied, how many
+  draws, what counts as stable), none of which is validated; widening the
+  variation only makes the verdicts more cautious. The tail statistics (value at
+  risk, expected shortfall, the exceedance curve) are standard readings of the
+  sampled distribution; because risk is sampled as frequency times magnitude per
+  iteration, FAIR&rsquo;s own form, their tails are an approximation once the
+  loss-event frequency exceeds one per year. That is a disclosure, not a
+  departure. The dashboard&rsquo;s and PDF&rsquo;s &ldquo;by threat
+  community&rdquo; breakdown is the same kind of reporting derivation: it sums
+  each scenario&rsquo;s mean residual loss by the community recorded in the
+  run&rsquo;s inputs snapshot, with scenarios still awaiting review grouped
+  under &ldquo;Needs review / unassigned&rdquo;, and reports per community how
+  many of the applicable library entries your active scenarios pin; it has no
+  per-group tail and is not a FAIR quantity.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="how-to-evaluate">How to evaluate any of this</h2>

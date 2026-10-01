@@ -429,11 +429,11 @@
       },
       "privileged_insider": {
         "what": "An employee or contractor who already holds administrative, financial-approval or other elevated rights and turns them against the organisation; preventative controls the role legitimately bypasses are not in the path.",
-        "not_for": "Not nonprivileged_insider (ordinary role access: POS, EHR, ERP data entry, shared drives). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Use when the description names admin, approval or infrastructure rights."
+        "not_for": "Not nonprivileged_insider (ordinary role access: POS, EHR, ERP data entry, shared drives). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Not competitors (an insider acting for a rival is labelled with the rival's community). Use when the description names admin, approval or infrastructure rights."
       },
       "nonprivileged_insider": {
         "what": "An employee, contractor or other affiliate with ordinary, role-based access who deliberately misuses it: taking data they can read, manipulating transactions they can enter, damaging what they can reach.",
-        "not_for": "Not privileged_insider (admin, approval or infrastructure rights). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Not competitors when the insider acts for their own gain."
+        "not_for": "Not privileged_insider (admin, approval or infrastructure rights). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Not competitors (an insider acting for a rival is labelled with the rival's community)."
       },
       "insider_accidental": {
         "what": "Employees, contractors or other affiliates who cause loss without meaning to: misdirected emails, misconfigured systems, lost devices, mishandled records, mistaken transactions.",
