@@ -521,9 +521,14 @@ async def test_confirm_untokened_post_rejected_by_csrf(
 def _form_for(
     s: Scenario, *, vulnerability: dict[str, Any], name: str | None = None
 ) -> ScenarioForm:
+    # Threat Agent Library P1 fix-wave: ScenarioService.update() now requires
+    # threat_community on edit (service-level guard) -- carry the fixture
+    # scenario's own community ("cybercriminals", per _seed_legacy_scenario)
+    # rather than omitting it.
     return ScenarioForm(
         name=name or s.name,
         threat_category=getattr(s.threat_category, "value", s.threat_category),
+        threat_community="cybercriminals",
         threat_event_frequency=s.threat_event_frequency,
         vulnerability=vulnerability,
         primary_loss=s.primary_loss,
