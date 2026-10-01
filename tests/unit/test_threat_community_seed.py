@@ -39,15 +39,15 @@ _TEXT_FIELDS = (
 # JSON row (not model_dump) so a later optional schema field does not change every hash.
 # Fill once Task 1's content is final.
 V1_CONTENT_SHA256: dict[str, str] = {
-    "nation_state": "7cb6fdb579134c262ddbca0c79ea6fdda43957ee7abe2fa6adedb65a6ff112d4",
-    "cybercriminals": "60f529af45635974f2dfa44c00060aea7d8de8d6d04f80d2ce3cc69577f825e4",
-    "hacktivists": "e06a986717bb3a6c546b4d99bd36324c839032e531ba04de3d7695c843ddf53d",
-    "competitors": "e0d71f2047ff4f56401955d43097ec7bd7eb0f250f2a7f0f58e4f98f1fe04d0e",
-    "privileged_insider": "bdd10566ff2af4737fb86a60d44c5a4bc65a89e894ed56d7effe97a5a96e374f",
-    "nonprivileged_insider": "87e486b0620241aab29127515de43d6d687aa3be32b9ebe99fd15a4141fd20ce",
-    "insider_accidental": "590ff2e9d89be27d1919760ffb50c0b37338e50d43ef2a3c1e7fa257dfb7a923",
-    "third_party": "e37085d0efc9f315c67e7fd518a1d5d0606219fc3af9510648acff37bab5a873",
-    "opportunistic_hackers": "9a224bdb2af3d1ae292773c8cb4f13990cbd085789b7e2d947c70971ccadcd93",
+    "nation_state": "283cd7c630a3bcb8594eb623e2aef21a161d39c9ffcca81012b2fae8aaf4c8a2",
+    "cybercriminals": "f8e75b662dfebd3796b239d7662f29f8dc5d13ac672c11d527cf98e0c8ddafc5",
+    "hacktivists": "87466e7d925cd48eac6ae2ef51fe4b4d066cfad2122c9751af180fdd4f42b703",
+    "competitors": "d3753f6f5da25aaa411e095884308adc0a71a72e8a8e448280afa91dbef05626",
+    "privileged_insider": "9273fc6ad7dc90d553a3b28c20cbf8108e85db6bdcca292ec7907b75da2f6a92",
+    "nonprivileged_insider": "9926b08c995c6cc6dffcde4c6e9c3d3a0de2a0da5966b64988de527a525f614a",
+    "insider_accidental": "a5a78ba668eb939fc8441d9a9a9d9ab107ef07d9912816ed2f7a2c8dc1e58288",
+    "third_party": "f299573d81dd7d64c2074c277e08b7b769039f875664634c7a8415a4db6784be",
+    "opportunistic_hackers": "6469dd926048272c9acff2eaefde152abe56a28949d9d977e9a8c63dd006a16c",
 }
 
 

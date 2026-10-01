@@ -649,7 +649,7 @@ async def test_browse_filters_by_threat_community_querystring(
 ) -> None:
     """GET /library?threat_community=<slug> narrows results to that community.
 
-    A malformed value (fails the ``_SLUG_RE`` shape allowlist) is silently
+    A malformed value (fails the ``SLUG_RE`` shape allowlist) is silently
     dropped — the querystring falls through to "no narrowing", not a 422/500.
     """
     cyber_entry = _tc_entry("tc-qs-cyber", "TC QS Cybercriminals", "cybercriminals")

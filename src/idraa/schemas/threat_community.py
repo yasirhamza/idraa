@@ -84,7 +84,8 @@ class TefLandmark(LandmarkTriple):
                 raise ValueError("a non-attempt TEF source needs assumed_conversion in (0, 1]")
             if self.basis_class != "derived":
                 raise ValueError(
-                    "a converted TEF landmark is 'derived' (cited, with a stated conversion)"
+                    "a converted TEF landmark is 'derived' (a cited base statistic carried "
+                    "through stated conversion steps)"
                 )
         return self
 

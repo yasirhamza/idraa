@@ -192,7 +192,8 @@
             aggregate run's run.scenario_inputs_snapshot (never a live
             Scenario query -- services/threat_community_summary.py). Grouped
             by SLUG, displayed by the snapshot's NAME; the needs-review row
-            (__needs_review__) is always last. ---- #}
+            (flagged by the row's ``is_needs_review`` field) is always
+            last. ---- #}
       {% if data.threat_communities %}
         <div class="mt-4 pt-4 border-t border-border-subtle">
           <div class="flex items-baseline justify-between gap-2">

@@ -188,31 +188,41 @@ the rationale; where it lives; how to evaluate it.
 > **Threat-community landmarks (default ranges).** Each canonical threat
 > community carries numeric TEF and TCap defaults that are landmarks for the
 > analyst, not inputs to the engine. Every landmark carries a `basis_class`:
-> `cited` ↔ this register's "cited"; `derived` ↔ "cited, with a stated
-> conversion" — never "calibrated", which this register reserves for values
-> fitted to data; `convention` ↔ "convention". A TEF landmark recovered from
-> an incident or loss statistic divides by `assumed_conversion`, the
-> controlled-world attempt→source-event conversion rate matching
+> `cited` ↔ this register's "cited"; `derived` ↔ a cited base statistic carried
+> through stated steps, some of which are curator conventions named on the
+> profile (the community share where the source publishes none, every conversion
+> rate, the spread factor k) — never "calibrated", which this register reserves
+> for values fitted to data; `convention` ↔ "convention". A TEF landmark
+> recovered from an incident or loss statistic divides by `assumed_conversion`,
+> the controlled-world attempt→source-event conversion rate matching
 > `source_event_level` (attempt→incident or attempt→loss event), which is a
-> curator convention and **not** the inherent Vulnerability of A2 (and
-> distinct from the `TEF = LEF / vuln` translation in
-> `fair-cam-methodology.md`). A derived landmark is a MEAN rate placed as the
-> PERT mean (mode solved from it, spread by a stated curator factor); it is
-> biased LOW by at least four mechanisms: the p→λ = −ln(1−p) step assumes
-> Poisson-distributed counts and under-states the mean under clustering
+> curator convention and **not** the inherent Vulnerability of A2 (the same `TEF
+> = LEF / vuln` translation as `fair-cam-methodology.md`, with this community's
+> own controlled-world conversion rate in place of the IRIS industry
+> vulnerability). A derived landmark is a MEAN rate placed as the PERT mean
+> (mode solved from it, spread by a stated curator factor); it is biased LOW by
+> at least five mechanisms: the p→λ = −ln(1−p) step assumes Poisson-distributed
+> counts and under-states the mean under clustering
 > (`industry_calibration.py:46-48` is the identity in fair_cam); λ from a
 > population-mean p under-states the mean λ across heterogeneous organisations
 > (−ln(1−·) is convex, Jensen); a conversion value that omits TEF-side
 > prevention (C4) over-states the conversion; and dividing by a single point
-> value of an uncertain conversion under-states the result (1/c is convex).
-> The p→λ step is NOT a probability↔frequency conversion in the sense §E
-> forbids — p is P(N ≥ 1) of the same annual count variable whose mean is λ,
-> so §E ("neither is converted into the other", Vulnerability ↔ TEF) still
-> holds. The landmarks are not identifiable from any organisation's data; in
-> P1 they are display-only and enter no calculation. P3 (wizard landmark →
-> row) must add the CALIBRATION entry when it lands. Where:
-> `data/seed_threat_communities.json`, `schemas/threat_community.py`,
-> `tests/unit/test_threat_community_seed.py` (tripwires).
+> value of an uncertain conversion under-states the result (1/c is convex). The
+> fifth dominates the other four and is not quantified: the IRIS probability
+> counts public-record loss events, an event threshold far above the loss event
+> a scenario counts, so a landmark recovered from it can sit one to two orders
+> of magnitude below a well-estimated scenario TEF — the shipped library's own
+> entries routinely place their most-likely TEF above their community's landmark
+> 95th percentile. A scenario TEF above the landmark is therefore not, by
+> itself, extreme. The p→λ step is NOT a probability↔frequency conversion in the
+> sense §E forbids — p is P(N ≥ 1) of the same annual count variable whose mean
+> is λ, so §E ("neither is converted into the other", Vulnerability ↔ TEF) still
+> holds. The landmarks are not identifiable from any organisation's data; in P1
+> they are display-only and enter no calculation. P3 (wizard landmark → row)
+> must add the CALIBRATION entry and resolve this scale gap before any landmark
+> is wired into the wizard. Where: `data/seed_threat_communities.json`,
+> `schemas/threat_community.py`, `tests/unit/test_threat_community_seed.py`
+> (tripwires).
 
 ### B1. Lognormal elicitation collapsed to a capped PERT for sampling
 
