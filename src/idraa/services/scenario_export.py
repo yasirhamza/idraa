@@ -10,6 +10,13 @@ provenance does NOT survive the round-trip — a 'legacy_residual' scenario
 re-imports as a fresh row stamped 'inherent' (the column default). Accepted
 at current scale: import is admin-only and the format omits the stamp.
 
+Threat Agent Library (Task 8): likewise, ``threat_community_provenance``
+does NOT survive the round-trip — a re-imported scenario is always
+provenance 'assigned' (an explicit community slug), 'migrated'/
+'migrated_split_default' (a legacy ``threat_actor_type`` cell), or
+'unassigned' (a blank community cell), never the ORIGINAL scenario's
+own provenance. Same acceptance rationale as ``vuln_framing`` above.
+
 Known limitation (#27 Task 7, PRE-EXISTING — verified at gate, not
 introduced by mixture pooling): a wizard-finalized (multi-SME pooled)
 scenario's distribution dict carries a ``distribution_fit_metadata``
@@ -147,7 +154,7 @@ def scenario_to_flat_row(s: Scenario) -> tuple[Any, ...]:
         "description": s.description or "",
         "scenario_type": _enum_value(s.scenario_type),
         "threat_category": _enum_value(s.threat_category),
-        "threat_actor_type": _enum_value(s.threat_actor_type),
+        "threat_community": s.threat_community.slug if s.threat_community else "",
         "attack_vector": s.attack_vector or "",
         "asset_class": _enum_value(s.asset_class),
         "effect": _enum_value(s.effect),
@@ -215,7 +222,7 @@ def scenario_to_json_obj(s: Scenario) -> dict[str, Any]:
         "description": s.description,
         "scenario_type": _enum_value(s.scenario_type) or "custom",
         "threat_category": _enum_value(s.threat_category),
-        "threat_actor_type": _enum_value(s.threat_actor_type) or None,
+        "threat_community": s.threat_community.slug if s.threat_community else None,
         "attack_vector": s.attack_vector,
         "asset_class": _enum_value(s.asset_class) or None,
         "effect": _enum_value(s.effect) or None,

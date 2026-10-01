@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.scenarios import ScenarioService
@@ -51,6 +52,9 @@ async def _seed_legacy_scenario(
     name: str = "legacy vuln scenario",
 ) -> Scenario:
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -517,9 +521,14 @@ async def test_confirm_untokened_post_rejected_by_csrf(
 def _form_for(
     s: Scenario, *, vulnerability: dict[str, Any], name: str | None = None
 ) -> ScenarioForm:
+    # Threat Agent Library P1 fix-wave: ScenarioService.update() now requires
+    # threat_community on edit (service-level guard) -- carry the fixture
+    # scenario's own community ("cybercriminals", per _seed_legacy_scenario)
+    # rather than omitting it.
     return ScenarioForm(
         name=name or s.name,
         threat_category=getattr(s.threat_category, "value", s.threat_category),
+        threat_community="cybercriminals",
         threat_event_frequency=s.threat_event_frequency,
         vulnerability=vulnerability,
         primary_loss=s.primary_loss,

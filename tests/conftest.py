@@ -14,10 +14,12 @@ acquiring them lands a schema-valid row.
 
 from __future__ import annotations
 
+import functools
 import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any as _Any
 
 # Set ENVIRONMENT=test BEFORE importing idraa so module-level app
@@ -57,16 +59,75 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.user import User
 
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
+
+    from idraa.models.threat_community import ThreatCommunity
+
+
+@functools.lru_cache(maxsize=1)
+def _cached_threat_community_seed() -> tuple[
+    _Any, ...
+]:  # conftest imports typing.Any as _Any (ruff F821 otherwise)
+    """Validated once per session. Returns a tuple; callers never mutate the models."""
+    from idraa.schemas.threat_community import load_threat_community_seed
+
+    return tuple(load_threat_community_seed())
+
+
+def seed_canonical_threat_communities(conn: Connection) -> None:
+    """Insert the nine canonical rows (sync connection; idempotent via ON CONFLICT DO NOTHING).
+
+    Test schemas are create_all (no migrations) and scenario_library_entries has a NOT NULL FK
+    to threat_communities, so every schema needs these rows. `client` and `db_session` both
+    call _create_schema on the same file, hence the conflict clause.
+    """
+    import datetime as _dt
+
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from idraa.models.threat_community import ThreatCommunity, canonical_threat_community_id
+    from idraa.schemas.threat_community import seed_to_row_kwargs
+
+    now = _dt.datetime.now(_dt.UTC)
+    for seed in _cached_threat_community_seed():
+        stmt = (
+            sqlite_insert(ThreatCommunity.__table__)
+            .values(
+                id=canonical_threat_community_id(seed.slug),
+                version=1,
+                source="seed",
+                published_at=now,
+                created_at=now,
+                updated_at=now,
+                **seed_to_row_kwargs(seed),
+            )
+            .on_conflict_do_nothing(index_elements=["id", "version"])
+        )
+        conn.execute(stmt)
+
 
 async def _create_schema(engine: AsyncEngine) -> None:
-    """Create all tables on the given engine.
+    """Create all tables on the given engine and seed the canonical threat communities.
 
     Single entry point so that when Alembic migrations replace
     ``Base.metadata.create_all`` in a later milestone, only this helper
     changes instead of every fixture that needs a schema.
     """
-    async with engine.begin() as conn:
+    async with engine.begin() as conn:  # commits on exit -> visible to the app's separate engine
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
+
+
+@pytest_asyncio.fixture
+async def seed_threat_communities(db_session: AsyncSession) -> dict[str, ThreatCommunity]:
+    """The nine canonical rows already inserted by _create_schema, keyed by slug."""
+    from sqlalchemy import select
+
+    from idraa.models.threat_community import ThreatCommunity
+
+    rows = (await db_session.execute(select(ThreatCommunity))).scalars().all()
+    return {r.slug: r for r in rows}
 
 
 @pytest_asyncio.fixture
@@ -417,6 +478,7 @@ async def seed_scenario_factory(
     """
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(
         *,
@@ -426,6 +488,17 @@ async def seed_scenario_factory(
         created_by: uuid.UUID | None = None,
         **kwargs: _Any,
     ) -> Scenario:
+        # TAL mechanical rule: a bare Scenario(...) defaults to the common
+        # 'cybercriminals' community in the normal (non-review) 'assigned'
+        # state. Callers that need a different community/provenance (incl.
+        # the review state: NULL + 'unassigned') pass the three kwargs
+        # explicitly — popped here (not passed via **kwargs) so an explicit
+        # override never collides with the default.
+        threat_community_id = kwargs.pop(
+            "threat_community_id", canonical_threat_community_id("cybercriminals")
+        )
+        threat_community_version = kwargs.pop("threat_community_version", 1)
+        threat_community_provenance = kwargs.pop("threat_community_provenance", "assigned")
         scenario = Scenario(
             organization_id=organization_id
             if organization_id is not None
@@ -443,6 +516,9 @@ async def seed_scenario_factory(
             },
             status=status,
             created_by=created_by if created_by is not None else seed_user.id,
+            threat_community_id=threat_community_id,
+            threat_community_version=threat_community_version,
+            threat_community_provenance=threat_community_provenance,
             **kwargs,
         )
         db_session.add(scenario)
@@ -499,6 +575,7 @@ async def scenario_factory(
     """
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(
         *,
@@ -512,6 +589,17 @@ async def scenario_factory(
             db_session.add(seed_organization)
         if created_by is None and seed_user not in db_session:
             db_session.add(seed_user)
+        # TAL mechanical rule: a bare Scenario(...) defaults to the common
+        # 'cybercriminals' community in the normal (non-review) 'assigned'
+        # state. Callers that need a different community/provenance (incl.
+        # the review state: NULL + 'unassigned') pass the three kwargs
+        # explicitly — popped here (not passed via **kwargs) so an explicit
+        # override never collides with the default.
+        threat_community_id = kwargs.pop(
+            "threat_community_id", canonical_threat_community_id("cybercriminals")
+        )
+        threat_community_version = kwargs.pop("threat_community_version", 1)
+        threat_community_provenance = kwargs.pop("threat_community_provenance", "assigned")
         scenario = Scenario(
             organization_id=organization_id
             if organization_id is not None
@@ -529,6 +617,9 @@ async def scenario_factory(
             },
             status=status,
             created_by=created_by if created_by is not None else seed_user.id,
+            threat_community_id=threat_community_id,
+            threat_community_version=threat_community_version,
+            threat_community_provenance=threat_community_provenance,
             **kwargs,
         )
         db_session.add(scenario)
@@ -956,8 +1047,9 @@ async def seed_library_entry(db_session: AsyncSession) -> _Any:
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     entry = ScenarioLibraryEntry(
         id=_uuid.uuid4(),
@@ -966,7 +1058,8 @@ async def seed_library_entry(db_session: AsyncSession) -> _Any:
         name="Test Library Entry",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="A fixture entry for unit tests.",
@@ -999,8 +1092,9 @@ async def seed_library_entries_factory(
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(count: int) -> list[_Any]:
         entries: list[_Any] = []
@@ -1012,7 +1106,8 @@ async def seed_library_entries_factory(
                 name=f"Library Entry {i:03d}",
                 status="published",
                 threat_event_type=ThreatCategory.RANSOMWARE,
-                threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+                threat_community_id=canonical_threat_community_id("cybercriminals"),
+                threat_community_version=1,
                 asset_class=AssetClass.SYSTEMS,
                 tags=[],
                 description=f"Factory entry {i:03d} for pagination tests.",

@@ -50,7 +50,7 @@ class ScenarioForm(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     scenario_type: ScenarioType = ScenarioType.CUSTOM
     threat_category: str = Field(min_length=1, max_length=64)
-    threat_actor_type: str | None = Field(default=None, max_length=64)
+    threat_community: str | None = Field(default=None, max_length=64)
     attack_vector: str | None = Field(default=None, max_length=128)
     asset_class: str | None = Field(default=None, max_length=128)
     effect: str | None = Field(default=None, max_length=32)

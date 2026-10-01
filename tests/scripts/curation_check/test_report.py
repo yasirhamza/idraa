@@ -40,8 +40,8 @@ def _results() -> dict[str, CheckResult]:
             ),
             Flag(
                 "scenario-labels",
-                "scenario-labels:ot:threat_actor_type",
-                "ot · threat_actor_type",
+                "scenario-labels:ot:threat_community",
+                "ot · threat_community",
                 0.30,
                 "description | with pipe\nand <b>html</b>",
             ),
@@ -421,6 +421,6 @@ def test_queue_keys_follow_rank_order_and_sub_queues() -> None:
     keys = queue_keys(_results(), top=2)
     assert keys["scenario-labels"] == [
         "scenario-labels:fraud:asset_class",
-        "scenario-labels:ot:threat_actor_type",
+        "scenario-labels:ot:threat_community",
     ]
     assert keys["control-functions"] == ["control-functions:siem:v", "control-functions:siem:m"]

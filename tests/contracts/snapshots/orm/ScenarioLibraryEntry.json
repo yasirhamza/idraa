@@ -200,13 +200,21 @@
       "primary_key": false,
       "type": "JSON"
     },
-    "threat_actor_type": {
-      "foreign_key": false,
+    "threat_community_id": {
+      "foreign_key": true,
       "has_default": false,
       "indexed": false,
       "nullable": false,
       "primary_key": false,
-      "type": "VARCHAR(18)"
+      "type": "CHAR(32)"
+    },
+    "threat_community_version": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "INTEGER"
     },
     "threat_event_frequency": {
       "foreign_key": false,
@@ -251,7 +259,7 @@
   },
   "indexes": [
     "ix_library_entry_status",
-    "ix_library_entry_threat_actor",
+    "ix_library_entry_threat_community",
     "ix_library_entry_threat_event"
   ],
   "table_name": "scenario_library_entries"

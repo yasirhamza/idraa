@@ -29,6 +29,7 @@ from idraa.db import Base, get_engine, get_session
 from idraa.models._types import now_utc
 from idraa.models.system_state import SystemState
 from idraa.services.retention import maybe_sweep_opportunistic
+from tests.conftest import seed_canonical_threat_communities
 from tests.factories import create_org
 
 
@@ -45,6 +46,7 @@ async def wired_engine(db_url: str, monkeypatch: pytest.MonkeyPatch) -> AsyncIte
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
     try:
         yield
     finally:

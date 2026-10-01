@@ -270,9 +270,13 @@ allowlist = [
     "entry_currency",              # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
     "entry_rate",                  # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
     "conversion_metadata",         # epic #34 P1b — qualitative converter provenance, set by the converter service, never on ScenarioForm
+    "threat_community_id",         # TAL FK + system-managed provenance; the form carries the slug
+    "threat_community_version",    # TAL FK + system-managed provenance; the form carries the slug
+    "threat_community_provenance", # TAL FK + system-managed provenance; the form carries the slug
 ]
 dto_only_allowlist = [
     "library_entry_id",  # user-input flag indicating library origin; consumed during creation; provenance lives in library_pin
+    "threat_community",  # TAL slug; resolves to the threat_community_id/_version FK pair at the service layer
 ]
 
 [tool.idraa.contracts.field_sync.control]
@@ -332,6 +336,20 @@ dto_only_allowlist = [
     "reason",                     # OverlayDeactivateForm — deactivation audit reason; stored in audit_log, not overlay
 ]
 
+[tool.idraa.contracts.field_sync.threat_community]
+orm = "idraa.models.threat_community.ThreatCommunity"
+dto_classes = [
+    "idraa.schemas.threat_community.ThreatCommunitySeed",
+]
+allowlist = [
+    "id",            # deterministic uuid5, set by the seeding migration
+    "version",       # canonical row version, migration-managed
+    "source",        # always 'seed' in P1, migration-managed
+    "published_at",  # set at seed time
+    "created_at",    # TimestampMixin
+    "updated_at",    # TimestampMixin
+]
+
 [tool.idraa.contracts.field_sync.library_entry]
 # Epic C-i (#335 §6): ScenarioLibraryEntry (ORM) ↔ LibraryEntrySeed (seed DTO).
 # LibraryEntrySeed is the Pydantic validator the seed/import path runs before
@@ -349,7 +367,14 @@ allowlist = [
     "row_version",   # internal — optimistic-lock counter
     "created_at",    # TimestampMixin
     "updated_at",    # TimestampMixin
+    "threat_community_id",       # TAL composite FK resolved from the seed's slug
+    "threat_community_version",  # TAL composite FK resolved from the seed's slug
 ]
+# TAL: fields that exist on exactly one side on purpose. threat_community is a
+# DTO-only seed field (resolved to the ORM's threat_community_id/_version FK at
+# insert time); threat_actor_type is a DTO-only LEGACY field (back-compat parse
+# of pre-P1 bundles, never read by the insert path; see LEGACY_SEED_FIELDS).
+dto_only_allowlist = ["threat_community", "threat_actor_type"]
 
 [[tool.mypy.overrides]]
 module = ["pyotp", "segno"]

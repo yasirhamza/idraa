@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import ThreatCategory
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.run_executor import _scenario_to_fair_parameters
 from idraa.services.scenarios import ScenarioService
@@ -73,6 +74,9 @@ def _build_scenario(*, vulnerability: dict[str, Any]) -> Scenario:
     """A bare (unpersisted) Scenario row — _scenario_to_fair_parameters only
     reads the four JSON distribution columns, so no DB session is needed."""
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         name="degenerate-vuln-pert-probe",
         threat_category=ThreatCategory.RANSOMWARE.value,
         threat_event_frequency=_TEF_PERT,

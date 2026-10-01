@@ -115,6 +115,7 @@ async def _create_lognormal_scenario(
     payload: dict[str, str] = {
         "name": name,
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": pl_low,
@@ -774,6 +775,7 @@ async def test_pin_rejects_pert_field(
     payload = {
         "name": "Pin-reject-pert",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "pert",
         "pl_low": "100000",

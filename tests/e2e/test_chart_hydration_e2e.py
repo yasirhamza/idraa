@@ -170,7 +170,7 @@ async def _set_org_loss_tolerance(page: Page, base: str) -> None:
 _E2E_SCENARIO_1 = "E2E Chart Hydration Scenario Alpha"
 _E2E_SCENARIO_2 = "E2E Chart Hydration Scenario Beta"
 _E2E_CSV = (
-    "name,description,scenario_type,threat_category,threat_actor_type,attack_vector,"
+    "name,description,scenario_type,threat_category,threat_community,attack_vector,"
     "asset_class,version,status,distribution,tef_low,tef_mode,tef_high,vuln_low,"
     "vuln_mode,vuln_high,pl_low,pl_mode,pl_high,sl_low,sl_mode,sl_high\n"
     f"{_E2E_SCENARIO_1},,custom,ransomware,cybercriminals,,systems,1.0,active,PERT,"
@@ -191,7 +191,7 @@ _E2E_MC_ITERATIONS = "500"
 # the same org (fixture instantiation order across this module is not fixed).
 _E2E_SCENARIO_SINGLE = "E2E Chart Hydration Scenario Solo"
 _E2E_CSV_SINGLE = (
-    "name,description,scenario_type,threat_category,threat_actor_type,attack_vector,"
+    "name,description,scenario_type,threat_category,threat_community,attack_vector,"
     "asset_class,version,status,distribution,tef_low,tef_mode,tef_high,vuln_low,"
     "vuln_mode,vuln_high,pl_low,pl_mode,pl_high,sl_low,sl_mode,sl_high\n"
     f"{_E2E_SCENARIO_SINGLE},,custom,ransomware,cybercriminals,,systems,1.0,active,PERT,"

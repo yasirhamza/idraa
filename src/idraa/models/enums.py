@@ -254,18 +254,6 @@ CALIBRATED_INDUSTRIES: frozenset[IndustryType] = frozenset(
 )
 
 
-class ThreatActorType(StrEnum):
-    """Mirrors fair_cam.parameters.industry_calibration.ThreatActorType.
-    Parity verified by tests/unit/test_enum_parity.py."""
-
-    CYBERCRIMINALS = "cybercriminals"
-    NATION_STATE = "nation_state"
-    INSIDER_MALICIOUS = "insider_malicious"
-    INSIDER_ACCIDENTAL = "insider_accidental"
-    HACKTIVISTS = "hacktivists"
-    COMPETITORS = "competitors"
-
-
 class ThreatCategory(StrEnum):
     """Threat event classification per FAIR Feb 2025 taxonomy.
     OT-first commitment: includes OT_SAFETY_TAMPERING + OT_AVAILABILITY (spec §3.1)."""

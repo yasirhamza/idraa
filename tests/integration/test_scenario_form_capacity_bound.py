@@ -122,6 +122,7 @@ async def test_create_blank_max_mints_capacity_on_both_pl_and_sl(
     payload = {
         "name": "D17-mint-both",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -160,6 +161,7 @@ async def test_create_blank_max_revenue_unset_rejected_422(
     payload = {
         "name": "D17-no-revenue",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -193,6 +195,7 @@ async def test_create_typed_max_within_capacity_stored_as_typed(
     payload = {
         "name": "D17-typed-tighten",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -217,6 +220,7 @@ async def test_create_typed_max_exceeding_capacity_rejected_422(
     payload = {
         "name": "D17-typed-loosen-rejected",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -248,6 +252,7 @@ async def test_create_typed_max_revenue_unset_accepted_as_is(
     payload = {
         "name": "D17-typed-no-revenue",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -276,6 +281,7 @@ async def test_create_d19_floor_conflict_blocks_with_three_remedies(
     payload = {
         "name": "D19-floor-conflict",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -310,6 +316,7 @@ async def test_edit_form_prefills_existing_pl_and_sl_max(
     payload = {
         "name": "D17-edit-prefill",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -342,6 +349,7 @@ async def test_unchanged_resave_preserves_pl_and_sl_max_byte_for_byte(
     create_payload = {
         "name": "D17-silent-strip",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -374,6 +382,7 @@ async def test_unchanged_resave_preserves_pl_and_sl_max_byte_for_byte(
         "name": "D17-silent-strip",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -413,6 +422,7 @@ async def test_create_non_usd_typed_max_converted_like_siblings(
     payload = {
         "name": "D17-sar-max",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "entry_currency": "SAR",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
@@ -443,6 +453,7 @@ async def test_edit_does_not_reconvert_max(
     create_payload = {
         "name": "D17-sar-edit-noconvert",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "entry_currency": "SAR",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
@@ -462,6 +473,7 @@ async def test_edit_does_not_reconvert_max(
         "name": "D17-sar-edit-noconvert",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_dist": "lognormal",
         "pl_low": "100000",
@@ -494,6 +506,7 @@ async def test_create_pert_loss_never_stores_max_even_if_submitted(
     payload = {
         "name": "D17-pert-unaffected",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         **_PERT_TEF_VULN,
         "pl_low": "50000",
         "pl_mode": "250000",

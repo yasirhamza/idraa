@@ -52,6 +52,7 @@ from idraa.models._types import now_utc
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.services import retention
+from tests.conftest import seed_canonical_threat_communities
 from tests.factories import create_org
 
 pytestmark = pytest.mark.asyncio
@@ -257,6 +258,7 @@ async def _real_sqlite_engine(tmp_path: Path) -> AsyncGenerator[tuple[str, Path]
     _install_sqlite_pragmas(engine)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
     yield url, db_path
     await engine.dispose()
 

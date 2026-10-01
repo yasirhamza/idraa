@@ -9,10 +9,8 @@
         </h3>
 
         <div class="badges flex flex-wrap gap-1 my-2">
-          {# threat_actor_type and threat_event_type are non-nullable on the model #}
-          <span class="badge badge-sm badge-outline">
-            {{ entry.threat_actor_type.value | replace("_", " ") | title }}
-          </span>
+          {# threat_community and threat_event_type are non-nullable on the model #}
+          <a href="/library/threat-communities/{{ entry.threat_community.slug }}" class="badge badge-sm badge-outline">{{ entry.threat_community.name }}</a>
           <span class="badge badge-sm badge-secondary badge-outline">
             {{ entry.threat_event_type.value | replace("_", " ") | title }}
           </span>

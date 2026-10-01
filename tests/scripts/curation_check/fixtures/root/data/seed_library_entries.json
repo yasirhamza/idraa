@@ -1,5 +1,32 @@
 [
-  {"slug": "ddos-extortion", "name": "DDoS Extortion", "status": "published", "description": "Attackers flood payment channels and demand a ransom to stop.", "threat_event_type": "denial_of_service", "asset_class": "systems", "threat_actor_type": "cybercriminals"},
-  {"slug": "ddos-peak", "name": "DDoS at Seasonal Peak", "status": "published", "description": "Traffic floods hit banking channels during a seasonal peak.", "threat_event_type": "denial_of_service", "asset_class": "business_process_revenue", "threat_actor_type": "cybercriminals"},
-  {"slug": "call-center-fraud", "name": "Call-Center Account Takeover", "status": "published", "description": "A caller | posing as a customer gets credentials reset and moves money.", "threat_event_type": "social_engineering", "asset_class": "people", "threat_actor_type": "cybercriminals"}
+  {
+    "slug": "ddos-extortion",
+    "name": "DDoS Extortion",
+    "status": "published",
+    "description": "Attackers flood payment channels and demand a ransom to stop.",
+    "threat_event_type": "denial_of_service",
+    "asset_class": "systems",
+    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals"
+  },
+  {
+    "slug": "ddos-peak",
+    "name": "DDoS at Seasonal Peak",
+    "status": "published",
+    "description": "Traffic floods hit banking channels during a seasonal peak.",
+    "threat_event_type": "denial_of_service",
+    "asset_class": "business_process_revenue",
+    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals"
+  },
+  {
+    "slug": "call-center-fraud",
+    "name": "Call-Center Account Takeover",
+    "status": "published",
+    "description": "A caller | posing as a customer gets credentials reset and moves money.",
+    "threat_event_type": "social_engineering",
+    "asset_class": "people",
+    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals"
+  }
 ]

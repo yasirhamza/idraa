@@ -16,7 +16,7 @@
       <dt>Name:</dt><dd>{{ state.name }}</dd>
       <dt>Description:</dt><dd>{{ state.description or '—' }}</dd>
       <dt>Threat category:</dt><dd>{{ state.threat_category }}</dd>
-      <dt>Threat actor:</dt><dd>{{ state.threat_actor_type or '—' }}</dd>
+      <dt>Threat community:</dt><dd>{% if threat_community %}<a class="link" href="/library/threat-communities/{{ threat_community.slug }}">{{ threat_community.name }}</a>{% else %}—{% endif %}</dd>
       <dt>Asset class:</dt><dd>{{ state.asset_class or '—' }}</dd>
       <dt>Attack vector:</dt><dd>{{ state.attack_vector or '—' }}</dd>
     </dl>

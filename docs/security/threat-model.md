@@ -30,7 +30,7 @@ Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XF
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
    │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1129-1193) — B0 and B3 run BEFORE B2 (session lookup hits the
+   │  (app.py:1173-1237) — B0 and B3 run BEFORE B2 (session lookup hits the
    │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
@@ -79,10 +79,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1312-1320`). The idraa#107 cache-state
+  security-settings state (`app.py:1358-1366`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:980-991`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1018-1035`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -95,8 +95,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1187`; confirmed order
-`app.py:1129-1193`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1231`; confirmed order
+`app.py:1173-1237`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), B3's CSRF, and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -237,7 +237,7 @@ docstring).
   cross-site page reset the victim's cookie), and every 403 to an
   `HX-Request` carries `HX-Refresh: true` so HTMX reloads instead of swapping
   "Forbidden" into the page. **No exemption list** — module docstring and
-  inline comments (`routes/register_import.py:45`, `routes/library.py:344`)
+  inline comments (`routes/register_import.py:45`, `routes/library.py:352-353`)
   state nothing is exempted; fail-closed by design. Non-form JS reads the
   token through `window.idraaCsrfToken()` (`static/js/csrf.js`: the
   `csrf_token` cookie first — last exact-name match, like the server — then
@@ -351,26 +351,36 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`, gated instead by the
   outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1155-1178`).
+  `app.py:1190-1224`).
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
-  four. `VIEWER` is used in **7** read-only routes (re-derived 2026-08-05 —
-  the first sweep said "2", an undercount): 4 inline in
-  `routes/library.py:96,145,265,387` and 3 via the `_VIEWER_PLUS` allowlist
-  (`routes/control_library.py:45`, applied at `:154,210,249`). Separately,
-  `scenario_export_routes.py:51` deliberately uses bare `require_user` — a
-  strict VIEWER-inclusive allowlist would 403 admins and analysts, per its
-  inline comment. Never a security defect, only a doc-accuracy one; CLAUDE.md
-  now names all four roles with an inline "Corrected 2026-08-05" note.
+  four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for
+  the Threat Agent Library, up from 7 — the first sweep said "2", an
+  undercount): 4 inline in `routes/library.py:96,145,266,389` and 3 via the
+  `_VIEWER_PLUS` allowlist (`routes/control_library.py:45`, applied at
+  `:154,210,249`), plus 2 new Threat Agent Library read-only pages behind
+  their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:19`,
+  applied at `GET /library/threat-communities` (`:23`, role dependency
+  `:27`) and `GET /library/threat-communities/{slug}` (`:39`, role
+  dependency `:44`). Separately, `scenario_export_routes.py:51` deliberately
+  uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
+  admins and analysts, per its inline comment. Never a security defect, only
+  a doc-accuracy one; CLAUDE.md now names all four roles with an inline
+  "Corrected 2026-08-05" note.
+- **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
+  /scenarios/{scenario_id}/confirm-threat-community`
+  (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
+  UserRole.ADMIN)` (`:1542`) — REVIEWER and VIEWER get 403. It is the
+  dedicated confirm path; edit-form and wizard saves also resolve it (§11).
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
 - **I/E**: enforcement is consistent, not incidental. Repos expose only
   `*_for_org(organization_id, ...)` methods
-  (`repositories/scenario_repo.py:57-74`, `repositories/run_repo.py:27-41`);
+  (`repositories/scenario_repo.py:65-82`, `repositories/run_repo.py:27-41`);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
-  (`routes/overlays.py:457`, `routes/scenarios.py:718,753`,
+  (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
@@ -427,6 +437,22 @@ docstring).
   security-auditor persona (`CLAUDE.md` → Review ceremony) is the actual
   backstop for both: keeping the allowlist current and reading each
   suppression's reason for whether it's really true, not just present.
+- **Threat Agent Library canonical catalog is deliberately NOT org-scoped
+  (2026-10-01):** `ThreatCommunity` (`models/threat_community.py`) has no
+  `organization_id` column — P1 ships a single canonical, shared catalog
+  (`source` is always `"seed"`), mirroring `ScenarioLibraryEntry`. It is
+  listed in `NON_ORG_COLUMN_MODELS`
+  (`scripts/lint_org_scoped_lookups.py:98`), and the list's own header
+  comment (`:85`) is a standing tripwire: "P2's org-authored threat-community
+  table MUST go in `ORG_SCOPED_MODELS`" — P2 (spec §9) adds a *separate*,
+  org-scoped table for org-authored communities, it does not add an
+  `organization_id` column to this canonical one. `ORG_SCOPED_MODELS` and
+  `NON_ORG_COLUMN_MODELS` together are a closed partition, enforced by
+  `tests/contracts/test_org_scoped_models_parity.py`: every SQLAlchemy mapper
+  must appear in exactly one of the two lists (`:15-16`), so a new model
+  (P2's org-authored table included) that lands in neither — or in the
+  wrong one — fails CI rather than silently falling through the
+  `lint_org_scoped_lookups.py` checker unclassified.
 
 ## 8. B8 — Templating (XSS and template injection)
 
@@ -435,7 +461,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:96-99`), which Starlette constructs with
+  (`app.py:97-100`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — every file under `src/idraa/templates/` is `.html` (zero
@@ -457,18 +483,44 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `| tojson` idiom, `data_table.html`'s `page_size` x-data gets a defensive
   `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
   fails if any dist selector regresses to the raw shape.
+- **URL-context injection (href)** — a third class, distinct from both:
+  autoescape escapes `&<>"'` in an `href` value, preventing attribute
+  breakout, but does not validate the URL scheme, so `javascript:` survives
+  escaping intact — a raw `<a href="{{ url }}">` would still let a
+  `javascript:`-scheme citation URL execute on click. Two gates share one allowlist rule (https scheme + non-empty
+  host; everything else — `javascript:`, `data:`, `http:`, malformed —
+  renders inert): `formatting.linkify_https` (`formatting.py:29`, issue
+  #349) auto-links `https://` URLs inside free-text citation strings, used
+  in `templates/library/entry_detail.html`'s citations block; and
+  `formatting.safe_https_href` (`formatting.py:62`, issue #349/Sec-I5),
+  registered as the Jinja filter `https_href` (`app.py:503`), gates a
+  citation URL used directly as an `href=` attribute value — e.g. the
+  Threat Agent Library's community detail page
+  (`templates/library/threat_community_detail.html:74`:
+  `{% set href = c.url | https_href %}`, so a non-https/malformed citation
+  URL resolves to `href = None` and the template omits the anchor rather
+  than emitting a live link). Both gates are total (never raise) and both
+  explicitly reject `javascript:` — regression-tested in
+  `tests/unit/test_formatting_linkify.py`
+  (`test_linkify_https_javascript_scheme_stays_inert`,
+  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
+  plus a route-level end-to-end check that a stored `javascript:` citation
+  URL actually renders as inert text on a real response body
+  (`tests/routes/test_threat_community_pages.py:128`,
+  `test_javascript_citation_url_renders_as_text`).
 - **Template injection (SSTI)** — the distinct, more severe class: attacker
   text becoming the template *source* (`Environment.from_string()`,
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:101-106` about a
+  The only textual hit is an explanatory comment in `app.py:102-107` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2254`, the wizard step template) that
+  one exception (`routes/scenarios.py:2373-2375`, the wizard step template
+  construction, consumed by the `TemplateResponse` call at `:2538`) that
   indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`scenarios.py:2244`) — not attacker-controlled text, so it's path
+  `1..6` (`scenarios.py:2365`) — not attacker-controlled text, so it's path
   *selection* among a fixed set, not path or template *construction*.
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /
@@ -513,14 +565,55 @@ survivable on the 4 GB VM. The non-bypassable tightening (parse
 `[Content_Types].xml` to bound buffered parts by role) is deferred as
 disproportionate for an admin-only surface; revisit if import ever becomes
 non-admin. There is also a single
-`MAX_ROWS = 500` constant (`scenario_import_parsers.py:78`) enforced at
-every entry point that accepts row data — CSV (`scenario_import_parsers.py:
-243`) and JSON (`:293`) in that module, and re-imported and enforced again
+`MAX_ROWS = 500` constant (`scenario_import_parsers.py:85`) enforced at
+every entry point that accepts row data — CSV (`scenario_import_parsers.py:275`)
+and JSON (`:325`) in that module, and re-imported and enforced again
 for XLSX (`register_import_parsers.py:221-222`) and CSV
 (`register_import_parsers.py:250-251`) in the other; `defusedxml`
 auto-substitution blocking XML entity expansion (billion-laughs class,
 `register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
+
+**Threat Agent Library slug resolution (2026-10-01):** both import paths
+resolve a free-text `threat_community` cell against actual DB membership, not
+just syntactic shape — `services/scenario_import.py:348` (`raw_tc not in
+published_slugs`) for scenario CSV/JSON import and
+`services/library_bundle_import.py:253` (`tc_slug not in published_slugs`)
+for library-bundle JSON import; both build `published_slugs` from the same
+live query, `ThreatCommunityService(db, organization_id=org_id)
+.list_published()` (`services/scenario_import.py:713-715`,
+`library_bundle_import.py:419-420`) — constructed with the caller's required
+`organization_id`, but that parameter is **unused in P1** against the
+canonical catalog (`_latest_seed()` filters only `source == "seed"`,
+`services/threat_communities.py:58-73`, never `self._organization_id`); it
+is the hook that keeps P2's org-authored union (§7's new bullet) from ever
+running unscoped (`services/threat_communities.py:50-52`). An
+unrecognized slug is a per-row `422`-shaped preview error, never a silent
+pass-through or a foreign-key constraint violation surfacing as a 500. The
+**either-of header rule** (`services/scenario_import.py:276-281`): a row may carry
+`threat_community` OR the legacy `threat_actor_type` column but never both —
+both present is an `"ambiguous"` per-row error
+(`services/scenario_import.py:311-317`), matching the CSV header-level check
+(`scenario_import_parsers.py:250,256`); neither present is a legitimate
+blank ("unassigned"), not an error. The library-bundle importer is looser:
+`resolve_entry_threat_community()` (`services/library_bundle_import.py:172-176`) lets a present `threat_community` key win silently over a legacy
+`threat_actor_type` key in the same entry rather than rejecting the row as
+ambiguous — the shipped seed library JSON deliberately carries both on every
+entry for back-compat — whereas the scenario importer rejects that same
+combination outright; both importers' resolved slug is still checked
+against the published set before acceptance. The **legacy column is never
+exported**:
+`scenario_export.py`'s `CSV_EXPORT_HEADERS` is built directly from the
+canonical `CSV_HEADERS` list (`scenario_export.py:64`), which has no
+`threat_actor_type` entry; `library_bundle_export.py`'s `EXPORT_FIELDS`
+explicitly excludes `LEGACY_SEED_FIELDS` (`library_bundle_export.py:41`);
+and the third export path, the library catalog's own `library.csv` download,
+hardcodes its header list with `threat_community` and no legacy column
+(`routes/library.py:183`) — a
+round-tripped export always re-imports through the canonical slug path, never
+the legacy one, so legacy-format acceptance is import-only, one-directional,
+and shrinking (back-compat for bundles exported before P1), not a live
+dual-write surface.
 
 **Export — download header (C9, 2026-09)**: every download in `src/idraa`
 (CSV, scenario JSON, library bundle, PDF reports, samples export, the four
@@ -537,8 +630,9 @@ cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
 `services/sample_export.py:68,181` and `services/verification_workbook.py:
 51-66`, which also guards legacy `{=...}` array-formula braces). PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
-(`services/pdf_report.py:24-27,509-511,555`). The TOC/URI fix
-(`pdf_report.py:296-319`, `_RunReportDoc.afterFlowable`) re-escapes heading
+(`services/pdf_report.py:24-27,515-517,561` plus the by-threat-community
+names/amounts at `:1363,1371`). The TOC/URI fix
+(`pdf_report.py:298-321`, `_RunReportDoc.afterFlowable`) re-escapes heading
 text a second time before the `TOCEntry` notify call — without it, a
 scenario/run name containing markup could smuggle a live `/URI` Action into
 the generated table of contents, because `Paragraph.getPlainText()` returns
@@ -563,10 +657,10 @@ new export format must re-implement, not assume is "someone else's problem."
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `:2224`; `del calculator, fc_controls`
-  at `:2392` and again at `:2578`; `del per_scenario_inputs` at `:2579`;
-  `del aggregate` at `:2406`; `del results_payload` at `:2611`) each paired
-  with an explicit `gc.collect()` (`:2407`, `:2597`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `:2237`; `del calculator, fc_controls`
+  at `:2405` and again at `:2591`; `del per_scenario_inputs` at `:2592`;
+  `del aggregate` at `:2419`; `del results_payload` at `:2624`) each paired
+  with an explicit `gc.collect()` (`:2420`, `:2610`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -577,7 +671,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10, `db.py`), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:220-229,333-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1844`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1857`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -695,6 +789,24 @@ per burst it is bounded by `argon2_max_threads` (4) and the per-source
 `tests/services/test_recovery_code_atomicity.py::test_already_consumed_code_rejects_cleanly`).
 A lost claim therefore emits this row PLUS the caller's `user.login_mfa_failed` /
 `user.step_up_failed` — two rows by design.
+
+**New action (threat-agent library P1, 2026-10): `scenario.threat_community_confirmed`.**
+`changes` carries `threat_community` `[old_slug, new_slug]`,
+`threat_community_provenance` `[old, "assigned"]` and `row_version`. The
+create audit (`scenario.create`) now carries `threat_community` and
+`threat_community_provenance` as `[None, value]`. Provenance leaves a review
+state only through an analyst-visible choice: the confirm route; an edit-form
+save made with the review notice shown; or a wizard save after an active
+step-2 selection (the wizard seeds a blank community for a flagged scenario
+and finalize refuses a draft without one) — both saves audited as
+`scenario.update` with a `threat_community_provenance` diff. The migration
+backfill writes no audit rows (the `vuln_framing` precedent). Write
+amplification: analyst/admin + CSRF; at most one confirm row per scenario,
+because an already-`assigned` scenario returns 409 with no audit — absent a
+concurrent race (SQLite; accepted, see the service docstring at
+`services/scenarios.py:815-819`: two in-flight confirms can both pass the
+review check, so the later one overwrites or fails `BUSY`, and both writes
+are audited).
 
 ## 12. Known gaps / follow-ups
 

@@ -186,6 +186,42 @@
           {% endif %}
         </div>
       {% endif %}
+
+      {# ---- "By threat community" lens (Task 11, threat-agent-library-p1).
+            SNAPSHOT-based: data.threat_communities is built from the latest
+            aggregate run's run.scenario_inputs_snapshot (never a live
+            Scenario query -- services/threat_community_summary.py). Grouped
+            by SLUG, displayed by the snapshot's NAME; the needs-review row
+            (flagged by the row's ``is_needs_review`` field) is always
+            last. ---- #}
+      {% if data.threat_communities %}
+        <div class="mt-4 pt-4 border-t border-border-subtle">
+          <div class="flex items-baseline justify-between gap-2">
+            <h4 class="text-body font-medium text-ink-1">Threat communities</h4>
+            <a class="text-micro text-brand hover:underline" href="/library/threat-communities">Profiles &rarr;</a>
+          </div>
+          {% for r in data.threat_communities %}
+            <div class="flex items-center gap-2 mt-2">
+              <span class="w-32 shrink-0 text-body text-ink-2 truncate" title="{{ r.name }}">{{ r.name }}</span>
+              <div class="flex-1 h-2 bg-surface-2 rounded-full overflow-hidden">
+                <div class="h-full {{ 'bg-status-warning' if r.is_needs_review else 'bg-brand' }} rounded-full" style="width: {{ '%.0f' | format(r.residual_ale_share * 100) }}%"></div>
+              </div>
+              <span class="w-40 text-right font-mono tabular-nums text-micro text-ink-2">
+                {{ '%.0f' | format(r.residual_ale_share * 100) }}% of residual ALE · {{ r.scenario_count }} in latest run
+              </span>
+            </div>
+            {% if r.origin %}
+            <p class="text-micro text-ink-3 mt-0.5 pl-[8.5rem]">{{ r.library_coverage.covered_count }} of {{ r.library_coverage.reference_count }} sector-applicable library entries adopted</p>
+            {% endif %}
+          {% endfor %}
+          <p class="text-micro text-ink-3 mt-2">
+            Shares of the summed per-scenario residual ALE means from the latest aggregate run
+            {% if data.latest_aggregate %}as of {{ data.latest_aggregate.completed_at | format_date }}{% else %}(no aggregate run yet){% endif %}
+            (mean basis, not tail); confirmations take effect on the next run.
+            A reporting derivation, not a FAIR quantity (not FAIR-grounded).
+          </p>
+        </div>
+      {% endif %}
     </div>
 
   </div>

@@ -63,11 +63,13 @@ from idraa.errors import (
 from idraa.models.enums import EntityStatus, ScenarioSource
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import THREAT_COMMUNITY_PROVENANCE_VALUES, ThreatCommunity
 from idraa.models.user import User
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.audit import AuditWriter
 from idraa.services.fair_cam_validation import validate_fair_distributions
+from idraa.services.threat_communities import ThreatCommunityNotInReview, ThreatCommunityService
 
 
 class ScenarioOverlayTagNotFoundError(ValidationError):
@@ -117,6 +119,34 @@ class ScenarioService:
     # Primitive helpers
     # ------------------------------------------------------------------
 
+    async def _resolve_threat_community(
+        self, organization_id: uuid.UUID, slug: str | None
+    ) -> ThreatCommunity | None:
+        """Resolve BEFORE touching the row (the 'validate before applying' rule at :489-497): an
+        unknown slug must 422 with nothing applied, nothing autoflushed, nothing committed."""
+        if slug is None or slug == "":
+            return None
+        return await ThreatCommunityService(self._db, organization_id=organization_id).resolve(slug)
+
+    @staticmethod
+    def _assign_threat_community(scenario: Scenario, row: ThreatCommunity | None) -> None:
+        """None -> NULL + 'unassigned'. A row stamps 'assigned' when the community changes or the
+        scenario was in a review state (an explicit save of the placeholder is a choice); an
+        unchanged save of a 'migrated' scenario stays 'migrated'."""
+        if row is None:
+            scenario.threat_community = None
+            scenario.threat_community_id = scenario.threat_community_version = None
+            scenario.threat_community_provenance = "unassigned"
+            return
+        changed = (scenario.threat_community_id, scenario.threat_community_version) != (
+            row.id,
+            row.version,
+        )
+        scenario.threat_community = row
+        scenario.threat_community_id, scenario.threat_community_version = row.id, row.version
+        if changed or scenario.threat_community_needs_review:
+            scenario.threat_community_provenance = "assigned"
+
     async def _stamp_new_scenario(
         self,
         *,
@@ -127,6 +157,7 @@ class ScenarioService:
         library_pin: dict[str, Any] | None,
         ip_address: str | None = None,
         per_fieldset_pooling_summary: dict[str, Any] | None = None,
+        provenance_override: str | None = None,
     ) -> Scenario:
         """Row-builder primitive — stamps every NOT NULL Scenario field.
 
@@ -157,6 +188,13 @@ class ScenarioService:
                 f"user.organization_id={user.organization_id} does not match "
                 f"organization_id={organization_id} — cross-org create blocked"
             )
+
+        # 1b. Threat Agent Library: resolve BEFORE any FAIRCAM validation or
+        # row construction -- an unknown slug must 422 with nothing applied,
+        # nothing autoflushed, nothing committed (resolve-before-apply).
+        threat_community_row = await self._resolve_threat_community(
+            organization_id, form.threat_community
+        )
 
         # 2. FAIRCAM validation before any DB write.
         # D15 (Task 6): require_loss_max=True -- a scenario-write call site,
@@ -215,7 +253,6 @@ class ScenarioService:
             description=form.description,
             scenario_type=form.scenario_type,
             threat_category=form.threat_category,
-            threat_actor_type=form.threat_actor_type,
             attack_vector=form.attack_vector,
             asset_class=form.asset_class,
             effect=form.effect,
@@ -230,6 +267,19 @@ class ScenarioService:
             row_version=1,
             created_by=user.id,
         )
+
+        # 5b. Threat Agent Library: stamp the resolved community + provenance.
+        self._assign_threat_community(scenario, threat_community_row)
+
+        # 5c. Service-level-only override (no route passes it; ScenarioForm is
+        # extra="forbid" so this can never arrive from a form POST). Used by
+        # migration/import call sites that know the true historical provenance.
+        if provenance_override is not None:
+            if provenance_override not in THREAT_COMMUNITY_PROVENANCE_VALUES:
+                raise ValidationError(f"invalid provenance {provenance_override!r}")
+            if (provenance_override == "unassigned") != (threat_community_row is None):
+                raise ValidationError("provenance/community mismatch")
+            scenario.threat_community_provenance = provenance_override
 
         # 6. Persist.
         self._db.add(scenario)
@@ -248,6 +298,8 @@ class ScenarioService:
             "status": [None, scenario.status.value],
             "version": [None, scenario.version],
             "row_version": [None, scenario.row_version],
+            "threat_community": [None, threat_community_row.slug if threat_community_row else None],
+            "threat_community_provenance": [None, scenario.threat_community_provenance],
         }
         # Meth-I1: record the source library entry's provenance ('seed' /
         # 'imported') so the scenario's origin survives entry deletion.
@@ -285,6 +337,7 @@ class ScenarioService:
         form: ScenarioForm,
         current_user: User,
         ip_address: str | None = None,
+        provenance_override: str | None = None,
     ) -> Scenario:
         """Create a scenario via the expert form.
 
@@ -300,6 +353,9 @@ class ScenarioService:
         PR pi: pin auto-resolution removed; the calibration-override
         runtime was excised. ``ScenarioForm`` no longer carries
         ``overlay_tags`` (dropped with the rest of the runtime in F14).
+
+        ``provenance_override`` is service-level only (no route passes it;
+        ``ScenarioForm`` is ``extra="forbid"``) — see ``_stamp_new_scenario``.
         """
         library_pin: dict[str, Any] | None = None
         source: ScenarioSource = form.source
@@ -324,6 +380,7 @@ class ScenarioService:
             source=source,
             library_pin=library_pin,
             ip_address=ip_address,
+            provenance_override=provenance_override,
         )
 
     async def create_from_wizard(
@@ -396,9 +453,10 @@ class ScenarioService:
             "description": scenario.description,
             "scenario_type": scenario.scenario_type.value,
             "threat_category": getattr(scenario.threat_category, "value", scenario.threat_category),
-            "threat_actor_type": getattr(
-                scenario.threat_actor_type, "value", scenario.threat_actor_type
-            ),
+            "threat_community": scenario.threat_community.slug
+            if scenario.threat_community
+            else None,
+            "threat_community_provenance": scenario.threat_community_provenance,
             "attack_vector": scenario.attack_vector,
             "asset_class": getattr(scenario.asset_class, "value", scenario.asset_class),
             "effect": getattr(scenario.effect, "value", scenario.effect),
@@ -417,7 +475,6 @@ class ScenarioService:
         scenario.description = form.description
         scenario.scenario_type = form.scenario_type
         scenario.threat_category = form.threat_category  # type: ignore[assignment]
-        scenario.threat_actor_type = form.threat_actor_type  # type: ignore[assignment]
         scenario.attack_vector = form.attack_vector
         scenario.asset_class = form.asset_class  # type: ignore[assignment]
         scenario.effect = form.effect  # type: ignore[assignment]
@@ -431,12 +488,13 @@ class ScenarioService:
     @staticmethod
     def _audit_diff(before: dict[str, Any], scenario: Scenario) -> dict[str, list[Any]]:
         def _val(k: str) -> Any:
+            if k == "threat_community":
+                return scenario.threat_community.slug if scenario.threat_community else None
             v = getattr(scenario, k)
             if k in (
                 "scenario_type",
                 "status",
                 "threat_category",
-                "threat_actor_type",
                 "asset_class",
                 "effect",
             ):
@@ -502,6 +560,24 @@ class ScenarioService:
                 "status cannot be changed here — use Promote on the scenario page"
             )
 
+        # Threat Agent Library P1 fix-wave: service-level required-on-edit.
+        # Unlike create (where a None slug resolves to "unassigned" via
+        # _resolve_threat_community), an edit must never silently clear an
+        # existing assignment. The HTML form parser already guards this
+        # (scenario_form_helpers.py's ScenarioFormValidationError), but a
+        # caller that bypasses it (API, test, future entry point) must not
+        # be able to null out threat_community through this service method.
+        # BEFORE any mutation — nothing applied, nothing autoflushed.
+        if form.threat_community is None:
+            raise ValidationError("threat_community is required on edit")
+
+        # Threat Agent Library: resolve BEFORE any before-dict capture / FAIRCAM
+        # validation / field assignment (resolve-before-apply) — an unknown slug
+        # must 422 with nothing applied, nothing autoflushed, nothing committed.
+        threat_community_row = await self._resolve_threat_community(
+            organization_id, form.threat_community
+        )
+
         before = self._capture_audit_before(scenario)
 
         # Sec-1: FAIRCAM validation before any FAIR-distribution write —
@@ -533,6 +609,7 @@ class ScenarioService:
             scenario.vuln_framing = "inherent"
 
         self._apply_form_fields(scenario, form)
+        self._assign_threat_community(scenario, threat_community_row)
 
         changes = self._audit_diff(before, scenario)
 
@@ -600,6 +677,16 @@ class ScenarioService:
             raise ValidationError(
                 "status cannot be changed here — use Promote on the scenario page"
             )
+        # Threat Agent Library P1 fix-wave: service-level required-on-edit
+        # (see update()'s matching guard for the full rationale). BEFORE any
+        # mutation — nothing applied, nothing autoflushed.
+        if form.threat_community is None:
+            raise ValidationError("threat_community is required on edit")
+        # Threat Agent Library: resolve BEFORE any before-dict capture / FAIRCAM
+        # validation / field assignment (resolve-before-apply).
+        threat_community_row = await self._resolve_threat_community(
+            organization_id, form.threat_community
+        )
         before = self._capture_audit_before(scenario)  # standard keys ONLY (amendment 8)
         extras_before = {
             "source": scenario.source.value,
@@ -619,6 +706,7 @@ class ScenarioService:
             require_loss_max=True,
         )
         self._apply_form_fields(scenario, form)
+        self._assign_threat_community(scenario, threat_community_row)
         scenario.source = ScenarioSource.EXPERT_JUDGMENT
         scenario.library_pin = None
         scenario.vuln_framing = "inherent"
@@ -704,6 +792,59 @@ class ScenarioService:
             action=action,
             changes={
                 "vuln_framing": ["legacy_residual", "inherent"],
+                "row_version": [prev_row_version, scenario.row_version],
+            },
+            user_id=current_user.id,
+            ip_address=ip_address,
+        )
+        return scenario
+
+    async def confirm_threat_community(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        scenario_id: uuid.UUID,
+        slug: str,
+        current_user: User,
+        ip_address: str | None = None,
+    ) -> Scenario:
+        """Spec §4.3: confirm/correct a scenario in a review state. Refuses (409) when already
+        'assigned' — edits go through the form's optimistic lock. Unknown slug -> 422; missing,
+        cross-org or deleted -> 404 (no oracle).
+
+        Concurrency (the F2 Sec-F2-NTH1 record): unlike confirm_vuln_framing this is NOT
+        idempotent (a different slug is a different write) and takes no expected_row_version.
+        lock=True serialises on Postgres; on SQLite two in-flight confirms both pass the review
+        check and the later one overwrites or fails BUSY — both audited, both by authorised
+        analysts. Accepted for P1.
+        """
+        repo = ScenarioRepo(self._db)
+        scenario = await repo.get_for_org(
+            organization_id=organization_id, scenario_id=scenario_id, lock=True
+        )
+        if scenario is None or scenario.status == EntityStatus.DELETED:
+            raise NotFoundError(f"scenario_id={scenario_id} not found")
+        if not scenario.threat_community_needs_review:
+            raise ThreatCommunityNotInReview(
+                "threat community already assigned; edit the scenario instead"
+            )
+        row = await ThreatCommunityService(self._db, organization_id=organization_id).resolve(slug)
+        before_slug = scenario.threat_community.slug if scenario.threat_community else None
+        before_prov = scenario.threat_community_provenance
+        prev_row_version = scenario.row_version
+        scenario.threat_community = row
+        scenario.threat_community_id, scenario.threat_community_version = row.id, row.version
+        scenario.threat_community_provenance = "assigned"
+        scenario.row_version = prev_row_version + 1
+        await self._db.flush()
+        await AuditWriter(self._db).log(
+            organization_id=organization_id,
+            entity_type="scenario",
+            entity_id=scenario.id,
+            action="scenario.threat_community_confirmed",
+            changes={
+                "threat_community": [before_slug, row.slug],
+                "threat_community_provenance": [before_prov, "assigned"],
                 "row_version": [prev_row_version, scenario.row_version],
             },
             user_id=current_user.id,

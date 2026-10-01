@@ -79,6 +79,11 @@ async def test_edit_post_preserves_demoted_linked_control(
     payload = {
         "name": scenario.name,
         "threat_category": scenario.threat_category,
+        # Required by the edit form parser (scenario_form_helpers.py:734-736)
+        # since Task 7 made the field required; this test's directory sits
+        # outside every per-task scoped pytest run, so this was red before
+        # the Threat Agent Library P1 fix-wave guard ever landed.
+        "threat_community": "cybercriminals",
         "tef_low": str(scenario.threat_event_frequency["low"]),
         "tef_mode": str(scenario.threat_event_frequency["mode"]),
         "tef_high": str(scenario.threat_event_frequency["high"]),

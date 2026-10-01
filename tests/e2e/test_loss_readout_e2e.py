@@ -256,6 +256,11 @@ async def _goto_new_scenario_lognormal_pl(
     await page.goto(f"{base}/scenarios/new")
     await page.fill("input[name='name']", name)
     await page.select_option("select[name='threat_category']", "ransomware")
+    # TAL: threat_community is a required <select> on scenarios/form.html --
+    # without a selection the browser's native HTML5 validation blocks the
+    # submit client-side and a caller's later "Create scenario" click never
+    # navigates anywhere.
+    await page.select_option("select[name='threat_community']", "cybercriminals")
     await page.select_option("select[name='asset_class']", "systems")
     await _fill_tef_vuln_defaults(page)
     await page.select_option("select[name='pl_dist']", "lognormal")
@@ -319,7 +324,7 @@ async def _wizard_blank_flow_to_step4(page: Page, base: str, name: str) -> None:
     await page.click("text=Skip — start blank")
     await page.fill("input[name='name']", name)
     await page.select_option("select[name='threat_category']", "ransomware")
-    await page.select_option("select[name='threat_actor_type']", "cybercriminals")
+    await page.select_option("select[name='threat_community']", "cybercriminals")
     await page.select_option("select[name='asset_class']", "systems")
     await page.click("button:has-text('Next →')")
     await page.wait_for_selector("input[name='tef_low_0']")

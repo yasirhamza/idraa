@@ -44,6 +44,7 @@ from idraa.models.enums import (
 )
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -62,6 +63,9 @@ def _seed_scenario(
     on ``flush()``.
     """
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -237,7 +241,7 @@ async def test_new_form_renders_with_existing_control(
 async def test_new_form_uses_dropdowns_for_enum_fields(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
 ) -> None:
-    """Regression: threat_category / threat_actor_type / asset_class must
+    """Regression: threat_category / threat_community / asset_class must
     render as <select> with enum-derived options, not freeform <input type="text">.
 
     User feedback during local UAT: "data entry should not be freeform entry,
@@ -248,7 +252,7 @@ async def test_new_form_uses_dropdowns_for_enum_fields(
     assert r.status_code == 200
     body = r.text
 
-    for name in ("threat_category", "threat_actor_type", "asset_class"):
+    for name in ("threat_category", "threat_community", "asset_class"):
         # F22: select has id attr before name — check that name attr appears inside a select tag.
         # A <select ... name="X"> anywhere in the page satisfies "is a select, not a text input".
         assert f'name="{name}"' in body, f"{name} must have a name attr in the form"
@@ -333,6 +337,7 @@ async def test_create_scenario_persists_and_redirects(
     payload = {
         "name": "Phishing-led BEC",
         "threat_category": "social_engineering",
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",
@@ -386,6 +391,7 @@ async def test_create_scenario_lognormal_primary_loss_stored_native(
     payload = {
         "name": "Lognormal-PL scenario",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "tef_dist": "pert",
         "tef_low": "0.1",
         "tef_mode": "0.5",
@@ -452,6 +458,7 @@ async def test_effect_round_trips_through_create_and_edit(
     payload = {
         "name": "Availability-effect scenario",
         "threat_category": "ot_availability",
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",
@@ -695,6 +702,7 @@ async def test_update_persists_descriptive_change(
     payload = {
         "name": "After",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -760,6 +768,7 @@ async def test_update_does_not_clobber_status_version_type_source(
     payload = {
         "name": "Renamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -803,6 +812,7 @@ async def test_update_optimistic_conflict_returns_409(
     payload = {
         "name": "Renamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -850,6 +860,7 @@ async def test_update_409_rerender_displays_org_chips(
     payload = {
         "name": "ChipRegressionRenamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -1076,6 +1087,7 @@ async def test_reviewer_cannot_update(
     payload = {
         "name": "X",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -1126,6 +1138,9 @@ def _seed_lognormal_scenario(
     import math
 
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -1222,6 +1237,9 @@ def _seed_lognormal_mixture_scenario(
     """Seed a scenario with a catastrophic multi-SME lognormal_mixture
     primary_loss (the worked A/B pair, equal weight)."""
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -1337,6 +1355,9 @@ def _seed_scenario_with_pl_metadata(
         primary_loss["distribution_fit_metadata"] = metadata
 
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

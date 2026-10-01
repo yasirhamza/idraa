@@ -13,8 +13,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry, ScenarioLibraryOverride
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.scenario_library import merge_canonical_and_override
 
 
@@ -26,7 +27,8 @@ def _e(**overrides: Any) -> ScenarioLibraryEntry:
         "name": "x",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "d",

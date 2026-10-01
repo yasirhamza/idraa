@@ -38,6 +38,7 @@ async def test_two_scenarios_two_currencies_both_store_usd(
             "name": name,
             "scenario_type": "custom",
             "threat_category": "ransomware",
+            "threat_community": "cybercriminals",
             "entry_currency": cur,
             "tef_dist": "pert",
             "tef_low": "0.1",

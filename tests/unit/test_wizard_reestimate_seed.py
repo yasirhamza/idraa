@@ -23,7 +23,8 @@ def _scenario(**over):
         "name": "Ransomware on historian",
         "description": "desc",
         "threat_category": SimpleNamespace(value="ransomware"),
-        "threat_actor_type": SimpleNamespace(value="organized_crime"),
+        "threat_community": SimpleNamespace(slug="cybercriminals"),
+        "threat_community_needs_review": False,
         "asset_class": SimpleNamespace(value="ot_systems"),
         "attack_vector": "phishing",
         "vuln_framing": "inherent",
@@ -56,10 +57,33 @@ def test_seed_copies_descriptive_fields_and_controls():
     )
     assert st.name == "Ransomware on historian"
     assert st.threat_category == "ransomware"
-    assert st.threat_actor_type == "organized_crime"
+    assert st.threat_community == "cybercriminals"
     assert st.asset_class == "ot_systems"
     assert st.attack_vector == "phishing"
     assert st.mitigating_control_ids == [str(cid)]
+
+
+def test_seed_blanks_community_for_flagged_scenario():
+    # Sec4-I1: a scenario whose community still needs review (e.g. the
+    # migrated_split_default placeholder) must re-estimate from a BLANK
+    # select — never pre-fill the placeholder.
+    st = seed_wizard_state_from_scenario(
+        _scenario(threat_community_needs_review=True),
+        sme_estimates={},
+        mitigating_control_ids=[],
+        tx_id="t",
+    )
+    assert st.threat_community is None
+
+
+def test_seed_blanks_community_when_scenario_has_none():
+    st = seed_wizard_state_from_scenario(
+        _scenario(threat_community=None),
+        sme_estimates={},
+        mitigating_control_ids=[],
+        tx_id="t",
+    )
+    assert st.threat_community is None
 
 
 def test_seed_loss_shape_derivation():

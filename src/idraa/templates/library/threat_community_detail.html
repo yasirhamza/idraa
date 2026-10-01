@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/form_field.html" import form_field %}
+{% block title %}{{ community.name }} — Library{% endblock %}
+{% block content %}
+
+{{ page_header(title=community.name, meta=community.summary) }}
+
+<div class="max-w-4xl mx-auto">
+
+  <div class="flex items-center gap-2 mb-4">
+    <span class="badge badge-outline">{{ "Internal" if community.origin == "internal" else "External" }}</span>
+    {% if community.intent == "non_malicious" %}<span class="badge badge-outline">Non-malicious</span>{% endif %}
+  </div>
+
+  {% if community.slug == "privileged_insider" %}
+  <div class="bg-surface-2 border border-border-subtle rounded-card p-4 mb-4">
+    <p class="text-body text-ink-1">Privileged insiders do not need to defeat preventative controls, and the engine credits every linked control uniformly — do not link preventative controls that the insider's granted access bypasses, or the modelled reduction is overstated.</p>
+  </div>
+  {% endif %}
+
+  {# Eight-attribute display grid #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+      {{ form_field(name="motive", label="Motive", mode="display", value=community.motive) }}
+      {{ form_field(name="primary_intent", label="Primary intent", mode="display", value=community.primary_intent) }}
+      {{ form_field(name="sponsorship", label="Sponsorship", mode="display", value=community.sponsorship) }}
+      {{ form_field(name="preferred_target_characteristics", label="Preferred general target characteristics", mode="display", value=community.preferred_target_characteristics) }}
+      {{ form_field(name="preferred_targets", label="Preferred targets", mode="display", value=community.preferred_targets) }}
+      {{ form_field(name="capability", label="Capability", mode="display", value=community.capability) }}
+      {{ form_field(name="personal_risk_tolerance", label="Personal risk tolerance", mode="display", value=community.personal_risk_tolerance) }}
+      {{ form_field(name="collateral_damage_concern", label="Concern for collateral damage", mode="display", value=community.collateral_damage_concern) }}
+    </div>
+  </div>
+
+  {# What counts as a threat event #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">What counts as a threat event</h2>
+    <p class="text-body text-ink-1 leading-relaxed">{{ community.threat_event_definition }}</p>
+    <p class="text-meta text-ink-2 mt-2">{{ community.tef_basis }}</p>
+  </div>
+
+  {# Reference organisation #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    {{ form_field(name="reference_org", label="Reference organisation", mode="display",
+                  value=(community.reference_org.size | title) ~ " organisation, " ~ (community.reference_org.sector | title) ~ " sector") }}
+  </div>
+
+  {# Landmark ranges #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-3">Landmark ranges</h2>
+    <p class="text-micro text-ink-3">TEF landmark (events/yr, 5th · most likely · 95th — the same 5th/95th convention as library PERT bounds)</p>
+    <p class="font-mono tabular-nums">{{ community.tef_landmark.low | format_landmark_rate }} · {{ community.tef_landmark.mode | format_landmark_rate }} · {{ community.tef_landmark.high | format_landmark_rate }} <span class="badge badge-ghost">{{ community.tef_landmark.basis_class }}</span></p>
+    <p class="text-body text-ink-2">{{ community.tef_landmark.derivation }}</p>
+    <p class="text-micro text-ink-3 mt-3">TCap landmark (percentile rank, 5th · most likely · 95th)</p>
+    {% if community.tcap_landmark %}
+      <p class="font-mono tabular-nums">{{ community.tcap_landmark.low }} · {{ community.tcap_landmark.mode }} · {{ community.tcap_landmark.high }} <span class="badge badge-ghost">{{ community.tcap_landmark.basis_class }}</span></p>
+      <p class="text-body text-ink-2">{{ community.tcap_landmark.derivation }}</p>
+    {% else %}
+      <p class="text-body text-ink-2">Not applicable — an error is not a capability contest; estimate Vulnerability directly.</p>
+    {% endif %}
+    <p class="text-micro text-ink-3 mt-3">Default ranges, shown as landmarks for the analyst — not engine inputs. The TEF range is stated for the reference organisation across all its assets: first adjust it for your organisation's size and sector (up or down), then scope it to the one asset and method in your scenario, which lowers the rate — though the source&rsquo;s event-threshold gap noted below usually outweighs this. It is a 90% range to compare against, not a range to tighten.{% if community.tcap_landmark %} The TCap figure is a percentile rank of capability relative to the general threat population, not a probability, and is never converted into Vulnerability.{% endif %}</p>
+    {% if community.tef_landmark.assumed_conversion %}
+    <p class="text-micro text-ink-3">This range was recovered from an incident or loss statistic by dividing by a controlled-world conversion rate of {{ community.tef_landmark.assumed_conversion }}. That rate is a curator convention used only to recover attempts — do not use it as your scenario's inherent Vulnerability.</p>
+    <p class="text-micro text-ink-3">Library entries for this community routinely sit above this range: the source counts public-record loss events, a far higher bar than a scenario&rsquo;s loss event. A scenario frequency above the landmark is not by itself extreme.</p>
+    {% endif %}
+  </div>
+
+  {# Rationale & sources #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Rationale &amp; sources</h2>
+    <p class="text-body text-ink-1 leading-relaxed">{{ community.rationale }}</p>
+    <ul class="list-disc list-inside space-y-1 mt-3">
+      {% for c in community.citations %}{% set href = c.url | https_href %}
+        <li>{% if href %}<a class="link" href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>{% else %}{{ c.title }}{% endif %}{% if c.locator %} — {{ c.locator }}{% endif %}{% if c.edition_year %} ({{ c.edition_year }}){% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {# Library entries using this community #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Library entries using this community</h2>
+    {% if entries %}
+    <ul class="list-disc list-inside space-y-1">
+      {% for e in entries %}
+        <li><a class="link" href="/library/entries/{{ e.id }}">{{ e.name }}</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-body text-ink-2">None yet</p>
+    {% endif %}
+  </div>
+
+  {# Your scenarios using this community #}
+  <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
+    <h2 class="text-h3 text-ink-1 mb-2">Your scenarios using this community</h2>
+    {% if scenarios %}
+    <ul class="list-disc list-inside space-y-1">
+      {% for s in scenarios %}
+        <li><a class="link" href="/scenarios/{{ s.id }}">{{ s.name }}</a></li>
+      {% endfor %}
+    </ul>
+    {% if scenarios_truncated %}
+      <p class="text-micro text-ink-3 mt-2">Showing the first 200 — see <a class="link" href="/scenarios">/scenarios</a></p>
+    {% endif %}
+    {% else %}
+    <p class="text-body text-ink-2">None yet</p>
+    {% endif %}
+  </div>
+
+  <a class="link" href="/library/threat-communities">&larr; All threat communities</a>
+</div>
+{% endblock %}

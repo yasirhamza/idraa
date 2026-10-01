@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.errors import NotFoundError
+from idraa.errors import ValidationError as IdraaValidationError
 from idraa.models.attack import ATTACK_DOMAINS, AttackTechnique, ScenarioAttackMapping
 from idraa.models.csv_import_preview import PREVIEW_TTL_SECONDS as PREVIEW_TTL_SECONDS
 from idraa.models.csv_import_preview import CSVImportPreview
@@ -38,7 +39,6 @@ from idraa.models.enums import (
     ScenarioEffect,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.fx_rate import FX_RATE_MAX, FX_RATE_MIN
@@ -62,6 +62,7 @@ from idraa.services.scenario_import_parsers import (
     sniff_format,
 )
 from idraa.services.scenarios import ScenarioService
+from idraa.services.threat_communities import ThreatCommunityService, legacy_slug_for
 
 ENTITY_TYPE = "scenario"
 
@@ -216,20 +217,22 @@ def _validate_rows(
     *,
     existing_names: set[str],
     capacity_max: float | None = None,
+    published_slugs: set[str],
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[ScenarioForm | None],
-    list[tuple[str, str]],
+    list[tuple[str, str, str]],
     list[list[dict[str, Any]] | None],
 ]:
     """Per-row validation, pure (no DB). Returns
     ``(preview, errors, forms, entry_meta, attack_meta)``.
 
     ``forms[i]`` is a ScenarioForm only when ``preview[i]["action"]=="create"``.
-    ``entry_meta[i]`` is ``(entry_currency_str, entry_rate_str)`` for every row
-    (empty strings when absent); populated by popping the two keys from ``fd``
-    BEFORE ``ScenarioForm(**fd)`` (which is ``extra='forbid'``).
+    ``entry_meta[i]`` is ``(entry_currency_str, entry_rate_str,
+    threat_community_provenance)`` for every row (empty currency/rate strings
+    when absent); populated by popping the relevant keys from ``fd`` BEFORE
+    ``ScenarioForm(**fd)`` (which is ``extra='forbid'``).
     ``attack_meta[i]`` (issue #475 T12) is the structurally-validated,
     deduped-and-capped ``attack_techniques`` list for a "create" row, or
     ``None`` for every other row (JSON-only; CSV rows never carry the key).
@@ -244,11 +247,16 @@ def _validate_rows(
     "the importing org's revenue is unset/non-positive" and gates D18 exactly
     as a missing value would at the wizard. See the §2.6 step below for the
     mint/preserve/D18 semantics.
+
+    ``published_slugs`` (Threat Agent Library, Task 8) is the CALLER-fetched
+    set of currently-published threat community slugs (``validate_upload`` /
+    ``apply_validated_preview`` fetch it via ``ThreatCommunityService``); this
+    function stays pure — no DB access of its own.
     """
     preview: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     forms: list[ScenarioForm | None] = []
-    entry_meta: list[tuple[str, str]] = []
+    entry_meta: list[tuple[str, str, str]] = []
     attack_meta: list[list[dict[str, Any]] | None] = []
     seen_names: set[str] = set()
 
@@ -265,6 +273,98 @@ def _validate_rows(
         name = str(fd.get("name") or "").strip()
         key = name.casefold()
 
+        # Threat Agent Library (Task 8): resolve threat_community/legacy
+        # threat_actor_type BEFORE ScenarioForm(**fd) (extra='forbid' would
+        # otherwise reject either raw key outright). Either-of rule: exactly
+        # one of the two may be present; both → "ambiguous" row error
+        # (mirrors the CSV header's own ambiguity check); neither → treated
+        # as a blank community (unassigned), NOT an error.
+        raw_tc_val = fd.pop("threat_community", None)
+        raw_legacy_val = fd.pop("threat_actor_type", None)
+        # Fix round 1 (no-silent-default): a JSON value that is PRESENT but
+        # not a string (e.g. False/0/[]/{}) must not silently collapse to
+        # blank via `or ""` and import as "unassigned" -- reject it as a
+        # per-row error instead. None (absent/explicit null) is still a
+        # legitimate "blank" and falls through to the ambiguous/legacy/
+        # published-slug checks below exactly as before.
+        if raw_tc_val is not None and not isinstance(raw_tc_val, str):
+            errors.append(
+                {"line": line, "column": "threat_community", "reason": "must be a string slug"}
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        if raw_legacy_val is not None and not isinstance(raw_legacy_val, str):
+            errors.append(
+                {"line": line, "column": "threat_actor_type", "reason": "must be a string slug"}
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        raw_tc = str(raw_tc_val or "").strip() or None
+        raw_legacy = str(raw_legacy_val or "").strip() or None
+        tc_provenance = "assigned"
+        if raw_tc is not None and raw_legacy is not None:
+            errors.append(
+                {
+                    "line": line,
+                    "column": "threat_community",
+                    "reason": "ambiguous: both threat_community and threat_actor_type present",
+                }
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        if raw_tc is None:
+            try:
+                raw_tc, tc_provenance = legacy_slug_for(raw_legacy)
+            except KeyError:
+                errors.append(
+                    {
+                        "line": line,
+                        "column": "threat_actor_type",
+                        # Fix round 1: bound the echoed cell so an oversized
+                        # value cannot inflate the preview payload. raw_legacy
+                        # is always a non-empty str here (legacy_slug_for only
+                        # raises KeyError on a truthy unmatched string) but
+                        # mypy sees `str | None`, hence the `or ""`.
+                        "reason": (
+                            f"{(raw_legacy or '')[:64]!r} is not a recognised "
+                            "legacy threat actor type"
+                        ),
+                    }
+                )
+                preview.append({"line": line, "name": name, "action": "error"})
+                forms.append(None)
+                entry_meta.append((meta_currency, meta_rate, "unassigned"))
+                attack_meta.append(None)
+                continue
+        if raw_tc is not None and raw_tc not in published_slugs:
+            errors.append(
+                {
+                    "line": line,
+                    "column": "threat_community",
+                    # Fix round 1: bound the echoed cell so an oversized
+                    # value cannot inflate the preview payload.
+                    "reason": (
+                        f"{raw_tc[:64]!r} is not a published threat community; "
+                        f"expected one of {sorted(published_slugs)}"
+                    ),
+                }
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        fd["threat_community"] = raw_tc
+
         # 1. Pydantic structural validation (extra='forbid' blocks smuggling).
         try:
             form = ScenarioForm(**fd)
@@ -279,7 +379,7 @@ def _validate_rows(
                 )
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -287,7 +387,6 @@ def _validate_rows(
         enum_problem: tuple[str, type[StrEnum]] | None = None
         for col, enum_cls in (
             ("threat_category", ThreatCategory),
-            ("threat_actor_type", ThreatActorType),
             ("asset_class", AssetClass),
             # effect is unreachable here since ScenarioForm's field validator
             # (PR #451 Sec-N1) rejects non-enum strings at step 1 — kept as
@@ -315,7 +414,7 @@ def _validate_rows(
             )
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -338,7 +437,7 @@ def _validate_rows(
             )
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -380,7 +479,7 @@ def _validate_rows(
             errors.append({"line": line, "column": col_name, "reason": dist_problem})
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -426,7 +525,7 @@ def _validate_rows(
             )
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -459,7 +558,7 @@ def _validate_rows(
             errors.append({"line": line, "column": col_name, "reason": reason})
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -500,7 +599,7 @@ def _validate_rows(
             errors.append({"line": line, "column": "attack_techniques", "reason": attack_problem})
             preview.append({"line": line, "name": name, "action": "error"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
 
@@ -508,14 +607,14 @@ def _validate_rows(
         if key in seen_names or key in existing_names:
             preview.append({"line": line, "name": name, "action": "skip"})
             forms.append(None)
-            entry_meta.append((meta_currency, meta_rate))
+            entry_meta.append((meta_currency, meta_rate, tc_provenance))
             attack_meta.append(None)
             continue
         seen_names.add(key)
 
         preview.append({"line": line, "name": name, "action": "create"})
         forms.append(form)
-        entry_meta.append((meta_currency, meta_rate))
+        entry_meta.append((meta_currency, meta_rate, tc_provenance))
         attack_meta.append(resolved_attack_techniques)
 
     return preview, errors, forms, entry_meta, attack_meta
@@ -611,8 +710,11 @@ async def validate_upload(
         return token, [], hard_stop
 
     existing = await _existing_scenario_names(db, org_id=org_id)
+    published_slugs = {
+        r.slug for r in await ThreatCommunityService(db, organization_id=org_id).list_published()
+    }
     preview, errors, _, _meta, _attack_meta = _validate_rows(
-        pairs, existing_names=existing, capacity_max=capacity_max
+        pairs, existing_names=existing, capacity_max=capacity_max, published_slugs=published_slugs
     )
     token = await _store_preview(db, org_id=org_id, user_id=user_id, data=data, fmt=fmt)
     return token, preview, errors
@@ -673,8 +775,11 @@ async def apply_validated_preview(
         return 0, 0, hard_stop
 
     existing = await _existing_scenario_names(db, org_id=org_id)
+    published_slugs = {
+        r.slug for r in await ThreatCommunityService(db, organization_id=org_id).list_published()
+    }
     preview, errors, forms, entry_meta, attack_meta = _validate_rows(
-        pairs, existing_names=existing, capacity_max=capacity_max
+        pairs, existing_names=existing, capacity_max=capacity_max, published_slugs=published_slugs
     )
 
     svc = ScenarioService(db)
@@ -691,7 +796,7 @@ async def apply_validated_preview(
         (t.domain, t.technique_id): t for t in catalog_rows
     }
 
-    for meta, form, (em_currency, em_rate_str), am_list in zip(
+    for meta, form, (em_currency, em_rate_str, em_tc_prov), am_list in zip(
         preview, forms, entry_meta, attack_meta, strict=True
     ):
         if form is None:
@@ -774,8 +879,17 @@ async def apply_validated_preview(
                 form=form,
                 current_user=user,
                 ip_address=ip_address,
+                # Threat Agent Library (Task 8): em_tc_prov is derived ONLY from
+                # the legacy threat_actor_type map (_validate_rows), never from
+                # a file column -- "assigned" (an explicit threat_community
+                # slug) is the service's own default behaviour, so it is
+                # passed through as None; every other value (migrated /
+                # migrated_split_default / unassigned) must be stamped
+                # explicitly so the create audit row carries the TRUE
+                # historical provenance in a single scenario.create row.
+                provenance_override=em_tc_prov if em_tc_prov != "assigned" else None,
             )
-        except (FAIRCAMValidationError, ValueError) as exc:
+        except (IdraaValidationError, ValueError) as exc:
             apply_errors.append(
                 {"line": meta["line"], "column": "row", "reason": f"create failed: {exc}"}
             )
@@ -908,7 +1022,7 @@ def generate_sample_json() -> bytes:
             "description": "Email-borne ransomware via AD",
             "scenario_type": "custom",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "attack_vector": "phishing_then_lateral_movement",
             "asset_class": "systems",
             "effect": "availability",

@@ -37,6 +37,7 @@ from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.sample_codec import encode_sample_arrays
 from tests.conftest import csrf_post
@@ -87,6 +88,9 @@ def _seed_scenario_for_org(
     modules). Caller must ``await db.commit()`` after calling this.
     """
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

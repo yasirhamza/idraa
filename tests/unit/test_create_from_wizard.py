@@ -83,8 +83,9 @@ async def test_create_from_wizard_with_library_sets_pin_and_source(
 
     # Insert a published library entry so the TOCTOU re-validation in
     # _stamp_new_scenario can lock and verify status="published".
-    from idraa.models.enums import AssetClass, ThreatActorType
+    from idraa.models.enums import AssetClass
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     entry_id = uuid.uuid4()
     entry = ScenarioLibraryEntry(
@@ -94,7 +95,8 @@ async def test_create_from_wizard_with_library_sets_pin_and_source(
         name="Wizard Test Entry",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="For wizard F10 test.",

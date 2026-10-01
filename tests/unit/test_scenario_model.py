@@ -9,17 +9,20 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.errors import ValidationError
 from idraa.models.enums import (
     AssetClass,
     IndustryType,
     OrganizationSize,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
+from idraa.schemas.scenario import ScenarioForm
+from idraa.services.scenarios import ScenarioService
 
 
 async def test_scenario_roundtrip_minimal_fields(db_session: AsyncSession) -> None:
@@ -39,6 +42,7 @@ async def test_scenario_roundtrip_minimal_fields(db_session: AsyncSession) -> No
         threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 2.0},
         vulnerability={"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6},
         primary_loss={"distribution": "PERT", "low": 50_000, "mode": 250_000, "high": 2_000_000},
+        threat_community_provenance="unassigned",
     )
     db_session.add(s)
     await db_session.commit()
@@ -68,6 +72,7 @@ async def test_scenario_source_enum_values(db_session: AsyncSession) -> None:
         vulnerability={"distribution": "PERT", "low": 0.2, "mode": 0.4, "high": 0.6},
         primary_loss={"distribution": "PERT", "low": 50_000, "mode": 250_000, "high": 2_000_000},
         source=ScenarioSource.EXPERT_JUDGMENT,
+        threat_community_provenance="unassigned",
     )
     db_session.add(s)
     await db_session.commit()
@@ -88,36 +93,6 @@ async def test_scenario_mitigating_controls_default_empty(
 
 
 @pytest.mark.asyncio
-async def test_scenario_threat_actor_type_accepts_enum_value(
-    db_session: AsyncSession,
-    seed_organization: Any,
-    seed_user: Any,
-) -> None:
-    """D1: threat_actor_type is now ThreatActorType enum, not free-form."""
-    s = Scenario(
-        organization_id=seed_organization.id,
-        name="Enum-typed scenario",
-        threat_category=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
-        asset_class=AssetClass.SYSTEMS,
-        threat_event_frequency={"distribution": "PERT", "low": 1.0, "mode": 4.0, "high": 12.0},
-        vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
-        primary_loss={
-            "distribution": "PERT",
-            "low": 100_000.0,
-            "mode": 750_000.0,
-            "high": 5_000_000.0,
-        },
-        source=ScenarioSource.EXPERT_JUDGMENT,
-        created_by=seed_user.id,
-    )
-    db_session.add(s)
-    await db_session.commit()
-    await db_session.refresh(s)
-    assert s.threat_actor_type == ThreatActorType.CYBERCRIMINALS
-
-
-@pytest.mark.asyncio
 async def test_scenario_library_pin_round_trips_dict(
     db_session: AsyncSession,
     seed_organization: Any,
@@ -134,7 +109,9 @@ async def test_scenario_library_pin_round_trips_dict(
         organization_id=seed_organization.id,
         name="Pinned scenario",
         threat_category=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         asset_class=AssetClass.SYSTEMS,
         threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 1.0},
         vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
@@ -161,7 +138,9 @@ async def test_scenario_library_pin_defaults_to_none(
         organization_id=seed_organization.id,
         name="No-library scenario",
         threat_category=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         asset_class=AssetClass.SYSTEMS,
         threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 1.0},
         vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
@@ -198,6 +177,7 @@ async def test_scenario_organization_relationship_returns_org(
         threat_event_frequency={"distribution": "pert", "low": 0.1, "mode": 0.5, "high": 1.0},
         vulnerability={"distribution": "pert", "low": 0.1, "mode": 0.5, "high": 0.9},
         primary_loss={"distribution": "pert", "low": 1000.0, "mode": 5000.0, "high": 10000.0},
+        threat_community_provenance="unassigned",
     )
     db_session.add(scenario)
     await db_session.flush()
@@ -244,6 +224,7 @@ async def test_scenario_effect_column_roundtrips_and_defaults_none(
         vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
         primary_loss={"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
         effect=ScenarioEffect.AVAILABILITY,
+        threat_community_provenance="unassigned",
     )
     db_session.add(s)
     await db_session.flush()
@@ -257,8 +238,101 @@ async def test_scenario_effect_column_roundtrips_and_defaults_none(
         threat_event_frequency={"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
         vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
         primary_loss={"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+        threat_community_provenance="unassigned",
     )
     db_session.add(s2)
     await db_session.flush()
     await db_session.refresh(s2)
     assert s2.effect is None
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — Threat Agent Library: NULL<=>unassigned invariant + provenance_override
+# ---------------------------------------------------------------------------
+
+
+async def test_null_community_iff_unassigned_invariant(
+    seed_organization: Any,
+    seed_threat_communities: dict[str, Any],
+) -> None:
+    """``ScenarioService._assign_threat_community`` is the ONLY writer of the
+    (threat_community_id, threat_community_version, threat_community_provenance)
+    triple — None clears the pair to NULL + 'unassigned'; a row stamps the
+    pair + 'assigned'."""
+    s = Scenario(
+        organization_id=seed_organization.id,
+        name="Invariant scenario",
+        threat_category=ThreatCategory.RANSOMWARE,
+        threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 1.0},
+        vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
+        primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0},
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
+    )
+
+    ScenarioService._assign_threat_community(s, None)
+    assert s.threat_community_id is None
+    assert s.threat_community_version is None
+    assert s.threat_community_provenance == "unassigned"
+
+    row = seed_threat_communities["hacktivists"]
+    ScenarioService._assign_threat_community(s, row)
+    assert (s.threat_community_id, s.threat_community_version) == (row.id, row.version)
+    assert s.threat_community_provenance == "assigned"
+
+
+async def test_provenance_override_rejections(
+    db_session: AsyncSession,
+    seed_organization: Any,
+    seed_user: Any,
+    seed_threat_communities: dict[str, Any],
+) -> None:
+    """``provenance_override`` is service-level only (no route passes it). All
+    three rejection shapes raise ValidationError BEFORE ``self._db.add`` —
+    nothing lands in the session."""
+
+    def _base_form(threat_community: str | None) -> ScenarioForm:
+        return ScenarioForm(
+            name="S",
+            threat_category="ransomware",
+            threat_community=threat_community,
+            threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 1.0},
+            vulnerability={"distribution": "PERT", "low": 0.05, "mode": 0.20, "high": 0.50},
+            primary_loss={"distribution": "PERT", "low": 1.0, "mode": 2.0, "high": 3.0},
+        )
+
+    async def _nothing_pending() -> None:
+        assert (await db_session.execute(select(Scenario))).scalars().first() is None
+
+    svc = ScenarioService(db_session)
+
+    # Case 1: a bogus provenance value altogether.
+    with pytest.raises(ValidationError):
+        await svc.create(
+            organization_id=seed_organization.id,
+            form=_base_form("hacktivists"),
+            current_user=seed_user,
+            provenance_override="bogus",
+        )
+    await _nothing_pending()
+
+    # Case 2: 'unassigned' override with a valid (resolved) slug.
+    with pytest.raises(ValidationError):
+        await svc.create(
+            organization_id=seed_organization.id,
+            form=_base_form("hacktivists"),
+            current_user=seed_user,
+            provenance_override="unassigned",
+        )
+    await _nothing_pending()
+
+    # Case 3: a non-'unassigned' override with a blank slug.
+    with pytest.raises(ValidationError):
+        await svc.create(
+            organization_id=seed_organization.id,
+            form=_base_form(None),
+            current_user=seed_user,
+            provenance_override="migrated_split_default",
+        )
+    await _nothing_pending()

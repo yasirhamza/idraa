@@ -25,6 +25,7 @@ from idraa.models.enums import WebAuthnChallengePurpose
 from idraa.models.webauthn_challenge_consumed import WebAuthnChallengeConsumed
 from idraa.services import webauthn_challenge
 from idraa.services.auth import WEBAUTHN_CHALLENGE_MAX_AGE
+from tests.conftest import seed_canonical_threat_communities
 
 # asyncio_mode = "auto" (pyproject) collects async tests without an explicit
 # mark.
@@ -35,6 +36,7 @@ async def _create_schema(engine) -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
 
 
 @pytest_asyncio.fixture

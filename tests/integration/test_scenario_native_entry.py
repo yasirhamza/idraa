@@ -19,6 +19,7 @@ def _form(**over: str) -> dict[str, str]:
         "name": "OT ransomware (SAR)",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "entry_currency": "SAR",
         "tef_dist": "pert",
         "tef_low": "0.1",

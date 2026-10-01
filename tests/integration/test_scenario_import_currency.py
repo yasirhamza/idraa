@@ -44,6 +44,12 @@ def _scenario_form(**over: str) -> dict[str, str]:
         "name": "ImportRoundTrip-SAR",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        # TAL bridge (Task 8): the expert form has required threat_community
+        # since Task 7 (scenario_form_helpers.py) -- this fixture pre-dates
+        # that change and was never updated; fixing it here to unblock this
+        # task's Step 5 "-k scenario_import" regression run (pre-existing,
+        # unrelated to CSV/JSON import/export).
+        "threat_community": "cybercriminals",
         "entry_currency": "SAR",
         "tef_dist": "pert",
         "tef_low": "0.1",

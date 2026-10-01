@@ -227,6 +227,7 @@ async def test_create_as_draft_works(authed_analyst, db_session: AsyncSession):
     payload = {
         "name": "Draft-created scenario",
         "threat_category": "social_engineering",
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",

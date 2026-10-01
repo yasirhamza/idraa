@@ -1,0 +1,172 @@
+<h2 class="text-h3 text-ink-1 mb-3" id="what-a-threat-community-is">What a threat community is</h2>
+<p class="text-body text-ink-2 mb-3">
+  A <strong>threat community</strong> is a group of threat agents who share
+  enough characteristics that one profile describes them: who they are, what
+  they want, how capable they are, and how they go about it. Every scenario in
+  Idraa should name one; a scenario carried over from before this release
+  without a clear match is flagged for review until you choose. The community
+  gives the FAIR questions on the likelihood page their subject (&ldquo;how
+  often might <em>cybercriminals</em> try to&hellip;&rdquo;), it is the
+  vocabulary every analyst in your workspace shares, and it is the lens the
+  dashboard and the PDF use to show where your modelled loss sits. Idraa ships
+  nine canonical communities, browsable at
+  <a class="text-brand hover:underline" href="/library/threat-communities">Library &rarr; Threat communities</a>:
+  nation-state, cybercriminals, hacktivists, competitors, privileged insider,
+  non-privileged insider, accidental insider, third party (a supplier&rsquo;s
+  own personnel acting through granted access), and opportunistic hackers.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The community does not change any computed figure. The simulation reads
+  the frequency, vulnerability and loss ranges you author; the community is
+  recorded beside them so that the same question is asked the same way every
+  time, and so that reports can group by it.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="the-profile">The profile</h2>
+<p class="text-body text-ink-2 mb-3">
+  Each community carries the same eight attributes, so two communities can be
+  compared side by side and a scenario author can see at once which one fits:
+</p>
+<ul class="list-disc pl-6 text-body text-ink-2 mb-3 space-y-1">
+  <li><strong>Motive</strong> &mdash; what the community is after.</li>
+  <li><strong>Primary intent</strong> &mdash; the effect it wants on your assets.</li>
+  <li><strong>Sponsorship</strong> &mdash; who funds or directs it.</li>
+  <li><strong>Preferred target characteristics</strong> &mdash; what makes an organisation attractive to it.</li>
+  <li><strong>Preferred targets</strong> &mdash; the kinds of organisation and asset it goes after.</li>
+  <li><strong>Capability</strong> &mdash; what it can do, relative to the general threat population.</li>
+  <li><strong>Personal risk tolerance</strong> &mdash; how much exposure its members accept.</li>
+  <li><strong>Collateral damage concern</strong> &mdash; how much it cares about harm beyond its objective.</li>
+</ul>
+<p class="text-body text-ink-2 mb-6">
+  Below the attributes, each profile states its <strong>counting rule</strong>
+  (what counts as one threat event), a <strong>default frequency range</strong>
+  and, for the malicious communities, a <strong>default capability band</strong>,
+  with the reasoning and the sources behind each number. The accidental-insider
+  community carries no capability band: an error is not a contest against the
+  asset&rsquo;s resistance.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="counting-rule">The counting rule</h2>
+<p class="text-body text-ink-2 mb-3">
+  Threat Event Frequency only means something if everyone counts the same
+  thing. For the malicious communities a threat event is a
+  <strong>serious, intentional act</strong> against one of your assets &mdash;
+  an attempt to gain access, exfiltrate, extort, defraud, deface or disrupt.
+  Scans, minor misbehaviour and errors are not counted. For the accidental
+  insider a threat event is an <strong>error</strong> that, with nothing
+  intervening, would leave the asset in a loss-capable condition: a
+  misdirected disclosure, a misconfiguration that exposes it, a lost or
+  mishandled record, a mistaken transaction. Only slips the person notices
+  and corrects before the action takes effect are left out.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  The rule is <strong>control-naive for every community</strong>: a malicious
+  attempt counts whether or not your controls stop it, and an error counts
+  even when a control blocks or catches it. This matters because Idraa&rsquo;s
+  control layer already routes prevention onto Threat Event Frequency (see
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#the-control-model">the control model</a>).
+  If you counted only the attempts that got through, the control would be
+  credited twice &mdash; once in your frequency estimate and once by the
+  engine &mdash; and the modelled reduction would be overstated.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Scenarios created before this release that name the accidental insider were
+  elicited under older question wording. Their numbers are unchanged; when
+  you next re-estimate one, read the counting rule above before answering.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="landmarks-not-inputs">Landmarks, not inputs</h2>
+<p class="text-body text-ink-2 mb-3">
+  Each profile shows a default range (landmark) for Threat Event Frequency,
+  labelled <strong>5th &middot; most likely &middot; 95th</strong> &mdash; the
+  same convention every library entry and every wizard frequency range uses: the
+  5th and 95th percentiles are the bounds of the sampled distribution, and the
+  middle value is its most-likely point. The range is an
+  <strong>organisation-level base rate for a reference organisation</strong> (a
+  mid-sized, sector-neutral company) across all of its assets. To use it, first
+  adjust it up or down for your own organisation &mdash; your size, sector and
+  profile make you more or less attractive than the reference &mdash; and then
+  scope it down to the single asset and method your scenario describes. A
+  landmark used unadjusted is almost always wrong: scoping to one asset and
+  method lowers it, but the source&rsquo;s event threshold (below) pulls the
+  other way and usually dominates, and it is off in whichever direction your
+  organisation differs from the reference. Every range recovered from an incident or loss statistic is also
+  biased low, for the reasons its profile lists &mdash; an optimistic bias, not
+  a safe one. The largest reason is the source: a landmark recovered from
+  public-record loss events sits well below what a scenario counts, and the
+  library&rsquo;s own entries routinely place their most-likely frequency
+  above the landmark&rsquo;s 95th. A scenario frequency above the landmark is
+  not, by itself, extreme.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Idraa calls these ranges <strong>landmarks</strong> and deliberately avoids
+  the Bayesian name for a starting distribution. A starting distribution in
+  that sense is something a model updates with evidence; Idraa has no such
+  step. It runs a forward Monte Carlo on the ranges you author and never
+  revises an estimate from data (see
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#how-to-evaluate">probability interpretation</a>).
+  A landmark is a place to start reasoning, visible on the profile page and
+  nowhere in the calculation.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Where a landmark was recovered from an incident or loss statistic rather than
+  from a count of attempts, the profile says so, and shows the conversion rate
+  the curator divided by to get back to attempts. That rate is a curator
+  convention describing a <em>controlled</em> world &mdash; roughly the fraction
+  of attempts that become an incident or loss event once the controls in the
+  asset&rsquo;s path have acted. It leaves out the prevention that stops
+  attempts earlier, one reason these ranges run low, and it exists only to
+  recover the attempt rate. <strong>Do not reuse it as your scenario&rsquo;s
+  inherent Vulnerability</strong>: the Vulnerability you author is the chance an
+  attempt succeeds against the asset <em>before</em> your controls, which is a
+  different and generally larger number.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="privileged-insiders">Privileged insiders and your controls</h2>
+<p class="text-body text-ink-2 mb-6">
+  The privileged-insider community&rsquo;s capability reflects not needing to
+  defeat preventative controls: the account already has the rights an outsider
+  would have to earn. The engine credits every linked control uniformly &mdash;
+  it cannot tell that a particular control sits outside the insider&rsquo;s
+  path. So for a scenario assigned to this community, do not link preventative
+  controls that the insider&rsquo;s granted access bypasses, or the modelled
+  reduction is overstated. Link the controls that still stand in the way:
+  logging and monitoring, segregation of duties and approval checks the insider
+  cannot satisfy alone, and the detective and response controls that act after
+  the fact.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="split-or-lump">Split or lump?</h2>
+<p class="text-body text-ink-2 mb-6">
+  Nine communities is a starting point, not a ceiling. Treat a group of
+  threat agents as its own community when it differs from its neighbours in
+  <strong>how often</strong> it acts against you, in its
+  <strong>skillset</strong>, or in <strong>which of your controls</strong> are
+  relevant to it; when it does not differ on any of those, lumping it with the
+  nearest community loses nothing. Contractors and other non-employee
+  affiliates with ordinary access belong with the non-privileged insider by
+  default; move one to the privileged insider only when the role actually
+  carries elevated rights, and to third party only when a supplier&rsquo;s own
+  people act through the access you granted their employer.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="where-this-comes-from">Where this comes from</h2>
+<p class="text-body text-ink-2 mb-3">
+  The idea of a threat agent library with a fixed set of profiling attributes
+  comes from the FAIR literature: Jack Jones and Jack Freund, <em>Measuring and
+  Managing Information Risk: A FAIR Approach</em>, 2nd edition, chapter 4
+  (threat profiling), which in turn builds on Matthew Rosenquist&rsquo;s Threat
+  Agent Risk Assessment work at Intel. From that lineage Idraa adopts the
+  attribute structure, the idea of a starter set of communities, the practice of
+  publishing default ranges as starting points the analyst adjusts, the
+  split-or-lump test, and the convention of expressing capability as a
+  percentile rank. The control-naive counting rule is Idraa&rsquo;s own; it
+  follows from how Idraa&rsquo;s control layer credits prevention. Every
+  sentence of the profiles and every default range are Idraa&rsquo;s own, with
+  the sources and the derivation stated on each profile page.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  Browse the profiles at
+  <a class="text-brand hover:underline" href="/library/threat-communities">Library &rarr; Threat communities</a>.
+  Each one links to the library entries and to your own scenarios that name it.
+</p>

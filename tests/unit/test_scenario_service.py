@@ -37,6 +37,7 @@ from idraa.errors import (
     NotFoundError,
     RunBusyError,
     ScenarioInUseError,
+    ValidationError,
 )
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import (
@@ -59,6 +60,7 @@ def _form(
     description: str | None = None,
     threat_event_frequency: dict[str, Any] | None = None,
     primary_loss: dict[str, Any] | None = None,
+    threat_community: str | None = "cybercriminals",
 ) -> ScenarioForm:
     """Minimal valid ScenarioForm for service tests.
 
@@ -71,11 +73,18 @@ def _form(
     distribution fields are ``dict[str, Any]`` so an invalid shape is
     accepted at the Pydantic layer and rejected only at the FAIRCAM
     validator boundary — exactly the path under test.
+
+    ``threat_community`` defaults to the canonical ``"cybercriminals"``
+    slug (seeded on every test schema by conftest's
+    ``seed_canonical_threat_communities``) so create()/update() happy-path
+    tests resolve successfully; pass ``None`` explicitly to exercise the
+    Threat Agent Library required-on-edit guard.
     """
     return ScenarioForm(
         name=name,
         description=description,
         threat_category=ThreatCategory.RANSOMWARE,
+        threat_community=threat_community,
         threat_event_frequency=threat_event_frequency
         or {
             "distribution": "PERT",
@@ -455,6 +464,40 @@ async def test_update_valid_edit_still_succeeds(
     assert updated.name == "Retuned"
     assert updated.row_version == rv_before + 1
     assert updated.threat_event_frequency["mode"] == 0.6
+
+
+async def test_update_requires_threat_community_on_edit(
+    db_session: AsyncSession,
+    seed_org_user: SeedOrgUser,
+) -> None:
+    """Threat Agent Library P1 fix-wave: unlike create() (where a None
+    slug resolves to unassigned), update() must reject a None
+    ``threat_community`` BEFORE any mutation — the row is left exactly as
+    it was (name, row_version, assigned community)."""
+    org, user = await seed_org_user(db_session)
+
+    service = ScenarioService(db_session)
+    s = await service.create(
+        organization_id=org.id,
+        form=_form(name="Original"),
+        current_user=user,
+    )
+    rv_before = s.row_version
+    community_id_before = s.threat_community_id
+
+    with pytest.raises(ValidationError, match="threat_community is required on edit"):
+        await service.update(
+            organization_id=org.id,
+            scenario_id=s.id,
+            form=_form(name="Renamed", threat_community=None),
+            expected_row_version=rv_before,
+            current_user=user,
+        )
+
+    await db_session.refresh(s)
+    assert s.name == "Original"
+    assert s.row_version == rv_before
+    assert s.threat_community_id == community_id_before
 
 
 async def test_update_idor_safe_when_scenario_in_other_org(

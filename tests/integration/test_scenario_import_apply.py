@@ -206,6 +206,64 @@ async def test_summary_audit_row_shape_and_per_row_attribution(
 
 
 @pytest.mark.asyncio
+async def test_apply_legacy_split_writes_one_create_audit_with_provenance(
+    db_session, organization, admin_user
+) -> None:
+    """Review Focus #2: a legacy-split ``threat_actor_type`` value
+    (``insider_malicious``) imports cleanly, lands as ``privileged_insider``
+    with provenance ``migrated_split_default``, and writes exactly ONE
+    ``scenario.create`` audit row carrying that provenance in its changes
+    dict (not a silent default + a separate un-audited correction)."""
+    csv_body = (
+        "name,description,scenario_type,threat_category,threat_actor_type,attack_vector,"
+        "asset_class,version,status,distribution,tef_low,tef_mode,tef_high,vuln_low,vuln_mode,"
+        "vuln_high,pl_low,pl_mode,pl_high,sl_low,sl_mode,sl_high\n"
+        "LegacySplit,,custom,ransomware,insider_malicious,,systems,1.0,active,PERT,"
+        "0.1,0.5,2,0.2,0.35,0.6,100000,1000000,15000000,,,\n"
+    ).encode()
+    token, preview, errors = await validate_upload(
+        db_session,
+        org_id=organization.id,
+        user_id=admin_user.id,
+        data=csv_body,
+        filename="s.csv",
+        content_type="text/csv",
+    )
+    assert errors == []
+    assert preview[0]["action"] == "create"
+
+    imported, skipped, apply_errors = await apply_validated_preview(
+        db_session,
+        token=token,
+        org_id=organization.id,
+        user=admin_user,
+    )
+    assert (imported, skipped, apply_errors) == (1, 0, [])
+
+    scenario = (
+        await db_session.execute(select(Scenario).where(Scenario.name == "LegacySplit"))
+    ).scalar_one()
+    assert scenario.threat_community_provenance == "migrated_split_default"
+    assert scenario.threat_community is not None
+    assert scenario.threat_community.slug == "privileged_insider"
+
+    creates = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "scenario.create",
+                    AuditLog.entity_id == scenario.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(creates) == 1
+    assert creates[0].changes["threat_community_provenance"] == [None, "migrated_split_default"]
+
+
+@pytest.mark.asyncio
 async def test_imported_row_is_file_import_even_if_file_claims_library(
     db_session, organization, admin_user
 ) -> None:
@@ -300,6 +358,10 @@ from idraa.services.scenario_import_parsers import (  # noqa: E402
 # test_scenario_import_capacity_bound.py.
 _GENEROUS_CAPACITY_MAX = 1e9
 
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to every _validate_rows call in this file (pure function, caller-supplied).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
+
 
 def _csv_pipeline(
     pl_dist: str,
@@ -338,7 +400,10 @@ def _csv_pipeline(
     pairs, errs = parse_csv_flat(buf.getvalue().encode())
     assert errs == [] and pairs is not None
     preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
-        pairs, existing_names=set(), capacity_max=capacity_max
+        pairs,
+        existing_names=set(),
+        capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     return preview
 
@@ -362,7 +427,10 @@ def _json_pipeline(
     pairs, errs = parse_json_nested(json.dumps([obj]).encode())
     assert errs == [] and pairs is not None
     preview, _errors, _forms, _meta, _attack_meta = _validate_rows(
-        pairs, existing_names=set(), capacity_max=capacity_max
+        pairs,
+        existing_names=set(),
+        capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     return preview
 

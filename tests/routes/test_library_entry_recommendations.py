@@ -18,10 +18,10 @@ from idraa.models.control_library import ControlLibraryEntry
 from idraa.models.enums import (
     AssetClass,
     ControlType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 @pytest_asyncio.fixture
@@ -54,7 +54,8 @@ async def seed_library_entry_with_recs(db_session: AsyncSession) -> ScenarioLibr
         name="Ransomware on EHR",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d" * 25,

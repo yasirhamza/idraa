@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -301,5 +302,69 @@ async def test_wizard_offers_ot_integrity_threat_category(
         await page.select_option("select[name='threat_category']", "ot_integrity")
         selected = await select.input_value()
         assert selected == "ot_integrity"
+
+        await browser.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_threat_community_facet_filters_cards(
+    migrated_server_url: str,
+) -> None:
+    """Threat Agent Library: the threat_community sidebar facet (``nation_state``,
+    22 published entries on main, well under ``list_page_size=50``) narrows
+    ``#library-cards`` via HTMX to exactly the facet's own published count read
+    from its own label, and a full-render ``?threat_community=`` query param
+    reproduces that same count in the page's "N entries found" header.
+    """
+    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import async_playwright, expect
+
+    base = migrated_server_url
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(headless=True)
+        except PlaywrightError as exc:  # browser binary not installed
+            pytest.skip(
+                "Playwright Chromium not installed "
+                f"(run `uv run playwright install chromium`): {exc}"
+            )
+        context = await browser.new_context()
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+
+        await page.goto(f"{base}/library")
+
+        # browse.html renders the filter sidebar TWICE — a hidden md:hidden
+        # mobile copy first, then the desktop <aside> — so every selector is
+        # scoped to `aside`, exactly as the ot_integrity journey above does.
+        # Locate the facet label BY VALUE (never by community name, which
+        # Task 1 authors) and parse its own "(N)" published count rather than
+        # assuming a number.
+        label = page.locator(
+            "aside label:has(input[name='threat_community'][value='nation_state'])"
+        )
+        label_text = await label.inner_text()
+        match = re.search(r"\((\d+)\)", label_text)
+        assert match is not None, f"facet label has no (N) count: {label_text!r}"
+        n = int(match.group(1))
+        assert n > 0, "nation_state facet must have a non-zero published count"
+
+        # Tick the facet checkbox and wait for the #library-cards HTMX swap
+        # (hx-trigger="change from:input" on the desktop <aside>) to settle at
+        # exactly the facet's own count, rather than a fixed sleep.
+        await page.check("aside input[name='threat_community'][value='nation_state']")
+        await expect(page.locator("#library-cards .card")).to_have_count(n)
+
+        # The "N entries found" header sits OUTSIDE the HTMX swap target and
+        # does not update above — confirm the SAME count on a full render via
+        # the query-param equivalent of the facet tick.
+        await page.goto(f"{base}/library?threat_community=nation_state")
+        body = await page.content()
+        assert f"{n} entries found" in body, (
+            f"full-render header should read '{n} entries found'; body head: {body[:300]!r}"
+        )
 
         await browser.close()

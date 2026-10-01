@@ -34,11 +34,11 @@ from idraa.models.control_library import (
 from idraa.models.enums import (
     AssetClass,
     ControlType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.enums import FairCamSubFunction as F
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 MFA_SLUG = "multi-factor-authentication"
 EDR_SLUG = "endpoint-detection-response"
@@ -90,7 +90,8 @@ def _scenario_entry_kwargs() -> dict[str, object]:
         "name": "P2c Step5 Source",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "d",

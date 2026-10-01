@@ -13,6 +13,7 @@ from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.run_executor import execute_run
 
@@ -55,6 +56,9 @@ async def _seed_scenario_with_dists(
     defaults, which cannot be overridden via **kwargs for the distribution fields).
     """
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

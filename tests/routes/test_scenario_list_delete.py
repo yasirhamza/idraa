@@ -17,10 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import ScenarioSource, ScenarioType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 async def _seed_scenario(db: AsyncSession, org_id: uuid.UUID, *, name: str) -> Scenario:
     sc = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         threat_category="malware",

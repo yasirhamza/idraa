@@ -29,7 +29,7 @@ CSV_HEADERS: list[str] = [
     "description",
     "scenario_type",
     "threat_category",
-    "threat_actor_type",
+    "threat_community",
     "attack_vector",
     "asset_class",
     "effect",
@@ -57,6 +57,13 @@ CSV_HEADERS: list[str] = [
     "entry_currency",
     "entry_rate",
 ]
+
+# Threat Agent Library (Task 8): a CSV header may carry the current
+# ``threat_community`` column OR the legacy ``threat_actor_type`` column
+# (never both -- an "ambiguous" header error), never through CSV_HEADERS
+# itself (export never emits the legacy name). See parse_csv_flat's header
+# check below.
+_LEGACY_HEADERS: set[str] = {"threat_actor_type"}
 
 # Columns a CSV may legitimately omit (Epic B back-compat): a legacy pre-Epic-B
 # file carries only the single ``distribution`` column and none of the per-node
@@ -183,13 +190,20 @@ def _field_dict(row: dict[str, str]) -> dict[str, Any]:
         "description": (row.get("description") or "").strip() or None,
         "scenario_type": (row.get("scenario_type") or "").strip() or "custom",
         "threat_category": (row.get("threat_category") or "").strip(),
-        "threat_actor_type": (row.get("threat_actor_type") or "").strip() or None,
         "attack_vector": (row.get("attack_vector") or "").strip() or None,
         "asset_class": (row.get("asset_class") or "").strip() or None,
         "effect": (row.get("effect") or "").strip() or None,
         "version": (row.get("version") or "").strip() or "1.0",
         "status": (row.get("status") or "").strip() or "active",
     }
+    # Threat Agent Library (Task 8): carry whichever of the two columns the
+    # header actually had (parse_csv_flat's header check already rejected a
+    # file carrying both) -- _validate_rows resolves this exactly like it
+    # resolves a JSON row's threat_community/threat_actor_type keys.
+    if "threat_community" in row:
+        fd["threat_community"] = (row.get("threat_community") or "").strip() or None
+    elif "threat_actor_type" in row:
+        fd["threat_actor_type"] = (row.get("threat_actor_type") or "").strip() or None
     fd.update(_assemble_distributions(row))
     return fd
 
@@ -223,9 +237,27 @@ def parse_csv_flat(
     # legacy file omits the ``*_dist`` columns, a fully-stripped file may omit
     # them all. Every other CSV_HEADERS column is still required, and any column
     # NOT in CSV_HEADERS is still rejected as a genuine mismatch.
-    required = set(CSV_HEADERS) - _OPTIONAL_HEADERS
+    #
+    # Threat Agent Library (Task 8): ``threat_community`` is excluded from the
+    # base ``required`` set here because either it OR the legacy
+    # ``threat_actor_type`` column satisfies the requirement — exactly one of
+    # the two must be present (the either-of rule); both present is an
+    # "ambiguous" header error, neither present adds ``threat_community`` back
+    # into ``missing`` below.
+    required = set(CSV_HEADERS) - _OPTIONAL_HEADERS - {"threat_community"}
     missing = required - set(header)
-    extra = set(header) - set(CSV_HEADERS)
+    extra = set(header) - set(CSV_HEADERS) - _LEGACY_HEADERS
+    has_new, has_legacy = "threat_community" in header, "threat_actor_type" in header
+    if has_new and has_legacy:
+        return None, [
+            {
+                "line": 1,
+                "column": "header",
+                "reason": "ambiguous: both threat_community and threat_actor_type present",
+            }
+        ]
+    if not (has_new or has_legacy):
+        missing.add("threat_community")
     if missing or extra:
         return None, [
             {

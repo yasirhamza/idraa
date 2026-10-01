@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import importlib.metadata
 import logging
+import math
 import re as _re
 import uuid as _uuid
 from dataclasses import dataclass, field
@@ -67,6 +68,10 @@ from idraa.services.aggregate_run_view_model import (
     _build_per_scenario_control_matrix,  # T2 (#351): pure function, no DB query
 )
 from idraa.services.run_view_model import _build_control_effectiveness_rows
+from idraa.threat_community_provenance import (
+    NEEDS_REVIEW_LABEL,
+    community_by_scenario,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -506,6 +511,11 @@ class PerScenarioRow:
     base_ale: float
     residual_ale: float
     reduction: float
+    # Task 12: threat-community provenance from the run snapshot (register D10
+    # view-model derivation, not a fair_cam field). None when the scenario's
+    # community is in a review state, absent, or the run predates P1.
+    threat_community_slug: str | None = None
+    threat_community_name: str | None = None
 
 
 def build_per_scenario_rows(
@@ -624,6 +634,74 @@ class ScenarioInventoryRow:
     scenario_id: str
     name: str
     summary: str  # truncated Scenario.description (≤120 chars)
+    # Task 12: threat-community provenance from the run snapshot (same
+    # register-D10 view-model derivation as PerScenarioRow's pair).
+    threat_community_slug: str | None = None
+    threat_community_name: str | None = None
+
+
+def _parses_as_uuid(s: str) -> bool:
+    try:
+        _uuid.UUID(s)
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return True
+
+
+@dataclass(frozen=True)
+class ThreatCommunityGroup:
+    """One 'Scenarios by threat community' group (Task 12)."""
+
+    name: str
+    rows: list[PerScenarioRow]
+    residual_ale_subtotal: float  # sum of per-scenario residual ALE MEANS (mean basis)
+    share: float  # subtotal / total residual ALE across groups; 0.0 when total is 0
+
+
+def build_threat_community_groups(rows: list[PerScenarioRow]) -> list[ThreatCommunityGroup]:
+    """View-model derivation (NOT FAIR-grounded; register D10): group page-4 rows by
+    community SLUG as recorded in the run snapshot (display = the smallest snapshot name
+    seen for that slug — the dashboard's rule). Rows lacking a community (review state /
+    pre-P1) group under NEEDS_REVIEW_LABEL. Non-finite residual ALE rows are skipped, as
+    the dashboard does.
+    """
+    kept = [r for r in rows if math.isfinite(r.residual_ale) and _parses_as_uuid(r.scenario_id)]
+    # Count only — never log the raw ids (log-injection risk from a tampered value).
+    if len(kept) != len(rows):
+        logger.warning(
+            "threat-community grouping: dropped %d rows with non-UUID id or non-finite ALE",
+            len(rows) - len(kept),
+        )
+    rows = kept
+    # Fix round 1 (parity edge): the internal bucket key is the real slug or None —
+    # NEVER the NEEDS_REVIEW_SLUG sentinel string. The dashboard
+    # (services/threat_community_summary.py) keys its missing-community bucket on
+    # None too; if this function instead folded a literal-"__needs_review__" snapshot
+    # slug into the sentinel key, a tampered/colliding snapshot would silently merge
+    # into the real needs-review row here while the dashboard still gave it its own
+    # row — a cross-surface parity gap. NEEDS_REVIEW_SLUG/NEEDS_REVIEW_LABEL are
+    # applied only at emission time below, as the DISPLAY for the None bucket.
+    buckets: dict[str | None, list[PerScenarioRow]] = {}
+    label: dict[str, str] = {}
+    # Group by SLUG (names are neither unique nor stable); display = smallest name seen.
+    for r in rows:
+        key = r.threat_community_slug
+        buckets.setdefault(key, []).append(r)
+        if key is not None and r.threat_community_name:
+            label[key] = min(
+                label.get(key, r.threat_community_name), r.threat_community_name
+            )  # same rule as the dashboard
+    total = sum(r.residual_ale for r in rows)
+    groups = [
+        ThreatCommunityGroup(
+            name=NEEDS_REVIEW_LABEL if key is None else label.get(key, key),
+            rows=sorted(members, key=lambda r: (-r.residual_ale, r.scenario_name)),
+            residual_ale_subtotal=sum(r.residual_ale for r in members),
+            share=(sum(r.residual_ale for r in members) / total) if total > 0 else 0.0,
+        )
+        for key, members in buckets.items()
+    ]
+    return sorted(groups, key=lambda g: (-g.residual_ale_subtotal, g.name))
 
 
 @dataclass(frozen=True)
@@ -795,6 +873,12 @@ class RunReportData:
     # indistinguishable_control_ids, indistinguishable_pairs, state, draws_used.
     # None when the run predates Task 4 / carries no weight_robustness column.
     weight_robustness: dict[str, Any] | None = None
+
+    # Task 12: page-4 rows grouped by threat community (view-model derivation,
+    # register D10 — see build_threat_community_groups). Empty list when the
+    # run predates P1 or carries fewer than two groups worth of data; the
+    # renderer additionally suppresses the whole section when len < 2.
+    scenarios_by_threat_community: list[ThreatCommunityGroup] = field(default_factory=list)
 
 
 # T9 (#351): alias fully removed. All references migrated to RunReportData.
@@ -978,7 +1062,9 @@ def _clamp_epc_points(
 
 
 async def _resolve_scenarios(
-    db: AsyncSession, scenario_ids: list[str]
+    db: AsyncSession,
+    scenario_ids: list[str],
+    pair_for: Any = None,  # Callable[[str], tuple[str, str] | None] | None (Task 12)
 ) -> list[ScenarioInventoryRow]:
     """Single batch lookup for the page-5 scenarios sub-section.
 
@@ -993,6 +1079,11 @@ async def _resolve_scenarios(
     - Missing Scenario rows (scenario was deleted between run-create and
       PDF-export) emit a placeholder ScenarioInventoryRow so the exec
       sees the gap rather than a silent omission.
+
+    Task 12: ``pair_for``, when given, maps a scenario_id string to the
+    (slug, name) threat-community pair resolved from the run snapshot (or
+    None) — threaded onto every returned row, including the placeholder
+    row for a deleted scenario.
     """
     if not scenario_ids:
         return []
@@ -1000,6 +1091,10 @@ async def _resolve_scenarios(
     # so the renderer-side (services/pdf_report.py) purity boundary is
     # preserved even though that boundary lives in its own module.
     from idraa.models.scenario import Scenario
+
+    def _tc(sid: str) -> tuple[str | None, str | None]:
+        p = pair_for(sid) if pair_for is not None else None
+        return (p[0], p[1]) if p else (None, None)
 
     uuid_ids: list[_uuid.UUID] = []
     invalid: list[str] = []
@@ -1024,17 +1119,34 @@ async def _resolve_scenarios(
         summary = desc or ""
         if len(summary) > 120:
             summary = summary[:119] + "…"
-        by_id[str(sid)] = ScenarioInventoryRow(scenario_id=str(sid), name=name, summary=summary)
+        slug, tc_name = _tc(str(sid))
+        by_id[str(sid)] = ScenarioInventoryRow(
+            scenario_id=str(sid),
+            name=name,
+            summary=summary,
+            threat_community_slug=slug,
+            threat_community_name=tc_name,
+        )
     # Preserve aggregate_scenario_ids order; missing scenarios -> placeholder row.
     invalid_set = set(invalid)
-    return [
-        by_id.get(
-            s,
-            ScenarioInventoryRow(scenario_id=s, name="(deleted scenario)", summary=""),
-        )
-        for s in scenario_ids
-        if s not in invalid_set  # malformed UUIDs already dropped + logged
-    ]
+    out = []
+    for s in scenario_ids:
+        if s in invalid_set:  # malformed UUIDs already dropped + logged
+            continue
+        if s in by_id:
+            out.append(by_id[s])
+        else:
+            slug, tc_name = _tc(s)
+            out.append(
+                ScenarioInventoryRow(
+                    scenario_id=s,
+                    name="(deleted scenario)",
+                    summary="",
+                    threat_community_slug=slug,
+                    threat_community_name=tc_name,
+                )
+            )
+    return out
 
 
 def _convert_tail_risk(
@@ -1293,18 +1405,35 @@ async def build_executive_pdf_data(
         epc_without = []
 
     per_scenario_data = sr.get("per_scenario", [])
+
+    # Task 12: threat-community pairs from the run snapshot (register D10 view-model
+    # derivation). community_by_scenario keys on scenario_id.hex; _pair_for guards the
+    # UUID parse of the per_scenario scenario_id string so a malformed id degrades to
+    # None (NEEDS_REVIEW bucket, via build_threat_community_groups) rather than raising.
+    by_sid = community_by_scenario(run.scenario_inputs_snapshot)
+
+    def _pair_for(sid: str) -> tuple[str, str] | None:
+        try:
+            return by_sid.get(_uuid.UUID(sid).hex)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
     # Build per_scenario_rows from USD data then convert money fields.
     _raw_per_scenario_rows = build_per_scenario_rows(per_scenario_data)
-    per_scenario_rows = [
-        PerScenarioRow(
-            scenario_id=r.scenario_id,
-            scenario_name=r.scenario_name,
-            base_ale=_cvt_f(r.base_ale),
-            residual_ale=_cvt_f(r.residual_ale),
-            reduction=_cvt_f(r.reduction),
+    per_scenario_rows: list[PerScenarioRow] = []
+    for r in _raw_per_scenario_rows:
+        _p = _pair_for(r.scenario_id)
+        per_scenario_rows.append(
+            PerScenarioRow(
+                scenario_id=r.scenario_id,
+                scenario_name=r.scenario_name,
+                base_ale=_cvt_f(r.base_ale),
+                residual_ale=_cvt_f(r.residual_ale),
+                reduction=_cvt_f(r.reduction),
+                threat_community_slug=(_p[0] if _p else None),
+                threat_community_name=(_p[1] if _p else None),
+            )
         )
-        for r in _raw_per_scenario_rows
-    ]
 
     # PR μ.1: per-control loss-reduction breakdown.
     # Build in USD first, then convert loss_reduction_per_event and rebuild labels.
@@ -1346,7 +1475,7 @@ async def build_executive_pdf_data(
         sids = run.aggregate_scenario_ids or [ps.get("scenario_id", "") for ps in per_scenario_data]
     else:
         sids = [str(run.scenario_id)] if run.scenario_id else []
-    scenarios = await _resolve_scenarios(db, [s for s in sids if s])
+    scenarios = await _resolve_scenarios(db, [s for s in sids if s], pair_for=_pair_for)
 
     # T3 (#351): SINGLE runs use scenario-scoped narrative; AGGREGATE keeps portfolio wording.
     # Narrative is built after _resolve_scenarios so the SINGLE variant can use the
@@ -1571,6 +1700,9 @@ async def build_executive_pdf_data(
             if_removed_partial_ids=_ir_partial,
             if_removed_by_control_typical=_ir_secondary,
         ),
+        # Task 12: page-4 rows grouped by threat community (register D10 view-model
+        # derivation; pure helper over the already-built per_scenario_rows).
+        scenarios_by_threat_community=build_threat_community_groups(per_scenario_rows),
     )
 
 

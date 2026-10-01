@@ -17,6 +17,7 @@ from typing import Any
 
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 def _make_scenario(
@@ -39,6 +40,9 @@ def _make_scenario(
     from idraa.models.enums import ScenarioType, ThreatCategory
 
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         id=uuid.uuid4(),
         organization_id=org_id,
         name=name,

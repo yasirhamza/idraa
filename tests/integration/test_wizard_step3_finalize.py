@@ -113,7 +113,7 @@ async def _bootstrap_wizard_to_step3(
             "name": "T11 wizard finalize test",
             "description": "test scenario",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )
@@ -436,7 +436,7 @@ async def test_18_stale_version_token_returns_409(
         data={
             "name": "concurrent change",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )

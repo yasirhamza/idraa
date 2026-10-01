@@ -119,6 +119,7 @@ def seed_scenario_and_controls() -> tuple[uuid.UUID, list[uuid.UUID]]:
     from idraa.models.organization import Organization
     from idraa.models.scenario import Scenario
     from idraa.models.scenario_control import ScenarioControl
+    from idraa.models.threat_community import canonical_threat_community_id
     from idraa.models.user import User
 
     engine = create_engine(f"sqlite:///{DB_PATH}")
@@ -141,6 +142,8 @@ def seed_scenario_and_controls() -> tuple[uuid.UUID, list[uuid.UUID]]:
             industry="financial",
             revenue_tier="less_than_100m",
             created_by=admin.id,
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
         )
         session.add(sc)
         session.flush()

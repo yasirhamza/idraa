@@ -152,14 +152,6 @@
       "primary_key": false,
       "type": "VARCHAR(10)"
     },
-    "threat_actor_type": {
-      "foreign_key": false,
-      "has_default": false,
-      "indexed": false,
-      "nullable": true,
-      "primary_key": false,
-      "type": "VARCHAR(18)"
-    },
     "threat_category": {
       "foreign_key": false,
       "has_default": false,
@@ -167,6 +159,30 @@
       "nullable": false,
       "primary_key": false,
       "type": "VARCHAR(19)"
+    },
+    "threat_community_id": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "CHAR(32)"
+    },
+    "threat_community_provenance": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "VARCHAR(32)"
+    },
+    "threat_community_version": {
+      "foreign_key": true,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "INTEGER"
     },
     "threat_event_frequency": {
       "foreign_key": false,
@@ -210,7 +226,8 @@
     }
   },
   "indexes": [
-    "ix_scenarios_organization_id"
+    "ix_scenarios_organization_id",
+    "ix_scenarios_threat_community"
   ],
   "table_name": "scenarios"
 }

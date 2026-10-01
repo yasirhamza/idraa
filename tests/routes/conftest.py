@@ -35,6 +35,7 @@ async def scenario_factory(
 
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
     from idraa.models.user import User
 
     _client, org_id = authed_analyst
@@ -65,6 +66,16 @@ async def scenario_factory(
             ),
             "status": kwargs.pop("status", EntityStatus.ACTIVE),
             "created_by": created_by,
+            # TAL mechanical rule: a bare Scenario(...) defaults to the common
+            # 'cybercriminals' community in the normal (non-review) 'assigned'
+            # state. Callers that need a different community/provenance (incl.
+            # the review state: NULL + 'unassigned') pass the three kwargs
+            # explicitly — `defaults.update(kwargs)` below lets them override.
+            "threat_community_id": kwargs.pop(
+                "threat_community_id", canonical_threat_community_id("cybercriminals")
+            ),
+            "threat_community_version": kwargs.pop("threat_community_version", 1),
+            "threat_community_provenance": kwargs.pop("threat_community_provenance", "assigned"),
         }
         defaults.update(kwargs)
         scenario = Scenario(**defaults)

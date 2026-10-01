@@ -28,8 +28,9 @@ from tests.integration._wizard_step3_test_helpers import (
 
 def _make_lib_entry(slug: str) -> Any:
     """Minimal-valid published library entry for the wizard-picker paging test."""
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     return ScenarioLibraryEntry(
         id=uuid.uuid4(),
@@ -38,7 +39,8 @@ def _make_lib_entry(slug: str) -> Any:
         name=slug,
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",
@@ -596,7 +598,7 @@ async def test_wizard_finalize_creates_scenario(
             "name": "Wizard scenario E2E",
             "description": "from wizard",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )
@@ -669,7 +671,7 @@ async def test_wizard_finalize_persists_mitigating_controls(
             "name": "Wizard control-persistence regression",
             "description": "step-4 controls must reach scenario_controls",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )
@@ -864,7 +866,7 @@ async def test_finalize_double_post_creates_only_one_scenario(
             "tx_id": str(tx),
             "name": "double-post",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
             "sme_estimates": {
                 "tef": [_row(sme_id, 1.0, 12.0)],
@@ -969,7 +971,7 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     db_session: AsyncSession,
 ) -> None:
     """WS5b: the wizard step-1 library picker must expose a search input and
-    at least one facet filter control (e.g. asset_class or threat_actor_type),
+    at least one facet filter control (e.g. asset_class or threat_community),
     AND must list entries from a sub-sector OTHER than the test org's
     (MANUFACTURING) so cross-industry adoption works.
 
@@ -980,8 +982,9 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, IndustryType, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, IndustryType, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     # Seed a PROFESSIONAL-industry entry (cross-industry from MANUFACTURING org).
     cross_industry_entry = ScenarioLibraryEntry(
@@ -991,7 +994,8 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
         name="Professional Services Payroll BEC",
         status="published",
         threat_event_type=ThreatCategory.SOCIAL_ENGINEERING,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.CASH_OR_EQUIVALENT,
         tags=[],
         description="Business email compromise targeting payroll for professional services firms.",
@@ -1019,8 +1023,8 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     assert 'type="search"' in body or 'name="q"' in body, (
         "wizard step-1 picker must render a search input"
     )
-    # Must have at least one facet filter (e.g. asset_class or threat_actor_type checkboxes).
-    assert 'name="asset_class"' in body or 'name="threat_actor_type"' in body, (
+    # Must have at least one facet filter (e.g. asset_class or threat_community checkboxes).
+    assert 'name="asset_class"' in body or 'name="threat_community"' in body, (
         "wizard step-1 picker must render at least one facet filter control"
     )
     # The cross-industry entry (PROFESSIONAL sub-sector) must be visible (no industry narrowing).
@@ -1076,8 +1080,19 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
     seed_library_entry: Any,
     db_session: AsyncSession,
 ) -> None:
-    """WS4: GET deep-link must also seed threat_category, threat_actor_type,
+    """WS4: GET deep-link must also seed threat_category, threat_community,
     and attack_vector — not just asset_class.
+
+    TAL: ``routes/scenario_wizard_seeding.py:186`` sets
+    ``state.threat_community = resolved.entry.threat_community.slug`` from
+    the entry's canonical FK relationship — the deep-link DOES seed it (a
+    prior round of this test deleted the assertion on a stale claim that it
+    didn't; restored here). The fixture's slug is fixed to "cybercriminals"
+    (``tests/conftest.py``'s ``seed_library_entry``,
+    ``canonical_threat_community_id("cybercriminals")``); asserting against
+    that literal avoids a lazy-load of the ``threat_community`` relationship
+    on an instance built from FK columns under the async session (same
+    precedent as ``test_library_clone_reproducibility.py``).
     """
     client, org_id = authed_analyst
     entry_id = str(seed_library_entry.id)
@@ -1097,10 +1112,9 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
         f"got {state.get('threat_category')!r}, "
         f"expected {seed_library_entry.threat_event_type.value!r}"
     )
-    assert state.get("threat_actor_type") == seed_library_entry.threat_actor_type.value, (
-        f"GET deep-link must seed threat_actor_type; "
-        f"got {state.get('threat_actor_type')!r}, "
-        f"expected {seed_library_entry.threat_actor_type.value!r}"
+    assert state.get("threat_community") == "cybercriminals", (
+        f"GET deep-link must seed threat_community from entry; "
+        f"got {state.get('threat_community')!r}, expected 'cybercriminals'"
     )
 
 

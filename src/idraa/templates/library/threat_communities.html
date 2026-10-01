@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Threat Agent Library — Library{% endblock %}
+{% block content %}
+{{ page_header(title="Threat Agent Library", meta="Named threat communities with profiles and default ranges shown as landmarks — never engine inputs.") }}
+<p class="text-micro text-ink-3">Default ranges are landmarks for the analyst, not engine inputs. They derive from public-record loss events, so library entries routinely sit above them; a scenario frequency above a landmark is not by itself extreme.</p>
+<p class="text-body text-ink-2 mb-4">Every scenario names one community. Read the <a class="link" href="/help/threat-agent-library">methodology note</a> before using the ranges.</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  {% for c in communities %}
+  <a href="/library/threat-communities/{{ c.slug }}" class="block bg-surface-1 border border-border-subtle rounded-card p-5 hover:border-brand">
+    <div class="flex items-center justify-between gap-2">
+      <h3 class="text-h4 text-ink-1">{{ c.name }}</h3>
+      <span class="badge badge-outline">{{ "Internal" if c.origin == "internal" else "External" }}{% if c.intent == "non_malicious" %} · non-malicious{% endif %}</span>
+    </div>
+    <p class="text-body text-ink-2 mt-2">{{ c.summary }}</p>
+    <dl class="grid grid-cols-2 gap-x-4 mt-3 text-micro text-ink-3 font-mono tabular-nums">
+      <dt>TEF landmark (events/yr, 5th · most likely · 95th)</dt>
+      <dd>{{ c.tef_landmark.low | format_landmark_rate }} · {{ c.tef_landmark.mode | format_landmark_rate }} · {{ c.tef_landmark.high | format_landmark_rate }}</dd>
+      <dt>TCap landmark (percentile rank, 5th · most likely · 95th)</dt>
+      <dd>{% if c.tcap_landmark %}{{ c.tcap_landmark.low }} · {{ c.tcap_landmark.mode }} · {{ c.tcap_landmark.high }}{% else %}Not applicable{% endif %}</dd>
+      <dt>Reviewed</dt><dd>{{ c.reviewed_at | format_date }}</dd>
+    </dl>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

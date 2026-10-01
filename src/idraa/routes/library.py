@@ -25,7 +25,6 @@ from idraa.models.enums import (
     IndustrySubSector,
     IndustryType,
     StepUpCategory,
-    ThreatActorType,
     ThreatCategory,
     UserRole,
 )
@@ -48,6 +47,7 @@ from idraa.services.scenario_library import (
     ScenarioLibraryService,
     available_facets,
 )
+from idraa.services.threat_communities import SLUG_RE
 from idraa.utils.csv_export import csv_response
 
 router = APIRouter(tags=["library"])
@@ -55,12 +55,16 @@ router = APIRouter(tags=["library"])
 # F14 carryover A: hoist enum valid-value sets at module scope so
 # _parse_browse_filters doesn't rebuild them on every request.
 _VALID_VALUES: dict[type[StrEnum], frozenset[str]] = {
-    ThreatActorType: frozenset(m.value for m in ThreatActorType),
     ThreatCategory: frozenset(m.value for m in ThreatCategory),
     AssetClass: frozenset(m.value for m in AssetClass),
     IndustryType: frozenset(m.value for m in IndustryType),
     IndustrySubSector: frozenset(m.value for m in IndustrySubSector),
 }
+
+# threat_community querystring values are slugs, not an enum — allowlisted by
+# shape (lowercase alnum/underscore, via the shared idraa.services.threat_communities
+# .SLUG_RE), deduped, and capped at 16 values.
+_MAX_THREAT_COMMUNITY_SLUGS = 16
 
 
 def _parse_browse_filters(request: Request) -> BrowseFilters:
@@ -72,7 +76,9 @@ def _parse_browse_filters(request: Request) -> BrowseFilters:
         return [enum_cls(v) for v in qp.getlist(key) if v in valid]
 
     return BrowseFilters(
-        threat_actor_types=_multi("threat_actor_type", ThreatActorType),  # type: ignore[arg-type]
+        threat_community_slugs=list(
+            dict.fromkeys(v for v in qp.getlist("threat_community") if SLUG_RE.fullmatch(v))
+        )[:_MAX_THREAT_COMMUNITY_SLUGS],
         threat_event_types=_multi("threat_event_type", ThreatCategory),  # type: ignore[arg-type]
         asset_classes=_multi("asset_class", AssetClass),  # type: ignore[arg-type]
         applicable_industries=_multi("industry", IndustryType),  # type: ignore[arg-type]
@@ -170,7 +176,11 @@ async def library_export_csv(
         user_id=user.id,
         ip_address=audit_client_ip(request),
     )
-    header = ["id", "name", "threat_event_type", "threat_actor_type", "asset_class", "status"]
+    # TAL bridge: threat_actor_type column removed (Task 3); list_published()
+    # entries are query-loaded (threat_community is lazy="joined"), so the
+    # relationship is already populated here -- this is the direct successor
+    # column, not a lazy-load risk.
+    header = ["id", "name", "threat_event_type", "threat_community", "asset_class", "status"]
     rows = (
         (
             str(e.id),
@@ -178,9 +188,7 @@ async def library_export_csv(
             e.threat_event_type.value
             if hasattr(e.threat_event_type, "value")
             else str(e.threat_event_type),
-            e.threat_actor_type.value
-            if hasattr(e.threat_actor_type, "value")
-            else str(e.threat_actor_type),
+            e.threat_community.slug,
             e.asset_class.value if hasattr(e.asset_class, "value") else str(e.asset_class),
             e.status if isinstance(e.status, str) else str(e.status),
         )

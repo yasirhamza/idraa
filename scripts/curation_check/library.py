@@ -34,7 +34,7 @@ class ScenarioItem:
     status: str
     threat_event_type: str
     asset_class: str
-    threat_actor_type: str
+    threat_community: str
 
     def state(self) -> dict[str, str]:
         return {"scenario_name": self.name, "scenario_description": self.description}
@@ -65,7 +65,7 @@ def load_scenarios(root: Path = REPO_ROOT) -> list[ScenarioItem]:
                     status=e["status"],
                     threat_event_type=str(e["threat_event_type"]),
                     asset_class=str(e["asset_class"]),
-                    threat_actor_type=str(e["threat_actor_type"]),
+                    threat_community=str(e["threat_community"]),
                 )
             )
     return items

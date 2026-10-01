@@ -32,11 +32,11 @@ from idraa.models.enums import (
     EntityStatus,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 @pytest_asyncio.fixture
@@ -74,7 +74,8 @@ def _scenario_library_entry(suggested: list[str]) -> ScenarioLibraryEntry:
         name="Ransomware on EHR",
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d" * 25,
@@ -96,6 +97,9 @@ def _library_derived_scenario(
     org_id: _uuid.UUID, created_by: _uuid.UUID, entry: ScenarioLibraryEntry
 ) -> Scenario:
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Ransomware on EHR (cloned)",
         scenario_type=ScenarioType.CUSTOM,
@@ -158,6 +162,9 @@ async def custom_scenario(
     ).scalar_one()
 
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Hand-built custom scenario",
         scenario_type=ScenarioType.CUSTOM,

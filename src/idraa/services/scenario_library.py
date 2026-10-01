@@ -29,7 +29,6 @@ from idraa.models.enums import (
     AssetClass,
     IndustrySubSector,
     IndustryType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
@@ -37,6 +36,7 @@ from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import ThreatCommunity
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
 from idraa.services.audit import AuditWriter
 from idraa.services.fair_cam_validation import validate_fair_distributions
@@ -48,15 +48,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Facet labels — centralised so sidebar and tests share one definition.
 # ---------------------------------------------------------------------------
-
-_THREAT_ACTOR_LABELS: dict[str, str] = {
-    ThreatActorType.CYBERCRIMINALS: "Cybercriminals",
-    ThreatActorType.NATION_STATE: "Nation-state",
-    ThreatActorType.INSIDER_MALICIOUS: "Insider — malicious",
-    ThreatActorType.INSIDER_ACCIDENTAL: "Insider — accidental",
-    ThreatActorType.HACKTIVISTS: "Hacktivists",
-    ThreatActorType.COMPETITORS: "Competitors",
-}
 
 _THREAT_CATEGORY_LABELS: dict[str, str] = {
     ThreatCategory.RANSOMWARE: "Ransomware",
@@ -134,7 +125,9 @@ async def available_facets(
 
     Dimensions returned:
       - ``asset_class``:      scalar GROUP BY on the column.
-      - ``threat_actor_type``: scalar GROUP BY on the column.
+      - ``threat_community``: GROUP BY joined against ThreatCommunity on the
+                              composite (id, version) FK — keyed by slug,
+                              labelled by name.
       - ``threat_category``:  scalar GROUP BY on threat_event_type column.
       - ``sub_sector``:       JSON-array explode of applicable_sub_sectors;
                               NULL/empty entries are skipped (applies-to-all).
@@ -175,7 +168,7 @@ async def available_facets(
     )
 
     # ------------------------------------------------------------------
-    # 2. Scalar GROUP BYs (asset_class, threat_actor_type, threat_category).
+    # 2. Scalar GROUP BYs (asset_class, threat_category).
     # ------------------------------------------------------------------
     # Import ASSET_CLASS_LABELS lazily to avoid circular imports.
     from idraa.routes.scenario_form_helpers import ASSET_CLASS_LABELS
@@ -183,7 +176,6 @@ async def available_facets(
     ac_labels: dict[str, str] = {k.value: v for k, v in ASSET_CLASS_LABELS.items()}
     scalar_dims: list[tuple[str, Any, dict[str, str]]] = [
         ("asset_class", published_q.c.asset_class, ac_labels),
-        ("threat_actor_type", published_q.c.threat_actor_type, _THREAT_ACTOR_LABELS),
         ("threat_category", published_q.c.threat_event_type, _THREAT_CATEGORY_LABELS),
     ]
 
@@ -212,6 +204,28 @@ async def available_facets(
             )
         ).all()
         result[dim_name] = _sort_facets(_build_opts(rows, labels))
+
+    # ------------------------------------------------------------------
+    # 2b. threat_community — join against ThreatCommunity on the composite
+    # (id, version) FK; keyed by slug, labelled by the community's name.
+    # ------------------------------------------------------------------
+    tc_rows = (
+        await db.execute(
+            select(ThreatCommunity.slug, ThreatCommunity.name, func.count().label("cnt"))
+            .select_from(published_q)
+            .join(
+                ThreatCommunity,
+                and_(
+                    ThreatCommunity.id == published_q.c.threat_community_id,
+                    ThreatCommunity.version == published_q.c.threat_community_version,
+                ),
+            )
+            .group_by(ThreatCommunity.slug, ThreatCommunity.name)
+        )
+    ).all()
+    result["threat_community"] = _sort_facets(
+        [FacetOption(value=s, label=n, count=c) for s, n, c in tc_rows]
+    )
 
     # ------------------------------------------------------------------
     # 3. JSON-array dimensions (sub_sector, industry).
@@ -271,7 +285,7 @@ class ResolvedLibraryEntry:
 class BrowseFilters:
     """User-applied browse filter selections; defaults all None (= no narrowing)."""
 
-    threat_actor_types: list[ThreatActorType] = field(default_factory=list)
+    threat_community_slugs: list[str] = field(default_factory=list)
     threat_event_types: list[ThreatCategory] = field(default_factory=list)
     asset_classes: list[AssetClass] = field(default_factory=list)
     applicable_industries: list[IndustryType] = field(default_factory=list)
@@ -455,7 +469,7 @@ class ScenarioLibraryService:
         offset = (page - 1) * page_size
 
         rows = await self.repo.list_published(
-            threat_actor_types=filters.threat_actor_types or None,
+            threat_community_slugs=filters.threat_community_slugs or None,
             threat_event_types=filters.threat_event_types or None,
             asset_classes=filters.asset_classes or None,
             applicable_industries=filters.applicable_industries or None,
@@ -469,7 +483,7 @@ class ScenarioLibraryService:
         # via a separate count_published query. Mirrors list_published filter
         # clauses so "page 2 of 7" pagination math is accurate.
         total = await self.repo.count_published(
-            threat_actor_types=filters.threat_actor_types or None,
+            threat_community_slugs=filters.threat_community_slugs or None,
             threat_event_types=filters.threat_event_types or None,
             asset_classes=filters.asset_classes or None,
             applicable_industries=filters.applicable_industries or None,

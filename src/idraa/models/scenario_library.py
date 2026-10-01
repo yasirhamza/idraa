@@ -30,11 +30,12 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy import Uuid as UuidType
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from idraa.db import Base
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.mixins import IdMixin, OrgMixin, TimestampMixin
+from idraa.models.threat_community import ThreatCommunity
 
 
 class ScenarioLibraryEntry(TimestampMixin, Base):
@@ -79,9 +80,20 @@ class ScenarioLibraryEntry(TimestampMixin, Base):
         Enum(ThreatCategory, native_enum=False, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
-    threat_actor_type: Mapped[ThreatActorType] = mapped_column(
-        Enum(ThreatActorType, native_enum=False, values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
+    # Threat Agent Library (spec §4.2): composite FK to the canonical community snapshot,
+    # NOT NULL — every entry names exactly one community.
+    threat_community_id: Mapped[uuid.UUID] = mapped_column(UuidType(as_uuid=True), nullable=False)
+    threat_community_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    threat_community: Mapped[ThreatCommunity] = relationship(
+        ThreatCommunity,
+        primaryjoin=(
+            "and_(ScenarioLibraryEntry.threat_community_id == ThreatCommunity.id, "
+            "ScenarioLibraryEntry.threat_community_version == ThreatCommunity.version)"
+        ),
+        foreign_keys="[ScenarioLibraryEntry.threat_community_id, ScenarioLibraryEntry.threat_community_version]",
+        lazy="joined",
+        innerjoin=True,
+        viewonly=True,  # entries are immutable snapshots; never reassigned through the attribute
     )
     asset_class: Mapped[AssetClass] = mapped_column(
         Enum(AssetClass, native_enum=False, values_callable=lambda x: [e.value for e in x]),
@@ -219,7 +231,14 @@ class ScenarioLibraryEntry(TimestampMixin, Base):
         PrimaryKeyConstraint("id", "version", name="pk_scenario_library_entries"),
         UniqueConstraint("slug", "version", name="uq_library_entry_slug_version"),
         Index("ix_library_entry_status", "status"),
-        Index("ix_library_entry_threat_actor", "threat_actor_type"),
+        ForeignKeyConstraint(
+            ["threat_community_id", "threat_community_version"],
+            ["threat_communities.id", "threat_communities.version"],
+            name="fk_library_entry_threat_community",
+        ),
+        Index(
+            "ix_library_entry_threat_community", "threat_community_id", "threat_community_version"
+        ),
         Index("ix_library_entry_threat_event", "threat_event_type"),
     )
 

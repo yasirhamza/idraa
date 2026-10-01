@@ -150,7 +150,7 @@ async def _bootstrap_admin_and_login(page, base: str) -> None:
 # round-trip invariant, scenario_export.CSV_EXPORT_HEADERS).
 _E2E_SCENARIO_NAME = "E2E Imported Scenario"
 _E2E_CSV = (
-    "name,description,scenario_type,threat_category,threat_actor_type,attack_vector,"
+    "name,description,scenario_type,threat_category,threat_community,attack_vector,"
     "asset_class,version,status,distribution,tef_low,tef_mode,tef_high,vuln_low,"
     "vuln_mode,vuln_high,pl_low,pl_mode,pl_high,sl_low,sl_mode,sl_high\n"
     f"{_E2E_SCENARIO_NAME},,custom,ransomware,cybercriminals,,systems,1.0,active,PERT,"

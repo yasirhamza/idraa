@@ -29,6 +29,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from idraa.services.threat_communities import ENUM_TO_COMMUNITY_SLUG
+
 _PROJ = Path(__file__).resolve().parent.parent
 _EXTENSION_PATH = _PROJ / "data" / "seed_library_entries_extension.json"
 _ENVELOPES_PATH = _PROJ / "data" / "loss_form_envelopes.json"
@@ -657,7 +659,11 @@ def recalc(e: dict[str, Any]) -> dict[str, Any]:
         "name": e["name"],
         "status": "published",
         "threat_event_type": e["threat_event_type"],
+        # Threat Agent Library (Task 14): seed JSON keeps BOTH keys -- historical
+        # Alembic migrations read the seed JSON live and bind legacy
+        # :threat_actor_type (seed_library_loader.py LEGACY_SEED_FIELDS).
         "threat_actor_type": e["threat_actor_type"],
+        "threat_community": ENUM_TO_COMMUNITY_SLUG[e["threat_actor_type"]],
         "asset_class": e["asset_class"],
         "attack_vector": e["attack_vector"],
         "tags": e["tags"],

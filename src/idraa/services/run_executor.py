@@ -467,6 +467,8 @@ def _build_scenario_inputs_snapshot(scenarios: list[Scenario]) -> dict[str, Any]
               "primary_loss": dict,
               "secondary_loss": dict | None,
               "effect": str | None,
+              "threat_community": {"id": str, "version": int, "slug": str, "name": str} | None,
+              "threat_community_provenance": str,
             }, ...
           ]
         }
@@ -481,6 +483,17 @@ def _build_scenario_inputs_snapshot(scenarios: list[Scenario]) -> dict[str, Any]
                 "primary_loss": sc.primary_loss,
                 "secondary_loss": sc.secondary_loss,
                 "effect": sc.effect.value if sc.effect else None,
+                "threat_community": (
+                    {
+                        "id": str(sc.threat_community.id),
+                        "version": sc.threat_community.version,
+                        "slug": sc.threat_community.slug,
+                        "name": sc.threat_community.name,
+                    }
+                    if sc.threat_community is not None
+                    else None
+                ),
+                "threat_community_provenance": sc.threat_community_provenance,
             }
             for sc in scenarios
         ]

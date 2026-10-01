@@ -44,10 +44,10 @@ from idraa.models.enums import (
     EntityStatus,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.wizard_finalize import PerFieldsetResult, build_scenario_payload
 from idraa.services.wizard_state import WizardState
 
@@ -240,7 +240,9 @@ async def test_distribution_fit_metadata_15_fields_round_trip_through_db(
         "name": f"sidecar-roundtrip-{fitter}",
         "scenario_type": ScenarioType.CUSTOM,
         "threat_category": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
+        "threat_community_provenance": "assigned",
         "asset_class": AssetClass.SYSTEMS,
         "attack_vector": "email",
         "threat_event_frequency": base_dist,

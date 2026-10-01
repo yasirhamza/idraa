@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Allowed revenue tier slugs — must match _REVENUE_TIER_SLUGS at
 # services/library_calibration.py and the v3 tier taxonomy. Duplicated here
@@ -26,6 +26,10 @@ _REVENUE_TIER_SLUGS: frozenset[str] = frozenset(
         "more_than_100b",
     }
 )
+
+# Threat Agent Library: fields kept on LibraryEntrySeed ONLY for back-compat parsing
+# of pre-P1 bundles. Never read by the P1+ insert path.
+LEGACY_SEED_FIELDS: frozenset[str] = frozenset({"threat_actor_type"})
 
 
 class LossFormEntry(BaseModel):
@@ -85,7 +89,12 @@ class LibraryEntrySeed(BaseModel):
     name: str
     status: str = Field(pattern="^(draft|published|deprecated)$")
     threat_event_type: str
-    threat_actor_type: str
+    # Threat Agent Library: canonical community slug. Optional at the schema level ONLY so
+    # bundles exported before P1 (legacy ``threat_actor_type``) still parse; ``_one_threat_key``
+    # requires at least one. Historical Alembic migrations read the seed JSON live and bind
+    # ``:threat_actor_type`` — the JSON keeps BOTH keys.
+    threat_community: str | None = Field(default=None, max_length=64)
+    threat_actor_type: str | None = Field(default=None, max_length=64)  # LEGACY
     asset_class: str
     attack_vector: str | None = None
     tags: list[str] = []
@@ -129,6 +138,12 @@ class LibraryEntrySeed(BaseModel):
     # that a lognormal loss node has a matching verified-cited profile. The
     # outer max_length=12 caps the profile at the 6 forms x 2 sides ceiling (Sec1).
     loss_form_profile: list[LossFormEntry] = Field(default=[], max_length=12)
+
+    @model_validator(mode="after")
+    def _one_threat_key(self) -> LibraryEntrySeed:
+        if not (self.threat_community or self.threat_actor_type):
+            raise ValueError("threat_community (or legacy threat_actor_type) is required")
+        return self
 
     @field_validator("canonical_fair_gap", "description")
     @classmethod

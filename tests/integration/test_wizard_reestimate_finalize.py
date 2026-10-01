@@ -32,11 +32,11 @@ from idraa.models.enums import (
     ScenarioFieldset,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.wizard_draft import WizardDraft
 from idraa.repositories.scenario_repo import ScenarioRepo
 from tests.conftest import csrf_post
@@ -73,7 +73,9 @@ def _seed_scenario(
         description="pre-existing description",
         scenario_type=ScenarioType.CUSTOM,
         threat_category=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         asset_class=AssetClass.SYSTEMS,
         attack_vector="phishing",
         threat_event_frequency={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 2.0},
@@ -150,13 +152,20 @@ async def _walk_reestimate_to_finalize(
     (plural) posts multiple ``control_ids`` form values and takes precedence
     over the single-id ``control_id`` when both are given.
     """
+    # `threat_community` is a lazy="selectin" relationship, populated only on
+    # a QUERY-based load. `scenario` here was constructed directly by
+    # `_seed_scenario` and has since been through one or more
+    # `db.commit()`s (which expire it, per `expire_on_commit` default) — the
+    # relationship was never loaded in the first place, so a bare synchronous
+    # `scenario.threat_community` read below would attempt an implicit lazy
+    # load outside any await/greenlet context (MissingGreenlet). Load it
+    # explicitly first.
+    await db.refresh(scenario, attribute_names=["threat_community"])
     step2_data = {
         "name": scenario.name,
         "description": scenario.description or "",
         "threat_category": scenario.threat_category.value,
-        "threat_actor_type": (
-            scenario.threat_actor_type.value if scenario.threat_actor_type else ""
-        ),
+        "threat_community": (scenario.threat_community.slug if scenario.threat_community else ""),
         "asset_class": (scenario.asset_class.value if scenario.asset_class else ""),
         "attack_vector": scenario.attack_vector or "",
     }
@@ -542,7 +551,7 @@ async def test_create_path_unchanged(
         data={
             "name": "Fresh create-path scenario",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )

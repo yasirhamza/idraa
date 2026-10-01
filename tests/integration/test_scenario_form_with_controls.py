@@ -26,11 +26,13 @@ from idraa.models.enums import (
 )
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 _FORM_BASE = {
     "name": "phase-1-4-form-test",
     "threat_category": "ransomware",
+    "threat_community": "cybercriminals",
     # industry/revenue_tier are no longer ScenarioForm fields (issue #88 Task 9)
     "tef_low": "1",
     "tef_mode": "5",
@@ -66,6 +68,9 @@ def _make_control(org_id: uuid.UUID, *, name: str) -> Control:
 
 def _make_scenario(org_id: uuid.UUID, *, name: str) -> Scenario:
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -233,7 +238,15 @@ async def test_edit_scenario_controls_only_change_audits_and_bumps_row_version(
     db_session.add(ScenarioControl(scenario_id=scenario.id, control_id=c_keep.id))
     db_session.add(ScenarioControl(scenario_id=scenario.id, control_id=c_remove.id))
     await db_session.commit()
-    await db_session.refresh(scenario, attribute_names=["mitigating_controls"])
+    # TAL carry-in (Task 7, surfaced during this verification run): the commit
+    # above expires ALL attributes (expire_on_commit default); form_from_scenario
+    # now also reads scenario.threat_community (Task 6), a lazy="selectin"
+    # relationship — a bare post-expiry attribute access outside an await
+    # context raises MissingGreenlet. Refresh it alongside mitigating_controls
+    # (pre-existing bug, not Task 7's own regression — form_from_scenario had
+    # this read before Task 7 started; this test's partial refresh just never
+    # covered it).
+    await db_session.refresh(scenario, attribute_names=["mitigating_controls", "threat_community"])
 
     scenario_id = scenario.id
     original_row_version = scenario.row_version

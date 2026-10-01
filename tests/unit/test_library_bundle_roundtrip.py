@@ -22,10 +22,15 @@ import json
 import uuid
 from typing import Any
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import ThreatCommunity, canonical_threat_community_id
 from idraa.services.library_bundle_export import entry_to_seed_obj
 from idraa.services.library_bundle_import import _validate_entries, parse_bundle
+
+# Published-community allowlist for the mechanical _validate_entries(published_slugs=...)
+# rule (brief Task 5 §5). All three communities exercised below are members.
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists", "third_party"}
 
 # Three entries; mixed int/float in distributions to pin JSON numeric fidelity.
 _SOURCES: list[dict[str, Any]] = [
@@ -34,7 +39,6 @@ _SOURCES: list[dict[str, Any]] = [
         "name": "Round Trip A",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
         "asset_class": AssetClass.SYSTEMS,
         "attack_vector": "phishing",
         "tags": ["tag-a"],
@@ -66,7 +70,6 @@ _SOURCES: list[dict[str, Any]] = [
         "name": "Round Trip B",
         "status": "published",
         "threat_event_type": ThreatCategory.MALWARE,
-        "threat_actor_type": ThreatActorType.NATION_STATE,
         "asset_class": AssetClass.OT_SYSTEMS,
         "attack_vector": None,
         "tags": ["tag-b1", "tag-b2"],
@@ -92,7 +95,6 @@ _SOURCES: list[dict[str, Any]] = [
         "name": "Round Trip C",
         "status": "published",
         "threat_event_type": ThreatCategory.OT_INTEGRITY,
-        "threat_actor_type": ThreatActorType.INSIDER_MALICIOUS,
         "asset_class": AssetClass.SAFETY_SYSTEMS,
         "attack_vector": "supply_chain",
         "tags": [],
@@ -119,7 +121,6 @@ _SOURCES: list[dict[str, Any]] = [
         "name": "Round Trip D — lognormal paginated",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
         "asset_class": AssetClass.SYSTEMS,
         "attack_vector": "phishing",
         "tags": ["lognormal"],
@@ -184,9 +185,34 @@ _SOURCES: list[dict[str, Any]] = [
 # authored field below must survive export → import identically.
 _DIST_FIELDS = ("threat_event_frequency", "vulnerability", "primary_loss", "secondary_loss")
 
+# _SOURCES[i]'s community, in order — the legacy threat_actor_type value each
+# source used to carry, mapped through ENUM_TO_COMMUNITY_SLUG: rt-a
+# cybercriminals, rt-b nation_state, rt-c insider_malicious -> privileged_insider,
+# rt-d cybercriminals. THREE distinct communities across the four sources — the
+# only distinct-community export->import round-trip in the suite; do not collapse it.
+_TC_SLUGS = ["cybercriminals", "nation_state", "privileged_insider", "cybercriminals"]
+
 
 def _entries() -> list[ScenarioLibraryEntry]:
-    return [ScenarioLibraryEntry(id=uuid.uuid4(), version=1, **src) for src in _SOURCES]
+    """Build ORM fixtures from ``_SOURCES`` paired with ``_TC_SLUGS`` without
+    mutating ``_SOURCES`` — it is also read directly by the round-trip
+    assertions. Each entry carries both the FK columns AND an explicit
+    ``threat_community`` relationship object (legal on a viewonly relationship;
+    never persisted — these instances are never flushed) so
+    ``entry_to_seed_obj`` can read ``entry.threat_community.slug``."""
+    return [
+        ScenarioLibraryEntry(
+            id=uuid.uuid4(),
+            version=1,
+            threat_community_id=canonical_threat_community_id(tc),
+            threat_community_version=1,
+            threat_community=ThreatCommunity(
+                id=canonical_threat_community_id(tc), version=1, slug=tc, name=tc
+            ),
+            **src,
+        )
+        for src, tc in zip(_SOURCES, _TC_SLUGS, strict=True)
+    ]
 
 
 def test_export_import_round_trip_all_add_zero_errors() -> None:
@@ -198,7 +224,7 @@ def test_export_import_round_trip_all_add_zero_errors() -> None:
     assert pairs is not None
     assert len(pairs) == len(_SOURCES)
 
-    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set())
+    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set(), published_slugs=_PUB)
     assert errors == []
     assert [p["action"] for p in preview] == ["add"] * len(_SOURCES)
     assert all(s is not None for s in seeds)
@@ -209,16 +235,16 @@ def test_round_trip_preserves_authored_fields_exactly() -> None:
     payload = json.dumps([entry_to_seed_obj(e) for e in entries])
     pairs, _ = parse_bundle(payload.encode("utf-8"))
     assert pairs is not None
-    _preview, _errors, seeds = _validate_entries(pairs, existing_slugs=set())
+    _preview, _errors, seeds = _validate_entries(pairs, existing_slugs=set(), published_slugs=_PUB)
 
-    for src, seed in zip(_SOURCES, seeds, strict=True):
+    for src, tc, seed in zip(_SOURCES, _TC_SLUGS, seeds, strict=True):
         assert seed is not None
         # Scalar authored fields equal the source (enums compared by .value).
         assert seed["slug"] == src["slug"]
         assert seed["name"] == src["name"]
         assert seed["status"] == src["status"]
         assert seed["threat_event_type"] == src["threat_event_type"].value
-        assert seed["threat_actor_type"] == src["threat_actor_type"].value
+        assert seed["threat_community"] == tc
         assert seed["asset_class"] == src["asset_class"].value
         assert seed["attack_vector"] == src["attack_vector"]
         assert seed["tags"] == src["tags"]
@@ -239,7 +265,7 @@ def test_round_trip_distributions_exact_int_float_preserved() -> None:
     payload = json.dumps([entry_to_seed_obj(e) for e in entries])
     pairs, _ = parse_bundle(payload.encode("utf-8"))
     assert pairs is not None
-    _preview, _errors, seeds = _validate_entries(pairs, existing_slugs=set())
+    _preview, _errors, seeds = _validate_entries(pairs, existing_slugs=set(), published_slugs=_PUB)
 
     for src, seed in zip(_SOURCES, seeds, strict=True):
         assert seed is not None

@@ -10,27 +10,12 @@ overlays are excised.
 
 from __future__ import annotations
 
-from fair_cam.parameters.industry_calibration import (
-    ThreatActorType as FCThreatActorType,
-)
-
 from idraa.models.enums import (
     AssetClass,
     IndustryType,
     ScenarioSource,
-    ThreatActorType,
     ThreatCategory,
 )
-
-
-def test_threat_actor_type_parity_v3_equals_fair_cam() -> None:
-    """v3 ThreatActorType MUST equal fair_cam ThreatActorType value-for-value."""
-    v3_values = {member.value for member in ThreatActorType}
-    fair_cam_values = {member.value for member in FCThreatActorType}
-    assert v3_values == fair_cam_values, (
-        f"ThreatActorType parity drift: v3 - fair_cam = {v3_values - fair_cam_values}; "
-        f"fair_cam - v3 = {fair_cam_values - v3_values}"
-    )
 
 
 def test_industry_type_includes_all_naics2_buckets() -> None:

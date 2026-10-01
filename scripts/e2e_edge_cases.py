@@ -113,6 +113,7 @@ def seed_single_scenario(org_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID:
 
     from idraa.models.enums import ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     engine = create_engine(f"sqlite:///{DB_PATH}")
     with Session(engine) as session:
@@ -128,6 +129,8 @@ def seed_single_scenario(org_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID:
             industry="manufacturing",
             revenue_tier="1b_to_10b",
             created_by=user_id,
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
         )
         session.add(sc)
         session.commit()

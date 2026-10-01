@@ -38,6 +38,10 @@ from idraa.services.scenario_import import _structural_dist_problem, _validate_r
 
 _Z95 = 1.6448536269514722  # norm.ppf(0.95), matches fair_cam_validation._Z95
 
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to every _validate_rows call in this file (pure function, caller-supplied).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
+
 
 def _fd(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
@@ -45,7 +49,7 @@ def _fd(**over: Any) -> dict[str, Any]:
         "description": None,
         "scenario_type": "custom",
         "threat_category": "ransomware",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
         "attack_vector": None,
         "asset_class": "systems",
         "version": "1.0",
@@ -156,6 +160,7 @@ def test_csv_shaped_lognormal_mints_capacity_max() -> None:
         [(2, _fd(primary_loss=_lognormal(mean=6.9, sigma=1.0)))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -175,6 +180,7 @@ def test_csv_shaped_mixture_mints_shared_capacity_max() -> None:
         [(2, _fd(primary_loss=mix))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -195,6 +201,7 @@ def test_json_explicit_max_with_revenue_set_is_preserved_not_overwritten() -> No
         [(2, _fd(primary_loss=_lognormal(mean=6.9, sigma=1.0, max=explicit_max)))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -210,6 +217,7 @@ def test_d18_blocks_catastrophic_pl_when_capacity_max_none() -> None:
         [(2, _fd(primary_loss=_lognormal()))],
         existing_names=set(),
         capacity_max=None,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -222,6 +230,7 @@ def test_d18_blocks_catastrophic_sl_names_secondary_loss_column() -> None:
         [(2, _fd(secondary_loss=_lognormal()))],
         existing_names=set(),
         capacity_max=None,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert errors and errors[0]["column"] == "secondary_loss.max"
@@ -232,7 +241,10 @@ def test_d18_pert_only_row_unaffected_by_capacity_max_none() -> None:
     # A capped (PERT) row must never be gated by D18 -- capacity is
     # irrelevant to a non-catastrophic loss shape.
     preview, errors, forms, _meta, _am = _validate_rows(
-        [(2, _fd())], existing_names=set(), capacity_max=None
+        [(2, _fd())],
+        existing_names=set(),
+        capacity_max=None,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -246,6 +258,7 @@ def test_d18_explicit_max_does_not_bypass_null_revenue() -> None:
         [(2, _fd(primary_loss=_lognormal(max=1_000_000_000.0)))],
         existing_names=set(),
         capacity_max=None,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -266,6 +279,7 @@ def test_d18_fires_once_when_both_pl_and_sl_are_catastrophic() -> None:
         ],
         existing_names=set(),
         capacity_max=None,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert len(errors) == 1
@@ -283,6 +297,7 @@ def test_d19_floor_conflict_blocks_with_wrapped_remedies() -> None:
         [(2, _fd(primary_loss=_lognormal(mean=mean, sigma=sigma)))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -303,6 +318,7 @@ def test_d19_floor_holds_just_above_p95() -> None:
         [(2, _fd(primary_loss=_lognormal(mean=mean, sigma=sigma)))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -323,6 +339,7 @@ def test_d19_mixture_floor_conflict_blocks() -> None:
         [(2, _fd(primary_loss=_mixture([comp_a, comp_b])))],
         existing_names=set(),
         capacity_max=capacity_max,
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert errors and D19_FLOOR_MARKER in errors[0]["reason"]

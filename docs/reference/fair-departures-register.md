@@ -46,7 +46,7 @@ most to least consequential.
 |---|---|
 | **DEPARTURE** | A branch, relationship, or operator differs from what the Standard or the book prescribes. The page-42 case. Needs a rationale, a bound on the error, and a test. |
 | **ADDED RELATIONSHIP** | A relationship the Standard describes only qualitatively, or not at all where Idraa introduces a non-neutral constraint such as the B2 revenue bound, is given an explicit functional form. The book's "changed the relationships" case. (Where the Standard is silent and Idraa adopts a neutral assumption such as independence, the entry is IMPLEMENTATION-DEFINED.) |
-| **CALIBRATION** | A numeric value the Standard does not supply. The book's "added weighted values" case. Must say whether the value is cited, calibrated, or a convention, and whether it is identifiable. |
+| **CALIBRATION** | A numeric value the Standard does not supply. The book's "added weighted values" case. Must say whether the value is cited, calibrated, or a convention, and whether it is identifiable. *Cited* = taken from a named source as published; *calibrated* = fitted to data by a stated procedure; *convention* = chosen by the curator and stated as such. |
 | **IMPLEMENTATION-DEFINED** | The Standard gives a semantic but no formula; Idraa chose one. Must be property-tested against the semantic. |
 | **ESTIMATION LEVEL** | Which node of the tree the analyst authors. The book explicitly allows estimating at any level; listed for transparency, not as a deviation. |
 | **VIEW-MODEL DERIVATION** | Not FAIR at all. Lives outside the FAIR math; the attribution table carries a modelled-estimates disclaimer on screen and its "not FAIR-grounded" note in the help, the others are documented in this register and the help (CLAUDE.md "No portfolio-finance overclaim"). |
@@ -108,6 +108,10 @@ the rationale; where it lives; how to evaluate it.
   as a bounded probability; the `threat_capability` / `resistance_strength`
   fields exist on the engine's parameter dataclass but are never populated by
   the app. Controls then reduce Vulnerability in the simulation.
+  The threat-community profiles show a Threat Capability landmark (a
+  percentile-rank band, labelled 5th · most likely · 95th); it is displayed
+  beside the profile and is never converted into Vulnerability or read by
+  the engine, because Resistance Strength is not authored.
 - **Class.** ESTIMATION LEVEL. Not a deviation; the book's own option.
 - **Rationale.** Control credit must not be counted twice (once in the
   authored figure, once in the FAIR-CAM layer). The inherent framing is the
@@ -141,6 +145,16 @@ the rationale; where it lives; how to evaluate it.
   `templates/help/articles/run-and-read-analyses.html`.
 - **Evaluate.** Raw-sample export lets a reader re-sum with any correlation
   they prefer.
+- **Note (Range-lumping not adopted).** The book allows lumping threat
+  communities into one scenario by combining their ranges. Idraa does not:
+  a scenario names at most one community, pinned by a composite foreign key
+  to one community version (a scenario carried over without one names none
+  and is reported under "Needs review / unassigned", D10), and an aggregate
+  run sums scenarios as A4 states. Class IMPLEMENTATION-DEFINED. Evaluate:
+  the composite FK `fk_scenario_threat_community` and the both-or-neither
+  CHECK `ck_scenario_threat_community_pair` on `scenarios`, and the
+  migration invariant tests in
+  `tests/migrations/test_threat_communities_migration.py`.
 
 ### A5. Primary and Secondary Loss are sampled independently within one event
 
@@ -170,6 +184,46 @@ the rationale; where it lives; how to evaluate it.
 ---
 
 ## B. Distribution and calibration choices
+
+> **Threat-community landmarks (default ranges).** Each canonical threat
+> community carries numeric TEF and TCap defaults that are landmarks for the
+> analyst, not inputs to the engine. Every landmark carries a `basis_class`:
+> `cited` ↔ this register's "cited"; `derived` ↔ a cited base statistic carried
+> through stated steps, some of which are curator conventions named on the
+> profile (the community share where the source publishes none, every conversion
+> rate, the spread factor k) — never "calibrated", which this register reserves
+> for values fitted to data; `convention` ↔ "convention". A TEF landmark
+> recovered from an incident or loss statistic divides by `assumed_conversion`,
+> the controlled-world attempt→source-event conversion rate matching
+> `source_event_level` (attempt→incident or attempt→loss event), which is a
+> curator convention and **not** the inherent Vulnerability of A2 (for a
+> loss-event source, the same `TEF = LEF / vuln` translation as
+> `fair-cam-methodology.md`, with this community's own controlled-world
+> conversion rate in place of the IRIS industry vulnerability; for an incident
+> source, the attempt→incident analogue). A derived landmark is a MEAN rate placed as the PERT mean
+> (mode solved from it, spread by a stated curator factor); it is biased LOW by
+> at least five mechanisms: the p→λ = −ln(1−p) step assumes Poisson-distributed
+> counts and under-states the mean under clustering
+> (`industry_calibration.py:46-48` is the identity in fair_cam); λ from a
+> population-mean p under-states the mean λ across heterogeneous organisations
+> (−ln(1−·) is convex, Jensen); a conversion value that omits TEF-side
+> prevention (C4) over-states the conversion; and dividing by a single point
+> value of an uncertain conversion under-states the result (1/c is convex). The
+> fifth dominates the other four and is not quantified: the IRIS probability
+> counts public-record loss events, an event threshold far above the loss event
+> a scenario counts, so a landmark recovered from it can sit one to more than
+> two orders of magnitude below a well-estimated scenario TEF — the shipped library's own
+> entries routinely place their most-likely TEF above their community's landmark
+> 95th percentile. A scenario TEF above the landmark is therefore not, by
+> itself, extreme. The p→λ step is NOT a probability↔frequency conversion in the
+> sense §E forbids — p is P(N ≥ 1) of the same annual count variable whose mean
+> is λ, so §E ("neither is converted into the other", Vulnerability ↔ TEF) still
+> holds. The landmarks are not identifiable from any organisation's data; in P1
+> they are display-only and enter no calculation. P3 (wizard landmark → row)
+> must add the CALIBRATION entry and resolve this scale gap before any landmark
+> is wired into the wizard. Where: `data/seed_threat_communities.json`,
+> `schemas/threat_community.py`, `tests/unit/test_threat_community_seed.py`
+> (tripwires).
 
 ### B1. Lognormal elicitation collapsed to a capped PERT for sampling
 
@@ -247,6 +301,8 @@ the rationale; where it lives; how to evaluate it.
 - **Where.** `fair_cam/quantile_pooling/`.
 - **Evaluate.** Fixture parity against the pinned upstream commit in
   `fair_cam/tests/quantile_pooling/`.
+- **See also.** A4's "Range-lumping not adopted" note: pooling is per
+  scenario across experts, never across threat communities.
 
 ### B5. Library loss magnitudes = sector envelope × per-archetype form shares
 
@@ -659,6 +715,7 @@ help articles rather than labelled on every screen that shows them.
 | **D7. ATT&CK coverage ratios** | Share of a scenario's mapped techniques covered by present controls. Labelled "not FAIR-grounded" in code. | none | `services/attack_coverage.py` |
 | **D8. Appetite verdict and headroom** | Dashboard comparison of the loss-exceedance curve against a stated appetite. The headroom strip is labelled "not FAIR-grounded" in code; the verdict functions rely on this register. | interpolation on the LEC | `services/dashboard_view_model.py` |
 | **D9. Expected-shortfall sampling error** | Monte Carlo sampling standard error of the sample Expected Shortfall at each tail level (first-order influence-function estimator, Scaillet 2004 / Manistre & Hancock 2005), shown as a 95% interval beside ES so a reader can judge iteration count. A property of the simulation, not of FAIR. | z = 1.96 normal band; reported as unavailable when fewer than two samples lie at or above VaR | `services/run_executor.py` (`_es_standard_error`), `services/_view_model_helpers.py` (`ES_CI_Z_95`) |
+| **D10. Residual ALE share and library coverage by threat community** | Sums of per-scenario residual ALE means grouped by the community recorded in the latest aggregate run's inputs snapshot (mean-additive, no per-group tails; not FAIR-grounded), plus, per community, the share of the org's applicable published library entries (grouped by each entry's current community) that an active scenario pins — a library-coverage figure independent of any run. | Review-state and unassigned scenarios grouped under "Needs review / unassigned"; grouping by slug with display by the snapshot's smallest name; a stale slug keeps its own row; a `per_scenario` row whose id does not parse, and any row whose residual ALE is not finite, is dropped on both surfaces; ALE basis = the latest aggregate run's snapshot; coverage basis = library pins of the org's active scenarios against the org's sub-sector-applicable published entries, or all published entries when no sub-sector is set (capped by `_LIBRARY_REFERENCE_LIMIT`). | `services/threat_community_summary.py`, `services/reports.build_threat_community_groups`, `idraa/threat_community_provenance.py` |
 
 ---
 

@@ -113,6 +113,7 @@ async def test_expert_scenario_losses_accept_commas(
         {
             "name": "Comma Losses",
             "threat_category": "ransomware",
+            "threat_community": "cybercriminals",
             **_PERT_TEF_VULN,
             "pl_dist": "lognormal",
             "pl_low": "1,000,000",

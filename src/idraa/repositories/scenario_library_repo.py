@@ -15,13 +15,13 @@ from idraa.models.enums import (
     AssetClass,
     IndustrySubSector,
     IndustryType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import ThreatCommunity
 
 
 def _json_array_overlaps(column: Any, values: list[str]) -> Any:
@@ -75,7 +75,7 @@ class ScenarioLibraryRepo:
 
     async def list_published(
         self,
-        threat_actor_types: list[ThreatActorType] | None = None,
+        threat_community_slugs: list[str] | None = None,
         threat_event_types: list[ThreatCategory] | None = None,
         asset_classes: list[AssetClass] | None = None,
         applicable_industries: list[IndustryType] | None = None,
@@ -108,8 +108,14 @@ class ScenarioLibraryRepo:
             ),
         )
 
-        if threat_actor_types:
-            stmt = stmt.where(ScenarioLibraryEntry.threat_actor_type.in_(threat_actor_types))
+        if threat_community_slugs:
+            stmt = stmt.join(
+                ThreatCommunity,
+                and_(
+                    ThreatCommunity.id == ScenarioLibraryEntry.threat_community_id,
+                    ThreatCommunity.version == ScenarioLibraryEntry.threat_community_version,
+                ),
+            ).where(ThreatCommunity.slug.in_(threat_community_slugs))
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:
@@ -180,7 +186,9 @@ class ScenarioLibraryRepo:
             )
         )
         if for_update:
-            stmt = stmt.with_for_update()
+            # Architect N8a: explicit `of=` names the locked entity so a later join added to
+            # this SELECT can't silently widen the FOR UPDATE lock to another table.
+            stmt = stmt.with_for_update(of=ScenarioLibraryEntry)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def get_by_slug(
@@ -262,7 +270,7 @@ class ScenarioLibraryRepo:
 
     async def count_published(
         self,
-        threat_actor_types: list[ThreatActorType] | None = None,
+        threat_community_slugs: list[str] | None = None,
         threat_event_types: list[ThreatCategory] | None = None,
         asset_classes: list[AssetClass] | None = None,
         applicable_industries: list[IndustryType] | None = None,
@@ -302,8 +310,14 @@ class ScenarioLibraryRepo:
             )
         )
 
-        if threat_actor_types:
-            stmt = stmt.where(ScenarioLibraryEntry.threat_actor_type.in_(threat_actor_types))
+        if threat_community_slugs:
+            stmt = stmt.join(
+                ThreatCommunity,
+                and_(
+                    ThreatCommunity.id == ScenarioLibraryEntry.threat_community_id,
+                    ThreatCommunity.version == ScenarioLibraryEntry.threat_community_version,
+                ),
+            ).where(ThreatCommunity.slug.in_(threat_community_slugs))
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -28,6 +29,9 @@ def _seed_scenario_for_org(
     Caller must ``await db.commit()`` after calling this.
     """
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

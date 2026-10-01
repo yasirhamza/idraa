@@ -48,19 +48,13 @@
                     ]) }}
     </div>
     <div>
-      {{ form_field(name="threat_actor_type", label="Threat actor type",
+      {{ form_field(name="threat_community", label="Threat community",
                     input_type="select",
-                    value=state.threat_actor_type,
-                    error=errors.get('threat_actor_type'),
-                    options=[
-                      ("",                  "— select —"),
-                      ("cybercriminals",    "Cybercriminals"),
-                      ("nation_state",      "Nation-state"),
-                      ("insider_malicious", "Insider — malicious"),
-                      ("insider_accidental","Insider — accidental"),
-                      ("hacktivists",       "Hacktivists"),
-                      ("competitors",       "Competitors"),
-                    ]) }}
+                    value=state.threat_community,
+                    error=errors.get('threat_community'),
+                    option_groups=threat_community_groups,
+                    required=True) }}
+      <a href="/library/threat-communities" class="text-micro text-brand hover:underline">Profiles &rarr;</a>
     </div>
     <div>
       {{ form_field(name="asset_class", label="Asset class",

@@ -92,8 +92,9 @@ async def test_resolve_for_clone_draft_entry_raises_status_error(
     seed_organization: object,
 ) -> None:
     """Cannot clone from draft or deprecated entries."""
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     draft = ScenarioLibraryEntry(
         id=uuid.uuid4(),
@@ -102,7 +103,8 @@ async def test_resolve_for_clone_draft_entry_raises_status_error(
         name="d",
         status="draft",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",
@@ -139,9 +141,10 @@ async def test_list_browseable_defaults_to_all_industries(
     """
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.organization import Organization
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     assert isinstance(seed_organization, Organization)
     # Give the org a specific sub-sector so the old auto-narrow would activate.
@@ -158,7 +161,8 @@ async def test_list_browseable_defaults_to_all_industries(
         name="Cross-industry entry",
         status="published",
         threat_event_type=ThreatCategory.MALWARE,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.DATA,
         tags=[],
         description="An entry scoped to electric_utility sub-sector.",
@@ -201,9 +205,10 @@ async def test_list_browseable_explicit_sub_sector_filter_still_narrows(
     """WS5a: an EXPLICIT sub-sector filter still narrows results correctly."""
     import uuid as _uuid
 
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    from idraa.models.enums import AssetClass, ThreatCategory
     from idraa.models.organization import Organization
     from idraa.models.scenario_library import ScenarioLibraryEntry
+    from idraa.models.threat_community import canonical_threat_community_id
 
     assert isinstance(seed_organization, Organization)
     seed_organization.industry_sub_sector = IndustrySubSector.OIL_AND_GAS
@@ -218,7 +223,8 @@ async def test_list_browseable_explicit_sub_sector_filter_still_narrows(
         name="Electric only",
         status="published",
         threat_event_type=ThreatCategory.DENIAL_OF_SERVICE,
-        threat_actor_type=ThreatActorType.NATION_STATE,
+        threat_community_id=canonical_threat_community_id("nation_state"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="Scoped to electric_utility only.",

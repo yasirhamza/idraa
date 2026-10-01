@@ -183,7 +183,7 @@ async def _seed_state_from_library_entry(
 
     # Pre-fill step-2 scalar fields from canonical entry.
     state.threat_category = resolved.entry.threat_event_type.value
-    state.threat_actor_type = resolved.entry.threat_actor_type.value
+    state.threat_community = resolved.entry.threat_community.slug
     state.asset_class = resolved.entry.asset_class.value
     state.attack_vector = resolved.entry.attack_vector
 

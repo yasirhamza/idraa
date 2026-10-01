@@ -91,7 +91,8 @@ and a PERT distribution for each of TEF / Vulnerability / Primary Loss / Seconda
 | `scenario_type` | `ScenarioType` enum | `CUSTOM` / `LIBRARY` |
 | `source` | `ScenarioSource` enum | `EXPERT_JUDGMENT` / `LIBRARY_ENTRY` / etc. |
 | `threat_category` | `ThreatCategory` enum | 12 values, includes OT-specific entries |
-| `threat_actor_type` | `ThreatActorType` enum \| None | 6 values |
+| `threat_community_id`, `threat_community_version` | UUID / int \| None | nullable composite FK → `threat_communities` (`fk_scenario_threat_community`); CHECK `ck_scenario_threat_community_pair` enforces both-or-neither (replaces the removed `threat_actor_type` enum — Threat Agent Library, spec §4.3) |
+| `threat_community_provenance` | str | app-enforced value set `assigned` / `migrated` / `migrated_split_default` / `unassigned`; invariant NULL community ⇔ `unassigned` |
 | `attack_vector` | str \| None | curated dropdown values, but stored free-text varchar(128) |
 | `asset_class` | `AssetClass` enum \| None | 7 values, includes OT_SYSTEMS / SAFETY_SYSTEMS |
 | `industry`, `revenue_tier` | str | calibration anchors — pinned at create time from organization profile (issue #56 interim UX) |
@@ -134,7 +135,8 @@ correction means inserting `(id, version+1)`; rows are never mutated.
 | `id`, `version` | UUID, int | composite PK |
 | `slug` | str | stable across versions |
 | `status` | `library_entry_status` | `draft` / `published` / `deprecated` |
-| `threat_event_type`, `threat_actor_type`, `asset_class` | enums | |
+| `threat_event_type`, `asset_class` | enums | |
+| `threat_community_id`, `threat_community_version` | UUID, int | composite FK → `threat_communities` (`fk_library_entry_threat_community`), NOT NULL — every library entry names exactly one community (replaces the removed `threat_actor_type` enum) |
 | `attack_vector`, `tags` | str / JSON | |
 | `description`, `example_incidents`, `source_citations`, `canonical_fair_gap` | text / JSON | narrative + provenance |
 | `applicable_industries`, `applicable_sub_sectors`, `applicable_org_sizes` | JSON | filtering metadata |
@@ -144,6 +146,40 @@ correction means inserting `(id, version+1)`; rows are never mutated.
 | `row_version` | int | |
 
 Per-org override layer: `ScenarioLibraryOverride` (one row per `(organization_id, library_entry_id)` pair). Versions bump in-place on edit. Surfaced via `/library/overrides`.
+
+### ThreatCommunity (`models/threat_community.py`)
+
+The canonical Threat Agent Library (spec §4.1). Mirrors `ScenarioLibraryEntry`'s
+versioning idiom: composite PK (`id`, `version`); a row is never mutated —
+re-curation inserts `(id, version+1)`. Canonical ids are deterministic
+`uuid5(THREAT_COMMUNITY_NAMESPACE, slug)`. Not org-scoped.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id`, `version` | UUID, int | composite PK (`pk_threat_communities`); canonical id = `uuid5(THREAT_COMMUNITY_NAMESPACE, slug)`; UNIQUE (`slug`, `version`) `uq_threat_community_slug_version`; index `ix_threat_communities_slug` |
+| `slug` | str | stable across versions; one of the nine `CANONICAL_THREAT_COMMUNITY_SLUGS` in P1 |
+| `name`, `summary` | str / text | display name and the profile's lead paragraph |
+| `source` | str | `"seed"` in P1 (hardcoded column default; not schema-validated — P1 has no other value); P2 org-authored communities live in their own org-scoped table (spec §9) |
+| `origin` | str | `"internal"` / `"external"` |
+| `intent` | str | `"malicious"` / `"non_malicious"` |
+| `motive`, `primary_intent`, `sponsorship`, `preferred_target_characteristics`, `preferred_targets`, `capability`, `personal_risk_tolerance`, `collateral_damage_concern` | text | the eight profile attribute columns |
+| `threat_event_definition` | text | the community's counting rule |
+| `tef_basis` | text | prose basis for the TEF landmark (reference organisation, scope) |
+| `reference_org` | dict (JSON) | `{size, sector}` — the reference organisation the TEF landmark is scaled to |
+| `tef_landmark` | dict (JSON) | `{low, mode, high, basis_class, source_event_level, assumed_conversion, derivation}` — `basis_class` is `LandmarkTriple.basis_class` (`schemas/threat_community.py`), a `Literal["cited", "derived", "convention"]`; display-only, never read by the engine (register A2/B-note) |
+| `tcap_landmark` | dict (JSON) \| None | `{low, mode, high, basis_class, derivation}` on a 0–100 percentile-rank scale (no `source_event_level` / `assumed_conversion`); `none_as_null=True` so Python `None` stores SQL NULL; NULL iff `intent == "non_malicious"` — enforced by the seed schema and its tests, not by the database (an error is not a capability contest) |
+| `rationale` | text | |
+| `citations` | list[dict] (JSON) | `{title, url, locator?, edition_year?}` |
+| `reviewed_at` | date | |
+| `published_at` | datetime | |
+| `created_at`, `updated_at` | datetime | `TimestampMixin` |
+
+Composite FK consumers: `scenario_library_entries.(threat_community_id,
+threat_community_version)` is a NOT NULL composite FK (`fk_library_entry_threat_community`)
+— every library entry names exactly one community. `scenarios.(threat_community_id,
+threat_community_version)` is a nullable composite FK (`fk_scenario_threat_community`)
+plus `threat_community_provenance`, guarded by CHECK `ck_scenario_threat_community_pair`
+(both columns NULL or both populated).
 
 ### Organization (`models/organization.py`)
 

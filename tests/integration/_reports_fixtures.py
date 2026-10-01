@@ -21,6 +21,7 @@ from idraa.models.enums import ScenarioType, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 async def _make_scenarios(
@@ -41,6 +42,9 @@ async def _make_scenarios(
     scenarios: list[Scenario] = []
     for name in names:
         sc = Scenario(
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
+            threat_community_provenance="assigned",
             id=uuid.uuid4(),
             organization_id=org_id,
             name=name,
@@ -69,6 +73,14 @@ async def _make_scenarios(
         session.add(sc)
         scenarios.append(sc)
     await session.flush()
+    # The `threat_community` relationship is populated by SQLAlchemy's
+    # selectin strategy on a QUERY-based load; a freshly-constructed-then-
+    # flushed object was never queried, so the attribute is unloaded. An
+    # explicit (awaited) refresh here avoids a later SYNCHRONOUS attribute
+    # access (e.g. _scenario_inputs_snapshot_for below) triggering an
+    # implicit lazy load outside a greenlet context (MissingGreenlet).
+    for sc in scenarios:
+        await session.refresh(sc, attribute_names=["threat_community"])
     return scenarios
 
 
@@ -237,11 +249,20 @@ async def _make_completed_aggregate_run(
     controls: list[tuple[str, str, str]] | None = None,
     completed_at: dt.datetime | None = None,
     legacy_band: bool = False,
+    threat_community_slugs: list[str | None] | None = None,
+    snapshot: bool = False,
 ) -> RiskAnalysisRun:
     """Seed an AGGREGATE COMPLETED run + its referenced scenarios.
 
     ``legacy_band=True`` seeds a pre-#202 ``confidence_intervals`` block (no
     ``interval_pct`` marker) so the suppress-not-relabel gate can be exercised.
+
+    ``threat_community_slugs`` (Task 12 fixture extension): one entry per
+    ``scenario_names`` entry; ``None`` leaves the scenario's community NULL /
+    ``unassigned``, matching a pre-P1 scenario. ``snapshot=True`` builds
+    ``run.scenario_inputs_snapshot`` with the REAL producer
+    (``run_executor._build_scenario_inputs_snapshot``) so dashboard/report
+    tests exercise the same shape production writes.
 
     Returns the persisted run.
     """
@@ -258,6 +279,20 @@ async def _make_completed_aggregate_run(
     )
     scenarios = await _make_scenarios(session, org.id, scenario_names)
     sids = [sc.id for sc in scenarios]
+
+    if threat_community_slugs is not None:
+        for sc, slug in zip(scenarios, threat_community_slugs, strict=True):
+            if slug is None:
+                sc.threat_community_id = None
+                sc.threat_community_version = None
+                sc.threat_community_provenance = "unassigned"
+            else:
+                sc.threat_community_id = canonical_threat_community_id(slug)
+                sc.threat_community_version = 1
+                sc.threat_community_provenance = "assigned"
+        await session.flush()
+        for sc in scenarios:
+            await session.refresh(sc, attribute_names=["threat_community"])
 
     run = RiskAnalysisRun(
         id=uuid.uuid4(),
@@ -277,6 +312,10 @@ async def _make_completed_aggregate_run(
             scenario_ids=sids, scenario_names=scenario_names, legacy_band=legacy_band
         ),
     )
+    if snapshot:
+        from idraa.services.run_executor import _build_scenario_inputs_snapshot
+
+        run.scenario_inputs_snapshot = _build_scenario_inputs_snapshot(scenarios)
     session.add(run)
     await session.flush()
     return run
@@ -413,6 +452,17 @@ def _scenario_inputs_snapshot_for(scenarios: list[Scenario]) -> dict[str, Any]:
                 "vulnerability": sc.vulnerability,
                 "primary_loss": sc.primary_loss,
                 "secondary_loss": sc.secondary_loss,
+                "threat_community": (
+                    {
+                        "id": str(sc.threat_community.id),
+                        "version": sc.threat_community.version,
+                        "slug": sc.threat_community.slug,
+                        "name": sc.threat_community.name,
+                    }
+                    if sc.threat_community is not None
+                    else None
+                ),
+                "threat_community_provenance": sc.threat_community_provenance,
             }
             for sc in scenarios
         ]

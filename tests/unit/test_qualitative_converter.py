@@ -23,6 +23,7 @@ from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, Threa
 from idraa.models.organization import Organization
 from idraa.models.qualitative_mapping import QualitativeMappingBand
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.qualitative_converter import (
     SL_NOTE,
@@ -208,6 +209,9 @@ async def test_dedup_name_reason_vs_all_statuses(
     # (spec §3.1 — NOT the ACTIVE-only _existing_active_names precedent).
     db_session.add(
         Scenario(
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
+            threat_community_provenance="assigned",
             organization_id=org.id,
             name="Duplicate Title",
             threat_category=ThreatCategory.RANSOMWARE,

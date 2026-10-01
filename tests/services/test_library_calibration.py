@@ -16,11 +16,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_calibration import (
     CalibrationAnchor,
     library_calibrated_pre_fill,
@@ -35,7 +36,8 @@ def _entry(**overrides: Any) -> ScenarioLibraryEntry:
         "name": "Test",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
         "asset_class": AssetClass.SYSTEMS,
         "tags": [],
         "description": "d",
@@ -160,7 +162,7 @@ _MINIMAL_VALID_KWARGS: dict[str, Any] = {
     "name": "test",
     "status": "published",
     "threat_event_type": "ransomware",
-    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals",
     "asset_class": "systems",
     "description": "test description, must be at least twenty characters long",
     "canonical_fair_gap": "test canonical fair gap, must be at least twenty characters long",
@@ -262,7 +264,7 @@ def test_seed_loader_rejects_entry_without_calibration_anchor() -> None:
         "name": "test",
         "status": "published",
         "threat_event_type": "ransomware",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
         "asset_class": "systems",
         "description": "test description, must be at least twenty characters long",
         "canonical_fair_gap": "test canonical fair gap, must be at least twenty characters long",

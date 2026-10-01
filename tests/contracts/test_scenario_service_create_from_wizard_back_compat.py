@@ -32,6 +32,7 @@ from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.scenarios import ScenarioService
+from tests.conftest import seed_canonical_threat_communities
 from tests.factories import create_org, create_user
 
 
@@ -52,6 +53,7 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         yield session

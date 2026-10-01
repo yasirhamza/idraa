@@ -23,12 +23,12 @@ from idraa.models.enums import (
     ControlType,
     EntityStatus,
     IndustrySubSector,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.framework_crosswalk import FrameworkControl
 from idraa.models.organization import Organization
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.dashboard import DashboardData, build_dashboard
 from tests.integration._dashboard_fixtures import (
     _make_completed_aggregate_run,
@@ -155,7 +155,8 @@ def _make_library_entry(
         name=slug,
         status="published",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="d",

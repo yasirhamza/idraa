@@ -202,7 +202,7 @@ SECTOR_PREDICATES: dict[str, Callable[[dict], bool]] = {
         # (f) competitors actor >= 1 — 0 entries in 44-state
         (
             "competitors_actor_ge_1",
-            lambda entries: any(e["threat_actor_type"] == "competitors" for e in entries),
+            lambda entries: any(e["threat_community"] == "competitors" for e in entries),
             True,  # 0 competitors in pre-T3 → should fail
         ),
     ],
@@ -306,10 +306,10 @@ def test_asset_class_coverage_ge_1(asset_class):
 
 
 def test_competitors_actor_ge_1():
-    """(f) threat_actor_type == 'competitors' has ≥1 published entry."""
+    """(f) threat_community == 'competitors' has ≥1 published entry."""
     pub = _load_all_published()
-    count = sum(1 for e in pub if e["threat_actor_type"] == "competitors")
-    assert count >= 1, f"threat_actor_type 'competitors': expected ≥1 entry, got {count}"
+    count = sum(1 for e in pub if e["threat_community"] == "competitors")
+    assert count >= 1, f"threat_community 'competitors': expected ≥1 entry, got {count}"
 
 
 def test_full_partition_every_published_entry_maps_to_ge1_sector_bucket():

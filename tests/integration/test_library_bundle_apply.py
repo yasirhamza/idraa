@@ -35,9 +35,10 @@ import pytest_asyncio
 from sqlalchemy import func, select
 
 from idraa.models.csv_import_preview import CSVImportPreview
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_import import (
     PreviewExpiredError,
     apply_validated_preview,
@@ -124,7 +125,8 @@ async def test_existing_seed_slug_is_skipped(db_session, organization, admin_use
         status="published",
         source="seed",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
         description="A seed entry to collide against.",
@@ -191,6 +193,55 @@ async def test_summary_audit_written(db_session, organization, admin_user) -> No
     assert len(summ) == 1
     assert set(summ[0].changes.keys()) == {"imported", "skipped", "errors_count"}
     assert summ[0].user_id == admin_user.id
+
+
+# ---------------------------------------------------------------------------
+# Task 5: legacy threat_actor_type -> threat_community mapping (Review Focus #1)
+# ---------------------------------------------------------------------------
+
+_BUNDLE_LEGACY_ONLY = json.dumps(
+    [
+        {
+            "slug": "legacy-insider",
+            "name": "Legacy Insider",
+            "status": "published",
+            "threat_event_type": "ransomware",
+            "threat_actor_type": "insider_malicious",
+            "asset_class": "systems",
+            "description": "d" * 25,
+            "canonical_fair_gap": "g" * 25,
+            "threat_event_frequency": {"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+            "vulnerability": {"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+            "primary_loss": {"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+            "calibration_anchor": {"industry": "other", "revenue_tier": "100m_to_1b"},
+        },
+    ]
+).encode()
+
+
+@pytest.mark.asyncio
+async def test_legacy_bundle_maps_via_enum_end_to_end(db_session, organization, admin_user) -> None:
+    """A bundle entry carrying ONLY the legacy ``threat_actor_type`` (no
+    ``threat_community``) maps via ``ENUM_TO_COMMUNITY_SLUG`` end to end:
+    preview resolves it to an "add", and the applied row's related community
+    is 'privileged_insider' (insider_malicious's canonical slug)."""
+    token, preview, errors = await validate_upload(
+        db_session, org_id=organization.id, user_id=admin_user.id, data=_BUNDLE_LEGACY_ONLY
+    )
+    assert errors == []
+    assert [p["action"] for p in preview] == ["add"]
+
+    imported, skipped, apply_errors = await apply_validated_preview(
+        db_session, token=token, org_id=organization.id, user=admin_user
+    )
+    assert (imported, skipped, apply_errors) == (1, 0, [])
+
+    row = (
+        await db_session.execute(
+            select(ScenarioLibraryEntry).where(ScenarioLibraryEntry.slug == "legacy-insider")
+        )
+    ).scalar_one()
+    assert row.threat_community.slug == "privileged_insider"
 
 
 # ---------------------------------------------------------------------------

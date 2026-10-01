@@ -2,28 +2,31 @@
 
 Pins the canonical export contract:
 
-- ``EXPORT_FIELDS == list(LibraryEntrySeed.model_fields)`` — exactly the authored
-  fields, in order. This is the load-bearing invariant that guarantees a
-  downloaded bundle re-imports cleanly through the seed schema.
+- ``EXPORT_FIELDS`` == the authored seed fields minus ``LEGACY_SEED_FIELDS`` —
+  exactly the authored fields the import side still accepts, in order. This is
+  the load-bearing invariant that guarantees a downloaded bundle re-imports
+  cleanly through the seed schema.
 - ``entry_to_seed_obj`` emits EXACTLY those field keys; it EXCLUDES the
   DB-managed fields (``id`` / ``version`` / ``row_version`` / ``source`` /
   ``created_at`` / ``updated_at``) so a downloaded bundle is content-only and
   re-imports as fresh ``imported`` entries.
-- Enum-valued attributes (threat_event_type / threat_actor_type / asset_class)
-  serialize as their ``.value`` string, not the enum repr.
+- Enum-valued attributes (threat_event_type / asset_class) serialize as their
+  ``.value`` string, not the enum repr; ``threat_community`` serialises as the
+  related community's slug.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import ThreatCommunity, canonical_threat_community_id
 from idraa.services.library_bundle_export import (
     EXPORT_FIELDS,
     entry_to_seed_obj,
 )
-from idraa.services.seed_library_loader import LibraryEntrySeed
+from idraa.services.seed_library_loader import LEGACY_SEED_FIELDS, LibraryEntrySeed
 
 
 def _entry(**overrides: object) -> ScenarioLibraryEntry:
@@ -38,7 +41,14 @@ def _entry(**overrides: object) -> ScenarioLibraryEntry:
         "name": "Export Unit A",
         "status": "published",
         "threat_event_type": ThreatCategory.RANSOMWARE,
-        "threat_actor_type": ThreatActorType.CYBERCRIMINALS,
+        "threat_community_id": canonical_threat_community_id("cybercriminals"),
+        "threat_community_version": 1,
+        "threat_community": ThreatCommunity(
+            id=canonical_threat_community_id("cybercriminals"),
+            version=1,
+            slug="cybercriminals",
+            name="Cybercriminals",
+        ),
         "asset_class": AssetClass.SYSTEMS,
         "attack_vector": "phishing",
         "tags": ["a", "b"],
@@ -66,14 +76,18 @@ def _entry(**overrides: object) -> ScenarioLibraryEntry:
 
 
 def test_export_fields_equal_seed_model_fields() -> None:
-    """The load-bearing contract: EXPORT_FIELDS is EXACTLY the authored seed fields."""
-    assert list(LibraryEntrySeed.model_fields) == EXPORT_FIELDS
-    assert set(EXPORT_FIELDS) == set(LibraryEntrySeed.model_fields)
+    """The load-bearing contract: EXPORT_FIELDS is EXACTLY the authored seed
+    fields minus LEGACY_SEED_FIELDS."""
+    assert [
+        f for f in LibraryEntrySeed.model_fields if f not in LEGACY_SEED_FIELDS
+    ] == EXPORT_FIELDS
 
 
 def test_entry_to_seed_obj_emits_exactly_seed_keys() -> None:
     out = entry_to_seed_obj(_entry())
-    assert set(out.keys()) == set(LibraryEntrySeed.model_fields)
+    # The seed model still carries the excluded legacy field, so compare
+    # against EXPORT_FIELDS (not the full seed model field set).
+    assert set(out) == set(EXPORT_FIELDS)
 
 
 def test_entry_to_seed_obj_excludes_db_managed_fields() -> None:
@@ -85,7 +99,7 @@ def test_entry_to_seed_obj_excludes_db_managed_fields() -> None:
 def test_entry_to_seed_obj_serializes_enums_as_value_strings() -> None:
     out = entry_to_seed_obj(_entry())
     assert out["threat_event_type"] == "ransomware"
-    assert out["threat_actor_type"] == "cybercriminals"
+    assert out["threat_community"] == "cybercriminals" and "threat_actor_type" not in out
     assert out["asset_class"] == "systems"
     # Plain-str column passes through unchanged.
     assert out["status"] == "published"

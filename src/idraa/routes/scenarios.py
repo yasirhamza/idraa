@@ -77,13 +77,13 @@ from idraa.models.enums import (
     AssetClass,
     EntityStatus,
     StepUpCategory,
-    ThreatActorType,
     UserRole,
 )
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
+from idraa.models.threat_community import ThreatCommunity
 from idraa.models.user import User
 from idraa.models.wizard_draft import WizardDraft
 from idraa.repositories.control_repo import ControlRepo
@@ -102,7 +102,6 @@ from idraa.routes.scenario_form_helpers import (
     ATTACK_VECTOR_CHOICES,
     EFFECT_CHOICES,
     MAX_ATTACK_MAPPINGS,
-    THREAT_ACTOR_TYPE_CHOICES,
     THREAT_CATEGORY_CHOICES,
     extract_attack_mapping_ids,
     flatten_validation_errors,
@@ -168,6 +167,7 @@ from idraa.services.scenario_library import (
     available_facets,
 )
 from idraa.services.scenarios import ScenarioService, ScenarioVersionConflictError
+from idraa.services.threat_communities import ThreatCommunityService
 from idraa.services.wizard_finalize import (
     _FINALIZE_SEMAPHORE,
     FinalizationError,
@@ -351,6 +351,9 @@ async def new_scenario_form(
     available_controls = await ControlRepo(db).list_for_org(user.organization_id)
     # Issue #475 T9: no scenario yet on the create form — no submitted rows either.
     attack_ctx = await load_attack_form_context(db)
+    threat_community_groups = await ThreatCommunityService(
+        db, organization_id=user.organization_id
+    ).grouped_choices()
     organization = await db.get(Organization, user.organization_id)
     if organization is not None:
         ctx = calibration_context_from_org(organization)
@@ -397,7 +400,7 @@ async def new_scenario_form(
             "overlay_options": overlay_options,
             "available_controls": available_controls,
             "threat_category_choices": THREAT_CATEGORY_CHOICES,
-            "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
+            "threat_community_groups": threat_community_groups,
             "asset_class_choices": ASSET_CLASS_CHOICES,
             "attack_vector_choices": ATTACK_VECTOR_CHOICES,
             "effect_choices": EFFECT_CHOICES,
@@ -452,6 +455,10 @@ async def create_scenario(
     overlay_options = await load_overlay_options(db, user.organization_id)
     available_controls = await ControlRepo(db).list_for_org(user.organization_id)
     create_org = await db.get(Organization, user.organization_id)
+    # TAL (Task 7): fetched once per handler, reused by every 422 re-render below.
+    threat_community_groups = await ThreatCommunityService(
+        db, organization_id=user.organization_id
+    ).grouped_choices()
 
     # Arch3-I1 (issue #475 T9): extraction runs in its OWN try, AFTER the
     # org/overlay/controls loads above (the extraction-failure 422 render
@@ -473,6 +480,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=[]),
             errors=[str(exc)],
@@ -490,6 +498,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[
@@ -509,6 +518,7 @@ async def create_scenario(
                 scenario=None,
                 form_raw=raw,
                 overlay_options=overlay_options,
+                threat_community_groups=threat_community_groups,
                 available_controls=available_controls,
                 attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
                 errors=[f"Entry currency {entry_currency!r} rate disappeared; try again."],
@@ -547,6 +557,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=errors,
@@ -574,6 +585,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[str(exc)],
@@ -611,6 +623,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[message],
@@ -651,6 +664,7 @@ async def create_scenario(
             scenario=None,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[str(exc)],
@@ -837,6 +851,10 @@ async def _view_scenario_context(
         # field goes unused (reusing the edit-form helper rather than
         # hand-duplicating the pin-detection walk).
         "pin_panels": _pin_panel_context(scenario, None),
+        # TAL (Task 7): grouped choices for the review-banner's confirm select.
+        "threat_community_groups": await ThreatCommunityService(
+            db, organization_id=user.organization_id
+        ).grouped_choices(),
     }
 
 
@@ -987,6 +1005,9 @@ async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -
     ]
     # Issue #475 T9: render the scenario's existing mappings as initial rows.
     attack_ctx = await load_attack_form_context(db, scenario=scenario)
+    threat_community_groups = await ThreatCommunityService(
+        db, organization_id=user.organization_id
+    ).grouped_choices()
     organization = await db.get(Organization, user.organization_id)
     if organization is not None:
         edit_ctx = calibration_context_from_org(organization)
@@ -1019,7 +1040,7 @@ async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -
         "available_controls": available_controls,
         "inactive_linked_controls": inactive_linked_controls,
         "threat_category_choices": THREAT_CATEGORY_CHOICES,
-        "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
+        "threat_community_groups": threat_community_groups,
         "asset_class_choices": ASSET_CLASS_CHOICES,
         "attack_vector_choices": ATTACK_VECTOR_CHOICES,
         "effect_choices": EFFECT_CHOICES,
@@ -1172,6 +1193,10 @@ async def update_scenario(
     overlay_options = await load_overlay_options(db, user.organization_id)
     available_controls = await ControlRepo(db).list_for_org(user.organization_id)
     update_org = await db.get(Organization, user.organization_id)
+    # TAL (Task 7): fetched once per handler, reused by every 422/409 re-render below.
+    threat_community_groups = await ThreatCommunityService(
+        db, organization_id=user.organization_id
+    ).grouped_choices()
 
     # Arch3-I1 (issue #475 T9): extraction runs in its OWN try, AFTER the
     # org/overlay/controls loads above and BEFORE the pre-parse early return
@@ -1190,6 +1215,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, scenario=scenario),
             errors=[str(exc)],
@@ -1215,6 +1241,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=["expected_row_version: missing or invalid hidden form field"],
@@ -1245,6 +1272,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=errors,
@@ -1272,6 +1300,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[str(exc)],
@@ -1295,6 +1324,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[
@@ -1323,6 +1353,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[message],
@@ -1390,6 +1421,7 @@ async def update_scenario(
             scenario=scenario,
             form_raw=raw,
             overlay_options=overlay_options,
+            threat_community_groups=threat_community_groups,
             available_controls=available_controls,
             attack_ctx=await load_attack_form_context(db, submitted_ids=technique_ids),
             errors=[str(exc)],
@@ -1498,6 +1530,56 @@ async def confirm_vuln_framing(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
+@router.post("/scenarios/{scenario_id}/confirm-threat-community")
+async def confirm_threat_community(
+    request: Request,
+    scenario_id: uuid.UUID,
+    threat_community: str = Form(..., max_length=64),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """Threat Agent Library: confirm/correct a scenario in a review state. Analyst+; CSRF via
+    middleware; 404 cross-org/missing/deleted (no oracle); 409 if not in review and 422 on an
+    unknown slug both RE-RENDER the scenario view page with an alert flash
+    (``_render_view_action_failure``, the SAME T3.a/T4 idiom ``refresh_loss_from_library`` uses
+    above) instead of raising a raw ``HTTPException`` -- base.html's ``htmx:beforeSwap``
+    force-swaps any 4xx body, so a double-submit was otherwise showing the analyst raw JSON.
+    The 422 message is a fixed string that never echoes the submitted slug (Sec-N-1: it used to
+    be interpolated via ``repr()`` into the ``HTTPException`` detail -- self-XSS only, CSRF
+    blocks the cross-site case, but unescaped all the same). Status codes and the
+    no-audit/no-row-change guarantees on failure are unchanged; fixed path-derived redirect
+    target on success."""
+    try:
+        await ScenarioService(db).confirm_threat_community(
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            slug=threat_community.strip(),
+            current_user=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="This scenario's threat community is already assigned — edit the scenario instead.",
+            status_code=409,
+        )
+    except ValidationError:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="Choose a published threat community.",
+            status_code=422,
+        )
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 
@@ -1914,21 +1996,24 @@ def _form_str(form: Any, key: str) -> str | None:
     return str(val) if isinstance(val, str) else None
 
 
-def _build_rendered_questions(state: WizardState) -> dict[str, str]:
+def _build_rendered_questions(
+    state: WizardState, community: ThreatCommunity | None
+) -> dict[str, str]:
     """Render the per-fieldset scenario-context question copy for the FAIR
     pages (step 3 Likelihood + step 4 Impact).
 
-    Built from the WizardState's step-2 fields (threat_actor_type,
-    attack_vector, asset_class) per the templates in
-    ``services/wizard_questions.QUESTION_TEMPLATES``. Consumed by
+    Built from the WizardState's step-2 fields (threat_community, attack_vector,
+    asset_class) plus the resolved ``community`` row (for its ``intent`` —
+    malicious vs. non-malicious selects the question wording) per the templates
+    in ``services/wizard_questions.QUESTION_TEMPLATES``. Consumed by
     ``_fair_page_context`` so the shared ``_fair_params_form_inner.html``
     partial (which expects ``rendered_questions[fieldset_key]``) renders
     identically on the initial GET and the prefill/apply-overlay HTMX swaps.
     """
     ctx = ScenarioContext(
-        threat_actor_type=(
-            ThreatActorType(state.threat_actor_type) if state.threat_actor_type else None
-        ),
+        threat_community_slug=community.slug if community else None,
+        threat_community_name=community.name if community else None,
+        threat_community_intent=community.intent if community else None,
         attack_vector=state.attack_vector,
         asset_class=AssetClass(state.asset_class) if state.asset_class else None,
     )
@@ -2199,6 +2284,42 @@ async def get_wizard_library_cards_partial(
     )
 
 
+async def _step2_context(db: AsyncSession, user: User, state: WizardState) -> dict[str, Any]:
+    """Shared step-2 context: attack-vector choices, the org industry/revenue
+    chips, the selected library entry's name (if any), and the grouped
+    threat-community choices for the select.
+
+    TAL (Task 7): extracted out of ``get_wizard_step``'s inline ``n == 2``
+    block so the step-2 POST's 422 re-render (``post_wizard_step``) carries
+    the SAME context the GET renders — a rejected blank/unknown community
+    must not drop the dropdown data the template needs.
+    """
+    ctx: dict[str, Any] = {"attack_vector_choices": ATTACK_VECTOR_CHOICES}
+    step2_org = await db.get(Organization, user.organization_id)
+    if step2_org is not None:
+        step2_ctx = calibration_context_from_org(step2_org)
+        ctx["org_industry"] = step2_ctx.industry
+        ctx["org_revenue_tier"] = step2_ctx.revenue_tier
+    else:
+        ctx["org_industry"] = None
+        ctx["org_revenue_tier"] = None
+    if state.library_entry_id is not None:
+        # Pre-fill: show selected library entry name if one was picked in step 1.
+        entry_row = (
+            await db.execute(
+                select(ScenarioLibraryEntry).where(
+                    ScenarioLibraryEntry.id == uuid.UUID(state.library_entry_id)
+                )
+            )
+        ).scalar_one_or_none()
+        if entry_row is not None:
+            ctx["selected_library_entry_name"] = entry_row.name
+    ctx["threat_community_groups"] = await ThreatCommunityService(
+        db, organization_id=user.organization_id
+    ).grouped_choices()
+    return ctx
+
+
 @router.get("/scenarios/new/wizard/step/{n}", response_class=HTMLResponse)
 async def get_wizard_step(
     n: int,
@@ -2277,30 +2398,7 @@ async def get_wizard_step(
             extra_ctx["library_entries"] = []
             extra_ctx["facets"] = {}
     if n == 2:
-        # Step 2 renders threat_category / threat_actor_type / asset_class /
-        # attack_vector dropdowns. Industry + revenue_tier are shown as read-only
-        # chips sourced live from the org (issue #88 Task 8 — no longer stored
-        # on WizardState).
-        extra_ctx["attack_vector_choices"] = ATTACK_VECTOR_CHOICES
-        step2_org = await db.get(Organization, user.organization_id)
-        if step2_org is not None:
-            step2_ctx = calibration_context_from_org(step2_org)
-            extra_ctx["org_industry"] = step2_ctx.industry
-            extra_ctx["org_revenue_tier"] = step2_ctx.revenue_tier
-        else:
-            extra_ctx["org_industry"] = None
-            extra_ctx["org_revenue_tier"] = None
-    if n == 2 and state.library_entry_id is not None:
-        # Pre-fill: show selected library entry name if one was picked in step 1.
-        entry_row = (
-            await db.execute(
-                select(ScenarioLibraryEntry).where(
-                    ScenarioLibraryEntry.id == uuid.UUID(state.library_entry_id)
-                )
-            )
-        ).scalar_one_or_none()
-        if entry_row is not None:
-            extra_ctx["selected_library_entry_name"] = entry_row.name
+        extra_ctx.update(await _step2_context(db, user, state))
     if n in (3, 4):
         # Steps 3 (Likelihood: TEF+Vuln) and 4 (Impact: PL+SL) are evaluator-
         # style SME-row elicitation pages sharing _fair_params_form_inner.html.
@@ -2429,6 +2527,14 @@ async def get_wizard_step(
         # the review page renders the entered rows instead of a dash.
         review_sme_dir = await sme_directory.list_for_dropdown(db, user.organization_id)
         extra_ctx["review_fair_rows"] = _review_fair_rows(state.sme_estimates, review_sme_dir)
+        # TAL (Task 7): resolve the assigned community for the review dt/dd row.
+        extra_ctx["threat_community"] = (
+            await ThreatCommunityService(db, organization_id=user.organization_id).get_by_slug(
+                state.threat_community
+            )
+            if state.threat_community
+            else None
+        )
     return templates.TemplateResponse(
         request,
         template,
@@ -2518,10 +2624,35 @@ async def post_wizard_step(
     form = await request.form()
 
     if n == 2:
+        # TAL (Task 7): every FAIR scenario names a threat community — reject
+        # blank / over-length / unknown slugs with a 422 re-render BEFORE
+        # assigning any state.* field (a rejected POST must not half-apply).
+        slug = _form_str(form, "threat_community")
+        if (
+            not slug
+            or len(slug) > 64
+            or await ThreatCommunityService(db, organization_id=user.organization_id).get_by_slug(
+                slug
+            )
+            is None
+        ):
+            return templates.TemplateResponse(
+                request,
+                "scenarios/wizard/step_2_basic.html",
+                {
+                    "current_user": user,
+                    "flash": None,
+                    "state": state,
+                    "step": 2,
+                    "errors": {"threat_community": "Choose a threat community"},
+                    **await _step2_context(db, user, state),
+                },
+                status_code=422,
+            )
         state.name = _form_str(form, "name")
         state.description = _form_str(form, "description")
         state.threat_category = _form_str(form, "threat_category")
-        state.threat_actor_type = _form_str(form, "threat_actor_type")
+        state.threat_community = slug
         state.asset_class = _form_str(form, "asset_class")
         state.attack_vector = _form_str(form, "attack_vector")
     elif n in (3, 4):
@@ -2953,6 +3084,15 @@ async def _render_review_with_flash(
     # undefined variable. Build it identically so both paths render the same.
     flash_sme_dir = await sme_directory.list_for_dropdown(db, user.organization_id)
     extra_ctx["review_fair_rows"] = _review_fair_rows(state.sme_estimates, flash_sme_dir)
+    # F7 (TAL Task 7): mirror the n==6 GET's threat_community resolution so
+    # every flash re-render on this page shows the assigned community, not "—".
+    extra_ctx["threat_community"] = (
+        await ThreatCommunityService(db, organization_id=user.organization_id).get_by_slug(
+            state.threat_community
+        )
+        if state.threat_community
+        else None
+    )
     return templates.TemplateResponse(
         request,
         "scenarios/wizard/step_6_review.html",
@@ -3051,6 +3191,25 @@ async def finalize_wizard(
             organization_id=user.organization_id,
             tx_id=tx,
         )
+        # TAL (Task 7): the backstop against a POST that skips step 2 on a
+        # flagged re-estimate (seed_wizard_state_from_scenario blanks the
+        # community for a needs-review scenario) — finalize must never attest
+        # the placeholder, nor silently unassign it. Runs AFTER the draft lock
+        # + cross-org check, BEFORE _assert_finalizable (whose SME-shape flash
+        # would otherwise mask this) and BEFORE advance_step (so a rejected
+        # finalize leaves the same version_token re-submittable, A-I3).
+        # Nothing is dirty yet (get_or_create only reads for an existing tx),
+        # so no rollback is needed here.
+        if not state.threat_community:
+            return await _render_review_with_flash(
+                request,
+                db,
+                user,
+                tx,
+                message="Choose a threat community on step 2 before saving.",
+                href=f"/scenarios/new/wizard/step/2?tx={tx}",
+                href_text="Back to step 2",
+            )
         # State-sourced (D6): SME rows were persisted by steps 3+4. Defensively
         # re-validate the full submit shape (and assert each required fieldset
         # is non-empty per Plan-gate S-I1) before the scipy fit so a malformed /
@@ -3667,6 +3826,25 @@ async def _fair_page_context(
     # mounts the pl/sl readouts there, and a Likelihood render must not pay
     # the semaphore-serialized scipy fit for cfg nobody uses.
     readout_cfg = await _build_readout_cfg(db, user, state) if page == "impact" else None
+    # TAL (Task 7): resolve the assigned community ONCE so both the question
+    # copy and the TEF tooltip (its curated threat_event_definition) derive
+    # from the same row.
+    community: ThreatCommunity | None = (
+        await ThreatCommunityService(db, organization_id=user.organization_id).get_by_slug(
+            state.threat_community
+        )
+        if state.threat_community
+        else None
+    )
+    fieldset_tooltips = dict(QUESTION_TOOLTIPS)
+    if community is not None:
+        # M-I1 fix: concatenate, don't overwrite — the community's curated
+        # threat_event_definition supplies the WHAT (what counts as a TEF for
+        # this community), but QUESTION_TOOLTIPS["tef"] still carries the SME
+        # elicitation CONVENTION (low=5th/high=95th pct, per year) that every
+        # fieldset's tooltip states. Dropping it would silently un-teach the
+        # convention the moment a community is assigned.
+        fieldset_tooltips["tef"] = f"{community.threat_event_definition} {QUESTION_TOOLTIPS['tef']}"
     return {
         "current_user": user,
         "flash": None,
@@ -3674,11 +3852,11 @@ async def _fair_page_context(
         "step": step,
         "page": page,
         "fieldsets_on_page": fieldsets_on_page,
-        "fieldset_tooltips": QUESTION_TOOLTIPS,
+        "fieldset_tooltips": fieldset_tooltips,
         "csrf_token": _csrf_token_from_request(request),
         "org_industry": org_industry,
         "org_revenue_tier": org_revenue_tier,
-        "rendered_questions": _build_rendered_questions(state),
+        "rendered_questions": _build_rendered_questions(state, community),
         "initial_rows": initial_rows,
         "sme_directory_for_dropdown": sme_directory_for_dropdown,
         "available_overlays": overlays,

@@ -1,15 +1,28 @@
-"""Hardcoded scenario-context question templates per MD-5. Per spec §7.4."""
+"""Hardcoded scenario-context question templates per MD-5. Per spec §7.4.
+
+TAL (Threat Agent Library, 2026-09-30): question copy is keyed off the
+assigned ThreatCommunity rather than the retired threat_actor_type enum.
+A community's ``intent`` ('malicious' | 'non_malicious') selects between two
+wordings per fieldset — a non-malicious community (e.g. an accidental
+insider) never asks "try to compromise" or carries an attack-vector clause;
+it asks about an error instead (Task 7).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from idraa.models.enums import AssetClass, ThreatActorType
+from idraa.models.enums import AssetClass
 
 QUESTION_TEMPLATES = {
     "tef": (
         "In a typical year, how often might {threat_actor_phrase} try to "
         "compromise your {asset_class_phrase}{attack_vector_phrase}?"
+    ),
+    "tef_non_malicious": (
+        "In a typical year, how often might {threat_actor_phrase} make an error "
+        "involving your {asset_class_phrase} — a mistake in how it is configured, "
+        "handled, sent or changed?"
     ),
     # Inherent-susceptibility framing (methodology/vuln-inherent-framing):
     # vulnerability is the asset's CONTROL-NAIVE inherent weakness, not a
@@ -20,35 +33,52 @@ QUESTION_TEMPLATES = {
         "If the attempt happens, how likely is the attacker to succeed against "
         "the asset's inherent weaknesses, before any of your mitigating controls?"
     ),
+    "vuln_non_malicious": (
+        "If that error happens, how likely is it to become a loss given the "
+        "asset's inherent weaknesses, before any of your mitigating controls?"
+    ),
     "pl": "If the attack succeeds, what does the event itself cost you: response, recovery, downtime, replacement?",
+    "pl_non_malicious": (
+        "If the error results in a loss, what does the event itself cost you: "
+        "response, recovery, downtime, replacement?"
+    ),
     # Plan-gate M-N2: event-conditional (matches PL), not annualized.
     "sl": "If the attack succeeds, what do other stakeholders' reactions cost you: fines, lost business, and the response they force?",
+    "sl_non_malicious": (
+        "If the error results in a loss, what do other stakeholders' reactions "
+        "cost you: fines, lost business, and the response they force?"
+    ),
 }
 
 
 @dataclass(frozen=True)
 class ScenarioContext:
-    threat_actor_type: ThreatActorType | None
+    threat_community_slug: str | None
+    threat_community_name: str | None
+    threat_community_intent: str | None  # 'malicious' | 'non_malicious' | None
     attack_vector: str | None
     asset_class: AssetClass | None
 
 
-# Arch-3 PR1 fix: enum values must match models/enums.py:ThreatActorType actual definition.
-# Verify against `grep -n "class ThreatActorType" src/idraa/models/enums.py` before T4.
-_THREAT_ACTOR_PHRASES = {
-    ThreatActorType.CYBERCRIMINALS: "cybercriminals",
-    ThreatActorType.NATION_STATE: "a nation-state actor",
-    ThreatActorType.INSIDER_MALICIOUS: "a malicious insider",
-    ThreatActorType.INSIDER_ACCIDENTAL: "an accidental insider",
-    ThreatActorType.HACKTIVISTS: "hacktivists",
-    ThreatActorType.COMPETITORS: "a competitor",
+# TAL: phrases for the canonical (source='seed') communities — Task 7.
+# Keys mirror idraa.models.threat_community.CANONICAL_THREAT_COMMUNITY_SLUGS.
+_THREAT_COMMUNITY_PHRASES: dict[str, str] = {
+    "cybercriminals": "cybercriminals",
+    "nation_state": "a nation-state actor",
+    "hacktivists": "hacktivists",
+    "competitors": "a competitor",
+    "privileged_insider": "a malicious privileged insider",
+    "nonprivileged_insider": "a malicious nonprivileged insider",
+    "insider_accidental": "one of your staff",
+    "third_party": "a vendor's or partner's own staff (abusing access you granted)",
+    "opportunistic_hackers": "an opportunistic attacker",
 }
 
 
-def humanize_threat_actor(actor: ThreatActorType | None) -> str:
-    if actor is None:
+def humanize_threat_community(slug: str | None, name: str | None) -> str:
+    if slug is None:
         return "an attacker"
-    return _THREAT_ACTOR_PHRASES.get(actor, "an attacker")
+    return _THREAT_COMMUNITY_PHRASES.get(slug) or (name.lower() if name else "an attacker")
 
 
 def humanize_attack_vector(vector: str | None) -> str:
@@ -94,11 +124,14 @@ def humanize_asset_class(asset: AssetClass | None) -> str:
 
 
 def render_question(fieldset: str, ctx: ScenarioContext) -> str:
-    template = QUESTION_TEMPLATES[fieldset]
-    return template.format(
-        threat_actor_phrase=humanize_threat_actor(ctx.threat_actor_type),
-        attack_vector_phrase=humanize_attack_vector(ctx.attack_vector),
+    non_mal = ctx.threat_community_intent == "non_malicious"
+    key = f"{fieldset}_non_malicious" if non_mal else fieldset
+    return QUESTION_TEMPLATES[key].format(
+        threat_actor_phrase=humanize_threat_community(
+            ctx.threat_community_slug, ctx.threat_community_name
+        ),
         asset_class_phrase=humanize_asset_class(ctx.asset_class),
+        attack_vector_phrase="" if non_mal else humanize_attack_vector(ctx.attack_vector),
     )
 
 
@@ -107,9 +140,14 @@ def render_question(fieldset: str, ctx: ScenarioContext) -> str:
 QUESTION_TOOLTIPS = {
     "tef": (
         # Plan-gate M-N1: restate the per-year basis so a tooltip-only reader
-        # doesn't anchor on a non-annual figure.
+        # doesn't anchor on a non-annual figure. TAL M-I1 fix: "threat events"
+        # (not "attempts") so this convention text reads correctly for a
+        # non-malicious community too, where the event is an error, not an
+        # attempt — _fair_page_context (routes/scenarios.py) CONCATENATES this
+        # onto a community's curated threat_event_definition, never replaces
+        # it, so the elicitation convention always reaches the analyst.
         "Each SME gives a low (5%) and high (95%) — the range they're 90% "
-        "sure the true number of attempts per year falls inside."
+        "sure the true number of threat events per year falls inside."
     ),
     "vuln": (
         "Estimate the asset's INHERENT susceptibility, before your controls — "

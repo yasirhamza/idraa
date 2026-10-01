@@ -34,6 +34,7 @@ from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -44,6 +45,9 @@ async def _seed_scenario(
     name: str = "run-delete test scenario",
 ) -> Scenario:
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=organization_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

@@ -7,6 +7,7 @@ is allowed through.
 
 from __future__ import annotations
 
+import pytest
 from markupsafe import Markup
 
 from idraa.formatting import linkify_https
@@ -58,3 +59,18 @@ def test_linkify_https_uppercase_scheme_stays_inert():
 def test_linkify_https_data_scheme_stays_inert():
     out = str(linkify_https("see data:text/html,<h1>x</h1>"))
     assert "<a" not in out and "&lt;h1&gt;" in out
+
+
+@pytest.mark.parametrize(
+    "bad", ["https://[", "https://x]", "javascript:alert(1)", "http://example.com", "", None, 42]
+)
+def test_safe_https_href_rejects(bad) -> None:
+    from idraa.formatting import safe_https_href
+
+    assert safe_https_href(bad) is None
+
+
+def test_safe_https_href_accepts() -> None:
+    from idraa.formatting import safe_https_href
+
+    assert safe_https_href("https://example.com/x?y=1") == "https://example.com/x?y=1"

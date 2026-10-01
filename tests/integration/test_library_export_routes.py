@@ -26,9 +26,14 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, ThreatCategory
 from idraa.models.scenario_library import ScenarioLibraryEntry
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.library_bundle_import import _validate_entries, parse_bundle
+
+# Published-community allowlist for the mechanical _validate_entries(published_slugs=...)
+# rule (brief Task 5 §5).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists", "third_party"}
 
 
 async def _insert_entry(
@@ -45,7 +50,8 @@ async def _insert_entry(
         status="published",
         source="seed",
         threat_event_type=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=["t"],
         description="An exportable published entry with a long-enough description.",
@@ -157,7 +163,7 @@ async def test_exported_bytes_reimport_cleanly(
     assert pairs is not None
     assert len(pairs) >= 2
 
-    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set())
+    preview, errors, seeds = _validate_entries(pairs, existing_slugs=set(), published_slugs=_PUB)
     assert errors == []
     assert all(p["action"] == "add" for p in preview)
     assert all(s is not None for s in seeds)

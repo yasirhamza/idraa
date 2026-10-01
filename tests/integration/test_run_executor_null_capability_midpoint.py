@@ -48,6 +48,7 @@ from idraa.models.enums import (
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.run_executor import execute_run
 
@@ -95,6 +96,9 @@ async def _seed_siem_with_cleared_monitoring(
 
 async def _seed_scenario(db: AsyncSession, *, org_id: uuid.UUID, created_by: uuid.UUID) -> Scenario:
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Ransomware against ICS",
         scenario_type=ScenarioType.CUSTOM,

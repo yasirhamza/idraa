@@ -28,6 +28,14 @@ from idraa.models.scenario_control import ScenarioControl
 
 
 @dataclass(frozen=True)
+class ScenarioIdName:
+    """Slim (id, name) projection — for list views that render nothing else from the row."""
+
+    id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True)
 class MitigatingControlsDiff:
     """Result of :meth:`ScenarioRepo.set_mitigating_controls` (issue #79 L6).
 
@@ -263,6 +271,40 @@ class ScenarioRepo:
         if scenario is None:
             raise ScenarioNotFoundError(f"scenario id={scenario_id} not in org={organization_id}")
         return scenario
+
+    async def list_id_name_for_community(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        threat_community_id: uuid.UUID,
+        threat_community_version: int,
+        limit: int,
+    ) -> list[ScenarioIdName]:
+        """Slim (id, name) projection of an org's scenarios pinned to one threat-community
+        (id, version) pair, ordered by name.
+
+        Architect N2: the Threat Agent Library profile page
+        (``routes/threat_communities.py``, ``threat_community_detail.html``'s "Your
+        scenarios using this community" list) renders nothing from these rows but
+        ``s.id``/``s.name`` — selecting only those two columns instead of the full ORM
+        ``Scenario`` (with its eager-loaded relationships and JSON distribution columns)
+        avoids loading data the page cannot show. ``limit`` is passed straight to SQL —
+        callers that need a truncation flag pass ``limit + 1`` and compare ``len(rows)``
+        against their own cap, the same convention this call site used before this method
+        existed.
+        """
+        stmt = (
+            select(Scenario.id, Scenario.name)
+            .where(
+                Scenario.organization_id == organization_id,
+                Scenario.threat_community_id == threat_community_id,
+                Scenario.threat_community_version == threat_community_version,
+            )
+            .order_by(Scenario.name)
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).all()
+        return [ScenarioIdName(id=row.id, name=row.name) for row in rows]
 
     async def fetch_by_ids_for_org(
         self,

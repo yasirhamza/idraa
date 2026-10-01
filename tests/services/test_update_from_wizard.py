@@ -32,6 +32,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.errors import ValidationError
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import ScenarioEffect, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.schemas.scenario import ScenarioForm
@@ -50,14 +51,21 @@ def _form(
     effect: str | None = None,
     scenario_type: ScenarioType = ScenarioType.CUSTOM,
     version: str = "1.0",
+    threat_community: str | None = "cybercriminals",
 ) -> ScenarioForm:
     """Minimal valid ScenarioForm for service tests (mirrors
-    tests/unit/test_scenario_service.py's ``_form`` builder)."""
+    tests/unit/test_scenario_service.py's ``_form`` builder).
+
+    ``threat_community`` defaults to the canonical ``"cybercriminals"``
+    slug (seeded on every test schema); pass ``None`` explicitly to
+    exercise the Threat Agent Library required-on-edit guard.
+    """
     return ScenarioForm(
         name=name,
         description=description,
         scenario_type=scenario_type,
         threat_category=ThreatCategory.RANSOMWARE,
+        threat_community=threat_community,
         effect=effect,
         version=version,
         threat_event_frequency=threat_event_frequency
@@ -149,6 +157,39 @@ async def test_row_version_conflict_raises(
     await db_session.refresh(s)
     assert s.name == "Original"
     assert s.row_version == 1
+
+
+async def test_update_from_wizard_requires_threat_community_on_edit(
+    db_session: AsyncSession,
+    seed_org_user: SeedOrgUser,
+) -> None:
+    """Threat Agent Library P1 fix-wave: like update(), update_from_wizard()
+    must reject a None ``threat_community`` BEFORE any mutation — the row
+    is left exactly as it was (name, row_version, assigned community)."""
+    org, user = await seed_org_user(db_session)
+
+    service = ScenarioService(db_session)
+    s = await service.create(
+        organization_id=org.id,
+        form=_form(name="Original"),
+        current_user=user,
+    )
+    rv_before = s.row_version
+    community_id_before = s.threat_community_id
+
+    with pytest.raises(ValidationError, match="threat_community is required on edit"):
+        await service.update_from_wizard(
+            organization_id=org.id,
+            scenario_id=s.id,
+            form=_form(name="Should not apply", threat_community=None),
+            expected_row_version=rv_before,
+            actor=user,
+        )
+
+    await db_session.refresh(s)
+    assert s.name == "Original"
+    assert s.row_version == rv_before
+    assert s.threat_community_id == community_id_before
 
 
 async def test_provenance_flip(
