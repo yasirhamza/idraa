@@ -31,7 +31,7 @@ _STEP_2_DATA: dict[str, str] = {
     "name": "test-scenario-readout-props",
     "description": "wizard readout props integration test",
     "threat_category": "ransomware",
-    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals",
     "asset_class": "systems",
 }
 

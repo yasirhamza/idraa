@@ -36,7 +36,7 @@ from tests.models.test_attack_models import _technique
 
 _STEP_2_BASE: dict[str, str] = {
     "threat_category": "ransomware",
-    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals",
     "asset_class": "systems",
 }
 

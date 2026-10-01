@@ -165,10 +165,7 @@ async def _walk_reestimate_to_finalize(
         "name": scenario.name,
         "description": scenario.description or "",
         "threat_category": scenario.threat_category.value,
-        # TAL bridge (Task 7 replaces): the step-2 form field is still named
-        # "threat_actor_type" until Task 7; the value now comes from the
-        # renamed threat_community relationship.
-        "threat_actor_type": (scenario.threat_community.slug if scenario.threat_community else ""),
+        "threat_community": (scenario.threat_community.slug if scenario.threat_community else ""),
         "asset_class": (scenario.asset_class.value if scenario.asset_class else ""),
         "attack_vector": scenario.attack_vector or "",
     }
@@ -554,7 +551,7 @@ async def test_create_path_unchanged(
         data={
             "name": "Fresh create-path scenario",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )

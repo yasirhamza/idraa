@@ -24,7 +24,7 @@ from tests.integration._wizard_step3_test_helpers import (
 
 _STEP_2_BASE: dict[str, str] = {
     "threat_category": "ransomware",
-    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals",
     "asset_class": "systems",
 }
 

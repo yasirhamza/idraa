@@ -146,7 +146,7 @@ async def _drive_wizard_to_finalize(
             "name": "F6 Test Scenario",
             "description": "test",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
             "attack_vector": "email_phishing",
         },

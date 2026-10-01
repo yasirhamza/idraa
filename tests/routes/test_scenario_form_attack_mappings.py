@@ -24,6 +24,7 @@ from tests.routes.test_attack_mapping_partial import seeded_catalog  # noqa: F40
 _FORM_BASE: dict[str, Any] = {
     "name": "attack-mapping-form-test",
     "threat_category": "ransomware",
+    "threat_community": "cybercriminals",
     "tef_low": "1",
     "tef_mode": "5",
     "tef_high": "12",

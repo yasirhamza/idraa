@@ -85,7 +85,6 @@ __all__ = [
     "INDUSTRY_CHOICES",
     "MAX_ATTACK_MAPPINGS",
     "REVENUE_TIER_CHOICES",
-    "THREAT_ACTOR_TYPE_CHOICES",
     "THREAT_CATEGORY_CHOICES",
     "AttackFormContext",
     "asset_class_choices",
@@ -303,14 +302,6 @@ THREAT_CATEGORY_CHOICES: list[tuple[str, str]] = [
     ("ot_availability", "OT availability"),
     ("ot_integrity", "OT integrity (manipulation of view)"),
     ("miscellaneous", "Miscellaneous"),
-]
-THREAT_ACTOR_TYPE_CHOICES: list[tuple[str, str]] = [
-    ("cybercriminals", "Cybercriminals"),
-    ("nation_state", "Nation-state"),
-    ("insider_malicious", "Insider — malicious"),
-    ("insider_accidental", "Insider — accidental"),
-    ("hacktivists", "Hacktivists"),
-    ("competitors", "Competitors"),
 ]
 ASSET_CLASS_CHOICES: list[tuple[str, str]] = asset_class_choices()
 # Attack vectors — curated dropdown values. No AttackVector enum exists
@@ -732,11 +723,23 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
     # TEF (frequency) and PL/SL (dollar magnitudes) are NOT bounded above.
     _assert_probability_bounds(vulnerability_dist, "vuln")
 
+    # TAL (Task 7): every FAIR scenario names a threat community — the simple
+    # form's select is REQUIRED (mirrors the wizard step-2 gate). ScenarioForm
+    # itself keeps the field nullable (other producers, e.g. a future bundle
+    # importer, may legitimately construct a form without going through this
+    # parser), so the required-ness is enforced HERE, at the human-authored
+    # form boundary. "{field}: {message}" matches the shape the route's
+    # existing except (..., ValueError) -> errors_dict.get(field) re-render
+    # already parses for every other ScenarioFormValidationError.
+    threat_community = (raw.get("threat_community") or "").strip() or None
+    if threat_community is None:
+        raise ScenarioFormValidationError("threat_community: Choose a threat community")
+
     form = ScenarioForm(
         name=raw["name"],
         description=description,
         threat_category=raw["threat_category"],
-        threat_community=(raw.get("threat_community") or "").strip() or None,
+        threat_community=threat_community,
         attack_vector=(raw.get("attack_vector") or "").strip() or None,
         asset_class=(raw.get("asset_class") or "").strip() or None,
         effect=(raw.get("effect") or "").strip() or None,
@@ -849,6 +852,7 @@ def render_scenario_form(
     scenario: Scenario | None,
     form_raw: dict[str, Any],
     overlay_options: list[dict[str, Any]],
+    threat_community_groups: list[tuple[str, list[tuple[str, str]]]],
     available_controls: list[Control] | None = None,
     inactive_linked_controls: list[Control] | None = None,
     attack_ctx: AttackFormContext | None = None,
@@ -900,7 +904,7 @@ def render_scenario_form(
             "org_industry": ctx.industry if ctx is not None else None,
             "org_revenue_tier": ctx.revenue_tier if ctx is not None else None,
             "threat_category_choices": THREAT_CATEGORY_CHOICES,
-            "threat_actor_type_choices": THREAT_ACTOR_TYPE_CHOICES,
+            "threat_community_groups": threat_community_groups,
             "asset_class_choices": ASSET_CLASS_CHOICES,
             "attack_vector_choices": ATTACK_VECTOR_CHOICES,
             "effect_choices": EFFECT_CHOICES,

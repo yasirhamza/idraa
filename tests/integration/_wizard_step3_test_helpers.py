@@ -59,7 +59,7 @@ async def _bootstrap_wizard_through_step_2(
         "name": "test-scenario-pi-f7",
         "description": "wizard step3 helper integration test",
         "threat_category": "ransomware",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
         "asset_class": "systems",
     }
     await csrf_post(client, "/scenarios/new/wizard/step/2", data=step2_data)

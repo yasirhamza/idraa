@@ -8,6 +8,7 @@ tx_id). Survives server restart; cleanup_expired sweeps idle drafts.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime as dt
 import uuid
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
 from idraa.models.wizard_draft import WizardDraft
+from idraa.services.threat_communities import LEGACY_SPLIT_SOURCE_VALUE, legacy_slug_for
 
 
 @dataclass
@@ -157,13 +159,31 @@ class WizardStateService:
         ).scalar_one_or_none()
         if row is None:
             return None
+        # TAL (Task 7): bridge a pre-rename draft that still carries the
+        # legacy "threat_actor_type" key. Mapped ONLY when no "threat_community"
+        # key is already present (a draft written post-rename wins outright)
+        # and the legacy value is NOT the split-source placeholder value —
+        # insider_malicious must never be silently pre-selected in the wizard
+        # (the placeholder exists so a human notices and corrects it, same
+        # rationale as dropping legacy_residual vuln rows on re-estimate).
+        raw = dict(row.state_json)
+        legacy = raw.pop("threat_actor_type", None)
+        if (
+            isinstance(legacy, str)
+            and "threat_community" not in raw
+            and legacy != LEGACY_SPLIT_SOURCE_VALUE
+        ):
+            with contextlib.suppress(
+                KeyError
+            ):  # unknown legacy value: drop it; the step-2 page shows the blank select
+                raw["threat_community"] = legacy_slug_for(legacy)[0]
         # Whitelist filter against current dataclass fields so a removed field
         # in WizardState does not blow up reads of pre-removal rows.
         # Drop ``version_token`` from the JSON payload (defense in depth
         # against stale legacy rows that still have it embedded) — the
         # row's column copy is the authoritative source for the token.
         known = {f.name for f in dataclasses.fields(WizardState)} - {"version_token"}
-        state = WizardState(**{k: v for k, v in row.state_json.items() if k in known})
+        state = WizardState(**{k: v for k, v in raw.items() if k in known})
         state.version_token = row.version_token
         return state
 
@@ -420,9 +440,16 @@ def seed_wizard_state_from_scenario(
         name=scenario.name,
         description=scenario.description,
         threat_category=_enum_val(scenario.threat_category),
-        # TAL bridge (Task 7 replaces): threat_community=None here; Task 7
-        # supplies the real value (scenario.threat_community.slug if set).
-        threat_community=None,
+        # TAL (Task 7): a scenario whose community still needs review (e.g. the
+        # migrated_split_default placeholder) must re-estimate from a BLANK
+        # select — never pre-fill the placeholder, same rationale as dropping
+        # legacy_residual vuln rows above (Meth-B1). A confirmed community
+        # carries its slug forward as normal.
+        threat_community=(
+            scenario.threat_community.slug
+            if scenario.threat_community and not scenario.threat_community_needs_review
+            else None
+        ),
         asset_class=_enum_val(scenario.asset_class),
         attack_vector=scenario.attack_vector,
         mitigating_control_ids=list(mitigating_control_ids),

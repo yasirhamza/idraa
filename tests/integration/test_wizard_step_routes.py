@@ -598,7 +598,7 @@ async def test_wizard_finalize_creates_scenario(
             "name": "Wizard scenario E2E",
             "description": "from wizard",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )
@@ -671,7 +671,7 @@ async def test_wizard_finalize_persists_mitigating_controls(
             "name": "Wizard control-persistence regression",
             "description": "step-4 controls must reach scenario_controls",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
         },
     )
@@ -866,7 +866,7 @@ async def test_finalize_double_post_creates_only_one_scenario(
             "tx_id": str(tx),
             "name": "double-post",
             "threat_category": "ransomware",
-            "threat_actor_type": "cybercriminals",
+            "threat_community": "cybercriminals",
             "asset_class": "systems",
             "sme_estimates": {
                 "tef": [_row(sme_id, 1.0, 12.0)],

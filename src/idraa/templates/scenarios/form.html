@@ -64,6 +64,28 @@
   {% endif %}
 {% endif %}
 
+{# TAL (Task 7): threat-community review notice on the edit form. Text only,
+   no confirm button — the confirm affordance lives on the scenario detail
+   page banner (view.html); this is the fix-it-here path (save this form with
+   a community picked below). #}
+{% if scenario and scenario.threat_community_needs_review %}
+  <div class="alert alert-warning mb-4" role="alert"><div>
+    <p class="font-semibold">Threat community needs review.</p>
+    <p class="text-sm mt-1">
+      {% if scenario.threat_community_provenance == 'migrated_split_default' %}
+      This scenario was recorded as a malicious insider before Idraa distinguished
+      <strong>privileged</strong> from <strong>nonprivileged</strong> insiders. It now carries
+      <strong>Privileged insider</strong> as a placeholder so it is not missed; the placeholder changes
+      no computed figure.
+      {% else %}
+      This scenario has no threat community. Every FAIR scenario names one; choose the community whose
+      profile best matches the actor you estimated against.
+      {% endif %}
+      Save this form with a community selected, or confirm it on the scenario page.
+    </p>
+  </div></div>
+{% endif %}
+
 {%- set errors_dict = {} -%}
 {%- if errors -%}
   {#- Convert list[str] errors into a dict keyed by positional index or parse loc-prefixed messages -#}
@@ -153,16 +175,10 @@
     </div>
 
     <div class="space-y-1">
-      <div class="flex items-center justify-between">
-        <label for="threat_actor_type" class="text-meta text-ink-2 font-mono uppercase tracking-[0.11em] text-[10px]">Threat actor type</label>
-      </div>
-      <select id="threat_actor_type" name="threat_actor_type"
-              class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
-        <option value="">— select —</option>
-        {% for value, label in threat_actor_type_choices %}
-        <option value="{{ value }}" {% if form.threat_actor_type == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+      {{ form_field(name="threat_community", label="Threat community", input_type="select",
+                    value=form.threat_community, error=errors_dict.get('threat_community'),
+                    option_groups=threat_community_groups, required=true) }}
+      <a href="/library/threat-communities" class="text-micro text-brand hover:underline">Profiles &rarr;</a>
     </div>
 
     <div class="space-y-1">

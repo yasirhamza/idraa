@@ -49,7 +49,8 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
                     help=none, error=none, required=False,
                     prefix=none, suffix=none, options=none,
                     disabled=False, mode='edit', placeholder=none,
-                    autocomplete=none, rows=4, step=none, field_id=none) -%}
+                    autocomplete=none, rows=4, step=none, field_id=none,
+                    option_groups=none) -%}
 {%- set _id = field_id or name -%}
 
 {% if mode == 'display' %}
@@ -126,9 +127,18 @@ h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border {% if error %}bord
             {% if required %}required aria-required="true"{% endif %}
             {% if disabled %}disabled{% endif %}
             class="{{ _input_classes(error, disabled) }}">
+      {% if option_groups is not none %}
+      <option value="" {% if not value %}selected{% endif %}>— select —</option>
+      {% for group_label, opts in option_groups %}
+      <optgroup label="{{ group_label }}">
+        {% for opt_value, opt_label in opts %}<option value="{{ opt_value }}" {% if value == opt_value %}selected{% endif %}>{{ opt_label }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+      {% else %}
       {% for opt_value, opt_label in (options or []) %}
       <option value="{{ opt_value }}"{% if opt_value == value %} selected{% endif %}>{{ opt_label }}</option>
       {% endfor %}
+      {% endif %}
     </select>
 
   {% elif input_type == 'textarea' %}

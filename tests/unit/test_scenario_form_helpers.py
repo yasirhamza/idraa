@@ -38,6 +38,7 @@ def _base_raw(**over: object) -> dict[str, object]:
     raw: dict[str, object] = {
         "name": "S",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "tef_dist": "pert",
         "tef_low": "1",
         "tef_mode": "2",
@@ -55,6 +56,34 @@ def _base_raw(**over: object) -> dict[str, object]:
 
 
 # ── parse_scenario_form dispatch ──────────────────────────────────────────
+
+
+# ── threat_community required ─────────────────────────────────────────────
+
+
+def test_blank_threat_community_raises_choose_a_community() -> None:
+    raw = _base_raw(threat_community="")
+    with pytest.raises(ScenarioFormValidationError, match="Choose a threat community"):
+        parse_scenario_form(raw)
+
+
+def test_missing_threat_community_key_raises_choose_a_community() -> None:
+    raw = _base_raw()
+    del raw["threat_community"]
+    with pytest.raises(ScenarioFormValidationError, match="Choose a threat community"):
+        parse_scenario_form(raw)
+
+
+def test_whitespace_only_threat_community_raises() -> None:
+    raw = _base_raw(threat_community="   ")
+    with pytest.raises(ScenarioFormValidationError, match="Choose a threat community"):
+        parse_scenario_form(raw)
+
+
+def test_valid_threat_community_round_trips_onto_form() -> None:
+    raw = _base_raw(threat_community="hacktivists")
+    form = parse_scenario_form(raw)
+    assert form.threat_community == "hacktivists"
 
 
 def test_lognormal_node_stored_as_native() -> None:
@@ -487,7 +516,7 @@ def test_form_from_scenario_preserves_pl_max_for_unchanged_resubmit() -> None:
         name="S",
         description="",
         threat_category="ransomware",
-        threat_community=None,
+        threat_community=SimpleNamespace(slug="cybercriminals"),
         attack_vector="",
         asset_class="",
         effect="",
