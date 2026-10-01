@@ -152,6 +152,15 @@ async def _walk_reestimate_to_finalize(
     (plural) posts multiple ``control_ids`` form values and takes precedence
     over the single-id ``control_id`` when both are given.
     """
+    # `threat_community` is a lazy="selectin" relationship, populated only on
+    # a QUERY-based load. `scenario` here was constructed directly by
+    # `_seed_scenario` and has since been through one or more
+    # `db.commit()`s (which expire it, per `expire_on_commit` default) — the
+    # relationship was never loaded in the first place, so a bare synchronous
+    # `scenario.threat_community` read below would attempt an implicit lazy
+    # load outside any await/greenlet context (MissingGreenlet). Load it
+    # explicitly first.
+    await db.refresh(scenario, attribute_names=["threat_community"])
     step2_data = {
         "name": scenario.name,
         "description": scenario.description or "",
