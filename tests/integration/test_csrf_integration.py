@@ -27,6 +27,7 @@ from idraa.models.enums import IndustryType, OrganizationSize, UserRole
 from idraa.models.organization import Organization
 from idraa.models.user import User
 from idraa.services.auth import SESSION_COOKIE, hash_password
+from tests.conftest import seed_canonical_threat_communities
 
 _SEED_EMAIL = "csrf-seed@example.test"
 
@@ -87,6 +88,7 @@ async def csrf_client(
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
 
     # Seed one user so the setup-guard's "no users -> redirect" branch
     # does not fire on the /__csrf_test__ and /__csrf_form_test__ endpoints.

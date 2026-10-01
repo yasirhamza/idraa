@@ -23,6 +23,7 @@ from idraa.models.mfa import RecoveryCode
 from idraa.models.user import User
 from idraa.services import second_factor
 from idraa.services.mfa_crypto import hash_recovery_code
+from tests.conftest import seed_canonical_threat_communities
 
 # asyncio_mode = "auto" (pyproject) collects async tests without an explicit
 # mark; NOT applying a module-level pytest.mark.asyncio here so the one sync
@@ -34,6 +35,7 @@ async def _create_schema(engine) -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
 
 
 @pytest_asyncio.fixture

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from idraa.db import Base, _install_sqlite_pragmas, strict_json_dumps
 from idraa.models.user import User
 from idraa.services import auth
+from tests.conftest import seed_canonical_threat_communities
 
 
 async def _create_schema(engine) -> None:
@@ -27,6 +28,7 @@ async def _create_schema(engine) -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
 
 
 @pytest_asyncio.fixture

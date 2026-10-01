@@ -14,10 +14,12 @@ acquiring them lands a schema-valid row.
 
 from __future__ import annotations
 
+import functools
 import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any as _Any
 
 # Set ENVIRONMENT=test BEFORE importing idraa so module-level app
@@ -57,16 +59,75 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.user import User
 
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
+
+    from idraa.models.threat_community import ThreatCommunity
+
+
+@functools.lru_cache(maxsize=1)
+def _cached_threat_community_seed() -> tuple[
+    _Any, ...
+]:  # conftest imports typing.Any as _Any (ruff F821 otherwise)
+    """Validated once per session. Returns a tuple; callers never mutate the models."""
+    from idraa.schemas.threat_community import load_threat_community_seed
+
+    return tuple(load_threat_community_seed())
+
+
+def seed_canonical_threat_communities(conn: Connection) -> None:
+    """Insert the nine canonical rows (sync connection; idempotent via ON CONFLICT DO NOTHING).
+
+    Test schemas are create_all (no migrations) and scenario_library_entries has a NOT NULL FK
+    to threat_communities, so every schema needs these rows. `client` and `db_session` both
+    call _create_schema on the same file, hence the conflict clause.
+    """
+    import datetime as _dt
+
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from idraa.models.threat_community import ThreatCommunity, canonical_threat_community_id
+    from idraa.schemas.threat_community import seed_to_row_kwargs
+
+    now = _dt.datetime.now(_dt.UTC)
+    for seed in _cached_threat_community_seed():
+        stmt = (
+            sqlite_insert(ThreatCommunity.__table__)
+            .values(
+                id=canonical_threat_community_id(seed.slug),
+                version=1,
+                source="seed",
+                published_at=now,
+                created_at=now,
+                updated_at=now,
+                **seed_to_row_kwargs(seed),
+            )
+            .on_conflict_do_nothing(index_elements=["id", "version"])
+        )
+        conn.execute(stmt)
+
 
 async def _create_schema(engine: AsyncEngine) -> None:
-    """Create all tables on the given engine.
+    """Create all tables on the given engine and seed the canonical threat communities.
 
     Single entry point so that when Alembic migrations replace
     ``Base.metadata.create_all`` in a later milestone, only this helper
     changes instead of every fixture that needs a schema.
     """
-    async with engine.begin() as conn:
+    async with engine.begin() as conn:  # commits on exit -> visible to the app's separate engine
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(seed_canonical_threat_communities)
+
+
+@pytest_asyncio.fixture
+async def seed_threat_communities(db_session: AsyncSession) -> dict[str, ThreatCommunity]:
+    """The nine canonical rows already inserted by _create_schema, keyed by slug."""
+    from sqlalchemy import select
+
+    from idraa.models.threat_community import ThreatCommunity
+
+    rows = (await db_session.execute(select(ThreatCommunity))).scalars().all()
+    return {r.slug: r for r in rows}
 
 
 @pytest_asyncio.fixture
