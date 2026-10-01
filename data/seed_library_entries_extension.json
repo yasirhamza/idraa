@@ -4911,7 +4911,7 @@
     "status": "published",
     "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
-    "threat_community": "privileged_insider",
+    "threat_community": "nonprivileged_insider",
     "asset_class": "cash_or_equivalent",
     "attack_vector": "privileged_access_misuse",
     "tags": [

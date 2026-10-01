@@ -14,16 +14,19 @@
     "personal_risk_tolerance": "High. Operators face little personal consequence; the sponsor accepts attribution risk when the objective justifies it.",
     "collateral_damage_concern": "Moderate in collection operations, where stealth matters; low in sanctioned disruptive operations.",
     "threat_event_definition": "A threat event for this community is an attempt by a state-directed operator to gain covert access to, exfiltrate from, or disrupt one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
-      "low": 0.00350831,
-      "mode": 0.00701663,
-      "high": 0.0315748,
+      "low": 0.00259615,
+      "mode": 0.0051923,
+      "high": 0.0233654,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.5,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.05 (Verizon DBIR 2024 Figure 13, p. 16: State-sponsored actors in breaches, n = 7,921 — population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.50 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.0105249 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.00701663, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.037 (State-sponsored actors at ≈5% of the n = 7,921 breaches with a known actor variety, Figure 13, p. 16, rescaled to the all-breach basis: 0.05 × 7,921 ÷ 10,626 ≈ 0.037; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.50 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00778846 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0051923, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 85,
@@ -32,10 +35,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: the most capable actors that exist, so the band sits at the top of the scale; the low end allows for the many lower-tier units that operate under state tasking. The central value is the most likely rank, placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community with a DBIR breach share; DBIR breaches are not the same population as IRIS loss events and DBIR allows more than one actor per breach, so the share is a proxy applied to λ. The External 65% of breaches (DBIR 2024 Figure 11, p. 15) is partitioned across the five external communities with organised crime taken as the residual, so the sum of external shares equals 65% and Σ share-weighted λ across all nine communities is 0.996 λ. The 0.50 conversion is this community's own: state operators are capable and targeted, so a larger fraction of attempts becomes a loss event than for the population average. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: cybercriminals are far more frequent but less capable and less patient; competitors share the espionage motive without the resources or legal cover.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community with a DBIR breach share — Figure 13's ≈5% is conditional on a known actor variety (n = 7,921), so it is rescaled to the all-breach basis (≈3.7%); DBIR breaches are not the same population as IRIS loss events and DBIR allows more than one actor per breach, so the share is a proxy applied to λ. The External 65% of breaches (DBIR 2024 Figure 11, p. 15) is partitioned across the five external communities with organised crime taken as the residual, so the sum of external shares equals 65% and Σ share-weighted λ across all nine communities is 0.991 λ. The 0.50 conversion is this community's own: state operators are capable and targeted, so a larger fraction of attempts becomes a loss event than for the population average. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: cybercriminals are far more frequent but less capable and less patient; competitors share the espionage motive without the resources or legal cover.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 11, p. 15 (actor origin in breaches); Figure 12, p. 15 (motives); Figure 13, p. 16 (actor varieties, n = 7,921)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 11, p. 15; Figure 12, p. 15; Figure 13, p. 16 (n = 7,921); p. 5 (10,626 breaches)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -54,16 +67,19 @@
     "personal_risk_tolerance": "High. Operators mostly sit outside the reach of the victim's law enforcement and price in the occasional takedown.",
     "collateral_damage_concern": "Low. Spill-over to customers, patients or the public is accepted and sometimes used as extra leverage.",
     "threat_event_definition": "A threat event for this community is an attempt by a financially motivated criminal to gain access to, extort, defraud or disrupt one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
-      "low": 0.0608108,
-      "mode": 0.121622,
-      "high": 0.547297,
+      "low": 0.062331,
+      "mode": 0.124662,
+      "high": 0.560979,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.3,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.52 (organised crime taken as the residual of the External 65% of breaches in Verizon DBIR 2024 Figure 11, p. 15, after the state-sponsored 5%, opportunistic 6%, hacktivist 1% and competitor 1% sub-shares — DBIR Figure 13, p. 16 shows organised crime at roughly 65% of breaches with a known actor variety, n = 7,921, which exceeds a partition because breaches can carry more than one actor; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.30 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.182432 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.121622, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.533 (organised crime taken as the residual of the External 65% of breaches (Figure 11, p. 15) after the state-sponsored 3.7%, opportunistic 6%, hacktivist 1% and competitor 1% sub-shares: 65 − 11.7 = 53.3%; Figure 13, p. 16 shows organised crime at ≈65% of the n = 7,921 breaches with a known actor variety, ≈48% on the all-breach basis — the residual sits above that because it also absorbs the unattributed remainder of External, and the Figure 13 bars sum to ≈105% because a breach can carry more than one actor; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.30 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.186993 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.124662, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 55,
@@ -72,10 +88,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: a wide band because the community spans commodity affiliates and elite crews; the most likely rank is well above the median actor. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is a residual: DBIR reports organised crime at roughly 65% of breaches with a known actor variety, but the actor-variety bars sum to more than 100% because a breach can carry several actors, so the curator partitions the External 65% of breaches among the five external communities and gives organised crime what is left (52%); the sum of external shares therefore equals 65% and Σ share-weighted λ across all nine communities is 0.996 λ. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.30 conversion is this community's own: high-volume phishing and credential campaigns mean many attempts per loss event. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: opportunistic hackers use the same commodity tools without organisation or targeting; nation-states are rarer, more patient and more capable.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is a residual: DBIR reports organised crime at ≈65% of the n = 7,921 breaches with a known actor variety, which is ≈48% on the all-breach basis; the curator partitions the External 65% of breaches among the five external communities and gives organised crime what is left (53.3%), which also absorbs the unattributed remainder of External, and the Figure 13 bars sum to ≈105% because a breach can carry more than one actor; the sum of external shares therefore equals 65% and Σ share-weighted λ across all nine communities is 0.991 λ. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.30 conversion is this community's own: high-volume phishing and credential campaigns mean many attempts per loss event. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: opportunistic hackers use the same commodity tools without organisation or targeting; nation-states are rarer, more patient and more capable.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 11, p. 15 (External 65% of breaches); Figure 13, p. 16 (organised crime, n = 7,921); Figure 12, p. 15 (financial motive)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 11, p. 15 (External 65% of breaches); Figure 13, p. 16 (organised crime, n = 7,921); Figure 12, p. 15 (financial motive)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -94,16 +120,19 @@
     "personal_risk_tolerance": "Moderate to high. Participants accept legal exposure for the cause, though many hide behind low-effort methods that are hard to attribute.",
     "collateral_damage_concern": "Low. Disruption to bystanders is often part of the intended message.",
     "threat_event_definition": "A threat event for this community is an attempt by an ideologically motivated actor to deface, leak from, or deny service to one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.00150356,
-      "mode": 0.00291315,
+      "mode": 0.00291317,
       "high": 0.0184186,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.2,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (a curator sub-share taken inside the non-financial, non-espionage 'Other' motive band of roughly 2% of breaches in Verizon DBIR 2024 Figure 12, p. 15, n = 5,632 — DBIR publishes no hacktivist actor variety; the competitor sub-share takes the other 1% so the two sub-shares sum to the parent band; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.20 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00526247 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.00291315, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (a curator convention of 1% — DBIR publishes no hacktivist actor variety and no ideology share of breaches; the only published bound is the Figure 13 'Other' actor variety at ≈10% of n = 7,921 (≈7.5% on the all-breach basis), which in VERIS pools activists, competitors and unaffiliated actors; the competitor row takes another 1% from the same pool; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.20 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00526247 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.00291317, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 30,
@@ -112,17 +141,27 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: a wide band around the median actor, because most participants use rented or commodity tooling while a few members are genuinely skilled. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no hacktivist actor variety and its 'Other' motive band is about 2% of breaches, so the share is a curator sub-share of 1% inside that band (the competitor row takes the other 1%; the sub-shares sum to the parent band). The share is a proxy — DBIR breaches are not the same population as IRIS loss events, and hacktivist denial-of-service incidents rarely become loss events with reported losses, so the loss-event base understates hacktivist attempts for a high-profile organisation; k = 3.5 widens the range to reflect that. The 0.20 conversion is this community's own: most attempts are noisy and low-skill. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). An organisation with a public role in a contested issue should expect a rate well above this landmark; a sector-neutral mid-sized organisation rarely attracts this community at all.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no hacktivist actor variety and no ideology share of breaches, so the 1% is a curator convention; the only published bound is the Figure 13 'Other' actor variety (≈10% of n = 7,921, ≈7.5% of all breaches), a VERIS pool of activists, competitors and unaffiliated actors from which the competitor row also takes 1%. The share is a proxy — DBIR breaches are not the same population as IRIS loss events, and a breach share excludes availability-only events (the Denial of Service pattern, p. 49, is 16,843 incidents but 3 breaches) while IRIS loss events include outages, so the breach share understates this outage-heavy community; k = 3.5 widens the range to reflect that. The 0.20 conversion is this community's own: most attempts are noisy and low-skill. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). An organisation with a public role in a contested issue should expect a rate well above this landmark; a sector-neutral mid-sized organisation rarely attracts this community at all.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 12, p. 15 (actor motives in breaches, n = 5,632); p. 49 (Denial of Service pattern, External 100%)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 12, p. 15 (motives); Figure 13, p. 16 ('Other' variety, n = 7,921); p. 49 (DoS, External 100%)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
   {
     "slug": "competitors",
     "name": "Competitors",
-    "summary": "Rival firms, or people acting for them, seeking commercial advantage through the theft of trade secrets, pricing, bids, customer lists or product plans. Most competitor-driven events arrive through a recruited or departing insider or a hired intermediary rather than a direct intrusion by the rival's own staff.",
+    "summary": "Rival firms, or people acting for them, seeking commercial advantage through the theft of trade secrets, pricing, bids, customer lists or product plans. Most competitor-driven events are executed through a recruited or departing insider or a hired intermediary rather than by the rival's own staff; when the rival initiates the event, it belongs to this community whoever carries it out.",
     "origin": "external",
     "intent": "malicious",
     "motive": "Commercial advantage: shortening development, winning bids, poaching customers or undercutting prices with stolen information.",
@@ -134,8 +173,11 @@
     "personal_risk_tolerance": "Low to moderate. Civil and criminal liability for the sponsor is real, so the work is pushed to intermediaries and deniable channels.",
     "collateral_damage_concern": "High. Publicity or disruption would expose the sponsor, so events are designed to be invisible.",
     "threat_event_definition": "A threat event for this community is an attempt by a rival, or someone acting for a rival, to obtain your confidential business information, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.000751782,
       "mode": 0.00145658,
@@ -143,7 +185,7 @@
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.4,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (a curator sub-share taken inside the non-financial, non-espionage 'Other' motive band of roughly 2% of breaches in Verizon DBIR 2024 Figure 12, p. 15, n = 5,632 — DBIR publishes no competitor actor variety and files insider-to-competitor theft under the espionage motive of the Privilege Misuse pattern, p. 53, which this library counts under the insider communities; the hacktivist sub-share takes the other 1% so the two sub-shares sum to the parent band; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.40 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00263124 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.00145658, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (a curator convention of 1% — DBIR publishes no competitor actor variety; the only published bound is the Figure 13 'Other' actor variety at ≈10% of n = 7,921 (≈7.5% on the all-breach basis), which in VERIS pools activists, competitors and unaffiliated actors; the hacktivist row takes another 1% from the same pool; rival-initiated events executed through a recruited insider are counted here and overlap the espionage-motivated part of the Privilege Misuse pattern (46% of its 854 breaches, p. 53), so this share is not disjoint from the two malicious-insider rows; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.40 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00263124 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.00145658, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 40,
@@ -152,10 +194,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: above the median because the sponsor knows precisely what to take and can buy access, but well below state and elite criminal actors in intrusion tradecraft. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no competitor actor variety; a rival acting through an insider is attributed to the insider communities here, so this row covers only the rival's own external action and takes a 1% curator sub-share of DBIR's roughly 2% 'Other' motive band (the hacktivist row takes the other 1%; the sub-shares sum to the parent band). DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ, and k = 3.5 widens the range for that uncertainty. The 0.40 conversion is this community's own: attempts are targeted but the actor's intrusion skill is limited. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: nation-states pursue espionage with far greater resources; privileged and non-privileged insiders are the usual instrument when a competitor is the sponsor, and are counted there.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no competitor actor variety, so the 1% is a curator convention; the only published bound is the Figure 13 'Other' actor variety (≈10% of n = 7,921, ≈7.5% of all breaches), a VERIS pool of activists, competitors and unaffiliated actors from which the hacktivist row also takes 1%. Rival-initiated events executed through a recruited or departing insider are counted here — the rival is the actor, the insider the instrument — which overlaps the espionage-motivated part of DBIR's Privilege Misuse pattern (46% of its 854 breaches, p. 53) that the two malicious-insider rows also draw on, so this row is not disjoint from them and Σ share-weighted λ stays below 1. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ, and k = 3.5 widens the range for that uncertainty. The 0.40 conversion is this community's own: attempts are targeted but the actor's intrusion skill is limited. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: nation-states pursue espionage with far greater resources; privileged and non-privileged insiders acting for their own benefit are counted there; an insider recruited by a rival is counted here.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 12, p. 15 (actor motives in breaches, n = 5,632); p. 53 (Privilege Misuse pattern, espionage motive 46%)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 12, p. 15 (motives); Figure 13, p. 16 ('Other' variety, n = 7,921); p. 53 (Misuse espionage 46%)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -174,16 +226,19 @@
     "personal_risk_tolerance": "Low to moderate. The insider is identifiable and faces prosecution and loss of livelihood, which suppresses frequency but not impact.",
     "collateral_damage_concern": "Moderate. Sabotage cases accept broad damage; theft and fraud cases try to stay unnoticed.",
     "threat_event_definition": "A threat event for this community is an attempt by a person holding elevated rights to misuse those rights against one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.00175416,
-      "mode": 0.00350831,
+      "mode": 0.00350832,
       "high": 0.0157874,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.8,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.04 (half of the Privilege Misuse pattern's 8.0% of breaches in Verizon DBIR 2024 — 854 confirmed breaches, p. 53, of 10,626 total breaches, p. 6, Internal 100% — split evenly between the privileged and non-privileged insider rows as a curator convention because DBIR does not separate privilege level; the two sub-shares sum to the parent 8.0%; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.80 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00526247 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.00350831, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.04 (half of the Privilege Misuse pattern's 8.0% of breaches — 854 confirmed breaches, p. 53, of 10,626, p. 5, Internal 100% — split evenly between the privileged and non-privileged insider rows as a curator convention because DBIR does not separate privilege level; the two sub-shares sum to the parent 8.0%; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.80 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00526247 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.00350832, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 60,
@@ -192,10 +247,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: high because the rank measures what the actor can do to the assets in scope, and elevated rights substitute for intrusion skill; the top of the band is reserved for administrators of identity, backup and production platforms. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is half of DBIR's Privilege Misuse pattern (854 of 10,626 breaches, 8.0%); DBIR does not distinguish privilege level, so the even split with the non-privileged row is a curator convention and the two sub-shares sum to the parent share. DBIR breaches are not the same population as IRIS loss events and a breach can carry more than one actor; the share is a proxy applied to λ. The 0.80 conversion is this community's own and is the highest in the library: the actor's rights already bypass the preventative controls that stop outsiders, so most serious attempts become loss events — which is also why scenarios assigned here must not link controls the role legitimately bypasses as preventative. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the non-privileged insider has the same motives with ordinary access; the accidental insider is not a capability contest at all.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is half of DBIR's Privilege Misuse pattern (854 of 10,626 breaches, 8.0%); DBIR does not distinguish privilege level, so the even split with the non-privileged row is a curator convention and the two sub-shares sum to the parent share. DBIR breaches are not the same population as IRIS loss events and a breach can carry more than one actor; the share is a proxy applied to λ. The 0.80 conversion is this community's own and is the highest in the library: the actor's rights already bypass the preventative controls that stop outsiders, so most serious attempts become loss events — which is also why scenarios assigned here must not link controls the role legitimately bypasses as preventative. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the non-privileged insider has the same motives with ordinary access; the accidental insider is not a capability contest at all.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "p. 53 (Privilege Misuse pattern: 897 incidents, 854 breaches, Internal 100%, Financial 88% / Espionage 46% / Grudge 6%); p. 6 (10,626 breaches in scope)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "p. 53 (Privilege Misuse: 854 breaches, Internal 100%); p. 5 (10,626 breaches)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -214,16 +279,19 @@
     "personal_risk_tolerance": "Low. The actor is identifiable and monitored; a real chance of detection and prosecution keeps attempts rare and small.",
     "collateral_damage_concern": "Moderate. Grudge-driven sabotage accepts wide damage; theft and fraud try to stay unnoticed.",
     "threat_event_definition": "A threat event for this community is an attempt by a person with ordinary access to misuse that access against one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.00280665,
-      "mode": 0.0056133,
+      "mode": 0.00561329,
       "high": 0.0252599,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.5,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.04 (half of the Privilege Misuse pattern's 8.0% of breaches in Verizon DBIR 2024 — 854 confirmed breaches, p. 53, of 10,626 total breaches, p. 6, Internal 100% — split evenly between the privileged and non-privileged insider rows as a curator convention because DBIR does not separate privilege level; the two sub-shares sum to the parent 8.0%; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.50 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00841995 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0056133, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.04 (half of the Privilege Misuse pattern's 8.0% of breaches — 854 confirmed breaches, p. 53, of 10,626, p. 5, Internal 100% — split evenly between the privileged and non-privileged insider rows as a curator convention because DBIR does not separate privilege level; the two sub-shares sum to the parent 8.0%; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.50 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00841995 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.00561329, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 25,
@@ -232,10 +300,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: around or slightly below the median actor — legitimate presence counts for something, but ordinary rights and no tooling cap what the person can reach. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is half of DBIR's Privilege Misuse pattern (854 of 10,626 breaches, 8.0%); DBIR does not distinguish privilege level, so the even split with the privileged row is a curator convention and the two sub-shares sum to the parent share. DBIR breaches are not the same population as IRIS loss events and a breach can carry more than one actor; the share is a proxy applied to λ. The 0.50 conversion is this community's own: legitimate access defeats some preventative controls but ordinary rights leave logging, approval and segregation-of-duties controls in the path. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the privileged insider has the same motives with far greater reach; the accidental insider is the same population without intent.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is half of DBIR's Privilege Misuse pattern (854 of 10,626 breaches, 8.0%); DBIR does not distinguish privilege level, so the even split with the privileged row is a curator convention and the two sub-shares sum to the parent share. DBIR breaches are not the same population as IRIS loss events and a breach can carry more than one actor; the share is a proxy applied to λ. The 0.50 conversion is this community's own: legitimate access defeats some preventative controls but ordinary rights leave logging, approval and segregation-of-duties controls in the path. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the privileged insider has the same motives with far greater reach; the accidental insider is the same population without intent.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "p. 53 (Privilege Misuse pattern: 897 incidents, 854 breaches, Internal 100%); p. 6 (10,626 breaches in scope)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "p. 53 (Privilege Misuse: 854 breaches, Internal 100%); p. 5 (10,626 breaches)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -253,23 +331,36 @@
     "capability": "Not applicable as a capability. The relevant properties are the volume of manual handling, the sensitivity of what is handled, and how far a single slip can travel before something catches it.",
     "personal_risk_tolerance": "Not applicable; the person does not perceive a risk being taken.",
     "collateral_damage_concern": "Not applicable; the person does not intend any effect.",
-    "threat_event_definition": "A threat event for this community is an error by a person with access to one of your assets that, with nothing intervening, would leave the asset in a loss-capable condition — a misdirected disclosure, a misconfiguration that exposes it, a lost or mishandled record or device, a mistaken transaction; only slips corrected before the action takes effect are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious errors only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "threat_event_definition": "A threat event for this community is an error by a person with access to one of your assets that, with nothing intervening, would leave the asset in a loss-capable condition — a misdirected disclosure, a misconfiguration that exposes it, a lost or mishandled record or device, a mistaken transaction; errors a control blocks or catches are counted, and only slips the person notices and corrects themselves before the action takes effect are not counted.",
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious errors only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
-      "low": 0.0299376,
-      "mode": 0.0598752,
-      "high": 0.269438,
+      "low": 0.0293529,
+      "mode": 0.0587058,
+      "high": 0.264176,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.3,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.256 (Internal actors are 35% of breaches and 73% of those Internal breaches fall in the Miscellaneous Errors pattern, Verizon DBIR 2024 p. 15 and Figure 11 — 0.35 × 0.73 = 0.256, consistent with the End-user actor variety at 26% in Figure 13, p. 16; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.30 (this community's controlled-world error→loss-event conversion rate: the fraction of serious errors that no control catches before they take effect — a curator convention, NOT the inherent Vulnerability you author) → m = 0.0898128 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0598752, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.251 (the Miscellaneous Errors pattern — 2,671 confirmed breaches, p. 47, of 10,626, p. 5, Internal 100% — 0.251 on the all-breach basis (consistent with Internal 35% × the 73% of Internal breaches in that pattern, p. 15, which gives 0.256); population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.30 (this community's controlled-world error→loss-event conversion rate: the fraction of serious errors that no control stops before they take effect — a curator convention, NOT the inherent Vulnerability you author) → m = 0.0880587 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0587058, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": null,
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share multiplies DBIR's Internal 35% of breaches by the 73% of Internal breaches that DBIR files under Miscellaneous Errors, which agrees with the 26% End-user actor variety; DBIR itself notes that the 2024 jump in Internal and error breaches reflects new mandatory-disclosure contributors, so the share is generous relative to earlier editions. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.30 conversion is this community's own: it is the fraction of serious errors that no detective or corrective control catches before the loss-capable condition takes effect, which is why the counting rule includes errors your controls catch — excluding them would credit the control twice. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). This row has no threat-capability landmark because an error is not a contest against the asset's resistance; its Vulnerability is the chance that the error reaches a loss-capable state, which the analyst authors directly.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is DBIR's Miscellaneous Errors pattern on the all-breach basis (2,671 of 10,626 = 25.1%), which agrees with Internal 35% × 73% of Internal breaches in that pattern (25.6%); DBIR itself notes that the 2024 jump in Internal and error breaches reflects new mandatory-disclosure contributors, so the share is generous relative to earlier editions. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.30 conversion is this community's own: it is the fraction of serious errors that no control stops before they take effect, which is why the counting rule includes errors your controls block or catch — excluding them would credit the control twice. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). This row has no threat-capability landmark because an error is not a contest against the asset's resistance; its Vulnerability is the chance that the error reaches a loss-capable state, which the analyst authors directly.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "p. 15 and Figure 11 (Internal 35% of breaches; 73% of Internal breaches in Miscellaneous Errors); Figure 13, p. 16 (End-user 26%); p. 47 (Miscellaneous Errors pattern: 2,679 incidents, 2,671 breaches, Internal 100%)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "p. 47 (Miscellaneous Errors: 2,671 breaches, Internal 100%); p. 5 (10,626 breaches); p. 15 (Internal 35%, 73% errors)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -288,8 +379,11 @@
     "personal_risk_tolerance": "Low to moderate. The person is identifiable through the contract, but accountability is split between two organisations and enforcement is slower.",
     "collateral_damage_concern": "Moderate. Theft cases stay quiet; sabotage cases accept damage to the client.",
     "threat_event_definition": "A threat event for this community is an attempt by a supplier's or partner's own personnel to misuse the access your organisation granted them against one of your assets, counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.000501188,
       "mode": 0.000971051,
@@ -297,7 +391,7 @@
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.6,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (Partner actors at roughly 1% of breaches in Verizon DBIR 2024 Figure 11, p. 15 — DBIR counts a partner as the actor only when the partner initiated the incident, which matches this community's scope; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.60 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00175416 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.000971051, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.01 (Partner actors at ≈1% of breaches, Figure 11, p. 15, all-breach basis — DBIR counts a partner as the actor only when the partner initiated the incident (p. 16 sidebar), which matches this community's scope; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.60 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.00175416 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3.5, mode = (6m − low − high)/4 = 0.000971051, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 40,
@@ -306,10 +400,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: a wide band because the granted access ranges from a support login to full administration of hosted infrastructure; the most likely rank is above the median actor because the access is legitimate and lightly watched. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is DBIR's Partner actor origin, about 1% of breaches; DBIR attributes a breach to a partner only when the partner initiated it, which is exactly this community's definition, while outsiders who compromise a vendor to reach you are counted under that outsider's community (and appear in DBIR's supply-chain interconnection metric, Figure 9, p. 13, at 15% of breaches — deliberately not used here). DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ, and k = 3.5 widens the range because a 1% share read from a chart is imprecise. The 0.60 conversion is this community's own: granted access bypasses perimeter controls, but contractual monitoring and scoped accounts leave some controls in the path. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the privileged and non-privileged insiders are the same behaviour by your own staff; cybercriminals and nation-states are the communities that use a vendor as a route.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. The share is DBIR's Partner actor origin, about 1% of breaches; DBIR attributes a breach to a partner only when the partner initiated it, which is exactly this community's definition, while outsiders who compromise a vendor to reach you are counted under that outsider's community (and appear in DBIR's supply-chain interconnection metric, Figure 9, p. 13, at 15% of breaches — deliberately not used here). DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ, and k = 3.5 widens the range because a 1% share read from a chart is imprecise. The 0.60 conversion is this community's own: granted access bypasses perimeter controls, but contractual monitoring and scoped accounts leave some controls in the path. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: the privileged and non-privileged insiders are the same behaviour by your own staff; cybercriminals and nation-states are the communities that use a vendor as a route.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 11, p. 15 (Partner actors in breaches); p. 16 sidebar (actor categories: partner counted as actor only when it initiates); Figure 9, p. 13 (supply-chain interconnection, not used)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 11, p. 15 (Partner actors); p. 16 sidebar (partner as actor); Figure 9, p. 13 (not used)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   },
@@ -327,17 +431,20 @@
     "capability": "Low. Off-the-shelf scanners, credential-stuffing tools and published exploits; no capacity to develop new techniques or to persist against an attentive defender.",
     "personal_risk_tolerance": "Moderate. Attribution is unlikely for low-effort, widely distributed activity, so the actor accepts the small chance of consequence.",
     "collateral_damage_concern": "Low. Effects on the victim are incidental to the actor.",
-    "threat_event_definition": "A threat event for this community is an attempt by an untargeted, low-skill outsider to exploit an exposed weakness in one of your assets — a credential-stuffing run, an exploit against an unpatched service, access to a publicly readable store — counted whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
-    "tef_basis": "Organisation-level base rate across all assets of the reference organisation; serious intentional acts only.",
-    "reference_org": {"size": "medium", "sector": "neutral"},
+    "threat_event_definition": "A threat event for this community is an attempt by an untargeted, low-skill outsider against one of your exposed assets — a credential-stuffing run against a login, an exploit attempt against an internet-facing service, a read attempt against a storage location — counted whether or not a weakness is present and whether or not your controls stop it; scans, minor misbehaviour and errors are not counted.",
+    "tef_basis": "Organisation-level base rate across all assets of the reference organisation (size medium: the $100M–$1B revenue tier); serious intentional acts only.",
+    "reference_org": {
+      "size": "medium",
+      "sector": "neutral"
+    },
     "tef_landmark": {
       "low": 0.0210499,
-      "mode": 0.0420998,
+      "mode": 0.0420997,
       "high": 0.189449,
       "basis_class": "derived",
       "source_event_level": "loss_event",
       "assumed_conversion": 0.1,
-      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier, all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.06 (a curator sub-share of the External 65% of breaches in Verizon DBIR 2024 Figure 11, p. 15, bounded by the Basic Web Application Attacks pattern at just over 8% of breaches, p. 43 — the pattern that carries credential stuffing, brute force and simple exploitation, External 100%, p. 42 — with the remainder of that pattern left to organised crime, which uses the same techniques; the external sub-shares (52 + 5 + 6 + 1 + 1) sum to the parent 65%; population: DBIR breaches with confirmed data disclosure, all organisation sizes; applied to λ, never to p) → ÷ assumed_conversion = 0.10 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.0631496 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0420998, checked low ≤ mode ≤ high"
+      "derivation": "source statistic (annual probability): p = 0.0999, the IRIS 2025 probability of at least one loss event in a year for an organisation in the $100M–$1B revenue tier — the reference organisation, size medium — all actors (Cyentia IRIS 2025 Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B row; the reference tier's p is selected directly, never scaled by a ratio) → λ = −ln(1−p) = 0.105249 loss events/yr, the Poisson expected count for all actors → × this community's share of source events = 0.06 (a curator sub-share of the External 65% of breaches (Figure 11, p. 15), bounded by the Basic Web Application Attacks pattern — 881 confirmed breaches, p. 42, of 10,626 = 8.3%, External 100% — the pattern that carries credential stuffing, brute force and simple exploitation, p. 43; the remainder of that pattern is left to organised crime, which uses the same techniques; the external sub-shares 53.3 + 3.7 + 6 + 1 + 1 sum to the parent 65%; population: Verizon DBIR 2024 breaches with confirmed data disclosure, all organisation sizes, on the all-breach basis of 10,626 breaches, p. 5, unless a figure's own n is stated; applied to λ, never to p) → ÷ assumed_conversion = 0.10 (this community's controlled-world attempt→loss-event conversion rate — a curator convention, NOT the inherent Vulnerability you author) → m = 0.0631496 mean events/yr → placed as the PERT mean: low = m ÷ k, high = m × k with k = 3, mode = (6m − low − high)/4 = 0.0420997, checked low ≤ mode ≤ high"
     },
     "tcap_landmark": {
       "low": 5,
@@ -346,10 +453,20 @@
       "basis_class": "convention",
       "derivation": "Percentile rank against the general threat population, a curator convention: the bottom of the scale — public tooling and no persistence — with the top of the band allowing for the occasional capable individual. The central value is placed as the mode."
     },
-    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no 'opportunistic' actor variety, so the share is a curator sub-share of the External 65% of breaches, bounded above by the Basic Web Application Attacks pattern (just over 8% of breaches) that carries exactly this community's techniques, with the balance of that pattern left to organised crime; the five external sub-shares sum to the parent 65%. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.10 conversion is this community's own and the lowest in the library: attempts are mass-produced and most fail against any maintained control, so the attempt rate is far higher than the loss-event rate implies. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering; λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen); the conversion reflects a controlled world and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: cybercriminals use the same commodity tools with organisation, persistence and monetisation infrastructure behind them; hacktivists share the low skill but choose their targets.",
+    "rationale": "Base rate is the all-actor annual loss-event probability of a $100M–$1B organisation in a sector-neutral position, converted to a Poisson rate and then attributed to this community. DBIR publishes no 'opportunistic' actor variety, so the share is a curator sub-share of the External 65% of breaches, bounded above by the Basic Web Application Attacks pattern (just over 8% of breaches) that carries exactly this community's techniques, with the balance of that pattern left to organised crime; the five external sub-shares sum to the parent 65%. DBIR breaches are not the same population as IRIS loss events; the share is a proxy applied to λ. The 0.10 conversion is this community's own and the lowest in the library: attempts are mass-produced and most fail against any maintained control, so the attempt rate is far higher than the loss-event rate implies. Biases this row carries, all pushing the landmark low: the Poisson step under-states the mean under clustering and λ from a population-mean p under-states the mean λ across heterogeneous organisations (Jensen) — jointly, IRIS's own at-least-2 and at-least-3 columns for this tier (0.0194, 0.0043) give E[N] ≥ 0.0999 + 0.0194 + 0.0043 = 0.1236 against λ = 0.1052, so the all-actor mean is under-stated by at least 17% before attribution; the conversion is taken as Vulnerability-side and omits TEF-side prevention (register C4); and dividing by a point conversion under-states the result (1/c is convex). Neighbours: cybercriminals use the same commodity tools with organisation, persistence and monetisation infrastructure behind them; hacktivists share the low skill but choose their targets.",
     "citations": [
-      {"title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025", "url": "https://www.cyentia.com/iris2025/", "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column", "edition_year": 2025},
-      {"title": "Verizon 2024 Data Breach Investigations Report", "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf", "locator": "Figure 11, p. 15 (External 65% of breaches); p. 42–43 (Basic Web Application Attacks pattern: External 100%, just over 8% of breaches; stolen credentials 77%, brute force 21%, exploit vuln 13%)", "edition_year": 2024}
+      {
+        "title": "Cyentia Institute — Information Risk Insights Study (IRIS) 2025",
+        "url": "https://www.cyentia.com/iris2025/",
+        "locator": "Member Vault table 'Likelihood of at least N incidents in the next year', $100M–$1B revenue tier, at-least-1 column",
+        "edition_year": 2025
+      },
+      {
+        "title": "Verizon 2024 Data Breach Investigations Report",
+        "url": "https://www.verizon.com/business/en-au/resources/reports/2024/dbir/2024-dbir-data-breach-investigations-report.pdf",
+        "locator": "Figure 11, p. 15 (External 65%); p. 42–43 (Basic Web Application Attacks: 881 breaches, External 100%)",
+        "edition_year": 2024
+      }
     ],
     "reviewed_at": "2026-09-30"
   }
