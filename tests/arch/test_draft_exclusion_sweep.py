@@ -35,6 +35,10 @@ AUDITED = {
     # cross-status sweep exists to filter, same rationale as
     # services/scenarios.py's CRUD-on-explicit-ids entry.
     "services/loss_pinning.py": "shows-all-by-design",
+    # Task 10 (Threat Agent Library pages): the detail page's "your scenarios"
+    # list is org-scoped but shows every status, same rationale as
+    # routes/scenarios.py (spec section 5.1).
+    "routes/threat_communities.py": "shows-all-by-design",
 }
 
 QUERY_RE = re.compile(

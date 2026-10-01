@@ -59,6 +59,18 @@ def linkify_https(text: str) -> Markup:
     return Markup("".join(parts))  # noqa: S704 — all text nodes escaped via markupsafe.escape above; Markup wraps pre-escaped parts only
 
 
+def safe_https_href(url: object) -> str | None:
+    """Render-time href gate (#349 / Sec-I5): https scheme + non-empty host, else None. Total --
+    never raises (urlsplit raises ValueError on e.g. 'https://[')."""
+    if not isinstance(url, str) or not url:
+        return None
+    try:
+        split = urlsplit(url)
+    except ValueError:
+        return None
+    return url if split.scheme == "https" and split.netloc else None
+
+
 def utc_isoformat(value: datetime.datetime | None) -> str:
     """Render a datetime as a UTC-aware ISO-8601 string for CSV exports.
 

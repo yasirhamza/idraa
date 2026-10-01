@@ -645,3 +645,31 @@ def test_control_coverage_no_controls_returns_zero_coverage() -> None:
     fw = out["frameworks"][0]["coverage"]
     assert fw.covered_count == 0
     assert fw.reference_count == 1
+
+
+# ---------------------------------------------------------------------------
+# idraa.app._format_date (Task 10 / Threat Agent Library): reviewed_at is a
+# plain ``Date`` column, which has no ``.tzinfo`` attribute. The filter must
+# widen to accept a plain date without raising, rendering it as a bare ISO
+# string (no <time data-localize> wrapper -- there is no time-of-day to
+# localize, and localizing a date at UTC midnight shifts it back a day in
+# negative-offset browsers). A ``datetime`` keeps the pre-existing behaviour.
+# ---------------------------------------------------------------------------
+
+
+def test_format_date_renders_plain_date_as_bare_iso() -> None:
+    from idraa.app import _format_date
+
+    out = _format_date(dt.date(2026, 3, 14))
+    assert str(out) == "2026-03-14"
+    assert "<time" not in str(out)
+
+
+def test_format_date_keeps_datetime_behavior() -> None:
+    from idraa.app import _format_date
+
+    out = _format_date(dt.datetime(2026, 3, 14, 23, 30, tzinfo=dt.UTC))
+    assert (
+        str(out)
+        == '<time datetime="2026-03-14T23:30:00+00:00" data-localize="date">2026-03-14</time>'
+    )

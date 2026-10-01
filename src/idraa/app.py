@@ -495,9 +495,11 @@ templates.env.filters["format_probability_input"] = _format_probability_input
 # Task 8: ``abbreviate_money`` filter retired — all templates use ``money`` (safe_money_format).
 # ``_abbreviate_money`` alias removed; test_filters.py tests were triaged accordingly.
 from idraa.formatting import linkify_https as _linkify_https  # noqa: E402
+from idraa.formatting import safe_https_href as _safe_https_href  # noqa: E402
 from idraa.formatting import safe_money_format as _safe_money_format  # noqa: E402
 
 templates.env.filters["linkify_https"] = _linkify_https
+templates.env.filters["https_href"] = _safe_https_href
 
 
 def _money_filter(value: object, code: str = "USD", compact: bool = True) -> str:
@@ -554,11 +556,20 @@ def _format_datetime(dt: datetime.datetime | None) -> str:
     return template.format(iso=iso, fallback=fallback)
 
 
-def _format_date(dt: datetime.datetime | None) -> str:
+def _format_date(dt: datetime.date | datetime.datetime | None) -> str:
     """Date-only variant of _format_datetime. Client-localized to the
-    browser's locale via the same <time> element pattern."""
+    browser's locale via the same <time> element pattern.
+
+    A plain ``datetime.date`` (e.g. the ``reviewed_at`` column) has no
+    ``.tzinfo`` -- reading it unconditionally raised ``AttributeError``.
+    A date has no time-of-day to localize, so it renders as a bare ISO
+    string with no <time data-localize> wrapper: localizing it at UTC
+    midnight would shift it back a day in negative-offset browsers.
+    """
     if dt is None:
         return "—"
+    if isinstance(dt, datetime.date) and not isinstance(dt, datetime.datetime):
+        return dt.isoformat()
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.UTC)
     iso = dt.astimezone(datetime.UTC).isoformat()
@@ -1217,6 +1228,7 @@ def create_app() -> FastAPI:
     from idraa.routes import setup as setup_router
     from idraa.routes import sme_directory as sme_directory_router
     from idraa.routes import step_up as step_up_router
+    from idraa.routes import threat_communities as threat_communities_router
     from idraa.routes import users as users_router
     from idraa.routes.scenario_form_helpers import (
         asset_class_choices as _asset_class_choices,
@@ -1262,6 +1274,7 @@ def create_app() -> FastAPI:
     # importer first keeps the ordering consistent with control_library /
     # scenario_import and removes any room for future regressions.
     app.include_router(library_import_router.router)
+    app.include_router(threat_communities_router.router)
     app.include_router(library_router.router)
     app.include_router(library_overrides_router.router)
     app.include_router(fx_rates_router.router)
