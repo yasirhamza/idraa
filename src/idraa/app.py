@@ -10,6 +10,7 @@ import math
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -781,6 +782,38 @@ def _format_dist_value(value: float | None, fmt: str) -> str:
 
 
 templates.env.filters["format_dist_value"] = _format_dist_value
+
+
+def _format_landmark_rate(value: float | None) -> str:
+    """Render a TEF/TCap landmark rate to 3 significant figures, plain
+    decimal, no exponent. Trailing zeros produced by the sig-fig rounding
+    are stripped for readability (1.5 -> "1.5", not "1.50") — unlike
+    ``_format_rate_input``, which is a fixed-4dp echo for ``<input>``
+    prefill, this is a read-only display value (M10-N1).
+
+    Examples: 0.000501188 -> "0.000501", 0.0051923 -> "0.00519",
+    0.0233654 -> "0.0234", 1.5 -> "1.5", 12.345 -> "12.3". None -> "—".
+    """
+    if value is None:
+        return "—"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / inf guard
+        return "—"
+    if v == 0:
+        return "0"
+    d = Decimal(repr(v))
+    quant = Decimal(1).scaleb(d.adjusted() - 2)  # keep 3 significant digits
+    rounded = d.quantize(quant, rounding=ROUND_HALF_UP)
+    s = format(rounded, "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
+
+
+templates.env.filters["format_landmark_rate"] = _format_landmark_rate
 
 
 # Setup-guard allowlist. Two shapes so the guard can use segment-aware

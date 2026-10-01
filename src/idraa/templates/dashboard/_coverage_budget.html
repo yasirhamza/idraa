@@ -214,7 +214,7 @@
             {% endif %}
           {% endfor %}
           <p class="text-micro text-ink-3 mt-2">
-            Shares are sums of per-scenario residual ALE means from the latest aggregate run
+            Shares of the summed per-scenario residual ALE means from the latest aggregate run
             {% if data.latest_aggregate %}as of {{ data.latest_aggregate.completed_at | format_date }}{% else %}(no aggregate run yet){% endif %}
             (mean basis, not tail); confirmations take effect on the next run.
           </p>

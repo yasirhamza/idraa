@@ -10,7 +10,7 @@ from idraa.threat_community_provenance import REVIEW_PROVENANCES, community_by_s
 
 
 def test_classification_rule() -> None:
-    a, b, c, d, e = (uuid.uuid4() for _ in range(5))
+    a, b, c, d, e, f = (uuid.uuid4() for _ in range(6))
     snap = {
         "scenarios": [
             {
@@ -34,10 +34,26 @@ def test_classification_rule() -> None:
                 "threat_community": "not-a-dict",
             },  # malformed -> None, never raises
             {"scenario_id": "not-a-uuid", "threat_community": {"slug": "z", "name": "Z"}},
+            {
+                # M2-N4: 'migrated' (unlike 'migrated_split_default') is NON-review --
+                # a one-to-one legacy mapping needs no analyst confirmation, so it
+                # attributes to its community like 'assigned' does.
+                "scenario_id": str(f),
+                "threat_community": {"slug": "w", "name": "W"},
+                "threat_community_provenance": "migrated",
+            },
         ]
     }
     out = community_by_scenario(snap)
-    assert out == {a.hex: ("x", "X"), b.hex: None, c.hex: None, d.hex: None, e.hex: None}
+    assert out == {
+        a.hex: ("x", "X"),
+        b.hex: None,
+        c.hex: None,
+        d.hex: None,
+        e.hex: None,
+        f.hex: ("w", "W"),
+    }
+    assert "migrated" not in REVIEW_PROVENANCES
     assert community_by_scenario(None) == {} and "migrated_split_default" in REVIEW_PROVENANCES
     assert community_by_scenario(
         {"scenarios": [{"scenario_id": str(a), "threat_community": {"name": "no slug"}}]}

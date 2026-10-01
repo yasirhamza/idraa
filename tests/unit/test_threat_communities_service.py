@@ -7,7 +7,11 @@ import pytest
 
 from idraa.errors import ValidationError
 from idraa.models.threat_community import ThreatCommunity, canonical_threat_community_id
-from idraa.services.threat_communities import ThreatCommunityService, legacy_slug_for
+from idraa.services.threat_communities import (
+    ENUM_TO_COMMUNITY_SLUG,
+    ThreatCommunityService,
+    legacy_slug_for,
+)
 
 _ORG = uuid.uuid4()
 _COPY_COLS = (
@@ -89,3 +93,20 @@ def test_legacy_slug_for_rules() -> None:
     assert legacy_slug_for("hacktivists") == ("hacktivists", "migrated")
     with pytest.raises(KeyError):
         legacy_slug_for("martians")
+
+
+def test_enum_to_community_slug_is_exhaustive_and_excludes_split_targets() -> None:
+    """M3-N2: the six legacy ThreatActorType literals (pre-P1 enum) map 1:1 here --
+    no more, no fewer -- and none of the three P1-only remap targets (which never
+    existed as a legacy enum value) can appear on the right-hand side."""
+    assert set(ENUM_TO_COMMUNITY_SLUG) == {
+        "cybercriminals",
+        "nation_state",
+        "hacktivists",
+        "competitors",
+        "insider_accidental",
+        "insider_malicious",
+    }
+    assert set(ENUM_TO_COMMUNITY_SLUG.values()).isdisjoint(
+        {"third_party", "opportunistic_hackers", "nonprivileged_insider"}
+    )

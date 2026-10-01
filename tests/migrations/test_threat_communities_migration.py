@@ -172,6 +172,36 @@ def test_upgrade_rules(alembic_runner, alembic_engine) -> None:
             )
 
 
+def test_upgrade_follows_pin_into_nonprivileged_insider_specifically(
+    alembic_runner, alembic_engine
+) -> None:
+    """M9-N1: `test_upgrade_rules`'s `s_remapped` case above already covers "a tat matching
+    the pinned entry's own legacy value follows the pin", but `remapped_slug` there is
+    `next(s for s, c in seed.items() if c in (third_party, opportunistic_hackers,
+    nonprivileged_insider))` -- whichever of the three dict-iteration-order hits first. This
+    pins the nonprivileged_insider leg BY NAME, with the literal legacy value
+    ('insider_malicious') such an entry actually carries (checked, not assumed): community =
+    the pinned entry's own community (nonprivileged_insider, not the split-default
+    privileged_insider a bare 'insider_malicious' tat would otherwise fall to), provenance
+    'migrated' (the pin resolves the ambiguity -- NOT 'migrated_split_default')."""
+    seed = _seed_map("threat_community")
+    np_slug = next(s for s, c in seed.items() if c == "nonprivileged_insider")
+    alembic_runner.migrate_up_to(PRE)
+    with alembic_engine.begin() as conn:
+        _insert_org(conn)
+        legacy = _legacy_of(conn, np_slug)
+        assert legacy == "insider_malicious", (
+            f"{np_slug}: expected legacy threat_actor_type 'insider_malicious', got "
+            f"{legacy!r} -- the seed data changed and M9-N1's premise (a "
+            "nonprivileged_insider entry carrying the legacy 'insider_malicious' value) "
+            "no longer holds"
+        )
+        s = _insert_scenario(conn, tat="insider_malicious", pin_entry_slug=np_slug)
+    alembic_runner.migrate_up_to(REV)
+    with alembic_engine.connect() as conn:
+        assert _community(conn, s) == ("nonprivileged_insider", "migrated")
+
+
 def test_downgrade_exact_for_seed_entries_lossy_for_scenarios_and_reupgrade(
     alembic_runner, alembic_engine
 ) -> None:

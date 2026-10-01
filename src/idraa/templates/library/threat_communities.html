@@ -14,7 +14,7 @@
     <p class="text-body text-ink-2 mt-2">{{ c.summary }}</p>
     <dl class="grid grid-cols-2 gap-x-4 mt-3 text-micro text-ink-3 font-mono tabular-nums">
       <dt>TEF landmark (events/yr, 5th · most likely · 95th)</dt>
-      <dd>{{ c.tef_landmark.low | format_dist_value("rate") }} · {{ c.tef_landmark.mode | format_dist_value("rate") }} · {{ c.tef_landmark.high | format_dist_value("rate") }}</dd>
+      <dd>{{ c.tef_landmark.low | format_landmark_rate }} · {{ c.tef_landmark.mode | format_landmark_rate }} · {{ c.tef_landmark.high | format_landmark_rate }}</dd>
       <dt>TCap landmark (percentile rank, 5th · most likely · 95th)</dt>
       <dd>{% if c.tcap_landmark %}{{ c.tcap_landmark.low }} · {{ c.tcap_landmark.mode }} · {{ c.tcap_landmark.high }}{% else %}Not applicable{% endif %}</dd>
       <dt>Reviewed</dt><dd>{{ c.reviewed_at | format_date }}</dd>

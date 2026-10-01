@@ -93,6 +93,39 @@ def test_import_non_string_threat_community_is_row_error() -> None:
     assert errors[0]["reason"] == "must be a string slug"
 
 
+def test_smuggled_threat_community_provenance_key_is_row_error() -> None:
+    """M8-N1(b): threat_community_provenance is server-computed (by legacy_slug_for
+    or the explicit "assigned" default inside _validate_rows) -- a file supplying it
+    directly must not be accepted as an override. It is never popped from `fd` (only
+    entry_currency/entry_rate/threat_community/threat_actor_type/attack_techniques
+    are), so ScenarioForm's `extra="forbid"` rejects the smuggled key. JSON-shaped row."""
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(threat_community_provenance="assigned"))],
+        existing_names=set(),
+        published_slugs=_PUB,
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+
+
+def test_smuggled_threat_community_provenance_key_is_row_error_csv_shaped() -> None:
+    """Same guard, exercised with a CSV-shaped flat row (entry_currency/entry_rate
+    present the way a parsed CSV row carries them). CSV_HEADERS has no such column
+    at all, so a real upload would be rejected earlier at the file-level header
+    check (scenario_import_parsers.parse_csv_flat) -- this pins the independent,
+    row-level _validate_rows defense."""
+    row = _fd() | {
+        "entry_currency": "USD",
+        "entry_rate": "1.0",
+        "threat_community_provenance": "migrated",
+    }
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, row)], existing_names=set(), published_slugs=_PUB
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+
+
 def test_valid_row_becomes_create() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd())], existing_names=set(), published_slugs=_PUB

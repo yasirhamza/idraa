@@ -22,6 +22,7 @@ import pytest
 
 from idraa.app import (  # type: ignore[attr-defined]
     _format_dist_value,
+    _format_landmark_rate,
     _format_money_input,
     _format_probability_input,
     _format_rate_input,
@@ -202,6 +203,31 @@ def test_input_filters_none_yields_empty_string_for_optional_fields() -> None:
     assert _format_money_input(None) == ""
     assert _format_rate_input(None) == ""
     assert _format_probability_input(None) == ""
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        # M10-N1: the six example outputs from the final-fix-wave brief.
+        (0.000501188, "0.000501"),  # third_party TEF low (seed data)
+        (0.0051923, "0.00519"),  # nation_state TEF mode (seed data)
+        (0.0233654, "0.0234"),  # nation_state TEF high (seed data)
+        (1.5, "1.5"),  # trailing zero from 3-s.f. rounding (1.50) stripped
+        (12.345, "12.3"),
+        (None, "—"),
+    ],
+)
+def test_format_landmark_rate(value: object, expected: str) -> None:
+    assert _format_landmark_rate(value) == expected  # type: ignore[arg-type]
+
+
+def test_format_landmark_rate_never_emits_scientific_notation_or_crashes() -> None:
+    for bad in (float("nan"), float("inf"), float("-inf"), "garbage"):
+        out = _format_landmark_rate(bad)  # type: ignore[arg-type]
+        assert out == "—"
+    tiny = 1.5146025633444114e-06
+    out = _format_landmark_rate(tiny)
+    assert "e" not in out.lower()
 
 
 # Task 8 (P3): test_currency_symbol_single_source and test_abbreviate_money_currency_code

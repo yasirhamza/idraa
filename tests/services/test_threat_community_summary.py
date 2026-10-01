@@ -36,15 +36,18 @@ def _ps(sid, ale):
 async def test_rows_from_snapshot_with_needs_review_row_summing_to_one(
     db_session, seed_threat_communities
 ) -> None:
-    a, b, c, d = (str(uuid.uuid4()) for _ in range(4))
+    a, b, c, d, e = (str(uuid.uuid4()) for _ in range(5))
     run = _Run(
-        [_ps(a, 300.0), _ps(b, 100.0), _ps(c, 600.0), _ps(d, 1000.0)],
+        [_ps(a, 300.0), _ps(b, 100.0), _ps(c, 600.0), _ps(d, 1000.0), _ps(e, 250.0)],
         {
             "scenarios": [
                 _snap(a, "cybercriminals", "Cybercriminals"),
                 _snap(b, "cybercriminals", "Cybercriminals"),
                 _snap(c, "nation_state", "Nation-state"),
                 _snap(d, "privileged_insider", "Privileged insider", "migrated_split_default"),
+                # M11-N1: 'migrated' is non-review -- this scenario's ALE must
+                # attribute to hacktivists, NOT pool into the needs-review row.
+                _snap(e, "hacktivists", "Hacktivists", "migrated"),
             ]
         },
     )
@@ -66,6 +69,7 @@ async def test_rows_from_snapshot_with_needs_review_row_summing_to_one(
         by[NEEDS_REVIEW_SLUG].residual_ale == 1000.0
         and by["privileged_insider"].scenario_count == 0
     )
+    assert by["hacktivists"].scenario_count == 1 and by["hacktivists"].residual_ale == 250.0
     assert abs(sum(r.residual_ale_share for r in rows) - 1.0) < 1e-9
 
 

@@ -192,6 +192,36 @@ def test_privileged_insider_states_control_bypass_and_every_definition_is_contro
             assert not hasattr(r.tcap_landmark, "source_event_level")
 
 
+@pytest.mark.parametrize("slug", CANONICAL_THREAT_COMMUNITY_SLUGS)
+def test_named_statistic_is_coupled_to_its_stated_placement(slug: str) -> None:
+    """M2-N1: couples the lead-in's named source statistic to the placement phrase
+    stated later in the SAME derivation. The per-row loop above
+    (test_privileged_insider_states_control_bypass_and_every_definition_is_control_naive)
+    only special-cases the "probability" branch (asserting mean-placement) and
+    otherwise just checks that EXACTLY ONE of the two placement phrases is present
+    -- it never checks a 'mean'-only lead-in matches mean-placement, and a 'mode'
+    lead-in has no coverage at all (no current seed row uses it). This tripwire
+    closes both gaps: mean/probability (never mode) -> PERT-mean-placed; mode
+    (never mean/probability) -> mode-placed.
+    """
+    by = {r.slug: r for r in load_threat_community_seed()}
+    d_low = by[slug].tef_landmark.derivation.lower()
+    lead = re.search(r"source statistic \(([^)]*)\)", d_low)
+    assert lead, slug
+    stat = lead.group(1)
+    names_mean_or_probability = (
+        bool(re.search(r"\b(mean|probability)\b", stat)) and "mode" not in stat
+    )
+    names_mode = "mode" in stat and not re.search(r"\b(mean|probability)\b", stat)
+    assert names_mean_or_probability or names_mode, (
+        f"{slug}: lead-in names neither mean/probability nor mode (and not both): {stat!r}"
+    )
+    if names_mean_or_probability:
+        assert "placed as the pert mean" in d_low, slug
+    if names_mode:
+        assert "placed as the mode" in d_low, slug
+
+
 def test_schema_rejects_missing_clause_missing_level_unconverted_source_and_tcap_with_level() -> (
     None
 ):

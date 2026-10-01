@@ -50,7 +50,7 @@
   <div class="bg-surface-1 border border-border-subtle rounded-card p-6 mb-4">
     <h2 class="text-h3 text-ink-1 mb-3">Landmark ranges</h2>
     <p class="text-micro text-ink-3">TEF landmark (events/yr, 5th · most likely · 95th — the same 5th/95th convention as library PERT bounds)</p>
-    <p class="font-mono tabular-nums">{{ community.tef_landmark.low | format_dist_value("rate") }} · {{ community.tef_landmark.mode | format_dist_value("rate") }} · {{ community.tef_landmark.high | format_dist_value("rate") }} <span class="badge badge-ghost">{{ community.tef_landmark.basis_class }}</span></p>
+    <p class="font-mono tabular-nums">{{ community.tef_landmark.low | format_landmark_rate }} · {{ community.tef_landmark.mode | format_landmark_rate }} · {{ community.tef_landmark.high | format_landmark_rate }} <span class="badge badge-ghost">{{ community.tef_landmark.basis_class }}</span></p>
     <p class="text-body text-ink-2">{{ community.tef_landmark.derivation }}</p>
     {% if community.tef_landmark.assumed_conversion %}
     <p class="text-micro text-ink-3">This range was recovered from an incident or loss statistic by dividing by a controlled-world conversion rate of {{ community.tef_landmark.assumed_conversion }}. That rate is a curator convention used only to recover attempts — do not use it as your scenario's inherent Vulnerability.</p>

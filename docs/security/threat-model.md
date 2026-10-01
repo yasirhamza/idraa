@@ -487,9 +487,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   autoescape escapes `&<>"'` in an `href` value, preventing attribute
   breakout, but does not validate the URL scheme, so `javascript:` survives
   escaping intact — a raw `<a href="{{ url }}">` would still let a
-  `javascript:`-scheme citation URL execute on click, because the attribute
-  is syntactically well-formed and needs no escaping to stay inert-looking
-  text yet live as a URL. Two gates share one allowlist rule (https scheme + non-empty
+  `javascript:`-scheme citation URL execute on click. Two gates share one allowlist rule (https scheme + non-empty
   host; everything else — `javascript:`, `data:`, `http:`, malformed —
   renders inert): `formatting.linkify_https` (`formatting.py:29`, issue
   #349) auto-links `https://` URLs inside free-text citation strings, used

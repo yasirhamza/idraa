@@ -242,3 +242,39 @@ async def test_noop_edit_of_assigned_writes_nothing(authed_analyst, db_session) 
     assert r.status_code == 303
     await db_session.refresh(s)
     assert s.row_version == 1 and await _audit_count(db_session) == n
+
+
+async def test_migrated_confirm_refused_and_noop_edit_keeps_migrated(
+    authed_analyst, db_session
+) -> None:
+    """M6-N1: 'migrated' is non-review (unlike 'migrated_split_default') -- confirm
+    refuses exactly like an already-'assigned' scenario (409, audit count unchanged),
+    and a no-op edit-form save of the SAME community leaves the provenance at
+    'migrated' rather than bumping it to 'assigned' (services/scenarios.py
+    `_assign_threat_community`'s `changed or threat_community_needs_review` gate --
+    neither is true here)."""
+    client, org_id = authed_analyst
+    s = await _make(db_session, org_id, slug="hacktivists", prov="migrated")
+    n = await _audit_count(db_session)
+    assert (
+        await csrf_post(
+            client,
+            f"/scenarios/{s.id}/confirm-threat-community",
+            {"threat_community": "competitors"},
+        )
+    ).status_code == 409
+    await db_session.refresh(s)
+    assert (
+        s.threat_community.slug == "hacktivists"
+        and s.threat_community_provenance == "migrated"
+        and s.row_version == 1
+        and await _audit_count(db_session) == n
+    )
+    r = await csrf_post(
+        client,
+        f"/scenarios/{s.id}",
+        _valid_update_payload_for(s) | {"threat_community": "hacktivists"},
+    )
+    assert r.status_code == 303
+    await db_session.refresh(s)
+    assert s.threat_community.slug == "hacktivists" and s.threat_community_provenance == "migrated"

@@ -74,6 +74,25 @@ async def test_list_marks_non_malicious_tcap_not_applicable(authed_viewer) -> No
     assert html.count("Not applicable") >= 1
 
 
+async def test_tef_landmark_renders_3sf_not_4dp(authed_viewer) -> None:
+    """M10-N1: the TEF landmark triple renders via the `format_landmark_rate`
+    filter (3 s.f.), not the old 4-decimal `format_dist_value("rate")`.
+
+    Uses third_party instead of the brief's suggested nation_state: nation_state's
+    own low (0.00259615) and high (0.0233654) render IDENTICALLY at 3 s.f. and at
+    4dp ("0.0026" / "0.0234" either way), and its mode's 3-s.f. form ("0.00519")
+    is a verbatim substring of the free-text derivation prose ("...= 0.0051923
+    mean events/yr...", seed data) -- an assertion on it would pass even without
+    the filter change. third_party's low = 0.000501188 is never echoed in its own
+    derivation text (only the symbolic "low = m / k"), so its full rendered
+    triple is a clean, exact regression guard.
+    """
+    client, _ = authed_viewer
+    html = (await client.get("/library/threat-communities/third_party")).text
+    assert "0.000501 · 0.000971 · 0.00614" in html
+    assert "0.0005 · 0.0010 · 0.0061" not in html
+
+
 async def test_anonymous_redirects_to_login(client) -> None:
     client.cookies.clear()
     r = await client.get("/library/threat-communities", follow_redirects=False)
@@ -119,7 +138,13 @@ async def test_javascript_citation_url_renders_as_text(
         html = (await client.get("/library/threat-communities/competitors")).text
         assert 'href="javascript:' not in html and "evil" in html
     finally:
-        await db_session.execute(delete(ThreatCommunity).where(ThreatCommunity.version == 2))
+        # SC10-M2: delete exactly the row this test inserted, by (id, version) --
+        # not every version==2 row (a sibling test's own v2 insert would collide).
+        await db_session.execute(
+            delete(ThreatCommunity).where(
+                ThreatCommunity.id == row.id, ThreatCommunity.version == row.version
+            )
+        )
         await db_session.commit()
 
 

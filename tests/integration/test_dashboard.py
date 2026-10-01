@@ -1393,6 +1393,11 @@ async def test_build_dashboard_populates_threat_communities_cold_start(
     assert "Threat communities" in page
     assert "of residual ALE" in page
     assert "no aggregate run yet" in page
+    # M11-N2: no prior test pinned the caption's exact wording (grep across
+    # tests/ at review time found nothing) -- pin the corrected sentence here.
+    assert (
+        "Shares of the summed per-scenario residual ALE means from the latest aggregate run" in page
+    )
 
 
 async def test_dashboard_threat_communities_from_producer_snapshot(
