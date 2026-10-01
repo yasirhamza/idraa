@@ -52,6 +52,10 @@ from idraa.services.dashboard_view_model import (
 )
 from idraa.services.fx_rates import FxRateService
 from idraa.services.reporting_currency import resolve_reporting_currency
+from idraa.services.threat_community_summary import (
+    ThreatCommunitySummaryRow,
+    build_threat_community_summary,
+)
 
 # Scenario-library corpus is small and curated (dozens of tiered entries,
 # not thousands — see Epic C re-curation); a fixed generous limit lets the
@@ -114,6 +118,10 @@ class DashboardData:
     # when the catalog is unseeded (template hides the block) — reference
     # data comes from the seeded tables, never literals.
     attack_coverage: list[AttackDomainSummary] = field(default_factory=list)
+    # Task 11 (threat-agent-library-p1): "by threat community" lens, built
+    # SNAPSHOT-based from the latest aggregate run's scenario_inputs_snapshot
+    # (services/threat_community_summary.py) -- never a live Scenario query.
+    threat_communities: list[ThreatCommunitySummaryRow] = field(default_factory=list)
 
 
 async def build_dashboard(db: AsyncSession, org: Organization) -> DashboardData:
@@ -329,6 +337,14 @@ async def build_dashboard(db: AsyncSession, org: Organization) -> DashboardData:
     pinned_library_ids = await scenario_repo.list_pinned_library_entry_ids_for_org(org.id)
     scenario_coverage = build_scenario_coverage(sector_library_ids, pinned_library_ids)
 
+    threat_communities = await build_threat_community_summary(
+        db,
+        organization_id=org.id,
+        latest_aggregate=latest_aggregate,
+        sector_entries=sector_entries,
+        pinned_library_ids=pinned_library_ids,
+    )
+
     attack_coverage = await build_attack_coverage_summary(db, organization_id=org.id)
 
     return DashboardData(
@@ -351,4 +367,5 @@ async def build_dashboard(db: AsyncSession, org: Organization) -> DashboardData:
         control_coverage=control_coverage,
         scenario_coverage=scenario_coverage,
         attack_coverage=attack_coverage,
+        threat_communities=threat_communities,
     )

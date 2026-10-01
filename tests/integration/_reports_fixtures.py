@@ -249,11 +249,20 @@ async def _make_completed_aggregate_run(
     controls: list[tuple[str, str, str]] | None = None,
     completed_at: dt.datetime | None = None,
     legacy_band: bool = False,
+    threat_community_slugs: list[str | None] | None = None,
+    snapshot: bool = False,
 ) -> RiskAnalysisRun:
     """Seed an AGGREGATE COMPLETED run + its referenced scenarios.
 
     ``legacy_band=True`` seeds a pre-#202 ``confidence_intervals`` block (no
     ``interval_pct`` marker) so the suppress-not-relabel gate can be exercised.
+
+    ``threat_community_slugs`` (Task 12 fixture extension): one entry per
+    ``scenario_names`` entry; ``None`` leaves the scenario's community NULL /
+    ``unassigned``, matching a pre-P1 scenario. ``snapshot=True`` builds
+    ``run.scenario_inputs_snapshot`` with the REAL producer
+    (``run_executor._build_scenario_inputs_snapshot``) so dashboard/report
+    tests exercise the same shape production writes.
 
     Returns the persisted run.
     """
@@ -270,6 +279,20 @@ async def _make_completed_aggregate_run(
     )
     scenarios = await _make_scenarios(session, org.id, scenario_names)
     sids = [sc.id for sc in scenarios]
+
+    if threat_community_slugs is not None:
+        for sc, slug in zip(scenarios, threat_community_slugs, strict=True):
+            if slug is None:
+                sc.threat_community_id = None
+                sc.threat_community_version = None
+                sc.threat_community_provenance = "unassigned"
+            else:
+                sc.threat_community_id = canonical_threat_community_id(slug)
+                sc.threat_community_version = 1
+                sc.threat_community_provenance = "assigned"
+        await session.flush()
+        for sc in scenarios:
+            await session.refresh(sc, attribute_names=["threat_community"])
 
     run = RiskAnalysisRun(
         id=uuid.uuid4(),
@@ -289,6 +312,10 @@ async def _make_completed_aggregate_run(
             scenario_ids=sids, scenario_names=scenario_names, legacy_band=legacy_band
         ),
     )
+    if snapshot:
+        from idraa.services.run_executor import _build_scenario_inputs_snapshot
+
+        run.scenario_inputs_snapshot = _build_scenario_inputs_snapshot(scenarios)
     session.add(run)
     await session.flush()
     return run

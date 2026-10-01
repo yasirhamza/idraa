@@ -8,11 +8,13 @@ two distinct orgs and make require_sole_org nondeterministic).
 from __future__ import annotations
 
 import datetime as dt
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from pathlib import Path
 
+import markupsafe
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,10 +37,14 @@ from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.dashboard import build_dashboard
 from idraa.services.fx_rates import FxRateService
+from idraa.threat_community_provenance import NEEDS_REVIEW_LABEL
 from tests.integration._dashboard_fixtures import (
     _make_completed_aggregate_run,
     _make_completed_single_run,
     _make_scenario,
+)
+from tests.integration._reports_fixtures import (
+    _make_completed_aggregate_run as _make_reports_aggregate_run,
 )
 from tests.models.test_attack_models import _tactic, _technique
 
@@ -1362,3 +1368,85 @@ async def test_dashboard_full_page_all_four_bands_in_order(
     # Band 4's recent-runs panel still renders (just not used as the
     # ordering marker above, for the reason noted).
     assert "Recent runs" in page
+
+
+# ---------- Task 11: run snapshot metadata + "by threat community" dashboard block ----------
+
+
+async def test_build_dashboard_populates_threat_communities_cold_start(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    """No aggregate run yet: ten rows (nine canonical + needs-review),
+    counts-only, and the cold-start caption renders (mirrors
+    test_build_dashboard_populates_attack_coverage)."""
+    client, org_id = authed_admin
+    org = (
+        await db_session.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one()
+
+    data = await build_dashboard(db_session, org)
+    assert len(data.threat_communities) == 10
+    assert all(r.residual_ale == 0.0 for r in data.threat_communities)
+
+    page = (await client.get("/")).text
+    assert "Threat communities" in page
+    assert "of residual ALE" in page
+    assert "no aggregate run yet" in page
+
+
+async def test_dashboard_threat_communities_from_producer_snapshot(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    seed_threat_communities,
+) -> None:
+    """The 'by threat community' block groups the latest aggregate run's
+    per-scenario residual ALE by the community recorded in
+    run.scenario_inputs_snapshot (built by the REAL producer), displays each
+    community's own percentage share, and falls back to the needs-review row
+    when the latest run carries no community snapshot (pre-P1 shape)."""
+    client, org_id = authed_admin
+    org = (
+        await db_session.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one()
+
+    def _pct(html: str, name: str) -> str:
+        m = re.search(
+            r'title="'
+            + re.escape(str(markupsafe.escape(name)))
+            + r'">[^·]{0,600}?(\d+)% of residual ALE',
+            html,
+            re.S,
+        )
+        assert m, name
+        return m.group(1)
+
+    await _make_reports_aggregate_run(
+        db_session,
+        org,
+        scenario_names=["A", "B"],
+        threat_community_slugs=["cybercriminals", "nation_state"],
+        snapshot=True,
+    )
+    await db_session.commit()
+
+    page = (await client.get("/")).text
+    assert "as of" in page
+    assert _pct(page, seed_threat_communities["cybercriminals"].name) == "50"
+    assert _pct(page, seed_threat_communities["nation_state"].name) == "50"
+    assert sum(map(int, re.findall(r"(\d+)% of residual ALE", page))) == 100
+
+    # A second, later run with no community snapshot (snapshot=False, the
+    # default) must win latest_aggregate selection (created_at desc, run_repo
+    # :150) and its scenarios fall entirely into the needs-review row.
+    await _make_reports_aggregate_run(
+        db_session,
+        org,
+        scenario_names=["C", "D"],
+        completed_at=dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.UTC),
+    )
+    await db_session.commit()
+
+    page = (await client.get("/")).text
+    assert _pct(page, NEEDS_REVIEW_LABEL) == "100"
+    assert _pct(page, seed_threat_communities["cybercriminals"].name) == "0"
