@@ -169,6 +169,11 @@ async def test_wizard_sme_step_fits_mobile_viewport(migrated_server_url: str) ->
         # 4. Fill the required basics and advance -> step 3 (Likelihood / SME grid).
         await page.fill("input[name='name']", "E2E Mobile Wizard Scenario")
         await page.select_option("select[name='threat_category']", index=1)
+        # TAL: threat_community is a required <select> on step 2
+        # (step_2_basic.html) -- without a selection the browser's native
+        # HTML5 validation blocks the submit client-side and the page never
+        # advances to step 3.
+        await page.select_option("select[name='threat_community']", "cybercriminals")
         await page.click("button[type='submit']:has-text('Next')")
 
         # Step 3 renders the SME estimate grid. Wait for the "+ Add SME estimate"
