@@ -1080,13 +1080,19 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
     seed_library_entry: Any,
     db_session: AsyncSession,
 ) -> None:
-    """WS4: GET deep-link must also seed threat_category and attack_vector —
-    not just asset_class.
+    """WS4: GET deep-link must also seed threat_category, threat_community,
+    and attack_vector — not just asset_class.
 
-    TAL bridge: threat_actor_type is no longer carried on the entry (replaced
-    by the threat_community FK in Task 3); the deep-link no longer seeds it
-    (routes/scenario_wizard_seeding.py sets it to None pending Task 6), so the
-    enum-purpose assertion that pinned it here is deleted.
+    TAL: ``routes/scenario_wizard_seeding.py:186`` sets
+    ``state.threat_community = resolved.entry.threat_community.slug`` from
+    the entry's canonical FK relationship — the deep-link DOES seed it (a
+    prior round of this test deleted the assertion on a stale claim that it
+    didn't; restored here). The fixture's slug is fixed to "cybercriminals"
+    (``tests/conftest.py``'s ``seed_library_entry``,
+    ``canonical_threat_community_id("cybercriminals")``); asserting against
+    that literal avoids a lazy-load of the ``threat_community`` relationship
+    on an instance built from FK columns under the async session (same
+    precedent as ``test_library_clone_reproducibility.py``).
     """
     client, org_id = authed_analyst
     entry_id = str(seed_library_entry.id)
@@ -1105,6 +1111,10 @@ async def test_wizard_deeplink_get_seeds_threat_fields(
         f"GET deep-link must seed threat_category; "
         f"got {state.get('threat_category')!r}, "
         f"expected {seed_library_entry.threat_event_type.value!r}"
+    )
+    assert state.get("threat_community") == "cybercriminals", (
+        f"GET deep-link must seed threat_community from entry; "
+        f"got {state.get('threat_community')!r}, expected 'cybercriminals'"
     )
 
 

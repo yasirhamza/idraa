@@ -370,9 +370,8 @@ docstring).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
   (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
-  UserRole.ADMIN)` (`:1542`) — REVIEWER and VIEWER get 403. It is the only
-  write path that resolves a scenario's review-state provenance to
-  `"assigned"`; see §11's new paragraph for its audit shape.
+  UserRole.ADMIN)` (`:1542`) — REVIEWER and VIEWER get 403. It is the
+  dedicated confirm path; edit-form and wizard saves also resolve it (§11).
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
@@ -485,10 +484,12 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
   fails if any dist selector regresses to the raw shape.
 - **URL-context injection (href)** — a third class, distinct from both:
-  Jinja autoescape covers *text nodes*, not the value of an `href`
-  attribute, so a raw `<a href="{{ url }}">` would let a `javascript:`-
-  scheme citation URL execute on click even though the text itself is
-  escaped. Two gates share one allowlist rule (https scheme + non-empty
+  autoescape escapes `&<>"'` in an `href` value, preventing attribute
+  breakout, but does not validate the URL scheme, so `javascript:` survives
+  escaping intact — a raw `<a href="{{ url }}">` would still let a
+  `javascript:`-scheme citation URL execute on click, because the attribute
+  is syntactically well-formed and needs no escaping to stay inert-looking
+  text yet live as a URL. Two gates share one allowlist rule (https scheme + non-empty
   host; everything else — `javascript:`, `data:`, `http:`, malformed —
   renders inert): `formatting.linkify_https` (`formatting.py:29`, issue
   #349) auto-links `https://` URLs inside free-text citation strings, used
@@ -504,7 +505,11 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   explicitly reject `javascript:` — regression-tested in
   `tests/unit/test_formatting_linkify.py`
   (`test_linkify_https_javascript_scheme_stays_inert`,
-  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`).
+  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
+  plus a route-level end-to-end check that a stored `javascript:` citation
+  URL actually renders as inert text on a real response body
+  (`tests/routes/test_threat_community_pages.py:108`,
+  `test_javascript_citation_url_renders_as_text`).
 - **Template injection (SSTI)** — the distinct, more severe class: attacker
   text becoming the template *source* (`Environment.from_string()`,
   `Template(user_text)`, `render_template_string`), not just a substituted
@@ -514,7 +519,8 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2516`, the wizard step template) that
+  one exception (`routes/scenarios.py:2351-2353`, the wizard step template
+  construction, consumed by the `TemplateResponse` call at `:2516`) that
   indexes a **fixed 6-element literal list** by an integer bounds-checked to
   `1..6` (`scenarios.py:2343`) — not attacker-controlled text, so it's path
   *selection* among a fixed set, not path or template *construction*.
@@ -574,24 +580,31 @@ auto-substitution blocking XML entity expansion (billion-laughs class,
 resolve a free-text `threat_community` cell against actual DB membership, not
 just syntactic shape — `services/scenario_import.py:348` (`raw_tc not in
 published_slugs`) for scenario CSV/JSON import and
-`services/library_bundle_import.py:248` (`tc_slug not in published_slugs`)
+`services/library_bundle_import.py:253` (`tc_slug not in published_slugs`)
 for library-bundle JSON import; both build `published_slugs` from the same
 live query, `ThreatCommunityService(db, organization_id=org_id)
-.list_published()` (`scenario_import.py:713-715`,
-`library_bundle_import.py:414-415`), org-scoped like every other lookup
-(§7) even though the canonical catalog itself is not (§7's new bullet). An
+.list_published()` (`services/scenario_import.py:713-715`,
+`library_bundle_import.py:419-420`) — constructed with the caller's required
+`organization_id`, but that parameter is **unused in P1** against the
+canonical catalog (`_latest_seed()` filters only `source == "seed"`,
+`services/threat_communities.py:51-65`, never `self._organization_id`); it
+is the hook that keeps P2's org-authored union (§7's new bullet) from ever
+running unscoped (`services/threat_communities.py:43-45`). An
 unrecognized slug is a per-row `422`-shaped preview error, never a silent
 pass-through or a foreign-key constraint violation surfacing as a 500. The
-**either-of header rule** (`scenario_import.py:276-281`): a row may carry
+**either-of header rule** (`services/scenario_import.py:276-281`): a row may carry
 `threat_community` OR the legacy `threat_actor_type` column but never both —
 both present is an `"ambiguous"` per-row error
-(`scenario_import.py:311-317`), matching the CSV header-level check
+(`services/scenario_import.py:311-317`), matching the CSV header-level check
 (`scenario_import_parsers.py:250,256`); neither present is a legitimate
 blank ("unassigned"), not an error. The **legacy column is never exported**:
 `scenario_export.py`'s `CSV_EXPORT_HEADERS` is built directly from the
 canonical `CSV_HEADERS` list (`scenario_export.py:64`), which has no
-`threat_actor_type` entry, and `library_bundle_export.py`'s `EXPORT_FIELDS`
-explicitly excludes `LEGACY_SEED_FIELDS` (`library_bundle_export.py:41`) — a
+`threat_actor_type` entry; `library_bundle_export.py`'s `EXPORT_FIELDS`
+explicitly excludes `LEGACY_SEED_FIELDS` (`library_bundle_export.py:41`);
+and the third export path, the library catalog's own `library.csv` download,
+hardcodes its header list with `threat_community` and no legacy column
+(`routes/library.py:183`) — a
 round-tripped export always re-imports through the canonical slug path, never
 the legacy one, so legacy-format acceptance is import-only, one-directional,
 and shrinking (back-compat for bundles exported before P1), not a live
@@ -612,7 +625,8 @@ cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
 `services/sample_export.py:68,181` and `services/verification_workbook.py:
 51-66`, which also guards legacy `{=...}` array-formula braces). PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
-(`services/pdf_report.py:24-27,515-517,552-553`). The TOC/URI fix
+(`services/pdf_report.py:24-27,515-517,561` plus the by-threat-community
+names/amounts at `:1363,1371`). The TOC/URI fix
 (`pdf_report.py:298-321`, `_RunReportDoc.afterFlowable`) re-escapes heading
 text a second time before the `TOCEntry` notify call — without it, a
 scenario/run name containing markup could smuggle a live `/URI` Action into
@@ -783,7 +797,11 @@ and finalize refuses a draft without one) — both saves audited as
 `scenario.update` with a `threat_community_provenance` diff. The migration
 backfill writes no audit rows (the `vuln_framing` precedent). Write
 amplification: analyst/admin + CSRF; at most one confirm row per scenario,
-because an already-`assigned` scenario returns 409 with no audit.
+because an already-`assigned` scenario returns 409 with no audit — absent a
+concurrent race (SQLite; accepted, see the service docstring at
+`services/scenarios.py:799-803`: two in-flight confirms can both pass the
+review check, so the later one overwrites or fails `BUSY`, and both writes
+are audited).
 
 ## 12. Known gaps / follow-ups
 

@@ -85,14 +85,23 @@ def test_ot_share_within_cap():
 
 def test_threat_type_and_asset_class_are_valid_enums():
     """threat_actor_type (v3 app enum) was retired by the Threat Agent Library
-    (Task 14); this dev/curation planning artifact's ``threat_actor`` values
-    (e.g. "insider_malicious") predate TAL's canonical ThreatCommunity split
-    (privileged_insider / nonprivileged_insider) and are not re-curated here,
-    so the ``threat_actor`` field is no longer cross-checked against a live
-    schema enum -- only threat_type/asset_class (both still live enums)."""
+    (Task 14), so the typo guard on ``threat_actor`` no longer cross-checks a
+    live schema enum. Fix round 2: restored via ``ENUM_TO_COMMUNITY_SLUG``
+    (idraa.services.threat_communities) instead -- its key set is exactly the
+    six retired ThreatActorType values (cybercriminals, nation_state,
+    hacktivists, competitors, insider_accidental, insider_malicious), so this
+    still catches a typo'd threat_actor value in the planning JSON without
+    importing the deleted enum or re-curating the file against the new
+    ThreatCommunity slug taxonomy (which splits insider into
+    privileged/nonprivileged -- out of scope here)."""
     from idraa.models.enums import AssetClass, ThreatCategory
+    from idraa.services.threat_communities import ENUM_TO_COMMUNITY_SLUG
 
     tc = {t.value for t in ThreatCategory}
     ac = {a.value for a in AssetClass}
     for r in _rows():
-        assert r["threat_type"] in tc and r["asset_class"] in ac
+        assert (
+            r["threat_type"] in tc
+            and r["asset_class"] in ac
+            and r["threat_actor"] in ENUM_TO_COMMUNITY_SLUG
+        )

@@ -239,7 +239,12 @@ def _validate_entries(
                 {
                     "index": idx,
                     "field": "threat_actor_type",
-                    "reason": f"{seed.get('threat_actor_type')!r} is not a recognised legacy threat actor type",
+                    # Bound the echoed cell so an oversized value cannot inflate the
+                    # preview payload (mirrors scenario_import.py's equivalent guard).
+                    "reason": (
+                        f"{(seed.get('threat_actor_type') or '')[:64]!r} is not a "
+                        "recognised legacy threat actor type"
+                    ),
                 }
             )
             preview.append({"index": idx, "slug": slug, "name": name, "action": "error"})
@@ -250,7 +255,7 @@ def _validate_entries(
                 {
                     "index": idx,
                     "field": "threat_community",
-                    "reason": f"{tc_slug!r} is not a published threat community",
+                    "reason": f"{tc_slug[:64]!r} is not a published threat community",
                 }
             )
             preview.append({"index": idx, "slug": slug, "name": name, "action": "error"})

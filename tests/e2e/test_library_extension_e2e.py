@@ -318,7 +318,7 @@ async def test_threat_community_facet_filters_cards(
     reproduces that same count in the page's "N entries found" header.
     """
     from playwright.async_api import Error as PlaywrightError
-    from playwright.async_api import async_playwright
+    from playwright.async_api import async_playwright, expect
 
     base = migrated_server_url
     async with async_playwright() as p:
@@ -353,15 +353,10 @@ async def test_threat_community_facet_filters_cards(
         assert n > 0, "nation_state facet must have a non-zero published count"
 
         # Tick the facet checkbox and wait for the #library-cards HTMX swap
-        # (hx-trigger="change from:input" on the desktop <aside>).
+        # (hx-trigger="change from:input" on the desktop <aside>) to settle at
+        # exactly the facet's own count, rather than a fixed sleep.
         await page.check("aside input[name='threat_community'][value='nation_state']")
-        await page.wait_for_timeout(800)  # HTMX swap settle
-
-        card_count = await page.locator("#library-cards .card").count()
-        assert card_count == n, (
-            f"#library-cards should show exactly the facet's {n} entries after "
-            f"the HTMX swap; got {card_count}"
-        )
+        await expect(page.locator("#library-cards .card")).to_have_count(n)
 
         # The "N entries found" header sits OUTSIDE the HTMX swap target and
         # does not update above — confirm the SAME count on a full render via
