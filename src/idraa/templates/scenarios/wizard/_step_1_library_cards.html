@@ -10,7 +10,7 @@
     <div class="card-body">
       <h3 class="card-title">{{ entry.name }}</h3>
       <div class="badges">
-        <span class="badge">{{ entry.threat_actor_type.value }}</span>
+        <a href="/library/threat-communities/{{ entry.threat_community.slug }}" class="badge badge-outline">{{ entry.threat_community.name }}</a>
         <span class="badge badge-secondary">{{ entry.threat_event_type.value }}</span>
       </div>
       <p class="text-sm">{{ entry.description[:120] }}{% if entry.description|length > 120 %}...{% endif %}</p>

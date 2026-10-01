@@ -39,8 +39,10 @@
       </div>
       {{ form_field(name="version", label="Version", mode="display",
                     value="v" ~ entry.version) }}
-      {{ form_field(name="threat_actor", label="Threat actor", mode="display",
-                    value=entry.threat_actor_type.value | replace("_", " ") | title) }}
+      <div class="space-y-1 max-w-md">
+        <p class="text-meta text-ink-2">Threat community</p>
+        <p class="text-body text-ink-1"><a class="link" href="/library/threat-communities/{{ entry.threat_community.slug }}">{{ entry.threat_community.name }}</a></p>
+      </div>
       {{ form_field(name="threat_category", label="Threat category", mode="display",
                     value=entry.threat_event_type.value | replace("_", " ") | title) }}
       {{ form_field(name="asset_class", label="Asset class", mode="display",

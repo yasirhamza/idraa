@@ -9,7 +9,7 @@
      the CSRF + submit buttons are never disrupted. #}
   <div class="mb-4 space-y-2"
        hx-get="/scenarios/new/wizard/_partials/library_cards"
-       hx-trigger="input changed delay:300ms from:[name='q'], change from:[name='asset_class'], change from:[name='threat_actor_type']"
+       hx-trigger="input changed delay:300ms from:[name='q'], change from:[name='asset_class'], change from:[name='threat_community']"
        hx-target="#wizard-library-cards"
        hx-include="#wizard-picker-filters">
     <div id="wizard-picker-filters" class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
@@ -35,13 +35,13 @@
       </select>
       {% endif %}
 
-      {# Threat actor filter — show only present values #}
-      {% if facets is defined and facets.threat_actor_type %}
-      <select class="select select-bordered select-sm" name="threat_actor_type">
-        <option value="">All threat actors</option>
-        {% for opt in facets.threat_actor_type %}
+      {# Threat community filter — show only present values #}
+      {% if facets is defined and facets.threat_community %}
+      <select class="select select-bordered select-sm" name="threat_community">
+        <option value="">All threat communities</option>
+        {% for opt in facets.threat_community %}
           <option value="{{ opt.value }}"
-            {% if filters is defined and opt.value in (filters.threat_actor_types | map(attribute='value') | list) %}selected{% endif %}>
+            {% if filters is defined and opt.value in filters.threat_community_slugs %}selected{% endif %}>
             {{ opt.label }} ({{ opt.count }})
           </option>
         {% endfor %}

@@ -15,13 +15,13 @@ from idraa.models.enums import (
     AssetClass,
     IndustrySubSector,
     IndustryType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario_library import (
     ScenarioLibraryEntry,
     ScenarioLibraryOverride,
 )
+from idraa.models.threat_community import ThreatCommunity
 
 
 def _json_array_overlaps(column: Any, values: list[str]) -> Any:
@@ -75,7 +75,7 @@ class ScenarioLibraryRepo:
 
     async def list_published(
         self,
-        threat_actor_types: list[ThreatActorType] | None = None,
+        threat_community_slugs: list[str] | None = None,
         threat_event_types: list[ThreatCategory] | None = None,
         asset_classes: list[AssetClass] | None = None,
         applicable_industries: list[IndustryType] | None = None,
@@ -108,9 +108,14 @@ class ScenarioLibraryRepo:
             ),
         )
 
-        # TAL bridge: threat_actor_type column removed (Task 3's FK migration to
-        # threat_communities); the parameter is accepted but is a no-op pending
-        # the threat_community-based facet/filter rebuild (Task 4+).
+        if threat_community_slugs:
+            stmt = stmt.join(
+                ThreatCommunity,
+                and_(
+                    ThreatCommunity.id == ScenarioLibraryEntry.threat_community_id,
+                    ThreatCommunity.version == ScenarioLibraryEntry.threat_community_version,
+                ),
+            ).where(ThreatCommunity.slug.in_(threat_community_slugs))
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:
@@ -263,7 +268,7 @@ class ScenarioLibraryRepo:
 
     async def count_published(
         self,
-        threat_actor_types: list[ThreatActorType] | None = None,
+        threat_community_slugs: list[str] | None = None,
         threat_event_types: list[ThreatCategory] | None = None,
         asset_classes: list[AssetClass] | None = None,
         applicable_industries: list[IndustryType] | None = None,
@@ -303,9 +308,14 @@ class ScenarioLibraryRepo:
             )
         )
 
-        # TAL bridge: threat_actor_type column removed (Task 3's FK migration to
-        # threat_communities); the parameter is accepted but is a no-op pending
-        # the threat_community-based facet/filter rebuild (Task 4+).
+        if threat_community_slugs:
+            stmt = stmt.join(
+                ThreatCommunity,
+                and_(
+                    ThreatCommunity.id == ScenarioLibraryEntry.threat_community_id,
+                    ThreatCommunity.version == ScenarioLibraryEntry.threat_community_version,
+                ),
+            ).where(ThreatCommunity.slug.in_(threat_community_slugs))
         if threat_event_types:
             stmt = stmt.where(ScenarioLibraryEntry.threat_event_type.in_(threat_event_types))
         if asset_classes:

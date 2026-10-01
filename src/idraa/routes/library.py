@@ -5,6 +5,7 @@ Spec §8.1 §8.3.
 
 from __future__ import annotations
 
+import re
 import uuid
 from enum import StrEnum
 
@@ -25,7 +26,6 @@ from idraa.models.enums import (
     IndustrySubSector,
     IndustryType,
     StepUpCategory,
-    ThreatActorType,
     ThreatCategory,
     UserRole,
 )
@@ -55,12 +55,16 @@ router = APIRouter(tags=["library"])
 # F14 carryover A: hoist enum valid-value sets at module scope so
 # _parse_browse_filters doesn't rebuild them on every request.
 _VALID_VALUES: dict[type[StrEnum], frozenset[str]] = {
-    ThreatActorType: frozenset(m.value for m in ThreatActorType),
     ThreatCategory: frozenset(m.value for m in ThreatCategory),
     AssetClass: frozenset(m.value for m in AssetClass),
     IndustryType: frozenset(m.value for m in IndustryType),
     IndustrySubSector: frozenset(m.value for m in IndustrySubSector),
 }
+
+# threat_community querystring values are slugs, not an enum — allowlisted by
+# shape (lowercase alnum/underscore), deduped, and capped at 16 values.
+_SLUG_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+_MAX_THREAT_COMMUNITY_SLUGS = 16
 
 
 def _parse_browse_filters(request: Request) -> BrowseFilters:
@@ -72,7 +76,9 @@ def _parse_browse_filters(request: Request) -> BrowseFilters:
         return [enum_cls(v) for v in qp.getlist(key) if v in valid]
 
     return BrowseFilters(
-        threat_actor_types=_multi("threat_actor_type", ThreatActorType),  # type: ignore[arg-type]
+        threat_community_slugs=list(
+            dict.fromkeys(v for v in qp.getlist("threat_community") if _SLUG_RE.fullmatch(v))
+        )[:_MAX_THREAT_COMMUNITY_SLUGS],
         threat_event_types=_multi("threat_event_type", ThreatCategory),  # type: ignore[arg-type]
         asset_classes=_multi("asset_class", AssetClass),  # type: ignore[arg-type]
         applicable_industries=_multi("industry", IndustryType),  # type: ignore[arg-type]

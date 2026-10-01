@@ -30,6 +30,7 @@ def _entry(
     threat_event_type: ThreatCategory = ThreatCategory.RANSOMWARE,
     industries: list[str] | None = None,
     sub_sectors: list[str] | None = None,
+    threat_community: str = "cybercriminals",
 ) -> ScenarioLibraryEntry:
     return ScenarioLibraryEntry(
         id=uuid.uuid4(),
@@ -38,7 +39,7 @@ def _entry(
         name=slug,
         status=status,
         threat_event_type=threat_event_type,
-        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_id=canonical_threat_community_id(threat_community),
         threat_community_version=1,
         asset_class=AssetClass.SYSTEMS,
         tags=[],
@@ -92,6 +93,26 @@ async def test_list_published_filters_by_sub_sector_overlap(
     assert "a" in slugs
     assert "b" not in slugs
     assert "c" in slugs
+
+
+@pytest.mark.asyncio
+async def test_list_published_filters_by_threat_community_slug(
+    db_session: AsyncSession,
+) -> None:
+    """``threat_community_slugs`` narrows list_published (and count_published agrees)."""
+    repo = ScenarioLibraryRepo(db_session)
+    a = _entry(slug="a", threat_community="cybercriminals")
+    b = _entry(slug="b", threat_community="cybercriminals")
+    c = _entry(slug="c", threat_community="nation_state")
+    db_session.add_all([a, b, c])
+    await db_session.commit()
+
+    rows = await repo.list_published(threat_community_slugs=["nation_state"])
+    slugs = sorted(r.slug for r in rows)
+    assert slugs == ["c"]
+
+    count = await repo.count_published(threat_community_slugs=["nation_state"])
+    assert count == 1
 
 
 @pytest.mark.asyncio

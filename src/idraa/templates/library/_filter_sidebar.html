@@ -2,20 +2,15 @@
   <h2 class="text-base font-semibold">Filters</h2>
 
   <fieldset class="border border-border-strong rounded p-3">
-    <legend class="text-sm font-semibold px-1">Threat actor</legend>
-    {% for opt in facets.threat_actor_type %}
+    <legend class="text-sm font-semibold px-1">Threat community</legend>
+    {% for opt in facets.threat_community %}
       <label class="flex items-center gap-2 cursor-pointer mt-1">
-        <input
-          class="checkbox checkbox-xs"
-          type="checkbox"
-          name="threat_actor_type"
-          value="{{ opt.value }}"
-          {% if opt.value in (filters.threat_actor_types | map(attribute='value') | list) %}
-            checked
-          {% endif %}>
+        <input class="checkbox checkbox-xs" type="checkbox" name="threat_community" value="{{ opt.value }}"
+          {% if opt.value in filters.threat_community_slugs %}checked{% endif %}>
         <span class="text-sm">{{ opt.label }} ({{ opt.count }})</span>
       </label>
     {% endfor %}
+    <a href="/library/threat-communities" class="text-micro text-brand hover:underline mt-2 inline-block">About these communities &rarr;</a>
   </fieldset>
 
   <fieldset class="border border-border-strong rounded p-3">

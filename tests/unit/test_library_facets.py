@@ -242,7 +242,7 @@ async def test_available_facets_empty_db(db_session: AsyncSession) -> None:
     facets = await available_facets(db_session)
 
     assert facets["asset_class"] == []
-    assert facets["threat_actor_type"] == []
+    assert facets["threat_community"] == []
     assert facets["threat_category"] == []
     assert facets["sub_sector"] == []
     assert facets["industry"] == []
@@ -265,9 +265,32 @@ async def test_available_facets_stable_order(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     facets = await available_facets(db_session)
-    ta = facets["threat_actor_type"]
+    ta = facets["threat_community"]
 
     assert ta[0].value == "cybercriminals", (
         f"Expected cybercriminals first (highest count), got {ta[0].value}"
     )
     assert ta[1].value == "nation_state"
+
+
+@pytest.mark.asyncio
+async def test_threat_community_facet_uses_slug_and_name(
+    db_session, seed_threat_communities
+) -> None:
+    from idraa.services.scenario_library import available_facets
+
+    db_session.add_all(
+        [
+            _entry("a", "A", threat_community="cybercriminals"),
+            _entry("b", "B", threat_community="cybercriminals"),
+            _entry("c", "C", threat_community="nation_state"),
+        ]
+    )
+    await db_session.flush()
+    facets = await available_facets(db_session)
+    assert "threat_actor_type" not in facets
+    names = {s: r.name for s, r in seed_threat_communities.items()}
+    assert {o.value: (o.label, o.count) for o in facets["threat_community"]} == {
+        "cybercriminals": (names["cybercriminals"], 2),
+        "nation_state": (names["nation_state"], 1),
+    }
