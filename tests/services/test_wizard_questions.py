@@ -167,3 +167,45 @@ def test_malicious_question_keeps_compromise_wording() -> None:
     assert "try to compromise" in render_question(
         "tef", ctx
     ) and "cybercriminals" in render_question("tef", ctx)
+
+
+_NON_MALICIOUS_CTX = ScenarioContext(
+    threat_community_slug="insider_accidental",
+    threat_community_name="Accidental insider",
+    threat_community_intent="non_malicious",
+    attack_vector=None,
+    asset_class=None,
+)
+
+
+def test_non_malicious_vuln_question_is_still_inherent_framed() -> None:
+    """M-I2: the error-framed Vulnerability copy must keep the inherent-framing
+    pin too — methodology/vuln-inherent-framing applies regardless of intent."""
+    q = render_question("vuln", _NON_MALICIOUS_CTX)
+    assert q == (
+        "If that error happens, how likely is it to become a loss given the "
+        "asset's inherent weaknesses, before any of your mitigating controls?"
+    )
+    assert "inherent" in q.lower()
+    assert "before any of your mitigating controls" in q
+    assert "current controls" not in q.lower()
+
+
+def test_non_malicious_pl_question_uses_error_framing() -> None:
+    q = render_question("pl", _NON_MALICIOUS_CTX)
+    assert q == (
+        "If the error results in a loss, what does the event itself cost you: "
+        "response, recovery, downtime, replacement?"
+    )
+    assert "If the error results in a loss" in q
+    assert "attack" not in q.lower()
+
+
+def test_non_malicious_sl_question_uses_error_framing() -> None:
+    q = render_question("sl", _NON_MALICIOUS_CTX)
+    assert q == (
+        "If the error results in a loss, what do other stakeholders' reactions "
+        "cost you: fines, lost business, and the response they force?"
+    )
+    assert "If the error results in a loss" in q
+    assert "attack" not in q.lower()

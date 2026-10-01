@@ -140,9 +140,14 @@ def render_question(fieldset: str, ctx: ScenarioContext) -> str:
 QUESTION_TOOLTIPS = {
     "tef": (
         # Plan-gate M-N1: restate the per-year basis so a tooltip-only reader
-        # doesn't anchor on a non-annual figure.
+        # doesn't anchor on a non-annual figure. TAL M-I1 fix: "threat events"
+        # (not "attempts") so this convention text reads correctly for a
+        # non-malicious community too, where the event is an error, not an
+        # attempt — _fair_page_context (routes/scenarios.py) CONCATENATES this
+        # onto a community's curated threat_event_definition, never replaces
+        # it, so the elicitation convention always reaches the analyst.
         "Each SME gives a low (5%) and high (95%) — the range they're 90% "
-        "sure the true number of attempts per year falls inside."
+        "sure the true number of threat events per year falls inside."
     ),
     "vuln": (
         "Estimate the asset's INHERENT susceptibility, before your controls — "

@@ -34,11 +34,16 @@ async def _bootstrap_wizard_through_step_2(
     user_id: uuid.UUID,
     *,
     library_entry: Any = None,
+    threat_community: str = "cybercriminals",
 ) -> uuid.UUID:
     """Drive the wizard from /scenarios/new to the end of step 2; return tx_id.
 
     Posts step 1 (skip-library path so the test does not require a seeded
     library entry) then step 2 with the scenario metadata fields.
+    ``threat_community`` defaults to "cybercriminals" (the long-standing
+    shape every pre-existing caller relies on) but is overridable so a test
+    can bootstrap against a different seeded community (e.g. an SC-I1
+    route-level copy test using "insider_accidental").
 
     Returns the tx_id of the resulting wizard draft so the caller can
     re-inject it into subsequent POSTs.
@@ -59,7 +64,7 @@ async def _bootstrap_wizard_through_step_2(
         "name": "test-scenario-pi-f7",
         "description": "wizard step3 helper integration test",
         "threat_category": "ransomware",
-        "threat_community": "cybercriminals",
+        "threat_community": threat_community,
         "asset_class": "systems",
     }
     await csrf_post(client, "/scenarios/new/wizard/step/2", data=step2_data)

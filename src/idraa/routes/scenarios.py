@@ -3816,7 +3816,13 @@ async def _fair_page_context(
     )
     fieldset_tooltips = dict(QUESTION_TOOLTIPS)
     if community is not None:
-        fieldset_tooltips["tef"] = community.threat_event_definition
+        # M-I1 fix: concatenate, don't overwrite — the community's curated
+        # threat_event_definition supplies the WHAT (what counts as a TEF for
+        # this community), but QUESTION_TOOLTIPS["tef"] still carries the SME
+        # elicitation CONVENTION (low=5th/high=95th pct, per year) that every
+        # fieldset's tooltip states. Dropping it would silently un-teach the
+        # convention the moment a community is assigned.
+        fieldset_tooltips["tef"] = f"{community.threat_event_definition} {QUESTION_TOOLTIPS['tef']}"
     return {
         "current_user": user,
         "flash": None,
