@@ -337,6 +337,7 @@ async def test_create_scenario_persists_and_redirects(
     payload = {
         "name": "Phishing-led BEC",
         "threat_category": "social_engineering",
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",
@@ -390,6 +391,7 @@ async def test_create_scenario_lognormal_primary_loss_stored_native(
     payload = {
         "name": "Lognormal-PL scenario",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "tef_dist": "pert",
         "tef_low": "0.1",
         "tef_mode": "0.5",
@@ -456,6 +458,7 @@ async def test_effect_round_trips_through_create_and_edit(
     payload = {
         "name": "Availability-effect scenario",
         "threat_category": "ot_availability",
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",
@@ -699,6 +702,7 @@ async def test_update_persists_descriptive_change(
     payload = {
         "name": "After",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -764,6 +768,7 @@ async def test_update_does_not_clobber_status_version_type_source(
     payload = {
         "name": "Renamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -807,6 +812,7 @@ async def test_update_optimistic_conflict_returns_409(
     payload = {
         "name": "Renamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -854,6 +860,7 @@ async def test_update_409_rerender_displays_org_chips(
     payload = {
         "name": "ChipRegressionRenamed",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),
@@ -1080,6 +1087,7 @@ async def test_reviewer_cannot_update(
     payload = {
         "name": "X",
         "threat_category": s.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": str(s.threat_event_frequency["low"]),
         "tef_mode": str(s.threat_event_frequency["mode"]),
         "tef_high": str(s.threat_event_frequency["high"]),

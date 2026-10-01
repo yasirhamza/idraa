@@ -1215,6 +1215,7 @@ async def test_pin_clears_on_edit_save_and_banner_refires(
     payload = {
         "name": scenario.name,
         "threat_category": scenario.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",
@@ -1260,6 +1261,7 @@ async def test_migration_stamp_also_clears_on_edit_save(
     payload = {
         "name": scenario.name,
         "threat_category": scenario.threat_category,
+        "threat_community": "cybercriminals",
         "tef_low": "0.1",
         "tef_mode": "0.5",
         "tef_high": "2.0",

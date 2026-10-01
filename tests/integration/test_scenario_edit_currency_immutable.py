@@ -44,6 +44,7 @@ async def test_noop_edit_does_not_reconvert_or_drop_currency(
         "name": "edit-me",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         "entry_currency": "SAR",
         "tef_dist": "pert",
         "tef_low": "0.1",
@@ -96,6 +97,7 @@ async def test_noop_edit_does_not_reconvert_or_drop_currency(
         "name": "edit-me",
         "scenario_type": "custom",
         "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
         # No entry_currency field — the edit form shows it read-only, not as an input.
         "tef_dist": "pert",
         "tef_low": "0.1",
