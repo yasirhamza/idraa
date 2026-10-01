@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.models.audit_log import AuditLog
 from idraa.models.enums import EntityStatus, ScenarioSource, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.schemas.scenario import ScenarioForm
 from idraa.services.scenarios import ScenarioService
@@ -51,6 +52,9 @@ async def _seed_legacy_scenario(
     name: str = "legacy vuln scenario",
 ) -> Scenario:
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

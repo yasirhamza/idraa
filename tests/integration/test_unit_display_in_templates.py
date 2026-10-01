@@ -39,6 +39,7 @@ from idraa.models.enums import (
 )
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 
 
@@ -226,6 +227,9 @@ async def completed_run_with_elapsed_time_control(
     """
     _, org_id = authed_analyst
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="T4 unit_display run-detail test scenario",
         scenario_type=ScenarioType.CUSTOM,

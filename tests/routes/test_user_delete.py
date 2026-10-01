@@ -62,8 +62,12 @@ async def _seed_run_authored_by(
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="authored-scenario",
         scenario_type=ScenarioType.CUSTOM,
@@ -289,6 +293,7 @@ async def _seed_sme_history(
     from idraa.models.scenario import Scenario
     from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
     from idraa.models.sme import SubjectMatterExpert
+    from idraa.models.threat_community import canonical_threat_community_id
 
     if surface == "sme_created_by":
         db_session.add(
@@ -309,6 +314,9 @@ async def _seed_sme_history(
         )
     else:
         scenario = Scenario(
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
+            threat_community_provenance="assigned",
             organization_id=org_id,
             name="sme-estimate-scenario",
             scenario_type=ScenarioType.CUSTOM,

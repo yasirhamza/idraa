@@ -247,8 +247,12 @@ async def _seed_scenario(
 ) -> Any:
     from idraa.models.enums import ScenarioSource, ScenarioType
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     sc = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         threat_category="malware",

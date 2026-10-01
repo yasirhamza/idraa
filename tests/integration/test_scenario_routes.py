@@ -44,6 +44,7 @@ from idraa.models.enums import (
 )
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -62,6 +63,9 @@ def _seed_scenario(
     on ``flush()``.
     """
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -1126,6 +1130,9 @@ def _seed_lognormal_scenario(
     import math
 
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -1222,6 +1229,9 @@ def _seed_lognormal_mixture_scenario(
     """Seed a scenario with a catastrophic multi-SME lognormal_mixture
     primary_loss (the worked A/B pair, equal weight)."""
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
@@ -1337,6 +1347,9 @@ def _seed_scenario_with_pl_metadata(
         primary_loss["distribution_fit_metadata"] = metadata
 
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

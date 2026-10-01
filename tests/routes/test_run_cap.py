@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.config import Settings
 from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 
@@ -37,6 +38,9 @@ def _seed_scenario_for_org(
     name: str = "run-cap-test-scenario",
 ) -> Scenario:
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

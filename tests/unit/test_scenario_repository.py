@@ -23,6 +23,7 @@ from idraa.models.enums import (
 from idraa.models.organization import Organization
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.repositories.scenario_repo import ScenarioRepo
 
 
@@ -34,6 +35,9 @@ def _seed_scenario(
     status: EntityStatus = EntityStatus.ACTIVE,
 ) -> Scenario:
     s = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

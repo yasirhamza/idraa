@@ -97,6 +97,9 @@ def _library_derived_scenario(
     org_id: _uuid.UUID, created_by: _uuid.UUID, entry: ScenarioLibraryEntry
 ) -> Scenario:
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Ransomware on EHR (cloned)",
         scenario_type=ScenarioType.CUSTOM,
@@ -159,6 +162,9 @@ async def custom_scenario(
     ).scalar_one()
 
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Hand-built custom scenario",
         scenario_type=ScenarioType.CUSTOM,

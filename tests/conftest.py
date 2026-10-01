@@ -478,6 +478,7 @@ async def seed_scenario_factory(
     """
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(
         *,
@@ -487,6 +488,17 @@ async def seed_scenario_factory(
         created_by: uuid.UUID | None = None,
         **kwargs: _Any,
     ) -> Scenario:
+        # TAL mechanical rule: a bare Scenario(...) defaults to the common
+        # 'cybercriminals' community in the normal (non-review) 'assigned'
+        # state. Callers that need a different community/provenance (incl.
+        # the review state: NULL + 'unassigned') pass the three kwargs
+        # explicitly — popped here (not passed via **kwargs) so an explicit
+        # override never collides with the default.
+        threat_community_id = kwargs.pop(
+            "threat_community_id", canonical_threat_community_id("cybercriminals")
+        )
+        threat_community_version = kwargs.pop("threat_community_version", 1)
+        threat_community_provenance = kwargs.pop("threat_community_provenance", "assigned")
         scenario = Scenario(
             organization_id=organization_id
             if organization_id is not None
@@ -504,6 +516,9 @@ async def seed_scenario_factory(
             },
             status=status,
             created_by=created_by if created_by is not None else seed_user.id,
+            threat_community_id=threat_community_id,
+            threat_community_version=threat_community_version,
+            threat_community_provenance=threat_community_provenance,
             **kwargs,
         )
         db_session.add(scenario)
@@ -560,6 +575,7 @@ async def scenario_factory(
     """
     from idraa.models.enums import EntityStatus, ScenarioType, ThreatCategory
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     async def _factory(
         *,
@@ -573,6 +589,17 @@ async def scenario_factory(
             db_session.add(seed_organization)
         if created_by is None and seed_user not in db_session:
             db_session.add(seed_user)
+        # TAL mechanical rule: a bare Scenario(...) defaults to the common
+        # 'cybercriminals' community in the normal (non-review) 'assigned'
+        # state. Callers that need a different community/provenance (incl.
+        # the review state: NULL + 'unassigned') pass the three kwargs
+        # explicitly — popped here (not passed via **kwargs) so an explicit
+        # override never collides with the default.
+        threat_community_id = kwargs.pop(
+            "threat_community_id", canonical_threat_community_id("cybercriminals")
+        )
+        threat_community_version = kwargs.pop("threat_community_version", 1)
+        threat_community_provenance = kwargs.pop("threat_community_provenance", "assigned")
         scenario = Scenario(
             organization_id=organization_id
             if organization_id is not None
@@ -590,6 +617,9 @@ async def scenario_factory(
             },
             status=status,
             created_by=created_by if created_by is not None else seed_user.id,
+            threat_community_id=threat_community_id,
+            threat_community_version=threat_community_version,
+            threat_community_provenance=threat_community_provenance,
             **kwargs,
         )
         db_session.add(scenario)

@@ -49,6 +49,7 @@ from idraa.models.enums import (
 from idraa.models.organization import Organization as _Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.models.user import User
 from idraa.services.fx_rates import FxRateService as _FxRateService
 from tests.conftest import csrf_post
@@ -75,6 +76,9 @@ async def _seed_analyst_org_scenario(
     see uncommitted rows from db_session's engine.
     """
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=organization_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,

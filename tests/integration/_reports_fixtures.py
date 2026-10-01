@@ -21,6 +21,7 @@ from idraa.models.enums import ScenarioType, ThreatCategory
 from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 async def _make_scenarios(
@@ -41,6 +42,9 @@ async def _make_scenarios(
     scenarios: list[Scenario] = []
     for name in names:
         sc = Scenario(
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
+            threat_community_provenance="assigned",
             id=uuid.uuid4(),
             organization_id=org_id,
             name=name,
@@ -69,6 +73,14 @@ async def _make_scenarios(
         session.add(sc)
         scenarios.append(sc)
     await session.flush()
+    # The `threat_community` relationship is populated by SQLAlchemy's
+    # selectin strategy on a QUERY-based load; a freshly-constructed-then-
+    # flushed object was never queried, so the attribute is unloaded. An
+    # explicit (awaited) refresh here avoids a later SYNCHRONOUS attribute
+    # access (e.g. _scenario_inputs_snapshot_for below) triggering an
+    # implicit lazy load outside a greenlet context (MissingGreenlet).
+    for sc in scenarios:
+        await session.refresh(sc, attribute_names=["threat_community"])
     return scenarios
 
 

@@ -330,6 +330,9 @@ async def test_option_b_delete_succeeds_with_pinned_scenario(
     # A scenario pinned to this entry (library_pin.entry_id is the hyphenated
     # str(entry.id), matching resolve_for_clone's pin construction).
     scenario = Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name="Pinned Scenario",
         threat_category=ThreatCategory.RANSOMWARE,

@@ -26,6 +26,7 @@ from idraa.models.enums import (
 )
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
+from idraa.models.threat_community import canonical_threat_community_id
 from tests.conftest import csrf_post
 
 _FORM_BASE = {
@@ -66,6 +67,9 @@ def _make_control(org_id: uuid.UUID, *, name: str) -> Control:
 
 def _make_scenario(org_id: uuid.UUID, *, name: str) -> Scenario:
     return Scenario(
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         organization_id=org_id,
         name=name,
         scenario_type=ScenarioType.CUSTOM,
