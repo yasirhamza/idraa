@@ -36,7 +36,19 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy import Uuid as UuidType
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,10 +59,10 @@ from idraa.models.enums import (
     ScenarioEffect,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.mixins import IdMixin, OrgMixin, TimestampMixin
+from idraa.models.threat_community import THREAT_COMMUNITY_REVIEW_PROVENANCES, ThreatCommunity
 
 if TYPE_CHECKING:
     from idraa.models.attack import ScenarioAttackMapping
@@ -73,10 +85,32 @@ class Scenario(IdMixin, TimestampMixin, OrgMixin, Base):
         Enum(ThreatCategory, native_enum=False, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
-    threat_actor_type: Mapped[ThreatActorType | None] = mapped_column(
-        Enum(ThreatActorType, native_enum=False, values_callable=lambda x: [e.value for e in x]),
-        nullable=True,
+    # Threat Agent Library (spec §4.3): nullable composite FK — the enum it replaces was nullable
+    # and we do not invent data. Form/wizard parsing require a value; the DTO and DB do not
+    # (register converter builds forms with no actor; exports round-trip NULL).
+    threat_community_id: Mapped[uuid.UUID | None] = mapped_column(
+        UuidType(as_uuid=True), nullable=True
     )
+    threat_community_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    threat_community: Mapped[ThreatCommunity | None] = relationship(
+        ThreatCommunity,
+        primaryjoin=(
+            "and_(Scenario.threat_community_id == ThreatCommunity.id, "
+            "Scenario.threat_community_version == ThreatCommunity.version)"
+        ),
+        foreign_keys="[Scenario.threat_community_id, Scenario.threat_community_version]",
+        lazy="selectin",  # no LEFT JOIN on with_for_update selects; assigned (not viewonly) so the audit diff sees the new row
+    )
+    # System-managed provenance (the vuln_framing idiom). App-enforced value set, no CHECK:
+    # 'assigned' | 'migrated' | 'migrated_split_default' | 'unassigned'. Invariant: NULL <=> 'unassigned'.
+    threat_community_provenance: Mapped[str] = mapped_column(
+        String(32), default="assigned", server_default="assigned", nullable=False
+    )
+
+    @property
+    def threat_community_needs_review(self) -> bool:
+        return self.threat_community_provenance in THREAT_COMMUNITY_REVIEW_PROVENANCES
+
     attack_vector: Mapped[str | None] = mapped_column(String(128), nullable=True)
     asset_class: Mapped[AssetClass | None] = mapped_column(
         Enum(AssetClass, native_enum=False, values_callable=lambda x: [e.value for e in x]),
@@ -176,4 +210,18 @@ class Scenario(IdMixin, TimestampMixin, OrgMixin, Base):
         "Organization",
         back_populates="scenarios",
         lazy="select",
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["threat_community_id", "threat_community_version"],
+            ["threat_communities.id", "threat_communities.version"],
+            name="fk_scenario_threat_community",
+        ),
+        Index("ix_scenarios_threat_community", "threat_community_id", "threat_community_version"),
+        # SQLite does not enforce a half-NULL composite FK; this CHECK is stable (unlike the enum CHECKs of #303).
+        CheckConstraint(
+            "(threat_community_id IS NULL) = (threat_community_version IS NULL)",
+            name="ck_scenario_threat_community_pair",
+        ),
     )

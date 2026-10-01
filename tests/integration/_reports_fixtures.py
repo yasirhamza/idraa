@@ -413,6 +413,17 @@ def _scenario_inputs_snapshot_for(scenarios: list[Scenario]) -> dict[str, Any]:
                 "vulnerability": sc.vulnerability,
                 "primary_loss": sc.primary_loss,
                 "secondary_loss": sc.secondary_loss,
+                "threat_community": (
+                    {
+                        "id": str(sc.threat_community.id),
+                        "version": sc.threat_community.version,
+                        "slug": sc.threat_community.slug,
+                        "name": sc.threat_community.name,
+                    }
+                    if sc.threat_community is not None
+                    else None
+                ),
+                "threat_community_provenance": sc.threat_community_provenance,
             }
             for sc in scenarios
         ]

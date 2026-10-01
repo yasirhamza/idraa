@@ -270,9 +270,13 @@ allowlist = [
     "entry_currency",              # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
     "entry_rate",                  # internal — multi-currency P2 provenance, set by route after create (not on ScenarioForm)
     "conversion_metadata",         # epic #34 P1b — qualitative converter provenance, set by the converter service, never on ScenarioForm
+    "threat_community_id",         # TAL FK + system-managed provenance; the form carries the slug
+    "threat_community_version",    # TAL FK + system-managed provenance; the form carries the slug
+    "threat_community_provenance", # TAL FK + system-managed provenance; the form carries the slug
 ]
 dto_only_allowlist = [
     "library_entry_id",  # user-input flag indicating library origin; consumed during creation; provenance lives in library_pin
+    "threat_community",  # TAL slug; resolves to the threat_community_id/_version FK pair at the service layer
 ]
 
 [tool.idraa.contracts.field_sync.control]

@@ -77,7 +77,6 @@ from idraa.models.enums import (
     AssetClass,
     EntityStatus,
     StepUpCategory,
-    ThreatActorType,
     UserRole,
 )
 from idraa.models.organization import Organization
@@ -1501,6 +1500,34 @@ async def confirm_vuln_framing(
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 
+@router.post("/scenarios/{scenario_id}/confirm-threat-community")
+async def confirm_threat_community(
+    request: Request,
+    scenario_id: uuid.UUID,
+    threat_community: str = Form(..., max_length=64),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
+) -> Response:
+    """Threat Agent Library: confirm/correct a scenario in a review state. Analyst+; CSRF via
+    middleware; 404 cross-org/missing/deleted (no oracle); 409 if not in review; 422 unknown
+    slug; fixed path-derived redirect target."""
+    try:
+        await ScenarioService(db).confirm_threat_community(
+            organization_id=user.organization_id,
+            scenario_id=scenario_id,
+            slug=threat_community.strip(),
+            current_user=user,
+            ip_address=client_ip(request),
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
+
+
 @router.post("/scenarios/{scenario_id}/loss/pin")
 async def pin_scenario_loss(
     request: Request,
@@ -1926,9 +1953,11 @@ def _build_rendered_questions(state: WizardState) -> dict[str, str]:
     identically on the initial GET and the prefill/apply-overlay HTMX swaps.
     """
     ctx = ScenarioContext(
-        threat_actor_type=(
-            ThreatActorType(state.threat_actor_type) if state.threat_actor_type else None
-        ),
+        # TAL bridge (Task 7 replaces): WizardState.threat_actor_type was renamed
+        # to threat_community (Task 6) and no longer maps onto ThreatActorType.
+        # Actor-type-personalized question copy is deferred to Task 7's wizard
+        # rewrite.
+        threat_actor_type=None,
         attack_vector=state.attack_vector,
         asset_class=AssetClass(state.asset_class) if state.asset_class else None,
     )
@@ -2521,7 +2550,10 @@ async def post_wizard_step(
         state.name = _form_str(form, "name")
         state.description = _form_str(form, "description")
         state.threat_category = _form_str(form, "threat_category")
-        state.threat_actor_type = _form_str(form, "threat_actor_type")
+        # TAL bridge (Task 7 replaces): WizardState field renamed threat_actor_type
+        # -> threat_community (Task 6); the step-2 form field itself is still named
+        # "threat_actor_type" until Task 7 updates the template.
+        state.threat_community = _form_str(form, "threat_actor_type")
         state.asset_class = _form_str(form, "asset_class")
         state.attack_vector = _form_str(form, "attack_vector")
     elif n in (3, 4):

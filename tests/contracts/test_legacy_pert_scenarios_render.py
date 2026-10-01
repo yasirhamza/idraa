@@ -20,10 +20,10 @@ from idraa.models.enums import (
     EntityStatus,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
+from idraa.models.threat_community import canonical_threat_community_id
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,9 @@ async def test_legacy_pert_only_scenario_renders_detail_page(
         name="legacy-pert-scenario",
         scenario_type=ScenarioType.CUSTOM,
         threat_category=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         asset_class=AssetClass.SYSTEMS,
         attack_vector="email",
         threat_event_frequency=legacy_pert,

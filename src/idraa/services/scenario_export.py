@@ -147,7 +147,9 @@ def scenario_to_flat_row(s: Scenario) -> tuple[Any, ...]:
         "description": s.description or "",
         "scenario_type": _enum_value(s.scenario_type),
         "threat_category": _enum_value(s.threat_category),
-        "threat_actor_type": _enum_value(s.threat_actor_type),
+        # TAL bridge (Task 8 replaces): threat_actor_type column removed (Task 6,
+        # replaced by Scenario.threat_community); CSV export shape unchanged for now.
+        "threat_actor_type": _enum_value(None),
         "attack_vector": s.attack_vector or "",
         "asset_class": _enum_value(s.asset_class),
         "effect": _enum_value(s.effect),
@@ -215,7 +217,9 @@ def scenario_to_json_obj(s: Scenario) -> dict[str, Any]:
         "description": s.description,
         "scenario_type": _enum_value(s.scenario_type) or "custom",
         "threat_category": _enum_value(s.threat_category),
-        "threat_actor_type": _enum_value(s.threat_actor_type) or None,
+        # TAL bridge (Task 8 replaces): threat_actor_type column removed (Task 6,
+        # replaced by Scenario.threat_community); JSON export shape unchanged for now.
+        "threat_actor_type": None,
         "attack_vector": s.attack_vector,
         "asset_class": _enum_value(s.asset_class) or None,
         "effect": _enum_value(s.effect) or None,

@@ -34,7 +34,8 @@ class WizardState:
     name: str | None = None
     description: str | None = None
     threat_category: str | None = None
-    threat_actor_type: str | None = None
+    # TAL: threat-community SLUG (renamed from threat_actor_type, Task 6).
+    threat_community: str | None = None
     asset_class: str | None = None
     attack_vector: str | None = None
     tags: list[str] = field(default_factory=list)
@@ -83,7 +84,7 @@ class WizardState:
         """
         import uuid as _uuid
 
-        from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+        from idraa.models.enums import AssetClass, ThreatCategory
 
         return {
             "name": self.name or "",
@@ -93,9 +94,7 @@ class WizardState:
                 if self.threat_category
                 else "miscellaneous"
             ),
-            "threat_actor_type": (
-                ThreatActorType(self.threat_actor_type).value if self.threat_actor_type else None
-            ),
+            "threat_community": self.threat_community or None,
             "asset_class": (AssetClass(self.asset_class).value if self.asset_class else None),
             "attack_vector": self.attack_vector,
             "library_entry_id": (
@@ -421,7 +420,9 @@ def seed_wizard_state_from_scenario(
         name=scenario.name,
         description=scenario.description,
         threat_category=_enum_val(scenario.threat_category),
-        threat_actor_type=_enum_val(scenario.threat_actor_type),
+        # TAL bridge (Task 7 replaces): threat_community=None here; Task 7
+        # supplies the real value (scenario.threat_community.slug if set).
+        threat_community=None,
         asset_class=_enum_val(scenario.asset_class),
         attack_vector=scenario.attack_vector,
         mitigating_control_ids=list(mitigating_control_ids),

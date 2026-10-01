@@ -25,12 +25,12 @@ from idraa.models.enums import (
     ScenarioFieldset,
     ScenarioSource,
     ScenarioType,
-    ThreatActorType,
     ThreatCategory,
 )
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_sme_estimate import ScenarioSMEEstimate
 from idraa.models.sme import SubjectMatterExpert
+from idraa.models.threat_community import canonical_threat_community_id
 from idraa.services.wizard_finalize import PerFieldsetResult, persist_estimates
 
 
@@ -68,7 +68,9 @@ async def test_persist_estimates_round_trips_n5_rows(
         name="iteration-test-scenario",
         scenario_type=ScenarioType.CUSTOM,
         threat_category=ThreatCategory.RANSOMWARE,
-        threat_actor_type=ThreatActorType.CYBERCRIMINALS,
+        threat_community_id=canonical_threat_community_id("cybercriminals"),
+        threat_community_version=1,
+        threat_community_provenance="assigned",
         asset_class=AssetClass.SYSTEMS,
         attack_vector="email",
         threat_event_frequency={"low": 1.0, "mode": 2.0, "high": 3.0},
