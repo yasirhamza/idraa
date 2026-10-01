@@ -196,10 +196,11 @@ the rationale; where it lives; how to evaluate it.
 > recovered from an incident or loss statistic divides by `assumed_conversion`,
 > the controlled-world attempt→source-event conversion rate matching
 > `source_event_level` (attempt→incident or attempt→loss event), which is a
-> curator convention and **not** the inherent Vulnerability of A2 (the same `TEF
-> = LEF / vuln` translation as `fair-cam-methodology.md`, with this community's
-> own controlled-world conversion rate in place of the IRIS industry
-> vulnerability). A derived landmark is a MEAN rate placed as the PERT mean
+> curator convention and **not** the inherent Vulnerability of A2 (for a
+> loss-event source, the same `TEF = LEF / vuln` translation as
+> `fair-cam-methodology.md`, with this community's own controlled-world
+> conversion rate in place of the IRIS industry vulnerability; for an incident
+> source, the attempt→incident analogue). A derived landmark is a MEAN rate placed as the PERT mean
 > (mode solved from it, spread by a stated curator factor); it is biased LOW by
 > at least five mechanisms: the p→λ = −ln(1−p) step assumes Poisson-distributed
 > counts and under-states the mean under clustering
@@ -210,8 +211,8 @@ the rationale; where it lives; how to evaluate it.
 > value of an uncertain conversion under-states the result (1/c is convex). The
 > fifth dominates the other four and is not quantified: the IRIS probability
 > counts public-record loss events, an event threshold far above the loss event
-> a scenario counts, so a landmark recovered from it can sit one to two orders
-> of magnitude below a well-estimated scenario TEF — the shipped library's own
+> a scenario counts, so a landmark recovered from it can sit one to more than
+> two orders of magnitude below a well-estimated scenario TEF — the shipped library's own
 > entries routinely place their most-likely TEF above their community's landmark
 > 95th percentile. A scenario TEF above the landmark is therefore not, by
 > itself, extreme. The p→λ step is NOT a probability↔frequency conversion in the

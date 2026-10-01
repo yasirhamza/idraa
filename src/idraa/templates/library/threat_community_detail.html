@@ -52,10 +52,6 @@
     <p class="text-micro text-ink-3">TEF landmark (events/yr, 5th · most likely · 95th — the same 5th/95th convention as library PERT bounds)</p>
     <p class="font-mono tabular-nums">{{ community.tef_landmark.low | format_landmark_rate }} · {{ community.tef_landmark.mode | format_landmark_rate }} · {{ community.tef_landmark.high | format_landmark_rate }} <span class="badge badge-ghost">{{ community.tef_landmark.basis_class }}</span></p>
     <p class="text-body text-ink-2">{{ community.tef_landmark.derivation }}</p>
-    {% if community.tef_landmark.assumed_conversion %}
-    <p class="text-micro text-ink-3">This range was recovered from an incident or loss statistic by dividing by a controlled-world conversion rate of {{ community.tef_landmark.assumed_conversion }}. That rate is a curator convention used only to recover attempts — do not use it as your scenario's inherent Vulnerability.</p>
-    <p class="text-micro text-ink-3">Library entries for this community routinely sit above this range: the source counts public-record loss events, a far higher bar than a scenario&rsquo;s loss event. A scenario frequency above the landmark is not by itself extreme.</p>
-    {% endif %}
     <p class="text-micro text-ink-3 mt-3">TCap landmark (percentile rank, 5th · most likely · 95th)</p>
     {% if community.tcap_landmark %}
       <p class="font-mono tabular-nums">{{ community.tcap_landmark.low }} · {{ community.tcap_landmark.mode }} · {{ community.tcap_landmark.high }} <span class="badge badge-ghost">{{ community.tcap_landmark.basis_class }}</span></p>
@@ -63,7 +59,11 @@
     {% else %}
       <p class="text-body text-ink-2">Not applicable — an error is not a capability contest; estimate Vulnerability directly.</p>
     {% endif %}
-    <p class="text-micro text-ink-3 mt-3">Default ranges, shown as landmarks for the analyst — not engine inputs. The TEF range is stated for the reference organisation across all its assets: first adjust it for your organisation's size and sector (up or down), then scope it to the one asset and method in your scenario, which lowers the rate. It is a 90% range to compare against, not a range to tighten.{% if community.tcap_landmark %} The TCap figure is a percentile rank of capability relative to the general threat population, not a probability, and is never converted into Vulnerability.{% endif %}</p>
+    <p class="text-micro text-ink-3 mt-3">Default ranges, shown as landmarks for the analyst — not engine inputs. The TEF range is stated for the reference organisation across all its assets: first adjust it for your organisation's size and sector (up or down), then scope it to the one asset and method in your scenario, which lowers the rate — though the source&rsquo;s event-threshold gap noted below usually outweighs this. It is a 90% range to compare against, not a range to tighten.{% if community.tcap_landmark %} The TCap figure is a percentile rank of capability relative to the general threat population, not a probability, and is never converted into Vulnerability.{% endif %}</p>
+    {% if community.tef_landmark.assumed_conversion %}
+    <p class="text-micro text-ink-3">This range was recovered from an incident or loss statistic by dividing by a controlled-world conversion rate of {{ community.tef_landmark.assumed_conversion }}. That rate is a curator convention used only to recover attempts — do not use it as your scenario's inherent Vulnerability.</p>
+    <p class="text-micro text-ink-3">Library entries for this community routinely sit above this range: the source counts public-record loss events, a far higher bar than a scenario&rsquo;s loss event. A scenario frequency above the landmark is not by itself extreme.</p>
+    {% endif %}
   </div>
 
   {# Rationale & sources #}

@@ -72,6 +72,7 @@ async def test_list_marks_non_malicious_tcap_not_applicable(authed_viewer) -> No
     client, _ = authed_viewer
     html = (await client.get("/library/threat-communities")).text
     assert html.count("Not applicable") >= 1
+    assert "not by itself extreme" in html
 
 
 async def test_tef_landmark_renders_3sf_not_4dp(authed_viewer) -> None:
@@ -163,3 +164,4 @@ async def test_detail_shows_conversion_caveat_for_a_converted_landmark(
     client, _ = authed_viewer
     html = (await client.get(f"/library/threat-communities/{converted[0]}")).text
     assert "do not use it as your scenario" in html
+    assert "not by itself extreme" in html

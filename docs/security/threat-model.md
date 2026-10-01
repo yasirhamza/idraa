@@ -82,7 +82,7 @@ covered by another boundary's row."
   security-settings state (`app.py:1358-1366`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:1024-1035`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1018-1035`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -506,7 +506,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
   plus a route-level end-to-end check that a stored `javascript:` citation
   URL actually renders as inert text on a real response body
-  (`tests/routes/test_threat_community_pages.py:127`,
+  (`tests/routes/test_threat_community_pages.py:128`,
   `test_javascript_citation_url_renders_as_text`).
 - **Template injection (SSTI)** — the distinct, more severe class: attacker
   text becoming the template *source* (`Environment.from_string()`,
@@ -596,8 +596,7 @@ both present is an `"ambiguous"` per-row error
 (`services/scenario_import.py:311-317`), matching the CSV header-level check
 (`scenario_import_parsers.py:250,256`); neither present is a legitimate
 blank ("unassigned"), not an error. The library-bundle importer is looser:
-`resolve_entry_threat_community()` (`services/library_bundle_import.py:
-172-176`) lets a present `threat_community` key win silently over a legacy
+`resolve_entry_threat_community()` (`services/library_bundle_import.py:172-176`) lets a present `threat_community` key win silently over a legacy
 `threat_actor_type` key in the same entry rather than rejecting the row as
 ambiguous — the shipped seed library JSON deliberately carries both on every
 entry for back-compat — whereas the scenario importer rejects that same

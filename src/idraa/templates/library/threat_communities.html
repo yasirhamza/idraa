@@ -3,6 +3,7 @@
 {% block title %}Threat Agent Library — Library{% endblock %}
 {% block content %}
 {{ page_header(title="Threat Agent Library", meta="Named threat communities with profiles and default ranges shown as landmarks — never engine inputs.") }}
+<p class="text-micro text-ink-3">Default ranges are landmarks for the analyst, not engine inputs. They derive from public-record loss events, so library entries routinely sit above them; a scenario frequency above a landmark is not by itself extreme.</p>
 <p class="text-body text-ink-2 mb-4">Every scenario names one community. Read the <a class="link" href="/help/threat-agent-library">methodology note</a> before using the ranges.</p>
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
   {% for c in communities %}
