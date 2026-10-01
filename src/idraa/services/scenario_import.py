@@ -279,8 +279,34 @@ def _validate_rows(
         # one of the two may be present; both → "ambiguous" row error
         # (mirrors the CSV header's own ambiguity check); neither → treated
         # as a blank community (unassigned), NOT an error.
-        raw_tc = str(fd.pop("threat_community", "") or "").strip() or None
-        raw_legacy = str(fd.pop("threat_actor_type", "") or "").strip() or None
+        raw_tc_val = fd.pop("threat_community", None)
+        raw_legacy_val = fd.pop("threat_actor_type", None)
+        # Fix round 1 (no-silent-default): a JSON value that is PRESENT but
+        # not a string (e.g. False/0/[]/{}) must not silently collapse to
+        # blank via `or ""` and import as "unassigned" -- reject it as a
+        # per-row error instead. None (absent/explicit null) is still a
+        # legitimate "blank" and falls through to the ambiguous/legacy/
+        # published-slug checks below exactly as before.
+        if raw_tc_val is not None and not isinstance(raw_tc_val, str):
+            errors.append(
+                {"line": line, "column": "threat_community", "reason": "must be a string slug"}
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        if raw_legacy_val is not None and not isinstance(raw_legacy_val, str):
+            errors.append(
+                {"line": line, "column": "threat_actor_type", "reason": "must be a string slug"}
+            )
+            preview.append({"line": line, "name": name, "action": "error"})
+            forms.append(None)
+            entry_meta.append((meta_currency, meta_rate, "unassigned"))
+            attack_meta.append(None)
+            continue
+        raw_tc = str(raw_tc_val or "").strip() or None
+        raw_legacy = str(raw_legacy_val or "").strip() or None
         tc_provenance = "assigned"
         if raw_tc is not None and raw_legacy is not None:
             errors.append(
@@ -303,7 +329,15 @@ def _validate_rows(
                     {
                         "line": line,
                         "column": "threat_actor_type",
-                        "reason": f"{raw_legacy!r} is not a recognised legacy threat actor type",
+                        # Fix round 1: bound the echoed cell so an oversized
+                        # value cannot inflate the preview payload. raw_legacy
+                        # is always a non-empty str here (legacy_slug_for only
+                        # raises KeyError on a truthy unmatched string) but
+                        # mypy sees `str | None`, hence the `or ""`.
+                        "reason": (
+                            f"{(raw_legacy or '')[:64]!r} is not a recognised "
+                            "legacy threat actor type"
+                        ),
                     }
                 )
                 preview.append({"line": line, "name": name, "action": "error"})
@@ -316,8 +350,10 @@ def _validate_rows(
                 {
                     "line": line,
                     "column": "threat_community",
+                    # Fix round 1: bound the echoed cell so an oversized
+                    # value cannot inflate the preview payload.
                     "reason": (
-                        f"{raw_tc!r} is not a published threat community; "
+                        f"{raw_tc[:64]!r} is not a published threat community; "
                         f"expected one of {sorted(published_slugs)}"
                     ),
                 }

@@ -80,6 +80,19 @@ def test_import_unknown_slug_and_unknown_legacy_are_row_errors() -> None:
     assert {e["line"] for e in errors} == {2, 3}
 
 
+def test_import_non_string_threat_community_is_row_error() -> None:
+    # Fix round 1 (no-silent-default): a JSON value that is present but not
+    # a string (e.g. False/0/[]/{}) must not silently collapse to blank via
+    # `or ""` and import as "unassigned" -- it must be a row error.
+    preview, errors, forms, _, _ = _validate_rows(
+        [(2, _fd(threat_community=False))], existing_names=set(), published_slugs=_PUB
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+    assert errors and errors[0]["column"] == "threat_community"
+    assert errors[0]["reason"] == "must be a string slug"
+
+
 def test_valid_row_becomes_create() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd())], existing_names=set(), published_slugs=_PUB

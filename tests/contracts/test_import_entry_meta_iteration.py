@@ -10,6 +10,14 @@ entry_currency and entry_rate.
 Mirror tests/contracts/test_scenario_import_iteration.py for the harness shape.
 SAR + EUR rates must be seeded so is_selectable_currency returns True for them.
 USD needs no rate (is_selectable_currency("USD") is always True).
+
+Task 8 fix round 1: entry_meta grew a THIRD element (threat_community_provenance)
+in Task 8. The currency/rate test above alone does not exercise it -- none of
+its rows carries a community, so every row resolves to "unassigned" and a
+future [0]/[-1]-style regression on just that element would go undetected.
+``test_entry_meta_third_element_stays_aligned_per_row`` below pins the SAME
+per-row-iteration contract for entry_meta[i][2] directly at the pure
+``_validate_rows`` layer (no DB needed for this one).
 """
 
 from __future__ import annotations
@@ -17,13 +25,18 @@ from __future__ import annotations
 import datetime as dt
 import json
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from sqlalchemy import select
 
 from idraa.models.scenario import Scenario
 from idraa.services.fx_rates import FxRateService
-from idraa.services.scenario_import import apply_validated_preview, validate_upload
+from idraa.services.scenario_import import _validate_rows, apply_validated_preview, validate_upload
+
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to the pure _validate_rows call below (caller-supplied, no DB).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
 
 
 def _scenario_obj(name: str, currency: str, rate: str) -> dict:
@@ -103,3 +116,41 @@ async def test_entry_meta_all_rows_persist_correct_currency_rate(
     eur_row = db_rows["IterMeta-EUR"]
     assert eur_row.entry_currency == "EUR"
     assert eur_row.entry_rate == Decimal("0.92000000")
+
+
+def _row(name: str, **threat_fields: Any) -> dict[str, Any]:
+    """Minimal pure-function fd for _validate_rows, overridable threat input."""
+    d: dict[str, Any] = {
+        "name": name,
+        "threat_category": "malware",
+        "threat_event_frequency": {"distribution": "PERT", "low": 1, "mode": 2, "high": 3},
+        "vulnerability": {"distribution": "PERT", "low": 0.1, "mode": 0.2, "high": 0.3},
+        "primary_loss": {"distribution": "PERT", "low": 10, "mode": 20, "high": 30},
+    }
+    d.update(threat_fields)
+    return d
+
+
+def test_entry_meta_third_element_stays_aligned_per_row() -> None:
+    """N=3 rows with DISTINCT threat inputs; entry_meta[i][2] (provenance) and
+    forms[i].threat_community must stay aligned with row i through the pure
+    _validate_rows pipeline -- a [0]/[-1]-style regression on the third tuple
+    element would silently misattribute provenance across rows."""
+    rows = [
+        (2, _row("EM3-Assigned", threat_community="cybercriminals")),
+        (3, _row("EM3-Migrated", threat_actor_type="hacktivists")),
+        (4, _row("EM3-Split", threat_actor_type="insider_malicious")),
+    ]
+    preview, errors, forms, entry_meta, _am = _validate_rows(
+        rows, existing_names=set(), published_slugs=_PUB
+    )
+    assert errors == [], f"unexpected validation errors: {errors}"
+    assert [p["action"] for p in preview] == ["create", "create", "create"]
+
+    assert entry_meta[0][2] == "assigned"
+    assert entry_meta[1][2] == "migrated"
+    assert entry_meta[2][2] == "migrated_split_default"
+
+    assert forms[0] is not None and forms[0].threat_community == "cybercriminals"
+    assert forms[1] is not None and forms[1].threat_community == "hacktivists"
+    assert forms[2] is not None and forms[2].threat_community == "privileged_insider"
