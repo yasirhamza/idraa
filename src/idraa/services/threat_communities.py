@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.errors import ConflictError, ValidationError
 from idraa.models.threat_community import ThreatCommunity
 
-# Legacy ThreatActorType value -> canonical slug. Used by import paths for pre-P1 files
-# (the migration carries its own frozen copy).
+# Legacy threat_actor_type enum value -> canonical slug. Used by import paths for pre-P1
+# files (the migration carries its own frozen copy).
 ENUM_TO_COMMUNITY_SLUG: dict[str, str] = {
     "cybercriminals": "cybercriminals",
     "nation_state": "nation_state",

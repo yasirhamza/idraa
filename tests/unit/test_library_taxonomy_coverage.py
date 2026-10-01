@@ -13,7 +13,7 @@ Guarded dimensions (fully-covered scalar taxonomies):
   - AssetClass       (JSON field: "asset_class")
   - threat_community (JSON field: "threat_community"; canonical slugs from
                        CANONICAL_THREAT_COMMUNITY_SLUGS — Threat Agent Library,
-                       replaces the retired ThreatActorType dimension)
+                       replaces the retired threat_actor_type dimension)
   - ThreatCategory   (JSON field: "threat_event_type")
 
 NOT hard-guarded (open taxonomies with many legitimately-uncovered values):

@@ -20,6 +20,8 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from idraa.services.threat_communities import ENUM_TO_COMMUNITY_SLUG
+
 ENV = {r["sector"]: r for r in json.loads(Path("data/loss_form_envelopes.json").read_text())}
 IRIS_CITE = "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
 _EXT = Path("data/seed_library_entries_extension.json")
@@ -391,6 +393,9 @@ NEW_ENTRIES: list[dict] = [
         "status": "published",
         "threat_event_type": "denial_of_service",
         "threat_actor_type": "insider_malicious",
+        # Override the generic insider_malicious -> privileged_insider default: an
+        # enrolled student affiliate is not a PRIVILEGED insider.
+        "_threat_community": "nonprivileged_insider",
         "asset_class": "systems",
         "attack_vector": "volumetric_ddos_botnet",
         "tags": ["education", "higher_education", "ddos", "insider", "availability"],
@@ -485,8 +490,21 @@ NEW_ENTRIES: list[dict] = [
 
 
 def realize(entry: dict) -> dict:
-    """Turn an authored NEW_ENTRIES dict into a full seed entry (compute loss nodes)."""
+    """Turn an authored NEW_ENTRIES dict into a full seed entry (compute loss nodes).
+
+    Threat Agent Library (Task 14): seed JSON keeps BOTH keys -- historical
+    Alembic migrations read the seed JSON live and bind legacy
+    :threat_actor_type (seed_library_loader.py LEGACY_SEED_FIELDS). The
+    canonical slug defaults via ENUM_TO_COMMUNITY_SLUG; an entry may override
+    it with "_threat_community" when the generic insider_malicious ->
+    privileged_insider placeholder doesn't fit (e.g. a student affiliate is
+    not a PRIVILEGED insider -- "higher-ed-insider-ddos" overrides to
+    nonprivileged_insider, matching the published seed_library_entries_extension.json).
+    """
     e = {k: v for k, v in entry.items() if not k.startswith("_")}
+    e["threat_community"] = entry.get(
+        "_threat_community", ENUM_TO_COMMUNITY_SLUG[entry["threat_actor_type"]]
+    )
     shares = entry["_shares"]
     sec = sector_of(e)
     mu_s, sigma_s = ENV[sec]["mean"], ENV[sec]["sigma"]

@@ -685,7 +685,7 @@ def test_phase_6_single_run_breakdown(page: Page) -> None:
     try:
         page.locator('input[name="name"]').fill("UAT OT Safety Tampering")
         page.locator('select[name="threat_category"]').select_option(value="ot_safety_tampering")
-        page.locator('select[name="threat_actor_type"]').select_option(value="nation_state")
+        page.locator('select[name="threat_community"]').select_option(value="nation_state")
         page.locator('select[name="attack_vector"]').select_option(value="vulnerable_software")
         page.locator('select[name="asset_class"]').select_option(value="ot_systems")
         # PERT triangle (low / mode / high). OT-flavoured magnitudes.
@@ -820,7 +820,7 @@ def test_phase_6_single_run_breakdown(page: Page) -> None:
     try:
         page.locator('input[name="name"]').fill("UAT OT Availability Attack")
         page.locator('select[name="threat_category"]').select_option(value="ot_availability")
-        page.locator('select[name="threat_actor_type"]').select_option(value="cybercriminals")
+        page.locator('select[name="threat_community"]').select_option(value="cybercriminals")
         page.locator('select[name="attack_vector"]').select_option(value="credential_compromise")
         page.locator('select[name="asset_class"]').select_option(value="ot_systems")
         for prefix, low, mode, high in [
@@ -1188,7 +1188,7 @@ def test_phase_11_scenario_form_validation(page: Page) -> None:
         try:
             page.locator('input[name="name"]').fill(name)
             page.locator('select[name="threat_category"]').select_option(value=cat)
-            page.locator('select[name="threat_actor_type"]').select_option(value=actor)
+            page.locator('select[name="threat_community"]').select_option(value=actor)
             page.locator('select[name="attack_vector"]').select_option(value=vec)
             page.locator('select[name="asset_class"]').select_option(value=asset)
             for prefix, triple in [("tef", tef), ("vuln", vuln), ("pl", pl), ("sl", sl)]:
@@ -1864,11 +1864,11 @@ def test_phase_21_scenario_library_browse(page: Page) -> None:
 
     body = page.locator("body").inner_text()
     # Body length signals a fully-rendered page (>1KB rules out a 500
-    # blank page or nav-only render). Specific marker: the Threat actor /
+    # blank page or nav-only render). Specific marker: the Threat community /
     # Threat category filter sidebar is always present on the browse page.
     report(
         "21.0 /library page renders (admin can see browse)",
-        len(body) > 1000 and "Threat actor" in body,
+        len(body) > 1000 and "Threat community" in body,
         f"body length: {len(body)}; excerpt: {body[:300]!r}",
         page,
     )

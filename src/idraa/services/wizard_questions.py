@@ -1,7 +1,7 @@
 """Hardcoded scenario-context question templates per MD-5. Per spec §7.4.
 
 TAL (Threat Agent Library, 2026-09-30): question copy is keyed off the
-assigned ThreatCommunity rather than the retired ThreatActorType enum.
+assigned ThreatCommunity rather than the retired threat_actor_type enum.
 A community's ``intent`` ('malicious' | 'non_malicious') selects between two
 wordings per fieldset — a non-malicious community (e.g. an accidental
 insider) never asks "try to compromise" or carries an attack-vector clause;

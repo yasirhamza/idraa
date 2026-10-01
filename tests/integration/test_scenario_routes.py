@@ -241,7 +241,7 @@ async def test_new_form_renders_with_existing_control(
 async def test_new_form_uses_dropdowns_for_enum_fields(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
 ) -> None:
-    """Regression: threat_category / threat_actor_type / asset_class must
+    """Regression: threat_category / threat_community / asset_class must
     render as <select> with enum-derived options, not freeform <input type="text">.
 
     User feedback during local UAT: "data entry should not be freeform entry,
@@ -252,7 +252,7 @@ async def test_new_form_uses_dropdowns_for_enum_fields(
     assert r.status_code == 200
     body = r.text
 
-    for name in ("threat_category", "threat_actor_type", "asset_class"):
+    for name in ("threat_category", "threat_community", "asset_class"):
         # F22: select has id attr before name — check that name attr appears inside a select tag.
         # A <select ... name="X"> anywhere in the page satisfies "is a select, not a text input".
         assert f'name="{name}"' in body, f"{name} must have a name attr in the form"

@@ -12,7 +12,7 @@ _BASE: dict[str, object] = {
     "name": "n",
     "status": "published",
     "threat_event_type": "ransomware",
-    "threat_actor_type": "cybercriminals",
+    "threat_community": "cybercriminals",
     "asset_class": "data",
     "description": "d" * 25,
     "canonical_fair_gap": "g" * 25,

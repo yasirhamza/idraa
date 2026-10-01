@@ -971,7 +971,7 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     db_session: AsyncSession,
 ) -> None:
     """WS5b: the wizard step-1 library picker must expose a search input and
-    at least one facet filter control (e.g. asset_class or threat_actor_type),
+    at least one facet filter control (e.g. asset_class or threat_community),
     AND must list entries from a sub-sector OTHER than the test org's
     (MANUFACTURING) so cross-industry adoption works.
 
@@ -1023,8 +1023,8 @@ async def test_wizard_step_1_has_search_box_and_facet_filter(
     assert 'type="search"' in body or 'name="q"' in body, (
         "wizard step-1 picker must render a search input"
     )
-    # Must have at least one facet filter (e.g. asset_class or threat_actor_type checkboxes).
-    assert 'name="asset_class"' in body or 'name="threat_actor_type"' in body, (
+    # Must have at least one facet filter (e.g. asset_class or threat_community checkboxes).
+    assert 'name="asset_class"' in body or 'name="threat_community"' in body, (
         "wizard step-1 picker must render at least one facet filter control"
     )
     # The cross-industry entry (PROFESSIONAL sub-sector) must be visible (no industry narrowing).

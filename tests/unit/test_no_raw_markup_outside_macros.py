@@ -178,7 +178,7 @@ ALLOWED_DIRS = {"macros"}
 #
 #   scenarios/wizard/step_1_library.html
 #       Wizard picker filter bar: debounced HTMX <input type="search"> + two
-#       facet <select> dropdowns (asset_class, threat_actor_type) drive
+#       facet <select> dropdowns (asset_class, threat_community) drive
 #       hx-get card refresh — same HTMX-density constraint as library/browse.html;
 #       no form_field search or facet-select variant.  The radio-card grid
 #       was extracted into _step_1_library_cards.html (see below).

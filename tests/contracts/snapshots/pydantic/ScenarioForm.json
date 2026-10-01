@@ -55,15 +55,15 @@
       "optional": false,
       "type": "<enum 'EntityStatus'>"
     },
-    "threat_actor_type": {
-      "has_default": true,
-      "optional": true,
-      "type": "str | None"
-    },
     "threat_category": {
       "has_default": false,
       "optional": false,
       "type": "<class 'str'>"
+    },
+    "threat_community": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
     },
     "threat_event_frequency": {
       "has_default": false,

@@ -84,10 +84,15 @@ def test_ot_share_within_cap():
 
 
 def test_threat_type_and_asset_class_are_valid_enums():
-    from idraa.models.enums import AssetClass, ThreatActorType, ThreatCategory
+    """threat_actor_type (v3 app enum) was retired by the Threat Agent Library
+    (Task 14); this dev/curation planning artifact's ``threat_actor`` values
+    (e.g. "insider_malicious") predate TAL's canonical ThreatCommunity split
+    (privileged_insider / nonprivileged_insider) and are not re-curated here,
+    so the ``threat_actor`` field is no longer cross-checked against a live
+    schema enum -- only threat_type/asset_class (both still live enums)."""
+    from idraa.models.enums import AssetClass, ThreatCategory
 
     tc = {t.value for t in ThreatCategory}
     ac = {a.value for a in AssetClass}
-    at = {a.value for a in ThreatActorType}
     for r in _rows():
-        assert r["threat_type"] in tc and r["asset_class"] in ac and r["threat_actor"] in at
+        assert r["threat_type"] in tc and r["asset_class"] in ac
