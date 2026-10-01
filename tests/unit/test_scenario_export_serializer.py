@@ -15,7 +15,7 @@ class _S:  # minimal Scenario stand-in (duck-typed)
     description = "d,with,commas"
     scenario_type = type("E", (), {"value": "custom"})()
     threat_category = type("E", (), {"value": "ransomware"})()
-    threat_actor_type = type("E", (), {"value": "cybercriminals"})()
+    threat_community = type("TC", (), {"slug": "cybercriminals", "name": "Cybercriminals"})()
     attack_vector = "phish"
     asset_class = type("E", (), {"value": "systems"})()
     effect = None
@@ -73,7 +73,7 @@ def test_flat_row_collapses_integral_floats() -> None:
         description = ""
         scenario_type = type("E", (), {"value": "custom"})()
         threat_category = type("E", (), {"value": "ransomware"})()
-        threat_actor_type = None
+        threat_community = None
         attack_vector = None
         asset_class = None
         effect = None
@@ -125,7 +125,7 @@ def test_json_obj_collapses_integral_floats() -> None:  # Arch-NTH-1
         description = None
         scenario_type = type("E", (), {"value": "custom"})()
         threat_category = type("E", (), {"value": "ransomware"})()
-        threat_actor_type = None
+        threat_community = None
         attack_vector = None
         asset_class = None
         effect = None
@@ -216,7 +216,7 @@ def _scenario(**kwargs: Any) -> Any:
         description = None
         scenario_type = type("E", (), {"value": "custom"})()
         threat_category = type("E", (), {"value": "ransomware"})()
-        threat_actor_type = None
+        threat_community = None
         attack_vector = None
         asset_class = None
         effect = defaults["effect"]
@@ -577,3 +577,28 @@ def test_export_json_obj_includes_effect_value() -> None:
     s = _scenario(effect=ScenarioEffect.CONFIDENTIALITY)
     obj = scenario_to_json_obj(s)
     assert obj["effect"] == "confidentiality"
+
+
+# --- Threat Agent Library (Task 8): threat_community export ------------------
+
+
+def test_export_flat_row_includes_threat_community() -> None:
+    row = dict(zip(CSV_EXPORT_HEADERS, scenario_to_flat_row(_S()), strict=True))
+    assert row["threat_community"] == "cybercriminals"
+
+
+def test_export_flat_row_threat_community_none_is_empty_string() -> None:
+    s = _scenario()  # threat_community=None by default
+    row = dict(zip(CSV_EXPORT_HEADERS, scenario_to_flat_row(s), strict=True))
+    assert row["threat_community"] == ""
+
+
+def test_export_json_obj_includes_threat_community() -> None:
+    obj = scenario_to_json_obj(_S())
+    assert obj["threat_community"] == "cybercriminals"
+
+
+def test_export_json_obj_threat_community_none_is_null() -> None:
+    obj = scenario_to_json_obj(_scenario())
+    assert "threat_community" in obj
+    assert obj["threat_community"] is None

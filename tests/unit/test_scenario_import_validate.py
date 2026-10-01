@@ -6,6 +6,10 @@ import pytest
 
 from idraa.services.scenario_import import _validate_rows
 
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to every _validate_rows call in this file (pure function, caller-supplied).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
+
 
 def _fd(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
@@ -13,7 +17,7 @@ def _fd(**over: Any) -> dict[str, Any]:
         "description": None,
         "scenario_type": "custom",
         "threat_category": "ransomware",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
         "attack_vector": None,
         "asset_class": "systems",
         "version": "1.0",
@@ -27,15 +31,68 @@ def _fd(**over: Any) -> dict[str, Any]:
     return base
 
 
+# --- Threat Agent Library (Task 8): threat_community / legacy threat_actor_type ---
+
+
+def test_import_legacy_insider_malicious_flags_review() -> None:
+    """Review Focus #2."""
+    row = {k: v for k, v in _fd().items() if k != "threat_community"} | {
+        "threat_actor_type": "insider_malicious"
+    }
+    preview, errors, forms, entry_meta, _ = _validate_rows(
+        [(2, row)], existing_names=set(), published_slugs=_PUB
+    )
+    assert errors == [] and preview[0]["action"] == "create"
+    assert forms[0].threat_community == "privileged_insider"
+    assert entry_meta[0][2] == "migrated_split_default"
+
+
+def test_import_known_legacy_one_to_one_is_migrated() -> None:
+    row = {k: v for k, v in _fd().items() if k != "threat_community"} | {
+        "threat_actor_type": "hacktivists"
+    }
+    _, errors, forms, entry_meta, _ = _validate_rows(
+        [(2, row)], existing_names=set(), published_slugs=_PUB
+    )
+    assert errors == [] and forms[0].threat_community == "hacktivists"
+    assert entry_meta[0][2] == "migrated"
+
+
+def test_import_blank_community_is_unassigned_not_error() -> None:
+    _, errors, forms, entry_meta, _ = _validate_rows(
+        [(2, _fd(threat_community=""))], existing_names=set(), published_slugs=_PUB
+    )
+    assert errors == [] and forms[0].threat_community is None
+    assert entry_meta[0][2] == "unassigned"
+
+
+def test_import_unknown_slug_and_unknown_legacy_are_row_errors() -> None:
+    rows = [
+        (2, _fd(threat_community="martians")),
+        (
+            3,
+            {k: v for k, v in _fd().items() if k != "threat_community"}
+            | {"threat_actor_type": "martians"},
+        ),
+    ]
+    preview, errors, _, _, _ = _validate_rows(rows, existing_names=set(), published_slugs=_PUB)
+    assert [p["action"] for p in preview] == ["error", "error"]
+    assert {e["line"] for e in errors} == {2, 3}
+
+
 def test_valid_row_becomes_create() -> None:
-    preview, errors, forms, _, _am = _validate_rows([(2, _fd())], existing_names=set())
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd())], existing_names=set(), published_slugs=_PUB
+    )
     assert errors == []
     assert preview[0]["action"] == "create"
     assert forms[0] is not None and forms[0].name == "S"
 
 
 def test_existing_name_skipped() -> None:
-    preview, errors, forms, _, _am = _validate_rows([(2, _fd(name="Dup"))], existing_names={"dup"})
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(name="Dup"))], existing_names={"dup"}, published_slugs=_PUB
+    )
     assert preview[0]["action"] == "skip"
     assert forms[0] is None
     assert errors == []  # skip is not an error
@@ -43,7 +100,9 @@ def test_existing_name_skipped() -> None:
 
 def test_intra_file_duplicate_name_skipped() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(name="A")), (3, _fd(name="A"))], existing_names=set()
+        [(2, _fd(name="A")), (3, _fd(name="A"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "create"
     assert preview[1]["action"] == "skip"
@@ -52,7 +111,9 @@ def test_intra_file_duplicate_name_skipped() -> None:
 
 def test_bad_threat_category_is_error() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(threat_category="not_a_category"))], existing_names=set()
+        [(2, _fd(threat_category="not_a_category"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -63,6 +124,7 @@ def test_pert_low_gt_mode_is_error() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss={"distribution": "PERT", "low": 9, "mode": 2, "high": 3}))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert errors and "primary_loss" in errors[0]["column"]
@@ -72,6 +134,7 @@ def test_pert_mode_gt_high_is_error() -> None:  # SC-I8
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss={"distribution": "PERT", "low": 1, "mode": 9, "high": 3}))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -80,6 +143,7 @@ def test_negative_loss_is_error() -> None:  # SC-I8
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss={"distribution": "PERT", "low": -5, "mode": 2, "high": 3}))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -88,6 +152,7 @@ def test_vuln_above_one_is_error() -> None:  # B1: now caught by validate_fair_d
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(vulnerability={"distribution": "PERT", "low": 0.1, "mode": 0.5, "high": 1.5}))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -96,6 +161,7 @@ def test_vuln_below_zero_is_error() -> None:  # B1 / SC-I8
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(vulnerability={"distribution": "PERT", "low": -0.1, "mode": 0.5, "high": 0.9}))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -116,6 +182,7 @@ def test_non_pert_distribution_is_error() -> None:  # I2 / Meth-I1
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert errors and "distribution" in errors[0]["column"]
@@ -138,6 +205,7 @@ def test_extra_key_in_distribution_dict_is_error() -> None:  # B4 / Sec-B2
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -158,12 +226,15 @@ def test_non_numeric_pert_value_is_error() -> None:
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_missing_name_is_error() -> None:
-    preview, errors, forms, _, _am = _validate_rows([(2, _fd(name=""))], existing_names=set())
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(name=""))], existing_names=set(), published_slugs=_PUB
+    )
     assert preview[0]["action"] == "error"
     assert errors and errors[0]["column"] in {"name", ""}
 
@@ -172,6 +243,7 @@ def test_extra_smuggled_field_rejected() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(organization_id="11111111-1111-1111-1111-111111111111"))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -192,6 +264,7 @@ def test_inf_high_in_primary_loss_is_error() -> None:  # Meth-B1
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -217,6 +290,7 @@ def test_csv_1e999_cell_rejected_end_to_end() -> None:  # Meth-B1 (CSV parser �
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -241,13 +315,16 @@ def test_json_1e999_literal_rejected_end_to_end() -> None:  # Meth-B1 (JSON → 
             )
         ],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_draft_status_row_creates_as_draft() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(status="draft"))], existing_names=set()
+        [(2, _fd(status="draft"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "create"
     assert forms[0] is not None and forms[0].status == "draft"
@@ -258,7 +335,9 @@ def test_non_creatable_status_row_errors_at_preview() -> None:
     # membership but ScenarioService._stamp_new_scenario refuses them — the
     # preview must say so instead of letting the row fail at apply.
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(status="deprecated"))], existing_names=set()
+        [(2, _fd(status="deprecated"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert errors and errors[0]["column"] == "status"
@@ -289,6 +368,7 @@ def test_valid_lognormal_pl_becomes_create() -> None:
         [(2, _fd(primary_loss=_lognormal()))],
         existing_names=set(),
         capacity_max=_GENEROUS_CAPACITY_MAX,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -303,6 +383,7 @@ def test_lognormal_sl_accepted_but_lognormal_tef_rejected() -> None:
         [(2, _fd(secondary_loss=_lognormal()))],
         existing_names=set(),
         capacity_max=_GENEROUS_CAPACITY_MAX,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -312,6 +393,7 @@ def test_lognormal_sl_accepted_but_lognormal_tef_rejected() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(threat_event_frequency=_lognormal(mean=0.0)))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -323,6 +405,7 @@ def test_lognormal_vulnerability_is_rejected() -> None:
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(vulnerability=_lognormal(mean=-1.0, sigma=0.5)))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -331,7 +414,9 @@ def test_lognormal_vulnerability_is_rejected() -> None:
 
 def test_lognormal_mean_inf_is_error_never_stored() -> None:  # Meth-B1
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(mean=float("inf"))))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(mean=float("inf"))))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -341,14 +426,18 @@ def test_lognormal_1e999_mean_is_error() -> None:  # Meth-B1 (1e999 -> inf)
     parsed = float("1e999")
     assert parsed == float("inf")
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(mean=parsed)))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(mean=parsed)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_lognormal_sigma_zero_is_error() -> None:  # Sec-I2
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(sigma=0)))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(sigma=0)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -356,21 +445,27 @@ def test_lognormal_sigma_zero_is_error() -> None:  # Sec-I2
 
 def test_lognormal_sigma_negative_is_error() -> None:  # Sec-I2
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(sigma=-1)))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(sigma=-1)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_lognormal_sigma_above_bound_is_error() -> None:  # Sec-I2 (sigma=50 > 10)
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(sigma=50)))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(sigma=50)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_lognormal_mean_non_numeric_is_error() -> None:  # Sec-I1 (numeric-type guard)
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(mean="abc")))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(mean="abc")))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -378,14 +473,18 @@ def test_lognormal_mean_non_numeric_is_error() -> None:  # Sec-I1 (numeric-type 
 
 def test_lognormal_sigma_list_is_error() -> None:  # Sec-I1 (numeric-type guard)
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(sigma=[1, 2])))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(sigma=[1, 2])))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_lognormal_bool_sigma_is_error() -> None:  # Sec-I1 (bool is not numeric)
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_lognormal(sigma=True)))], existing_names=set()
+        [(2, _fd(primary_loss=_lognormal(sigma=True)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -393,7 +492,9 @@ def test_lognormal_bool_sigma_is_error() -> None:  # Sec-I1 (bool is not numeric
 def test_lognormal_extra_key_is_error() -> None:  # anti-blob-smuggling preserved
     bad = {"distribution": "lognormal", "mean": 6.9, "sigma": 1.0, "junk": "x" * 100}
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=bad))], existing_names=set()
+        [(2, _fd(primary_loss=bad))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -401,7 +502,9 @@ def test_lognormal_extra_key_is_error() -> None:  # anti-blob-smuggling preserve
 def test_lognormal_missing_sigma_is_error() -> None:  # exact-key-set preserved
     bad = {"distribution": "lognormal", "mean": 6.9}
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=bad))], existing_names=set()
+        [(2, _fd(primary_loss=bad))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -409,7 +512,9 @@ def test_lognormal_missing_sigma_is_error() -> None:  # exact-key-set preserved
 def test_unknown_distribution_kind_is_error() -> None:
     bad = {"distribution": "weibull", "low": 1, "mode": 2, "high": 3}
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=bad))], existing_names=set()
+        [(2, _fd(primary_loss=bad))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -442,6 +547,7 @@ def test_valid_two_component_mixture_becomes_create() -> None:
         [(2, _fd(primary_loss=mix))],
         existing_names=set(),
         capacity_max=_GENEROUS_CAPACITY_MAX,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -452,7 +558,9 @@ def test_mixture_vulnerability_is_rejected() -> None:
     # vuln must always be PERT — lognormal_mixture not allowed for vulnerability.
     mix = _mixture([_mix_component(), _mix_component(mean=12.0, weight=0.5)])
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(vulnerability=mix))], existing_names=set()
+        [(2, _fd(vulnerability=mix))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -462,7 +570,9 @@ def test_mixture_vulnerability_is_rejected() -> None:
 def test_mixture_missing_components_key_is_error() -> None:  # exact-key-set (top level)
     bad = {"distribution": "lognormal_mixture"}
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=bad))], existing_names=set()
+        [(2, _fd(primary_loss=bad))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -472,14 +582,18 @@ def test_mixture_extra_top_level_key_is_error() -> None:  # anti-blob-smuggling
     bad = _mixture([_mix_component(), _mix_component(mean=12.0, weight=0.5)])
     bad["junk"] = "x" * 100
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=bad))], existing_names=set()
+        [(2, _fd(primary_loss=bad))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
 
 def test_mixture_empty_components_is_error() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_mixture([])))], existing_names=set()
+        [(2, _fd(primary_loss=_mixture([])))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -489,6 +603,7 @@ def test_mixture_component_missing_key_is_error() -> None:  # exact-key-set (com
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -499,6 +614,7 @@ def test_mixture_component_extra_key_is_error() -> None:  # anti-blob-smuggling 
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -508,6 +624,7 @@ def test_mixture_component_non_numeric_mean_is_error() -> None:  # numeric-type 
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss=_mixture([_mix_component(), bad_component])))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -537,6 +654,7 @@ def test_mixture_malformed_last_component_is_error(bad: dict[str, object]) -> No
     preview, errors, forms, _, _am = _validate_rows(
         [(2, _fd(primary_loss=_mixture(_three_components_with_last_bad(bad))))],
         existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -549,7 +667,9 @@ def test_mixture_bad_weight_sum_is_error() -> None:
         _mix_component(mean=16.0, sigma=1.1, weight=0.3),
     ]
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_mixture(components)))], existing_names=set()
+        [(2, _fd(primary_loss=_mixture(components)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -562,7 +682,9 @@ def test_mixture_component_count_over_cap_is_error() -> None:  # Sec-N1
     w = 1.0 / n
     components = [_mix_component(mean=10.0, sigma=1.0, weight=w) for _ in range(n)]
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(primary_loss=_mixture(components)))], existing_names=set()
+        [(2, _fd(primary_loss=_mixture(components)))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
 
@@ -583,7 +705,9 @@ def test_mixture_tef_is_rejected() -> None:
         ]
     )
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(threat_event_frequency=mix))], existing_names=set()
+        [(2, _fd(threat_event_frequency=mix))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -601,6 +725,7 @@ def test_mixture_secondary_loss_is_accepted() -> None:
         [(2, _fd(secondary_loss=mix))],
         existing_names=set(),
         capacity_max=_GENEROUS_CAPACITY_MAX,
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"
@@ -623,7 +748,9 @@ def test_enum_ok_validates_effect_membership() -> None:
 
 def test_invalid_effect_is_error() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(effect="not_a_cia_value"))], existing_names=set()
+        [(2, _fd(effect="not_a_cia_value"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
@@ -632,7 +759,9 @@ def test_invalid_effect_is_error() -> None:
 
 def test_none_effect_passes_validation() -> None:
     """Absent/None effect is valid — effect is optional (detection-gated default)."""
-    preview, errors, forms, _, _am = _validate_rows([(2, _fd(effect=None))], existing_names=set())
+    preview, errors, forms, _, _am = _validate_rows(
+        [(2, _fd(effect=None))], existing_names=set(), published_slugs=_PUB
+    )
     assert errors == []
     assert preview[0]["action"] == "create"
     assert forms[0] is not None
@@ -641,7 +770,9 @@ def test_none_effect_passes_validation() -> None:
 
 def test_valid_effect_passes_validation() -> None:
     preview, errors, forms, _, _am = _validate_rows(
-        [(2, _fd(effect="availability"))], existing_names=set()
+        [(2, _fd(effect="availability"))],
+        existing_names=set(),
+        published_slugs=_PUB,
     )
     assert errors == []
     assert preview[0]["action"] == "create"

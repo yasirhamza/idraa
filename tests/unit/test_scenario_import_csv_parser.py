@@ -5,6 +5,10 @@ import pytest
 from idraa.services.scenario_import import _validate_rows, generate_template_csv
 from idraa.services.scenario_import_parsers import CSV_HEADERS, MAX_ROWS, parse_csv_flat
 
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to every _validate_rows call in this file (pure function, caller-supplied).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
+
 
 def _csv(rows: list[str], header: str | None = None) -> bytes:
     h = header if header is not None else ",".join(CSV_HEADERS)
@@ -53,7 +57,9 @@ def test_generated_template_parses_and_validates_clean() -> None:  # I-1
     }
 
     # Full row-level validation passes (action create, no errors).
-    preview, val_errors, forms, _, _am = _validate_rows(pairs, existing_names=set())
+    preview, val_errors, forms, _, _am = _validate_rows(
+        pairs, existing_names=set(), published_slugs=_PUB
+    )
     assert val_errors == []
     assert preview[0]["action"] == "create"
     assert forms[0] is not None
@@ -126,6 +132,41 @@ def test_unknown_extra_header_is_hard_stop() -> None:
     assert errors and errors[0]["column"] == "header"
 
 
+# --- Threat Agent Library (Task 8): threat_community / legacy header either-of ---
+
+
+def test_header_with_threat_community_parses() -> None:
+    # The default header (CSV_HEADERS) already carries threat_community.
+    pairs, errors = parse_csv_flat((",".join(CSV_HEADERS) + "\n").encode())
+    assert errors == []
+    assert pairs == []
+
+
+def test_header_with_legacy_threat_actor_type_parses() -> None:
+    legacy_header = ",".join(
+        [h for h in CSV_HEADERS if h != "threat_community"] + ["threat_actor_type"]
+    )
+    pairs, errors = parse_csv_flat((legacy_header + "\n").encode())
+    assert errors == []
+    assert pairs == []
+
+
+def test_header_with_both_community_and_legacy_is_ambiguous_error() -> None:
+    both_header = ",".join([*CSV_HEADERS, "threat_actor_type"])
+    pairs, errors = parse_csv_flat((both_header + "\n").encode())
+    assert pairs is None
+    assert errors and errors[0]["column"] == "header"
+    assert "ambiguous" in errors[0]["reason"]
+
+
+def test_header_with_neither_community_nor_legacy_is_missing() -> None:
+    neither_header = ",".join([h for h in CSV_HEADERS if h != "threat_community"])
+    pairs, errors = parse_csv_flat((neither_header + "\n").encode())
+    assert pairs is None
+    assert errors and errors[0]["column"] == "header"
+    assert "threat_community" in errors[0]["reason"]
+
+
 def test_non_numeric_pert_value_is_row_error_not_hardstop() -> None:
     # effect column added after asset_class — blank (optional).
     body = _csv(
@@ -171,7 +212,7 @@ def test_header_order_independent() -> None:
         "description": "",
         "scenario_type": "custom",
         "threat_category": "malware",
-        "threat_actor_type": "",
+        "threat_community": "",
         "attack_vector": "",
         "asset_class": "",
         "effect": "",  # Slice 1: optional C/I/A column

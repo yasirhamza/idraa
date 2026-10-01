@@ -10,6 +10,10 @@ from idraa.services.scenario_export import (
 from idraa.services.scenario_import import _validate_rows
 from idraa.services.scenario_import_parsers import parse_csv_flat, parse_json_nested
 
+# Threat Agent Library (Task 8): published community slugs assumed available
+# to every _validate_rows call in this file (pure function, caller-supplied).
+_PUB = {"cybercriminals", "nation_state", "privileged_insider", "hacktivists"}
+
 
 def _make(name: str, with_sl: bool, effect: object = None) -> object:
     sl = {"distribution": "PERT", "low": 1, "mode": 2, "high": 3} if with_sl else None
@@ -21,7 +25,9 @@ def _make(name: str, with_sl: bool, effect: object = None) -> object:
             "description": "round, trip",
             "scenario_type": type("E", (), {"value": "custom"})(),
             "threat_category": type("E", (), {"value": "ransomware"})(),
-            "threat_actor_type": type("E", (), {"value": "cybercriminals"})(),
+            "threat_community": type(
+                "TC", (), {"slug": "cybercriminals", "name": "Cybercriminals"}
+            )(),
             "attack_vector": "phish",
             "asset_class": type("E", (), {"value": "systems"})(),
             "effect": effect,
@@ -63,8 +69,8 @@ def _assert_authored_equal(form, src) -> None:
     assert (form.description or None) == (src.description or None)
     assert form.scenario_type == src.scenario_type.value
     assert form.threat_category == src.threat_category.value
-    assert (form.threat_actor_type or None) == (
-        src.threat_actor_type.value if src.threat_actor_type else None
+    assert (form.threat_community or None) == (
+        src.threat_community.slug if src.threat_community else None
     )
     assert (form.attack_vector or None) == (src.attack_vector or None)
     assert (form.asset_class or None) == (src.asset_class.value if src.asset_class else None)
@@ -84,7 +90,9 @@ def test_json_roundtrip() -> None:
     blob = json.dumps([scenario_to_json_obj(s) for s in _SCENARIOS]).encode()
     pairs, errors = parse_json_nested(blob)
     assert errors == []
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(
+        pairs, existing_names=set(), published_slugs=_PUB
+    )
     assert verrors == []
     assert [p["action"] for p in preview] == ["create", "create", "create"]
     for form, src in zip([f for f in forms if f], _SCENARIOS, strict=True):
@@ -102,7 +110,9 @@ def test_csv_roundtrip() -> None:
         w.writerow(scenario_to_flat_row(s))
     pairs, errors = parse_csv_flat(buf.getvalue().encode())
     assert errors == []
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(
+        pairs, existing_names=set(), published_slugs=_PUB
+    )
     assert verrors == []
     for form, src in zip([f for f in forms if f], _SCENARIOS, strict=True):
         _assert_authored_equal(form, src)
@@ -117,14 +127,14 @@ def test_csv_and_json_export_store_identical_distributions() -> None:
     s = _SCENARIOS[0]
     # JSON path
     jpairs, _ = parse_json_nested(json.dumps([scenario_to_json_obj(s)]).encode())
-    _, _, jforms, _, _am = _validate_rows(jpairs, existing_names=set())
+    _, _, jforms, _, _am = _validate_rows(jpairs, existing_names=set(), published_slugs=_PUB)
     # CSV path
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(CSV_EXPORT_HEADERS)
     w.writerow(scenario_to_flat_row(s))
     cpairs, _ = parse_csv_flat(buf.getvalue().encode())
-    _, _, cforms, _, _am2 = _validate_rows(cpairs, existing_names=set())
+    _, _, cforms, _, _am2 = _validate_rows(cpairs, existing_names=set(), published_slugs=_PUB)
     assert jforms[0].primary_loss == cforms[0].primary_loss
     for k in ("low", "mode", "high"):
         assert type(jforms[0].primary_loss[k]) is type(cforms[0].primary_loss[k])
@@ -151,7 +161,9 @@ def test_effect_roundtrip_csv() -> None:
     _, fd = pairs[0]
     assert fd["effect"] == "confidentiality"
     # validate that the field_dict passes _validate_rows cleanly
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(
+        pairs, existing_names=set(), published_slugs=_PUB
+    )
     assert verrors == []
     assert forms[0] is not None
     assert forms[0].effect == "confidentiality"
@@ -168,7 +180,9 @@ def test_effect_roundtrip_json() -> None:
     assert pairs is not None
     _, fd = pairs[0]
     assert fd.get("effect") == "integrity"
-    preview, verrors, forms, _, _am = _validate_rows(pairs, existing_names=set())
+    preview, verrors, forms, _, _am = _validate_rows(
+        pairs, existing_names=set(), published_slugs=_PUB
+    )
     assert verrors == []
     assert forms[0] is not None
     assert forms[0].effect == "integrity"
