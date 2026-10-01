@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable
-from typing import Any
 
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,5 +101,15 @@ class ThreatCommunityService:
         ]
 
 
-def choices_from_rows(rows: Iterable[Any]) -> list[tuple[str, str]]:
+def choices_from_rows(rows: Iterable[ThreatCommunity]) -> list[tuple[str, str]]:
+    """Architect N4: the sole caller (``grouped_choices``) only ever passes
+    ``ThreatCommunity`` rows, and this function only ever reads ``.slug``/``.name`` off
+    them -- a Protocol was tried here first, but mypy's pre-commit pin (v1.11.2) does
+    not resolve a Protocol's ``str``-typed member (attribute OR property) against
+    SQLAlchemy's ``Mapped[str]`` descriptor on ``ThreatCommunity.slug``/``.name``,
+    false-flagging every call site. The concrete type sidesteps that structural check
+    entirely (``tests/contracts/test_threat_community_iteration.py``'s duck-typed
+    ``_Row`` test double is outside mypy's scope -- both the pre-commit hook
+    (``files: ^src/idraa/``) and the local gate (``scripts/run_local_gate.py``,
+    ``src/idraa fair_cam security`` only) exclude ``tests/``)."""
     return [(r.slug, r.name) for r in rows]

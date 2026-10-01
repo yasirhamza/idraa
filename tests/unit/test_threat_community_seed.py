@@ -315,3 +315,98 @@ def test_schema_rejects_missing_clause_missing_level_unconverted_source_and_tcap
 def test_at_least_one_seed_is_a_converted_landmark() -> None:
     """Task 10's conversion-caveat test needs a real non-attempt row; fail loud if Task 1 shipped none."""
     assert any(r.tef_landmark.source_event_level != "attempt" for r in load_threat_community_seed())
+
+
+def test_schema_rejects_bad_cases_with_field_named_errors() -> None:
+    """spec N2 (PR-gate r1): unlike the ``bad`` tuples above (which only assert SOME
+    ValidationError is raised), every case here asserts the error message names the
+    field/rule that actually tripped -- a tripwire against a future schema change that
+    makes the WRONG check fire first and silently pass this test for the wrong reason."""
+    raw_rows = json.loads(Path(SEED_PATH).read_text(encoding="utf-8"))
+    raw_tcap = next(r for r in raw_rows if r["tcap_landmark"] is not None)
+    raw_non_malicious = next(r for r in raw_rows if r["intent"] == "non_malicious")
+    assert raw_non_malicious["tcap_landmark"] is None  # sanity: the fixture this case needs
+
+    cases: list[tuple[dict, str]] = [
+        (
+            # non-finite value
+            {**raw_tcap, "tef_landmark": {**raw_tcap["tef_landmark"], "mode": float("inf")}},
+            "finite",
+        ),
+        (
+            # low == high
+            {
+                **raw_tcap,
+                "tef_landmark": {**raw_tcap["tef_landmark"], "low": 1.0, "mode": 1.0, "high": 1.0},
+            },
+            "low < high",
+        ),
+        (
+            # TEF low <= 0
+            {
+                **raw_tcap,
+                "tef_landmark": {**raw_tcap["tef_landmark"], "low": 0.0, "mode": 0.1, "high": 0.5},
+            },
+            "tef_landmark.low",
+        ),
+        (
+            # TCap outside [0, 100]
+            {
+                **raw_tcap,
+                "tcap_landmark": {
+                    **raw_tcap["tcap_landmark"],
+                    "low": 0.0,
+                    "mode": 50.0,
+                    "high": 150.0,
+                },
+            },
+            "tcap_landmark",
+        ),
+        (
+            # a non-malicious row carrying a TCap
+            {**raw_non_malicious, "tcap_landmark": {**raw_tcap["tcap_landmark"]}},
+            "tcap_landmark",
+        ),
+        (
+            # blank Text field
+            {**raw_tcap, "motive": "   "},
+            "motive",
+        ),
+        (
+            # empty citations
+            {**raw_tcap, "citations": []},
+            "citations",
+        ),
+        (
+            # unknown slug
+            {**raw_tcap, "slug": "martians"},
+            "slug",
+        ),
+        (
+            # an accidental row whose definition lacks "nothing intervening"
+            {**raw_non_malicious, "threat_event_definition": "An error with no qualifying clause."},
+            "threat_event_definition",
+        ),
+    ]
+    for bad, expected_substring in cases:
+        with pytest.raises(ValidationError) as exc_info:
+            ThreatCommunitySeed.model_validate(bad)
+        assert expected_substring in str(exc_info.value), (expected_substring, str(exc_info.value))
+
+
+@pytest.mark.parametrize("slug", CANONICAL_THREAT_COMMUNITY_SLUGS)
+def test_no_bayesian_prior_language(slug: str) -> None:
+    """spec N6 (PR-gate r1): Idraa deliberately avoids the Bayesian "prior" framing for
+    these landmarks (help/threat-agent-library.html's "Landmarks, not inputs" section:
+    "Idraa calls these ranges landmarks and deliberately avoids the Bayesian name for a
+    starting distribution"). Scans every text field AND every landmark derivation for a
+    stray "prior"/"priors", case-insensitive and word-bounded so "priority"/"prioritise"
+    don't false-positive."""
+    by = {r.slug: r for r in load_threat_community_seed()}
+    r = by[slug]
+    fields: dict[str, str] = {f: getattr(r, f) for f in _TEXT_FIELDS}
+    fields["tef_landmark.derivation"] = r.tef_landmark.derivation
+    if r.tcap_landmark is not None:
+        fields["tcap_landmark.derivation"] = r.tcap_landmark.derivation
+    for field, text in fields.items():
+        assert not re.search(r"\bpriors?\b", text, re.IGNORECASE), f"{slug}.{field}: {text!r}"

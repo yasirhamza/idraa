@@ -1542,8 +1542,16 @@ async def confirm_threat_community(
     user: User = Depends(require_role(UserRole.ANALYST, UserRole.ADMIN)),
 ) -> Response:
     """Threat Agent Library: confirm/correct a scenario in a review state. Analyst+; CSRF via
-    middleware; 404 cross-org/missing/deleted (no oracle); 409 if not in review; 422 unknown
-    slug; fixed path-derived redirect target."""
+    middleware; 404 cross-org/missing/deleted (no oracle); 409 if not in review and 422 on an
+    unknown slug both RE-RENDER the scenario view page with an alert flash
+    (``_render_view_action_failure``, the SAME T3.a/T4 idiom ``refresh_loss_from_library`` uses
+    above) instead of raising a raw ``HTTPException`` -- base.html's ``htmx:beforeSwap``
+    force-swaps any 4xx body, so a double-submit was otherwise showing the analyst raw JSON.
+    The 422 message is a fixed string that never echoes the submitted slug (Sec-N-1: it used to
+    be interpolated via ``repr()`` into the ``HTTPException`` detail -- self-XSS only, CSRF
+    blocks the cross-site case, but unescaped all the same). Status codes and the
+    no-audit/no-row-change guarantees on failure are unchanged; fixed path-derived redirect
+    target on success."""
     try:
         await ScenarioService(db).confirm_threat_community(
             organization_id=user.organization_id,
@@ -1554,10 +1562,24 @@ async def confirm_threat_community(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConflictError:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="This scenario's threat community is already assigned — edit the scenario instead.",
+            status_code=409,
+        )
+    except ValidationError:
+        return await _render_view_action_failure(
+            request,
+            db,
+            user,
+            scenario_id,
+            message="Choose a published threat community.",
+            status_code=422,
+        )
     return RedirectResponse(url=f"/scenarios/{scenario_id}", status_code=303)
 
 

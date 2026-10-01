@@ -361,8 +361,21 @@ def _hex(v: object) -> str:
 
 def _preflight(
     bind: sa.Connection,
-) -> tuple[dict[str, str], dict[str, str | None], list[tuple[str, str | None, str | None]]]:
-    """Read-only. Returns (entry_community_by_hex, entry_legacy_by_hex, scenario_rows)."""
+) -> tuple[
+    dict[str, str],
+    dict[str, str | None],
+    list[tuple[str, str | None, dict[str, object] | None]],
+]:
+    """Read-only. Returns (entry_community_by_hex, entry_legacy_by_hex, scenario_rows).
+
+    Architect N7: ``scenario_rows``' third element is ``library_pin`` already PARSED from its
+    stored JSON string (never the raw string) -- the ``json.loads`` used to live in the
+    ``upgrade()`` backfill loop itself, so a malformed pin was only discovered mid-backfill,
+    after the table-create + seed DDL had already run; aiosqlite commits DDL eagerly, so that
+    raise would strand a partially-migrated table at the old revision and boot-loop the
+    machine (same rationale as this function's existing checks). Parsing here instead means
+    EVERY row is validated before any DDL executes.
+    """
     entry_community: dict[str, str] = {}
     entry_legacy: dict[str, str | None] = {}
     for eid, _ver, eslug, tat in bind.execute(
@@ -375,15 +388,26 @@ def _preflight(
             )
         entry_community[_hex(eid)] = community
         entry_legacy[_hex(eid)] = tat
-    scenario_rows = bind.execute(
+    raw_scenario_rows = bind.execute(
         sa.text("SELECT id, threat_actor_type, library_pin FROM scenarios")
     ).all()
-    for sid, tat, _pin in scenario_rows:
+    scenario_rows: list[tuple[str, str | None, dict[str, object] | None]] = []
+    for sid, tat, pin_raw in raw_scenario_rows:
         if tat not in (None, "") and tat not in _LEGACY_MAP:
             raise RuntimeError(
                 f"pre-flight: scenario {sid} has unknown legacy threat_actor_type {tat!r}"
             )
-    return entry_community, entry_legacy, [(str(s), t, p) for s, t, p in scenario_rows]
+        if isinstance(pin_raw, str):
+            try:
+                pin = json.loads(pin_raw)
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"pre-flight: scenario {sid} has a malformed library_pin: {exc}"
+                ) from exc
+        else:
+            pin = pin_raw or None
+        scenario_rows.append((str(sid), tat, pin))
+    return entry_community, entry_legacy, scenario_rows
 
 
 def upgrade() -> None:
@@ -493,8 +517,7 @@ def upgrade() -> None:
             "threat_community_provenance", sa.String(32), nullable=False, server_default="assigned"
         ),
     )
-    for sid, tat, pin_raw in scenario_rows:
-        pin = json.loads(pin_raw) if isinstance(pin_raw, str) else (pin_raw or None)
+    for sid, tat, pin in scenario_rows:
         community_hex: str | None = None
         provenance = "unassigned"
         followed = False

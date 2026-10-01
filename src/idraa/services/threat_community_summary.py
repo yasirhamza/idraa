@@ -16,10 +16,11 @@ import math
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.risk_analysis_run import RiskAnalysisRun
+from idraa.models.scenario_library import ScenarioLibraryEntry
 from idraa.services.coverage import CoverageResult, coverage
 from idraa.services.threat_communities import ThreatCommunityService
 from idraa.threat_community_provenance import (
@@ -41,7 +42,7 @@ class ThreatCommunitySummaryRow:
     is_needs_review: bool  # True only for the trailing NEEDS_REVIEW_SLUG row
 
 
-def _ale_by_scenario(run: Any) -> dict[str, float]:
+def _ale_by_scenario(run: RiskAnalysisRun) -> dict[str, float]:
     out: dict[str, float] = {}
     for ps in (getattr(run, "simulation_results", None) or {}).get("per_scenario", []) or []:
         if not isinstance(ps, dict):
@@ -60,8 +61,8 @@ async def build_threat_community_summary(
     db: AsyncSession,
     *,
     organization_id: uuid.UUID,
-    latest_aggregate: Any | None,
-    sector_entries: list[Any],
+    latest_aggregate: RiskAnalysisRun | None,
+    sector_entries: list[ScenarioLibraryEntry],
     pinned_library_ids: Iterable[str],
 ) -> list[ThreatCommunitySummaryRow]:
     communities = await ThreatCommunityService(db, organization_id=organization_id).list_published()

@@ -305,6 +305,7 @@ def seed_realistic_org() -> tuple[uuid.UUID, list[uuid.UUID], list[uuid.UUID]]:
     from idraa.models.organization import Organization
     from idraa.models.scenario import Scenario
     from idraa.models.scenario_control import ScenarioControl
+    from idraa.models.threat_community import canonical_threat_community_id
     from idraa.models.user import User
 
     engine = create_engine("sqlite:///idraa.db")
@@ -334,6 +335,8 @@ def seed_realistic_org() -> tuple[uuid.UUID, list[uuid.UUID], list[uuid.UUID]]:
                 industry="manufacturing",
                 revenue_tier="1b_to_10b",
                 created_by=admin.id,
+                threat_community_id=canonical_threat_community_id("cybercriminals"),
+                threat_community_version=1,
             )
             session.add(sc)
             scenario_ids.append(sc.id)

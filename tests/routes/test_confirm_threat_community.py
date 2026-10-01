@@ -122,11 +122,12 @@ async def test_confirm_rejects_unknown_and_org_sourced_slug(
     await db_session.commit()
     s = await _make(db_session, org_id)
     for slug in ("martians", "org_only"):
-        assert (
-            await csrf_post(
-                client, f"/scenarios/{s.id}/confirm-threat-community", {"threat_community": slug}
-            )
-        ).status_code == 422
+        r = await csrf_post(
+            client, f"/scenarios/{s.id}/confirm-threat-community", {"threat_community": slug}
+        )
+        assert r.status_code == 422
+        assert "Choose a published threat community" in r.text
+        assert slug not in r.text
     await db_session.refresh(s)
     assert s.threat_community_provenance == "migrated_split_default"
 
@@ -135,13 +136,13 @@ async def test_confirm_refuses_when_already_assigned(authed_analyst, db_session)
     client, org_id = authed_analyst
     s = await _make(db_session, org_id, slug="hacktivists", prov="assigned")
     n = await _audit_count(db_session)
-    assert (
-        await csrf_post(
-            client,
-            f"/scenarios/{s.id}/confirm-threat-community",
-            {"threat_community": "competitors"},
-        )
-    ).status_code == 409
+    r = await csrf_post(
+        client,
+        f"/scenarios/{s.id}/confirm-threat-community",
+        {"threat_community": "competitors"},
+    )
+    assert r.status_code == 409
+    assert "already assigned" in r.text
     await db_session.refresh(s)
     assert (
         s.threat_community.slug == "hacktivists"
@@ -256,13 +257,13 @@ async def test_migrated_confirm_refused_and_noop_edit_keeps_migrated(
     client, org_id = authed_analyst
     s = await _make(db_session, org_id, slug="hacktivists", prov="migrated")
     n = await _audit_count(db_session)
-    assert (
-        await csrf_post(
-            client,
-            f"/scenarios/{s.id}/confirm-threat-community",
-            {"threat_community": "competitors"},
-        )
-    ).status_code == 409
+    r = await csrf_post(
+        client,
+        f"/scenarios/{s.id}/confirm-threat-community",
+        {"threat_community": "competitors"},
+    )
+    assert r.status_code == 409
+    assert "already assigned" in r.text
     await db_session.refresh(s)
     assert (
         s.threat_community.slug == "hacktivists"
@@ -278,3 +279,27 @@ async def test_migrated_confirm_refused_and_noop_edit_keeps_migrated(
     assert r.status_code == 303
     await db_session.refresh(s)
     assert s.threat_community.slug == "hacktivists" and s.threat_community_provenance == "migrated"
+
+
+async def test_create_form_audits_threat_community_assignment(authed_analyst, db_session) -> None:
+    """spec N4 (PR-gate r1): a scenario CREATE via the expert form audits the
+    threat_community assignment with the same ``[None, slug]`` diff shape the
+    confirm/edit paths use (services/scenarios.py:302), alongside the
+    threat_community_provenance key (:303)."""
+    from tests.routes.test_scenario_form_attack_mappings import _scenario_form_payload
+
+    client, org_id = authed_analyst
+    r = await csrf_post(
+        client,
+        "/scenarios",
+        _scenario_form_payload(name="N4 audit scenario"),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    row = (
+        (await db_session.execute(select(AuditLog).where(AuditLog.action == "scenario.create")))
+        .scalars()
+        .one()
+    )
+    assert row.changes["threat_community"] == [None, "cybercriminals"]
+    assert row.changes["threat_community_provenance"] == [None, "assigned"]

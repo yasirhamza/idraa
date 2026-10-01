@@ -78,6 +78,7 @@ def seed_aggregate_run() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
         RunType,
     )
     from idraa.models.scenario import Scenario
+    from idraa.models.threat_community import canonical_threat_community_id
 
     engine = create_engine("sqlite:///idraa.db")
     with Session(engine) as session:
@@ -116,6 +117,8 @@ def seed_aggregate_run() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
             },
             industry="manufacturing",
             revenue_tier="1b_to_10b",
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
         )
         s2 = Scenario(
             id=uuid.uuid4(),
@@ -143,6 +146,8 @@ def seed_aggregate_run() -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
             },
             industry="manufacturing",
             revenue_tier="1b_to_10b",
+            threat_community_id=canonical_threat_community_id("cybercriminals"),
+            threat_community_version=1,
         )
         session.add_all([s1, s2])
         session.flush()

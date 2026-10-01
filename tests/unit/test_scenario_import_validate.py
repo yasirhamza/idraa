@@ -93,6 +93,22 @@ def test_import_non_string_threat_community_is_row_error() -> None:
     assert errors[0]["reason"] == "must be a string slug"
 
 
+def test_import_both_threat_community_and_legacy_is_ambiguous_row_error() -> None:
+    """spec N3 (PR-gate r1): a row carrying BOTH the new-format `threat_community`
+    key and the legacy `threat_actor_type` key is rejected outright -- unlike the
+    library-bundle importer, which lets `threat_community` win silently (see
+    docs/security/threat-model.md Sec.9). scenario_import.py:311-325's either-of
+    header rule."""
+    row = _fd() | {"threat_actor_type": "hacktivists"}  # threat_community already in _fd()
+    preview, errors, forms, _, _ = _validate_rows(
+        [(2, row)], existing_names=set(), published_slugs=_PUB
+    )
+    assert preview[0]["action"] == "error"
+    assert forms[0] is None
+    assert errors and errors[0]["column"] == "threat_community"
+    assert "both" in errors[0]["reason"]
+
+
 def test_smuggled_threat_community_provenance_key_is_row_error() -> None:
     """M8-N1(b): threat_community_provenance is server-computed (by legacy_slug_for
     or the explicit "assigned" default inside _validate_rows) -- a file supplying it
@@ -106,6 +122,7 @@ def test_smuggled_threat_community_provenance_key_is_row_error() -> None:
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
+    assert errors and "Extra inputs" in errors[0]["reason"]
 
 
 def test_smuggled_threat_community_provenance_key_is_row_error_csv_shaped() -> None:
@@ -124,6 +141,7 @@ def test_smuggled_threat_community_provenance_key_is_row_error_csv_shaped() -> N
     )
     assert preview[0]["action"] == "error"
     assert forms[0] is None
+    assert errors and "Extra inputs" in errors[0]["reason"]
 
 
 def test_valid_row_becomes_create() -> None:

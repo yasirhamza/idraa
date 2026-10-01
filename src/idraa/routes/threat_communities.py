@@ -5,14 +5,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.app import templates
 from idraa.models.enums import UserRole
-from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.scenario_library_repo import ScenarioLibraryRepo
+from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import get_db, require_role
 from idraa.services.threat_communities import SLUG_RE, ThreatCommunityService
 
@@ -56,21 +55,11 @@ async def threat_community_detail(
             status_code=status.HTTP_404_NOT_FOUND, detail="threat community not found"
         )
     entries = await ScenarioLibraryRepo(db).list_published(threat_community_slugs=[slug], limit=200)
-    rows = (
-        (
-            await db.execute(
-                select(Scenario)
-                .where(
-                    Scenario.organization_id == user.organization_id,
-                    Scenario.threat_community_id == community.id,
-                    Scenario.threat_community_version == community.version,
-                )
-                .order_by(Scenario.name)
-                .limit(_SCENARIO_CAP + 1)
-            )
-        )
-        .scalars()
-        .all()
+    rows = await ScenarioRepo(db).list_id_name_for_community(
+        organization_id=user.organization_id,
+        threat_community_id=community.id,
+        threat_community_version=community.version,
+        limit=_SCENARIO_CAP + 1,
     )
     return templates.TemplateResponse(
         request,

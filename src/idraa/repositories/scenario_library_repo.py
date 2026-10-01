@@ -186,7 +186,9 @@ class ScenarioLibraryRepo:
             )
         )
         if for_update:
-            stmt = stmt.with_for_update()
+            # Architect N8a: explicit `of=` names the locked entity so a later join added to
+            # this SELECT can't silently widen the FOR UPDATE lock to another table.
+            stmt = stmt.with_for_update(of=ScenarioLibraryEntry)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
     async def get_by_slug(

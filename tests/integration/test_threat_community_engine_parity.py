@@ -86,9 +86,13 @@ async def _assert_identical(
         run_a.simulation_results == run_b.simulation_results
     )  # exact; a mismatch is investigated, never loosened
     assert run_a.inputs_hash == run_b.inputs_hash
-    for arr_a, arr_b in zip(
-        await _samples(db_session, run_a), await _samples(db_session, run_b), strict=True
-    ):
+    samples_a, samples_b = await _samples(db_session, run_a), await _samples(db_session, run_b)
+    # Methodology N5: an empty samples list on BOTH sides would make zip(strict=True) iterate
+    # zero times -- the loop body below would never run and this function would report a
+    # false PASS without comparing a single array. Fail loud instead.
+    assert samples_a, "run_a produced no decoded sample arrays"
+    assert samples_b, "run_b produced no decoded sample arrays"
+    for arr_a, arr_b in zip(samples_a, samples_b, strict=True):
         assert np.array_equal(arr_a, arr_b)
     assert _strip(run_a.scenario_inputs_snapshot) == _strip(run_b.scenario_inputs_snapshot)
 
