@@ -1352,7 +1352,8 @@ def _draw_threat_community_page(data: RunReportData, styles: Any) -> list[Any]:
         _h1("Scenarios by threat community", styles),
         Paragraph(
             "Subtotals are sums of per-scenario residual ALE means (mean basis)."
-            " No tail metrics are shown per group.",
+            " No tail metrics are shown per group."
+            " A reporting derivation, not a FAIR quantity (not FAIR-grounded).",
             pdf_theme.para("caption", fontSize=9),
         ),
     ]

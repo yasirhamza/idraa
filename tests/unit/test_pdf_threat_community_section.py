@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
 
@@ -58,12 +59,22 @@ def test_groups_sorted_by_subtotal_desc_with_shares() -> None:
 
 def test_pdf_groups_legacy_snapshot_under_needs_review() -> None:
     """Review Focus #5 (PDF half)."""
-    assert {
-        x.name
-        for x in build_threat_community_groups(
-            [_r("a", 10.0, None), _r("b", 5.0, ("hacktivists", "Hacktivists"))]
-        )
-    } == {"Hacktivists", NEEDS_REVIEW_LABEL}
+    mixed = build_threat_community_groups(
+        [_r("a", 10.0, None), _r("b", 5.0, ("hacktivists", "Hacktivists"))]
+    )
+    assert {x.name for x in mixed} == {"Hacktivists", NEEDS_REVIEW_LABEL}
+    needs_review = next(g for g in mixed if g.name == NEEDS_REVIEW_LABEL)
+    assert needs_review.residual_ale_subtotal == 10.0  # the sole legacy row's ALE
+
+    # Fix round 1 (explicit share pin): when EVERY row is legacy/no-community, the
+    # needs-review group is the ONLY group, so its subtotal equals the summed ALE
+    # across all input rows and its share is exactly 1.0 (not a fraction of a mixed
+    # total, as in the two-group case above).
+    all_legacy = build_threat_community_groups([_r("a", 10.0, None), _r("b", 5.0, None)])
+    assert len(all_legacy) == 1
+    assert all_legacy[0].name == NEEDS_REVIEW_LABEL
+    assert all_legacy[0].residual_ale_subtotal == 15.0  # 10.0 + 5.0, the summed ALE
+    assert all_legacy[0].share == pytest.approx(1.0)
 
 
 def test_pdf_groups_by_slug_not_name_and_labels_with_the_smallest_name() -> None:
@@ -90,6 +101,27 @@ def test_pdf_drops_unparseable_ids_like_the_dashboard() -> None:
     assert [x.name for x in g] == [
         "Hacktivists"
     ]  # the malformed row is dropped, not bucketed under Needs review
+
+
+def test_tampered_slug_literally_matching_the_sentinel_gets_its_own_group() -> None:
+    """Fix round 1 (parity edge): a snapshot slug that is literally the internal
+    NEEDS_REVIEW_SLUG string ("__needs_review__") must NOT silently merge into the
+    real needs-review bucket. The internal grouping key is the real slug or None
+    (dashboard parity -- services/threat_community_summary.py keys its own
+    missing-community bucket on None, never on a string sentinel), so a
+    tampered/colliding slug gets its own group, separate from the genuine
+    no-community rows."""
+    g = build_threat_community_groups(
+        [
+            _r("a", 10.0, None),  # genuine needs-review: no community recorded at all
+            _r("b", 5.0, ("__needs_review__", "Tampered")),  # tampered/colliding slug
+        ]
+    )
+    assert {x.name for x in g} == {NEEDS_REVIEW_LABEL, "Tampered"}
+    tampered = next(x for x in g if x.name == "Tampered")
+    real_needs_review = next(x for x in g if x.name == NEEDS_REVIEW_LABEL)
+    assert tampered.residual_ale_subtotal == 5.0
+    assert real_needs_review.residual_ale_subtotal == 10.0
 
 
 async def test_pdf_data_groups_from_the_real_producer_snapshot(
@@ -122,6 +154,7 @@ async def test_pdf_data_groups_from_the_real_producer_snapshot(
     )
     data2 = await build_executive_pdf_data(db_session, legacy, seed_organization)
     assert [g.name for g in data2.scenarios_by_threat_community] == [NEEDS_REVIEW_LABEL]
+    assert data2.scenarios_by_threat_community[0].share == pytest.approx(1.0)
 
 
 def test_section_suppressed_for_single_group_and_has_heading_otherwise() -> None:
@@ -145,5 +178,10 @@ def test_section_suppressed_for_single_group_and_has_heading_otherwise() -> None
     texts = [f.getPlainText() for f in flow if isinstance(f, Paragraph)]
     assert any("Scenarios by threat community" in t for t in texts) and any(
         "mean basis" in t for t in texts
+    )
+    # Fix round 1 (Important — controller ruling): the caption must carry the
+    # no-overclaim label on this view-model derivation.
+    assert any(
+        "not FAIR-grounded" in getattr(f, "text", "") for f in flow if isinstance(f, Paragraph)
     )
     assert not any("<b>" in getattr(f, "text", "") for f in flow if isinstance(f, Paragraph))

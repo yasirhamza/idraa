@@ -70,7 +70,6 @@ from idraa.services.aggregate_run_view_model import (
 from idraa.services.run_view_model import _build_control_effectiveness_rows
 from idraa.threat_community_provenance import (
     NEEDS_REVIEW_LABEL,
-    NEEDS_REVIEW_SLUG,
     community_by_scenario,
 )
 
@@ -674,20 +673,28 @@ def build_threat_community_groups(rows: list[PerScenarioRow]) -> list[ThreatComm
             len(rows) - len(kept),
         )
     rows = kept
-    buckets: dict[str, list[PerScenarioRow]] = {}
-    label: dict[str, str] = {NEEDS_REVIEW_SLUG: NEEDS_REVIEW_LABEL}
+    # Fix round 1 (parity edge): the internal bucket key is the real slug or None —
+    # NEVER the NEEDS_REVIEW_SLUG sentinel string. The dashboard
+    # (services/threat_community_summary.py) keys its missing-community bucket on
+    # None too; if this function instead folded a literal-"__needs_review__" snapshot
+    # slug into the sentinel key, a tampered/colliding snapshot would silently merge
+    # into the real needs-review row here while the dashboard still gave it its own
+    # row — a cross-surface parity gap. NEEDS_REVIEW_SLUG/NEEDS_REVIEW_LABEL are
+    # applied only at emission time below, as the DISPLAY for the None bucket.
+    buckets: dict[str | None, list[PerScenarioRow]] = {}
+    label: dict[str, str] = {}
     # Group by SLUG (names are neither unique nor stable); display = smallest name seen.
     for r in rows:
-        key = r.threat_community_slug or NEEDS_REVIEW_SLUG
+        key = r.threat_community_slug
         buckets.setdefault(key, []).append(r)
-        if r.threat_community_slug and r.threat_community_name:
+        if key is not None and r.threat_community_name:
             label[key] = min(
                 label.get(key, r.threat_community_name), r.threat_community_name
             )  # same rule as the dashboard
     total = sum(r.residual_ale for r in rows)
     groups = [
         ThreatCommunityGroup(
-            name=label.get(key, key),
+            name=NEEDS_REVIEW_LABEL if key is None else label.get(key, key),
             rows=sorted(members, key=lambda r: (-r.residual_ale, r.scenario_name)),
             residual_ale_subtotal=sum(r.residual_ale for r in members),
             share=(sum(r.residual_ale for r in members) / total) if total > 0 else 0.0,
