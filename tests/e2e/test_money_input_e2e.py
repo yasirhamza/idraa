@@ -141,7 +141,7 @@ async def _goto_wizard_step_4(page: Page, base: str) -> None:
     await page.click("text=Skip — start blank")
     await page.fill("input[name='name']", "E2E money entry")
     await page.select_option("select[name='threat_category']", "ransomware")
-    await page.select_option("select[name='threat_actor_type']", "cybercriminals")
+    await page.select_option("select[name='threat_community']", "cybercriminals")
     await page.select_option("select[name='asset_class']", "systems")
     await page.click("button:has-text('Next →')")
     await expect(page.locator("input[name='tef_low_0']")).not_to_be_empty()
@@ -265,6 +265,38 @@ async def test_money_entry_is_excel_like(migrated_server_url: str) -> None:
         assert await field.evaluate("el => el.validity.valid") is False
         await field.press("Tab")
         assert await field.input_value() == ""  # strict Number() -> loud blank
+
+        await context.close()
+        await browser.close()
+
+
+async def test_wizard_review_shows_threat_community(migrated_server_url: str) -> None:
+    """Threat Agent Library: the step-2 ``threat_community`` selection
+    ("cybercriminals", set by ``_goto_wizard_step_4``) survives through step 4
+    (Impact), the skipped step 5 (controls), and renders by its own name --
+    not its slug -- in the "Threat community:" <dd> on step 6's review page
+    (step_6_review.html:19)."""
+    base = migrated_server_url
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+        page.set_default_timeout(E2E_TIMEOUT_MS)
+
+        await _bootstrap_admin_and_login(page, base)
+        await _goto_wizard_step_4(page, base)
+
+        # Step 4 (Impact) is already pre-filled by the eager-seeded
+        # IRIS-baseline row -- advance past it with no edits.
+        await page.click("button:has-text('Next →')")
+
+        # Step 5: skip controls (test_wizard_blank_flow.py:152-160 precedent).
+        await page.click("button:has-text('Next →')")
+
+        # Step 6: review -- the community selected at step 2 renders by its
+        # own name ("Cybercriminals"), not the raw "cybercriminals" slug.
+        dd = page.locator("dt:has-text('Threat community:') + dd")
+        await expect(dd).to_contain_text("Cybercriminals")
 
         await context.close()
         await browser.close()

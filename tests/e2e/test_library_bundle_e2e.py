@@ -72,7 +72,7 @@ def _one_entry_bundle() -> bytes:
         "name": _NEW_NAME,
         "status": "published",
         "threat_event_type": "ransomware",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
         "asset_class": "systems",
         "attack_vector": "phishing_then_lateral_movement",
         "tags": ["e2e"],

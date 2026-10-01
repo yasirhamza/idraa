@@ -137,7 +137,7 @@ async def _bootstrap_admin_and_login(page, base: str) -> None:
 
 _E2E_SCENARIO_NAME = "E2E Run Lifecycle Scenario"
 _E2E_CSV = (
-    "name,description,scenario_type,threat_category,threat_actor_type,attack_vector,"
+    "name,description,scenario_type,threat_category,threat_community,attack_vector,"
     "asset_class,version,status,distribution,tef_low,tef_mode,tef_high,vuln_low,"
     "vuln_mode,vuln_high,pl_low,pl_mode,pl_high,sl_low,sl_mode,sl_high\n"
     f"{_E2E_SCENARIO_NAME},,custom,ransomware,cybercriminals,,systems,1.0,active,PERT,"
@@ -220,7 +220,7 @@ async def test_run_execution_pdf_and_delete_journey(migrated_server_url: str) ->
         # -- open it first (the form is x-show-hidden until then).
         await page.click("button[aria-haspopup='menu']")
         await page.click("form[action='/runs/" + run_id + "/delete'] button[type=submit]")
-        await page.wait_for_url(f"{base}/?deleted=1")
+        await page.wait_for_url(f"{base}/analyses?deleted=1")
 
         gone = await page.request.get(f"{base}/runs/{run_id}")
         assert gone.status == 404, "deleted run detail must 404"

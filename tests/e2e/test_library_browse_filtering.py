@@ -62,8 +62,8 @@ async def test_library_filter_updates_grid_via_htmx(
         initial_count = await page.locator(".card").count()
         assert initial_count > 0
 
-        # Check threat_actor=cybercriminals — grid narrows
-        await page.check("input[name='threat_actor_type'][value='cybercriminals']")
+        # Check threat_community=cybercriminals — grid narrows
+        await page.check("input[name='threat_community'][value='cybercriminals']")
         await page.wait_for_timeout(500)  # HTMX hx-trigger="change"
         filtered_count = await page.locator(".card").count()
         assert filtered_count <= initial_count

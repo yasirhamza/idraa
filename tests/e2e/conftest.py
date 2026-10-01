@@ -235,7 +235,7 @@ def seed_library_entries_e2e() -> Any:
     populated via POST to the library admin endpoint (or directly into the
     ephemeral DB) before browse filtering tests run. Each entry should have
     at least ``id`` and ``name`` populated, and entries should span multiple
-    threat_actor_type values to enable filtering tests.
+    threat_community values to enable filtering tests.
     """
     pytest.skip(_E2E_SEED_SKIP_REASON)
 

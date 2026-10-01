@@ -319,7 +319,7 @@ async def _wizard_blank_flow_to_step4(page: Page, base: str, name: str) -> None:
     await page.click("text=Skip — start blank")
     await page.fill("input[name='name']", name)
     await page.select_option("select[name='threat_category']", "ransomware")
-    await page.select_option("select[name='threat_actor_type']", "cybercriminals")
+    await page.select_option("select[name='threat_community']", "cybercriminals")
     await page.select_option("select[name='asset_class']", "systems")
     await page.click("button:has-text('Next →')")
     await page.wait_for_selector("input[name='tef_low_0']")

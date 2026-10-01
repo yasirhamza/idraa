@@ -108,7 +108,7 @@ async def test_wizard_blank_flow_no_library_pin(
 
     Phase 1.5b implementation notes:
     - seed_user_login_e2e should be an async callable: await seed_user_login_e2e(page)
-    - Step 2 selects: threat_category=ransomware, threat_actor_type=cybercriminals,
+    - Step 2 selects: threat_category=ransomware, threat_community=cybercriminals,
       asset_class=systems.
     - Steps 3 (Likelihood) and 4 (Impact) use the indexed SME-row shape
       (``<fieldset>_low_<idx>`` / ``<fieldset>_high_<idx>`` — no PERT ``_mode``).
@@ -137,7 +137,7 @@ async def test_wizard_blank_flow_no_library_pin(
         # Step 2: fill basic info manually
         await page.fill("input[name='name']", "E2E blank flow")
         await page.select_option("select[name='threat_category']", "ransomware")
-        await page.select_option("select[name='threat_actor_type']", "cybercriminals")
+        await page.select_option("select[name='threat_community']", "cybercriminals")
         await page.select_option("select[name='asset_class']", "systems")
         await page.click("button:has-text('Next →')")
 
