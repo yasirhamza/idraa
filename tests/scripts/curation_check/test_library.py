@@ -167,7 +167,7 @@ def _scenario(slug: str, name: str) -> dict[str, Any]:
         "description": f"{name} description",
         "threat_event_type": "ransomware",
         "asset_class": "data",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
     }
 
 

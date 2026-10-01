@@ -18,7 +18,7 @@
   | # | Score | Subject | Finding | Disposition | Reason |
   |---|---|---|---|---|---|
   | 1 | 0.95 | fraud · asset_class | curated **people** score 0.05; judge prefers **cash_or_equivalent** (0.95) |  |  |
-  | 2 | 0.30 | ot · threat_actor_type | description \| with pipe and &lt;b&gt;html&lt;/b&gt; |  |  |
+  | 2 | 0.30 | ot · threat_community | description \| with pipe and &lt;b&gt;html&lt;/b&gt; |  |  |
   
   **Errored items (1):**
   

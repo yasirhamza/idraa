@@ -11,7 +11,7 @@ from typing import Any
 from scripts.curation_check.config import REPO_ROOT
 
 CRITERIA_PATH = REPO_ROOT / "data" / "curation" / "criteria.json"
-TAXONOMY_FIELDS = ("threat_event_type", "asset_class", "threat_actor_type")
+TAXONOMY_FIELDS = ("threat_event_type", "asset_class", "threat_community")
 NONE_FITS = "not enough information to decide"
 NONE_FITS_TEXT = "The description does not give enough information to decide."
 NONE_DISTINCT = "none: this scenario is distinct"
@@ -22,7 +22,7 @@ Question = dict[str, Any]
 _FIELD_QUESTION = {
     "threat_event_type": "What type of threat event does this library scenario describe?",
     "asset_class": "What class of asset is primarily at risk in this library scenario?",
-    "threat_actor_type": "What type of threat actor carries out this library scenario?",
+    "threat_community": "Which threat community carries out this library scenario?",
 }
 
 

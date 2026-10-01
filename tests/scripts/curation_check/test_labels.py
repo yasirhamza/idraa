@@ -37,18 +37,18 @@ def test_scenario_flags_one_per_field_scored_by_disagreement() -> None:
     answers = {
         "threat_event_type": {"social_engineering": 0.9, "malware": 0.1},
         "asset_class": {"cash_or_equivalent": 0.95, "people": 0.05},
-        "threat_actor_type": {NONE_FITS: 0.8, "cybercriminals": 0.2},
+        "threat_community": {NONE_FITS: 0.8, "cybercriminals": 0.2},
     }
     flags = {f.key: f for f in score_scenario(SCEN, answers)}
     assert set(flags) == {
         "scenario-labels:fraud:threat_event_type",
         "scenario-labels:fraud:asset_class",
-        "scenario-labels:fraud:threat_actor_type",
+        "scenario-labels:fraud:threat_community",
     }
     assert flags["scenario-labels:fraud:threat_event_type"].score == pytest.approx(0.1)
     assert flags["scenario-labels:fraud:asset_class"].score == pytest.approx(0.95)
     assert "prefers **cash_or_equivalent**" in flags["scenario-labels:fraud:asset_class"].finding
-    assert "not enough information" in flags["scenario-labels:fraud:threat_actor_type"].finding
+    assert "not enough information" in flags["scenario-labels:fraud:threat_community"].finding
     assert "next: **malware** 0.10" in flags["scenario-labels:fraud:threat_event_type"].finding
 
 
@@ -56,7 +56,7 @@ def test_scenario_ties_never_claim_a_preference() -> None:  # Task-4 review
     answers = {
         "threat_event_type": {"malware": 0.5, "social_engineering": 0.5},
         "asset_class": {"people": 1.0},
-        "threat_actor_type": {NONE_FITS: 0.5, "cybercriminals": 0.5},
+        "threat_community": {NONE_FITS: 0.5, "cybercriminals": 0.5},
     }
     flags = score_scenario(SCEN, answers)
     assert all("agrees with curated" in f.finding for f in flags)
@@ -67,7 +67,7 @@ def test_scenario_no_named_type_is_reported_distinctly() -> None:  # M-N1
     answers = {
         "threat_event_type": {"miscellaneous": 0.8, "social_engineering": 0.2},
         "asset_class": {"people": 1.0},
-        "threat_actor_type": {"cybercriminals": 1.0},
+        "threat_community": {"cybercriminals": 1.0},
     }
     flags = {f.key: f for f in score_scenario(SCEN, answers)}
     assert "no named type fits" in flags["scenario-labels:fraud:threat_event_type"].finding
@@ -75,7 +75,7 @@ def test_scenario_no_named_type_is_reported_distinctly() -> None:  # M-N1
 
 def test_scenario_missing_curated_option_scores_as_full_disagreement() -> None:
     answers = {
-        f: {"malware": 1.0} for f in ("threat_event_type", "asset_class", "threat_actor_type")
+        f: {"malware": 1.0} for f in ("threat_event_type", "asset_class", "threat_community")
     }
     assert all(f.score == pytest.approx(1.0) for f in score_scenario(SCEN, answers))
 
@@ -84,7 +84,7 @@ def test_scenario_named_ties_at_display_precision_claim_no_preference() -> None:
     answers = {
         "threat_event_type": {"social_engineering": 0.2, "malware": 0.4, "supply_chain": 0.4},
         "asset_class": {"people": 0.441, "systems": 0.444, "data": 0.115},
-        "threat_actor_type": {"cybercriminals": 1.0},
+        "threat_community": {"cybercriminals": 1.0},
     }
     flags = {f.key.rsplit(":", 1)[1]: f for f in score_scenario(SCEN, answers)}
     assert (
@@ -101,7 +101,7 @@ def test_prefers_names_a_tie_with_not_enough_information() -> None:  # PR-gate r
     answers = {
         "threat_event_type": {"social_engineering": 0.2, "malware": 0.4, NONE_FITS: 0.4},
         "asset_class": {"people": 1.0},
-        "threat_actor_type": {"cybercriminals": 1.0},
+        "threat_community": {"cybercriminals": 1.0},
     }
     [te] = [f for f in score_scenario(SCEN, answers) if f.key.endswith(":threat_event_type")]
     assert "judge prefers **malware** (0.40, tied with 'not enough information')" in te.finding

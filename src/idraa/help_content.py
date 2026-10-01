@@ -146,6 +146,15 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         "Download per-iteration Monte Carlo samples and recompute tail metrics yourself.",
         ("run-and-read-analyses", "reports-and-workbook"),
     ),
+    HelpArticle(
+        "threat-agent-library",
+        "Threat Agent Library",
+        "methodology",
+        6,
+        "What a threat community is, the eight-attribute profile, and why the "
+        "TEF/TCap ranges are landmarks for the analyst, not inputs to the engine.",
+        ("fair-in-idraa-terms", "build-a-scenario", "where-idraa-departs-from-fair"),
+    ),
 )
 
 HELP_BY_SLUG: dict[str, HelpArticle] = {a.slug: a for a in HELP_ARTICLES}

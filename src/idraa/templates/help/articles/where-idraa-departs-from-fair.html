@@ -65,6 +65,20 @@
   understates the per-event tail for scenarios whose loss is split across
   both; the library&rsquo;s share rubric was tuned knowing this.
 </p>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Threat capability is shown, never computed on (estimation level).</strong>
+  Each threat community&rsquo;s profile shows a capability band on a 0&ndash;100
+  percentile scale. It sits beside the profile as a landmark; Idraa never
+  turns it into a Vulnerability, because the analyst authors Vulnerability
+  directly and resistance strength is not elicited.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Communities are not lumped (implementation-defined).</strong> The
+  book permits merging threat communities whose ranges overlap into one
+  scenario. Idraa keeps one community per scenario, pinned to a specific
+  profile version, and aggregates by summing scenarios; pooling happens
+  across experts within a scenario, never across communities.
+</p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="distribution-choices">Distribution choices</h2>
 <p class="text-body text-ink-2 mb-3">
@@ -133,6 +147,21 @@
   overlays such as critical infrastructure carry multiplicative adjustments
   to the FAIR inputs. They apply when you press the button, editing values
   you then own; nothing multiplies at run time.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  <strong>Threat-community default ranges are landmarks, not inputs.</strong>
+  Each profile&rsquo;s frequency and capability ranges carry a stated basis:
+  cited from a named source, derived from a cited figure with a stated
+  conversion, or a curator convention &mdash; never &ldquo;calibrated&rdquo;,
+  which Idraa reserves for values fitted to data. A frequency recovered from
+  an incident or loss statistic was divided by a controlled-world conversion
+  rate that is a curator convention, not the inherent Vulnerability you
+  author, and such a range is biased in one direction: it understates the
+  attempt rate for several reasons the profile spells out (an optimistic
+  bias, not a safe one).
+  None of these ranges is read by the engine; they are shown on the profile
+  page and in the help only. See
+  <a class="text-brand hover:underline" href="/help/threat-agent-library#landmarks-not-inputs">Threat Agent Library</a>.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="the-control-model">The control model (FAIR-CAM)</h2>
@@ -229,6 +258,12 @@
   frequency times magnitude per iteration, FAIR&rsquo;s own form, their
   tails are an approximation once the loss-event frequency exceeds one per
   year. That is a disclosure, not a departure.
+  The dashboard&rsquo;s and PDF&rsquo;s &ldquo;by threat community&rdquo; breakdown
+  is the same kind of reporting derivation: it sums each scenario&rsquo;s
+  mean residual loss by the community recorded in the run&rsquo;s inputs
+  snapshot, with scenarios still awaiting review grouped under
+  &ldquo;Needs review / unassigned&rdquo;; it has no per-group tail and is
+  not a FAIR quantity.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="how-to-evaluate">How to evaluate any of this</h2>

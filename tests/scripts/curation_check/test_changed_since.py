@@ -61,7 +61,7 @@ def _scenario(slug: str, name: str, status: str = "published") -> dict[str, Any]
         "description": f"{name} description.",
         "threat_event_type": "ransomware",
         "asset_class": "data",
-        "threat_actor_type": "cybercriminals",
+        "threat_community": "cybercriminals",
     }
 
 
@@ -120,7 +120,7 @@ def test_changed_subjects_covers_edits_add_delete_and_key_reorder(tmp_path: Path
 
     s3_reordered = {  # same content, keys in a different order: parsed-equal, not changed
         "asset_class": scenarios[2]["asset_class"],
-        "threat_actor_type": scenarios[2]["threat_actor_type"],
+        "threat_community": scenarios[2]["threat_community"],
         "slug": scenarios[2]["slug"],
         "name": scenarios[2]["name"],
         "status": scenarios[2]["status"],

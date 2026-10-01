@@ -14,7 +14,8 @@ from scripts.curation_check.criteria import (
     scenario_label_questions,
 )
 
-from idraa.models.enums import AssetClass, FairCamSubFunction, ThreatActorType, ThreatCategory
+from idraa.models.enums import AssetClass, FairCamSubFunction, ThreatCategory
+from idraa.models.threat_community import CANONICAL_THREAT_COMMUNITY_SLUGS
 
 
 def test_criteria_cover_every_enum_value() -> None:
@@ -24,7 +25,7 @@ def test_criteria_cover_every_enum_value() -> None:
     }
     assert set(c.taxonomy["threat_event_type"]) == {v.value for v in ThreatCategory}
     assert set(c.taxonomy["asset_class"]) == {v.value for v in AssetClass}
-    assert set(c.taxonomy["threat_actor_type"]) == {v.value for v in ThreatActorType}
+    assert set(c.taxonomy["threat_community"]) == set(CANONICAL_THREAT_COMMUNITY_SLUGS)
 
 
 def test_every_option_has_complete_wording() -> None:
@@ -50,7 +51,7 @@ def test_scenario_label_questions_offer_every_value_plus_none() -> None:
     qs = scenario_label_questions(load_criteria())
     assert set(qs) == set(TAXONOMY_FIELDS)
     assert all(q["type"] == "choice" for q in qs.values())
-    assert set(qs["threat_actor_type"]["criteria"]) == {v.value for v in ThreatActorType} | {
+    assert set(qs["threat_community"]["criteria"]) == set(CANONICAL_THREAT_COMMUNITY_SLUGS) | {
         NONE_FITS
     }
 

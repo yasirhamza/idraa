@@ -410,30 +410,42 @@
         "not_for": "Not for vague descriptions: if the description is too thin to decide, choose 'not enough information to decide'."
       }
     },
-    "threat_actor_type": {
-      "competitors": {
-        "what": "Rival organisations seeking commercial advantage, e.g., through industrial espionage or theft of trade secrets.",
-        "not_for": "Not nation_state (state-directed espionage) or cybercriminals (financially motivated via extortion/fraud rather than market advantage)."
+    "threat_community": {
+      "nation_state": {
+        "what": "Government-directed or government-funded operators pursuing intelligence, strategic advantage or pre-positioning against another state's interests; patient, well-resourced, often long-dwell.",
+        "not_for": "Not cybercriminals (profit motive) or hacktivists (ideology), even when techniques overlap. Not competitors (commercial rival without state sponsorship). Use when state direction or sponsorship is indicated."
       },
       "cybercriminals": {
-        "what": "Financially motivated external actors or groups (e.g., ransomware gangs, fraudsters, credential thieves).",
-        "not_for": "Not nation_state (state-sponsored, strategic aims). Not hacktivists (ideological). Not insider_malicious (holds granted access)."
+        "what": "Financially motivated criminal groups and their affiliates: ransomware and extortion crews, business-email-compromise operators, card and credential fraudsters, and the access brokers that supply them.",
+        "not_for": "Not opportunistic_hackers (untargeted, low-skill, no organisation behind them). Not nation_state (strategic aims). Not hacktivists (ideology). Not an insider community (holds granted access)."
       },
       "hacktivists": {
-        "what": "Ideologically or politically motivated external actors seeking disruption, exposure or publicity.",
-        "not_for": "Not cybercriminals (profit motive). Not nation_state (state-sponsored), even when state proxies pose as hacktivists without clear attribution."
+        "what": "Ideologically or politically motivated individuals and collectives who attack to embarrass, silence or punish; defacement, leaks and denial of service rather than theft for profit.",
+        "not_for": "Not cybercriminals (profit motive). Not nation_state (state-sponsored), even when state proxies pose as hacktivists without clear attribution. Not opportunistic_hackers (no cause, no chosen target)."
+      },
+      "competitors": {
+        "what": "Rival firms, or people acting for them, seeking commercial advantage through theft of trade secrets, pricing, bids, customer lists or product plans; includes a rival acting through a recruited or departing insider.",
+        "not_for": "Not nation_state (state-directed espionage). Not cybercriminals (extortion or fraud rather than market advantage). An insider acting for their own benefit is privileged_insider or nonprivileged_insider, not competitors."
+      },
+      "privileged_insider": {
+        "what": "An employee or contractor who already holds administrative, financial-approval or other elevated rights and turns them against the organisation; preventative controls the role legitimately bypasses are not in the path.",
+        "not_for": "Not nonprivileged_insider (ordinary role access: POS, EHR, ERP data entry, shared drives). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Use when the description names admin, approval or infrastructure rights."
+      },
+      "nonprivileged_insider": {
+        "what": "An employee, contractor or other affiliate with ordinary, role-based access who deliberately misuses it: taking data they can read, manipulating transactions they can enter, damaging what they can reach.",
+        "not_for": "Not privileged_insider (admin, approval or infrastructure rights). Not insider_accidental (no intent). Not third_party (a supplier's own staff). Not competitors when the insider acts for their own gain."
       },
       "insider_accidental": {
-        "what": "Employees or contractors who cause loss unintentionally through error, negligence or misconfiguration.",
-        "not_for": "Not insider_malicious (intent to harm or profit). Use when there is no malicious intent, e.g., misdirected email or exposed storage bucket."
+        "what": "Employees, contractors or other affiliates who cause loss without meaning to: misdirected emails, misconfigured systems, lost devices, mishandled records, mistaken transactions.",
+        "not_for": "Not privileged_insider or nonprivileged_insider (intent to harm or profit). Not opportunistic_hackers (the outsider who later finds an exposed asset is a separate actor). Use when there is no malicious intent."
       },
-      "insider_malicious": {
-        "what": "Employees, contractors or trusted partners who intentionally misuse their access to cause harm or for personal gain.",
-        "not_for": "Not insider_accidental (no intent). Not cybercriminals (external, no granted access); an insider recruited by an external actor is still insider_malicious."
+      "third_party": {
+        "what": "Staff of a supplier, partner, managed-service provider or outsourcer who act maliciously through the access your organisation granted their employer; outside your HR reach but inside your trust boundary.",
+        "not_for": "Not cybercriminals or nation_state using a vendor as a route (count the outsider's community instead). Not privileged_insider or nonprivileged_insider (your own staff). Use only when the vendor's own people are the actor."
       },
-      "nation_state": {
-        "what": "State-sponsored or state-directed actors pursuing espionage, sabotage or strategic objectives, typically highly capable.",
-        "not_for": "Not cybercriminals (profit motive) or hacktivists (ideology), even if techniques overlap. Use when state direction or sponsorship is indicated."
+      "opportunistic_hackers": {
+        "what": "Unaffiliated individuals and small crews who attack whatever is exposed rather than who you are: credential stuffing, exploitation of unpatched internet-facing services, harvesting of publicly readable storage, vandalism.",
+        "not_for": "Not cybercriminals (organised, persistent, with monetisation infrastructure). Not hacktivists (chosen target, a cause). Not insider_accidental (that is the person who exposed the asset, not the one who found it)."
       }
     }
   }
