@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -152,7 +153,12 @@ def test_build_one_entry_per_range_sorted_across_docs(tmp_path: Path) -> None:
         cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 4, "def client_ip(request):"),
         cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 95, "def audit_client_ip(request):"),
     ]
-    assert built.entries == sorted(built.entries)
+    many = tmp_path / "many"
+    body = "".join(f"line number {i:02d} long enough\n" for i in range(1, 13))
+    cites = " ".join(f"`app.py:{i}`" for i in (12, 3, 9, 1, 7, 11, 5, 2, 10, 4))
+    tracked_many = _tree(many, {"src/idraa/app.py": body, "docs/a.md": cites + "\n"})
+    built_many = cm.build(many, ["docs/a.md"], tracked_many)
+    assert [e.line for e in built_many.entries] == [1, 2, 3, 4, 5, 7, 9, 10, 11, 12]
 
 
 def test_build_dedupes_repeated_citations(tmp_path: Path) -> None:
@@ -434,6 +440,17 @@ def test_accept_drift_is_scoped_to_its_site(
     (tmp_path / "src/idraa/b.py").write_text("import logging\n" + APP, encoding="utf-8")
     assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/app.py:1") == 1
     assert "src/idraa/b.py:1 changed under an unchanged citation" in capsys.readouterr().err
+    same = tmp_path / "same-file"
+    two = "first long anchor line\nsecond long anchor line\n"
+    tracked_same = _tree(
+        same, {"docs/a.md": "`src/idraa/c.py:1` and `src/idraa/c.py:2`\n", "src/idraa/c.py": two}
+    )
+    assert _main(same, tracked_same, "--write") == 0
+    (same / "src/idraa/c.py").write_text(
+        "changed first anchor line\nchanged second anchor line\n", encoding="utf-8"
+    )
+    assert _main(same, tracked_same, "--write", "--accept-drift", "src/idraa/c.py:1") == 1
+    assert "src/idraa/c.py:2 changed under an unchanged citation" in capsys.readouterr().err
 
 
 def test_build_refuses_symlinked_cited_file(tmp_path: Path) -> None:
@@ -446,6 +463,21 @@ def test_build_refuses_symlinked_cited_file(tmp_path: Path) -> None:
         cm.ManifestError, match=r"docs/a\.md:1: src/idraa/app\.py goes through a symlink"
     ):
         cm.build(tmp_path, ["docs/a.md"], tracked)
+    linked = tmp_path / "linked-doc"
+    outside_doc = tmp_path.parent / f"{tmp_path.name}-outside-doc.md"
+    outside_doc.write_text("`app.py:1`\n", encoding="utf-8")
+    (linked / "docs").mkdir(parents=True)
+    (linked / "docs/a.md").symlink_to(outside_doc)
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md: docs/a\.md goes through a symlink"):
+        cm.build(linked, ["docs/a.md"], frozenset({"docs/a.md"}))
+    fifo = tmp_path / "fifo"
+    tracked_fifo = _tree(fifo, {"docs/a.md": "`src/idraa/app.py:1`\n"}) | {"src/idraa/app.py"}
+    (fifo / "src/idraa").mkdir(parents=True)
+    os.mkfifo(fifo / "src/idraa/app.py")
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: src/idraa/app\.py is not a regular file"
+    ):
+        cm.build(fifo, ["docs/a.md"], tracked_fifo)
 
 
 def test_write_refuses_symlinked_manifest_dir(
@@ -468,6 +500,7 @@ def test_shifted_anchor_refuses_check_and_write(
     assert "must start on its anchor line" in capsys.readouterr().err
     assert not (tmp_path / cm.MANIFEST).exists()
     assert _main(tmp_path, tracked, "--check") == 1
+    assert "must start on its anchor line" in capsys.readouterr().err
 
 
 def test_accept_drift_requires_write(tmp_path: Path) -> None:
