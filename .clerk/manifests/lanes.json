@@ -25,6 +25,9 @@
     "src/idraa/services/aggregate_run_view_model.py",
     "src/idraa/services/_view_model_helpers.py",
     "src/idraa/services/fair_cam_validation.py",
+    "src/idraa/services/wizard_helpers.py",
+    "src/idraa/services/dashboard_view_model.py",
+    "src/idraa/services/industry_mapping.py",
     "src/idraa/templates/help/articles/**"
    ],
    "subjects": ["fair-math", "calibration", "derivation"]
