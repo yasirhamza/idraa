@@ -228,3 +228,22 @@ def test_surfaces_manifest_sentences_present() -> None:
             if normalise(s["text"]) not in normalise((ROOT / surface).read_text(encoding="utf-8")):
                 missing.append((s["id"], surface))
     assert missing == []
+
+
+def test_threat_model_cited_files_are_escalation_paths() -> None:
+    """Spec §3.1 coverage rule: every line-cited src/idraa/ file in the threat model carries a tag."""
+    entries = json.loads(
+        (ROOT / ".clerk" / "manifests" / "citations.json").read_text(encoding="utf-8")
+    )["entries"]
+    cited = sorted(
+        {
+            str(e["file"])
+            for e in entries
+            if e["doc"] == "docs/security/threat-model.md"
+            and str(e["file"]).startswith("src/idraa/")
+        }
+    )
+    assert cited, "the threat model cites product files"
+    globs = _escalation_globs()
+    uncovered = [f for f in cited if not any(glob_match(g, f) for g in globs)]
+    assert uncovered == [], uncovered

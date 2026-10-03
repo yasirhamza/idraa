@@ -508,3 +508,45 @@ def test_accept_drift_requires_write(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as info:
         _main(tmp_path, tracked, "--check", "--accept-drift", "src/idraa/app.py:1")
     assert info.value.code == 2
+
+
+# ---- the committed manifest, against this repository -------------------------------------------
+
+
+def _committed() -> list[dict[str, object]]:
+    return json.loads((ROOT / cm.MANIFEST).read_text(encoding="utf-8"))["entries"]
+
+
+def _tracked() -> set[str]:
+    return set(cm.tracked_files(ROOT))
+
+
+def test_committed_manifest_is_fresh() -> None:
+    """A citation edited without regenerating, or code moved under one, fails here (and in CI)."""
+    built = cm.build(ROOT, cm.DOCS, cm.tracked_files(ROOT))
+    assert built.excluded == ["fly.toml"]
+    assert built.shifted == [], "a citation starts on its anchor line (spec §3.3)"
+    assert (ROOT / cm.MANIFEST).read_text(encoding="utf-8") == cm.render(built.entries)
+
+
+def test_committed_citation_anchors_hold() -> None:
+    """The clerk's citations gate, mirrored (implied by freshness; kept for its clearer message)."""
+    files = _tracked()
+    stale = []
+    for entry in _committed():
+        rel = str(entry["file"])
+        assert rel in files and ".." not in rel.split("/"), rel
+        lines = cm.lines_of((ROOT / rel).read_bytes().decode("utf-8"))
+        line = int(entry["line"])
+        if line > len(lines) or str(entry["pattern"]) not in lines[line - 1]:
+            stale.append(f"{rel}:{line} (cited in {entry['doc']})")
+    assert stale == []
+
+
+def test_committed_entries_cite_only_governed_docs() -> None:
+    entries = _committed()
+    assert len(entries) >= 100, "the manifest must hold the threat model's citations"
+    assert {str(e["doc"]) for e in entries} <= set(cm.DOCS)
+    assert all(e["regex"] is False for e in entries)
+    keys = [(e["doc"], e["file"], e["line"], e["pattern"]) for e in entries]
+    assert keys == sorted(keys) and len(keys) == len(set(keys))

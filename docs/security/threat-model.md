@@ -58,12 +58,12 @@ covered by another boundary's row."
 ## 2. B1 — Public internet ↔ Fly edge
 
 - **S**: `request.client.host` is spoofable behind Fly's edge and is **never**
-  trusted directly (`routes/deps.py:59-66,95-96`). Two opt-in trust
+  trusted directly (`routes/deps.py:62-69,98-99`). Two opt-in trust
   strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
   `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
   `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
-  trusting a spoofable value (`deps.py:117-127`); audit logging falls back to
-  best-effort `request.client` instead (`deps.py:130-151`) — a deliberate
+  trusting a spoofable value (`routes/deps.py:120-130`); audit logging falls back to
+  best-effort `request.client` instead (`routes/deps.py:133-154`) — a deliberate
   forensic-vs-security-critical asymmetry.
 - **T (request smuggling / desync, 2026-09)**: the back-end parser
   (uvicorn + httptools) rejects every classic gadget (dual CL, CL.TE, TE.CL,
@@ -108,8 +108,8 @@ docstring).
   doesn't exist outside the hosted UAT runtime. When set, every request
   without a valid `Authorization: Basic` header 401s
   (`_check_auth`, `uat_basic_auth.py:103-137`), except the exact paths in
-  `EXEMPT_PATHS` (`:33-48` — `/healthz` plus enumerated PWA install assets),
-  and only for `GET`/`HEAD` on those paths (`:74`) — a guard against a future
+  `EXEMPT_PATHS` (`uat_basic_auth.py:33-48` — `/healthz` plus enumerated PWA install assets),
+  and only for `GET`/`HEAD` on those paths (`uat_basic_auth.py:74`) — a guard against a future
   POST handler on one of those paths silently inheriting an unauthenticated
   write.
 - **T (misconfiguration)**: an empty-string `user` with a real password set
@@ -142,11 +142,11 @@ docstring).
 - **S/T**: session cookie `idraa_session`, `itsdangerous.URLSafeSerializer`
   signed (`services/auth.py:27,96-101`); cookie attributes — `httponly`,
   `samesite=lax`, `secure` in prod — set in `set_session_cookie`
-  (`auth.py:314-338`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
+  (`services/auth.py:314-338`). `SessionMiddleware.dispatch` (`middleware/session.py:33-64`)
   unsigns and loads `AuthSession`+`User` before any route runs, ASGI-wide —
   cannot be bypassed per-route (verified while checking B8/HTMX below: every
   fragment handler still resolves through the same dependency graph).
-  Absolute 14-day TTL, does not slide (`auth.py:28,295-311,362-378`).
+  Absolute 14-day TTL, does not slide (`services/auth.py:28,295-311,362-378`).
   **CSRF depends on this cookie value never changing mid-session** (GHSA-46jj-823j-mjj9 B4
   binding, §4): today it is a timestamp-free `URLSafeSerializer` signature and
   `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
@@ -154,18 +154,18 @@ docstring).
   with that in mind.
 - **S** (credential stuffing): Argon2 password hashing with a precomputed
   dummy-hash timing-safe check for nonexistent/inactive users
-  (`_DUMMY_PW_HASH`/`verify_user_password`, `auth.py:75-89`) — prevents a
+  (`_DUMMY_PW_HASH`/`verify_user_password`, `services/auth.py:75-89`) — prevents a
   login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
   verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
   a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
-  `auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:367`), isolated
+  `services/auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:367`), isolated
   from the default executor that Monte-Carlo run computes saturate (§10). This
   keeps the single event loop non-blocking (was a measured 13.7× head-of-line
   block) while preserving the timing-equal anti-enumeration property (both
   branches offloaded identically, exactly one verify each).
 - **D/brute-force**: two independent DB-backed throttles, both fail-open on
   store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
+  `services/auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
   `config.py:401-403`; `services/login_throttle.py`), applied to both
   `/login` and step-up re-verification (`routes/step_up.py:217,245`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
@@ -287,7 +287,7 @@ docstring).
   (`routes/deps.py:230-266`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
-  `services/security_settings.py:140-188`). **43** real call sites (37 as of
+  `services/security_settings.py:146-188`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
   `routes/deps.py:236` and a prose mention at
@@ -300,7 +300,7 @@ docstring).
   (`routes/mfa.py:96,136,190,232,259,337`). Re-verification
   (`routes/step_up.py:90-332`) has its own throttle and stamps
   `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `auth.py:308`).
+  `services/auth.py:308`).
 - **B1 — the settings write is never disarmed (2026-09).** The global
   kill-switch (window ≤ 0) and the per-category ADMIN override both live in the
   settings that `POST /settings/security` writes. `step_up_required()` honours
@@ -358,11 +358,11 @@ docstring).
   the Threat Agent Library, up from 7 — the first sweep said "2", an
   undercount): 4 inline in `routes/library.py:96,145,266,389` and 3 via the
   `_VIEWER_PLUS` allowlist (`routes/control_library.py:45`, applied at
-  `:154,210,249`), plus 2 new Threat Agent Library read-only pages behind
+  `routes/control_library.py:154,210,249`), plus 2 new Threat Agent Library read-only pages behind
   their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:19`,
-  applied at `GET /library/threat-communities` (`:23`, role dependency
-  `:27`) and `GET /library/threat-communities/{slug}` (`:39`, role
-  dependency `:44`). Separately, `scenario_export_routes.py:51` deliberately
+  applied at `GET /library/threat-communities` (`routes/threat_communities.py:23`, role dependency
+  `routes/threat_communities.py:27`) and `GET /library/threat-communities/{slug}` (`routes/threat_communities.py:39`, role
+  dependency `routes/threat_communities.py:44`). Separately, `scenario_export_routes.py:51` deliberately
   uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
   admins and analysts, per its inline comment. Never a security defect, only
   a doc-accuracy one; CLAUDE.md now names all four roles with an inline
@@ -370,7 +370,7 @@ docstring).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
   (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
-  UserRole.ADMIN)` (`:1542`) — REVIEWER and VIEWER get 403. It is the
+  UserRole.ADMIN)` (`routes/scenarios.py:1542`) — REVIEWER and VIEWER get 403. It is the
   dedicated confirm path; edit-form and wizard saves also resolve it (§11).
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
@@ -384,7 +384,7 @@ docstring).
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
-  (`:693`).
+  (`routes/controls.py:693`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
@@ -443,13 +443,13 @@ docstring).
   (`source` is always `"seed"`), mirroring `ScenarioLibraryEntry`. It is
   listed in `NON_ORG_COLUMN_MODELS`
   (`scripts/lint_org_scoped_lookups.py:98`), and the list's own header
-  comment (`:85`) is a standing tripwire: "P2's org-authored threat-community
+  comment (`scripts/lint_org_scoped_lookups.py:85`) is a standing tripwire: "P2's org-authored threat-community
   table MUST go in `ORG_SCOPED_MODELS`" — P2 (spec §9) adds a *separate*,
   org-scoped table for org-authored communities, it does not add an
   `organization_id` column to this canonical one. `ORG_SCOPED_MODELS` and
   `NON_ORG_COLUMN_MODELS` together are a closed partition, enforced by
   `tests/contracts/test_org_scoped_models_parity.py`: every SQLAlchemy mapper
-  must appear in exactly one of the two lists (`:15-16`), so a new model
+  must appear in exactly one of the two lists (`tests/contracts/test_org_scoped_models_parity.py:15-16`), so a new model
   (P2's org-authored table included) that lands in neither — or in the
   wrong one — fails CI rather than silently falling through the
   `lint_org_scoped_lookups.py` checker unclassified.
@@ -518,9 +518,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   it's ever called* — it documents an environment capability, not a used
   one. Every `TemplateResponse` call site uses a literal path string, with
   one exception (`routes/scenarios.py:2373-2375`, the wizard step template
-  construction, consumed by the `TemplateResponse` call at `:2538`) that
+  construction, consumed by the `TemplateResponse` call at `routes/scenarios.py:2538`) that
   indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`scenarios.py:2365`) — not attacker-controlled text, so it's path
+  `1..6` (`routes/scenarios.py:2365`) — not attacker-controlled text, so it's path
   *selection* among a fixed set, not path or template *construction*.
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /
@@ -539,7 +539,7 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
 `Content-Length` (`routes/deps.py:23`; enforced in
-`register_import.py:253-257`, `scenario_import.py:124-128`,
+`routes/register_import.py:253-257`, `routes/scenario_import.py:124-128`,
 `library_import.py:80-84`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
@@ -558,8 +558,8 @@ legit Excel workbooks (workbook-global `sharedStrings` compresses ~10x); the
 ratio cap only denies degenerate/accidental bombs since valid XML maxes ~412x
 and 5 MB of wire reaches 50 MB at any ratio. This is tolerated because the whole
 surface is ADMIN-only (every `register-import` route is `require_role(ADMIN)` —
-`register_import.py:234,248,322,358,402,436,519,578,662,736,775,837`; the
-`delete_profile` route additionally requires step-up, `:831`) and ~760 MB
+`routes/register_import.py:234,248,322,358,402,436,519,578,662,736,775,837`; the
+`delete_profile` route additionally requires step-up, `routes/register_import.py:831`) and ~760 MB
 transient is
 survivable on the 4 GB VM. The non-bypassable tightening (parse
 `[Content_Types].xml` to bound buffered parts by role) is deferred as
@@ -567,7 +567,7 @@ disproportionate for an admin-only surface; revisit if import ever becomes
 non-admin. There is also a single
 `MAX_ROWS = 500` constant (`scenario_import_parsers.py:85`) enforced at
 every entry point that accepts row data — CSV (`scenario_import_parsers.py:275`)
-and JSON (`:325`) in that module, and re-imported and enforced again
+and JSON (`scenario_import_parsers.py:325`) in that module, and re-imported and enforced again
 for XLSX (`register_import_parsers.py:221-222`) and CSV
 (`register_import_parsers.py:250-251`) in the other; `defusedxml`
 auto-substitution blocking XML entity expansion (billion-laughs class,
@@ -627,11 +627,11 @@ every caller passed a literal or a UUID). A guard in
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
 cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
-`services/sample_export.py:68,181` and `services/verification_workbook.py:
-51-66`, which also guards legacy `{=...}` array-formula braces). PDF report
+`services/sample_export.py:68,181` and `services/verification_workbook.py:51-66`, which also
+guards legacy `{=...}` array-formula braces). PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
-(`services/pdf_report.py:24-27,515-517,561` plus the by-threat-community
-names/amounts at `:1363,1371`). The TOC/URI fix
+(`services/pdf_report.py:25-27,515-517,561` plus the by-threat-community
+names/amounts at `services/pdf_report.py:1363,1371`). The TOC/URI fix
 (`pdf_report.py:298-321`, `_RunReportDoc.afterFlowable`) re-escapes heading
 text a second time before the `TOCEntry` notify call — without it, a
 scenario/run name containing markup could smuggle a live `/URI` Action into
@@ -643,7 +643,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 ## 10. B10 — Run execution / Monte Carlo (resource exhaustion)
 
-- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:64-75`, default
+- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-76`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
   `POST /analyses` (`routes/runs.py:1186-1197`) — the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
@@ -657,10 +657,10 @@ new export format must re-implement, not assume is "someone else's problem."
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `:2237`; `del calculator, fc_controls`
-  at `:2405` and again at `:2591`; `del per_scenario_inputs` at `:2592`;
-  `del aggregate` at `:2419`; `del results_payload` at `:2624`) each paired
-  with an explicit `gc.collect()` (`:2420`, `:2610`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2237`; `del calculator, fc_controls`
+  at `services/run_executor.py:2405` and again at `services/run_executor.py:2591`; `del per_scenario_inputs` at `services/run_executor.py:2592`;
+  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`) each paired
+  with an explicit `gc.collect()` (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -693,7 +693,7 @@ new export format must re-implement, not assume is "someone else's problem."
   event-loop block for a cross-boundary starvation DoS. New RAM term: each
   concurrent Argon2 verify holds ~64 MiB (`m=65536`), so the pool adds
   `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
-  budget (`config.py:67-76`) — fits the 4 GB VM; re-derive with the MC caps if
+  budget (`config.py:71-77`) — fits the 4 GB VM; re-derive with the MC caps if
   the VM shape changes.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
@@ -701,7 +701,7 @@ new export format must re-implement, not assume is "someone else's problem."
   actually read `performance / 2 cpus / 4096mb` since 2026-06-29 (PR #428/
   #429) — a ~5-week drift. **CLAUDE.md now carries the corrected figures**
   plus its own inline "Corrected 2026-08-05" note. Kept here (rather than
-  deleted) because the underlying coupling still matters: `config.py:67-76`
+  deleted) because the underlying coupling still matters: `config.py:71-77`
   ties the 1,000,000-iteration cap directly to the 4GB headroom (~700MB peak
   RSS at N=1M/M=30), so if the VM shape is ever downgraded, that cap must be
   re-benchmarked, not just inherited. This document defers to `fly.toml` as
@@ -715,10 +715,10 @@ new export format must re-implement, not assume is "someone else's problem."
 datetime/Enum. Confirmed call sites at login success (`routes/auth.py:262`), failed
 login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198`
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
-logged at `:362` under the generic `"update"` action — not a role-specific
+logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-full run lifecycle — create (`services/runs.py:328`), cancel (`:382`),
-delete (`:442`), sample-purge (`:475`) — plus bulk export via its
+full run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
+delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`) — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
@@ -872,6 +872,14 @@ watching:
     session change discards typed-but-unsaved values on that page (drafts are
     server-side and intact); a one-shot "session changed" notice is a UX
     follow-up.
+11. **Out of scope: developer tooling.** Two developer-machine tools send excerpts of this
+    repository and review text (claims, findings) to the TypeSafe API: the curation checker
+    (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; adoption
+    design 2026-10-03, local). The clerk reads the API key only from the OS keyring (macOS
+    Keychain; on Linux the secret service); the checker from the Keychain or, off macOS, from a
+    per-command environment variable. CI never
+    holds the key, and neither tool is a boundary of the running application. Listed so the
+    quarterly re-audit knows the flows exist.
 
 ## 13. Keeping this document current
 
@@ -906,3 +914,20 @@ Practical note for re-auditors: the highest-yield check is not "is this
 mechanism still correct" (they usually are) but "did an unrelated edit to a
 cited file shift the line numbers." Insertions early in a long file
 invalidate every later citation into it silently and en masse.
+
+**Automated (citation freshness, 2026-10).** The backticked `file:line` citations in this
+document and in `docs/reference/fair-departures-register.md` are compiled by
+`scripts/clerk_manifests.py` into `.clerk/manifests/citations.json`, one entry per cited
+range, each pinned to the text of its first substantive line, on which the citation starts.
+`tests/scripts/test_clerk_manifests.py::test_committed_manifest_is_fresh` fails the merge gate
+when a cited line moves or a citation is edited without regenerating, and the generator
+refuses to re-anchor code that moved under an unchanged citation unless the author names the
+site with `--accept-drift`, recorded as a line in the commit and PR bodies. What this pins: the
+first anchor line of every cited range. What it does not: lines inserted after the anchor
+inside a range; the prose counting claims; the meaning of a citation (a correct line can still
+support a wrong sentence); citations of `fly.toml` (deployment config, deliberately
+untracked); citations without a line number or not written in backticks; anything inside the
+fenced section 1 diagram. Those remain this
+section's re-audit scope. A bare file name that exists in two places (`auth.py`) and a bare
+continuation (`:NNN`) are refused by the generator, so every citation here names its file
+and, where needed, its directory.
