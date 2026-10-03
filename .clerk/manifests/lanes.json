@@ -23,6 +23,8 @@
     "src/idraa/services/sample_codec.py",
     "src/idraa/services/run_view_model.py",
     "src/idraa/services/aggregate_run_view_model.py",
+    "src/idraa/services/_view_model_helpers.py",
+    "src/idraa/services/fair_cam_validation.py",
     "src/idraa/templates/help/articles/**"
    ],
    "subjects": ["fair-math", "calibration", "derivation"]
