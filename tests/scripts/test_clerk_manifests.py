@@ -107,6 +107,7 @@ def test_anchor_twelve_character_boundary() -> None:
 
 
 def test_anchor_fallback_boundary() -> None:
+    assert cm.anchor(["abcd", "wxyz"], 1, 2) == (1, "abcd")
     assert cm.anchor(["abcd", "x"], 1, 1) == (1, "abcd")
     with pytest.raises(cm.ManifestError, match=r"line 1 anchor 'abc' is too short to pin"):
         cm.anchor(["abc", "x"], 1, 1)
@@ -151,6 +152,7 @@ def test_build_one_entry_per_range_sorted_across_docs(tmp_path: Path) -> None:
         cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 4, "def client_ip(request):"),
         cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 95, "def audit_client_ip(request):"),
     ]
+    assert built.entries == sorted(built.entries)
 
 
 def test_build_dedupes_repeated_citations(tmp_path: Path) -> None:
@@ -158,9 +160,11 @@ def test_build_dedupes_repeated_citations(tmp_path: Path) -> None:
         tmp_path,
         {"src/idraa/app.py": APP, "docs/a.md": "`src/idraa/app.py:1` and again `app.py:1`.\n"},
     )
-    assert cm.build(tmp_path, ["docs/a.md"], tracked).entries == [
+    built = cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert built.entries == [
         cm.Entry("docs/a.md", "src/idraa/app.py", 1, "from fastapi import FastAPI")
     ]
+    assert built.repeated == []
 
 
 def test_build_accepts_leading_dot_path(tmp_path: Path) -> None:
@@ -413,3 +417,61 @@ def test_check_reports_rule_errors(tmp_path: Path, capsys: pytest.CaptureFixture
     tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:7`\n", "src/idraa/app.py": "x\n"})
     assert _main(tmp_path, tracked, "--check") == 1
     assert "docs/a.md:1: line 7 is past the end of the file (1 lines)" in capsys.readouterr().err
+
+
+def test_accept_drift_is_scoped_to_its_site(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One acceptance must not clear a second drifted site."""
+    files = {
+        "docs/a.md": "`src/idraa/app.py:1` and `src/idraa/b.py:1`\n",
+        "src/idraa/app.py": APP,
+        "src/idraa/b.py": APP,
+    }
+    tracked = _tree(tmp_path, files)
+    assert _main(tmp_path, tracked, "--write") == 0
+    (tmp_path / "src/idraa/app.py").write_text("import logging\n" + APP, encoding="utf-8")
+    (tmp_path / "src/idraa/b.py").write_text("import logging\n" + APP, encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/app.py:1") == 1
+    assert "src/idraa/b.py:1 changed under an unchanged citation" in capsys.readouterr().err
+
+
+def test_build_refuses_symlinked_cited_file(tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+    outside.write_text("TOP-SECRET-LINE-0123456789\n", encoding="utf-8")
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n"}) | {"src/idraa/app.py"}
+    (tmp_path / "src/idraa").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src/idraa/app.py").symlink_to(outside)
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: src/idraa/app\.py goes through a symlink"
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_write_refuses_symlinked_manifest_dir(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-dir"
+    outside.mkdir()
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    (tmp_path / ".clerk").symlink_to(outside, target_is_directory=True)
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert "goes through a symlink (.clerk)" in capsys.readouterr().err
+    assert not (outside / "manifests" / "citations.json").exists()
+
+
+def test_shifted_anchor_refuses_check_and_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"src/idraa/app.py": "\n)\n" + APP, "docs/a.md": "`app.py:1-3`\n"})
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert "must start on its anchor line" in capsys.readouterr().err
+    assert not (tmp_path / cm.MANIFEST).exists()
+    assert _main(tmp_path, tracked, "--check") == 1
+
+
+def test_accept_drift_requires_write(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    with pytest.raises(SystemExit) as info:
+        _main(tmp_path, tracked, "--check", "--accept-drift", "src/idraa/app.py:1")
+    assert info.value.code == 2

@@ -27,6 +27,10 @@ pattern. Rules:
   the baseline is the working-tree manifest, else HEAD's copy, else empty;
 - output is deduplicated, sorted, one entry per line, trailing newline; `regex` is always false.
 
+The drift guard is the author's local pre-flight: a commit that deletes the manifest leaves no
+HEAD copy to compare against, and the authority is the orchestrator's base-manifest `clerk gate
+all` run and the security lane's review of the manifest diff (adoption design §3.3, §5).
+
 `--check` exits 1 when a rule fails or the committed manifest differs from a fresh build;
 `--write` rewrites it. Excluded untracked names and shifted anchors are always printed.
 """
@@ -37,6 +41,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -190,6 +195,19 @@ def _read_lines(path: Path) -> list[str]:
     return lines_of(path.read_bytes().decode("utf-8"))
 
 
+def _safe_path(root: Path, rel: str) -> Path:
+    """`root / rel` only if no component under `root` is a symlink and the target, if it exists,
+    is a regular file; the generator never follows a path out of the repository."""
+    path = root
+    for part in Path(rel).parts:
+        path = path / part
+        if path.is_symlink():
+            raise ManifestError(f"{rel} goes through a symlink ({path.relative_to(root)}); refused")
+    if path.exists() and not stat.S_ISREG(os.stat(path).st_mode):
+        raise ManifestError(f"{rel} is not a regular file; refused")
+    return path
+
+
 def _blocks(lines: list[str]) -> list[tuple[int, str]]:
     """(first line number, text) of every blank-line-delimited block; code spans never cross blocks."""
     out: list[tuple[int, str]] = []
@@ -213,7 +231,7 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
     cache: dict[str, list[str]] = {}
     for doc in docs:
         try:
-            lines = masked_lines(_read_lines(root / doc))
+            lines = masked_lines(_read_lines(_safe_path(root, doc)))
         except ManifestError as exc:
             errors.append(f"{doc}: {exc}")
             continue
@@ -271,7 +289,7 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
                         raise ManifestError(f"{cited!r} is not a tracked file")
                     if file not in cache:
                         try:
-                            cache[file] = _read_lines(root / file)
+                            cache[file] = _read_lines(_safe_path(root, file))
                         except OSError:
                             raise ManifestError(f"cannot read {file}") from None
                     cited_lines = cache[file]
@@ -313,7 +331,7 @@ def parse_manifest(text: str) -> list[Entry]:
 
 def load_baseline(root: Path, head_text: str | None) -> list[Entry]:
     """The drift baseline: the working-tree manifest if present and valid, else HEAD's copy, else empty."""
-    path = root / MANIFEST
+    path = _safe_path(root, MANIFEST)
     if path.is_file():
         try:
             return parse_manifest(path.read_text(encoding="utf-8"))
@@ -368,11 +386,13 @@ def main(
         "--verbose", action="store_true", help="list anchors whose pattern repeats in their file"
     )
     args = parser.parse_args(argv)
+    if args.accept_drift and not args.write:
+        parser.error("--accept-drift is only valid with --write")
     if tracked is None:
         tracked = tracked_files(root)
     head = head_manifest_text(root) if head_text is _GIT else head_text
-    path = root / MANIFEST
     try:
+        path = _safe_path(root, MANIFEST)
         built = build(root, docs, tracked)
         baseline = load_baseline(root, head if isinstance(head, str) else None)
     except ManifestError as exc:
@@ -382,6 +402,13 @@ def main(
         print(f"clerk-manifests: excluded (untracked): {name}")
     for note in built.shifted:
         print(f"clerk-manifests: shifted anchor: {note}")
+    if built.shifted:
+        print(
+            "clerk-manifests: a citation must start on its anchor line; re-cite each shifted range in the"
+            " document",
+            file=sys.stderr,
+        )
+        return 1
     if built.repeated:
         print(
             f"clerk-manifests: {len(built.repeated)} anchors repeat in their file (informational; --verbose lists them)"
