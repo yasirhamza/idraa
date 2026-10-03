@@ -1,0 +1,101 @@
+# superpowers-clerk project configuration (adoption design 2026-10-03, §3.1).
+# Read by the clerk from the BASE commit of a review, never from the worktree under review.
+
+project = "idraa"
+
+[judge]
+backend = "jev"
+model = "jev-1.13.0"                  # pinned, same as scripts/curation_check/config.py; never the moving alias
+keychain_service = "jev-eval-typesafe-key"   # macOS Keychain item the curation checker also accepts
+allow_external_judge = true           # public repository; the clerk has no per-run opt-in (adoption design §3.1, §8)
+
+[trust]                               # the clerk's floors; Idraa does not tighten in P1
+confidence = 0.95
+min_actionable = 19
+
+[escalation]
+# BLOCKER-class subjects: always escalated to the reviewer. Three engine subjects (CLAUDE.md,
+# Review ceremony), ten threat-model boundary subjects, and gate-integrity for the merge
+# authority itself. Every line-cited src/idraa/ file in docs/security/threat-model.md and every
+# security-lane file must match a path below (tests/scripts/test_clerk_config.py).
+subjects = [
+  "fair-math", "calibration", "derivation",
+  "auth", "csrf", "org-scoping", "migration", "import-export", "templating", "rbac",
+  "run-limits", "audit", "secrets", "gate-integrity",
+]
+
+[escalation.paths]                    # glob -> subject tag; a file may match several globs
+"fair_cam/**" = "fair-math"
+"src/idraa/services/calibration.py" = "calibration"
+"src/idraa/services/library_calibration.py" = "calibration"
+"src/idraa/services/loss_capacity.py" = "calibration"
+"src/idraa/services/loss_pinning.py" = "calibration"
+"data/**" = "calibration"
+"src/idraa/services/run_executor.py" = "derivation"
+"src/idraa/services/shapley.py" = "derivation"
+"src/idraa/services/weight_robustness.py" = "derivation"
+"src/idraa/services/auth.py" = "auth"
+"src/idraa/services/second_factor.py" = "auth"
+"src/idraa/services/mfa_*.py" = "auth"
+"src/idraa/services/webauthn_*.py" = "auth"
+"src/idraa/services/totp.py" = "auth"
+"src/idraa/services/login_throttle.py" = "auth"
+"src/idraa/routes/auth.py" = "auth"
+"src/idraa/routes/mfa.py" = "auth"
+"src/idraa/routes/step_up.py" = "auth"
+"src/idraa/routes/deps.py" = "auth"
+"src/idraa/middleware/**" = "auth"
+"src/idraa/middleware/csrf.py" = "csrf"
+"src/idraa/static/js/csrf.js" = "csrf"
+"src/idraa/repositories/**" = "org-scoping"
+"src/idraa/models/**" = "org-scoping"
+"src/idraa/services/scenarios.py" = "org-scoping"
+"src/idraa/services/controls.py" = "org-scoping"
+"src/idraa/services/retention.py" = "org-scoping"
+"scripts/lint_org_scoped_lookups.py" = "org-scoping"
+"alembic/**" = "migration"
+"src/idraa/services/*import*.py" = "import-export"
+"src/idraa/services/*export*.py" = "import-export"
+"src/idraa/services/library_bundle_*.py" = "import-export"
+"src/idraa/services/pdf_report.py" = "import-export"
+"src/idraa/services/reports.py" = "import-export"
+"src/idraa/services/verification_workbook*.py" = "import-export"
+"src/idraa/services/threat_communities.py" = "import-export"
+"src/idraa/utils/csv_export.py" = "import-export"
+"src/idraa/utils/download.py" = "import-export"
+"src/idraa/routes/*import*.py" = "import-export"
+"src/idraa/routes/scenario_export_routes.py" = "import-export"
+"src/idraa/templates/**" = "templating"
+"src/idraa/app.py" = "templating"
+"src/idraa/formatting.py" = "templating"
+"src/idraa/help_content.py" = "templating"
+"src/idraa/routes/**" = "rbac"
+"src/idraa/config.py" = "run-limits"
+"src/idraa/db.py" = "run-limits"
+"src/idraa/services/runs.py" = "run-limits"
+"src/idraa/services/run_reaper.py" = "run-limits"
+"src/idraa/services/audit.py" = "audit"
+"src/idraa/services/security_settings.py" = "secrets"
+".github/**" = "gate-integrity"
+".pre-commit-config.yaml" = "gate-integrity"
+"scripts/lint_*.py" = "gate-integrity"
+"scripts/sca_gate.py" = "gate-integrity"
+"scripts/run_local_gate.py" = "gate-integrity"
+"security/**" = "gate-integrity"
+"docs/security/**" = "gate-integrity"
+"docs/reference/fair-departures-register.md" = "gate-integrity"
+"clerk.toml" = "gate-integrity"
+".clerk/**" = "gate-integrity"
+"tests/scripts/test_clerk_*.py" = "gate-integrity"
+"tests/scripts/test_run_local_gate*.py" = "gate-integrity"
+"tests/arch/**" = "gate-integrity"
+
+[gates]
+citations_manifest = ".clerk/manifests/citations.json"
+surfaces_manifest = ".clerk/manifests/surfaces.json"
+lanes_manifest = ".clerk/manifests/lanes.json"
+scope_allowlist = ["uv.lock"]         # a task may touch the lockfile without naming it in its brief
+
+[boundary]
+workspace_allow = ["docs/superpowers/**"]   # gitignored specs, plans and review files, readable by the gates
+allow_external_untracked = false      # ...but never sent to an external judge as file sources
