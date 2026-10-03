@@ -136,6 +136,14 @@ def test_escalation_subjects_and_paths() -> None:
         assert paths[own] == "gate-integrity", (
             own
         )  # a retag would drop the per-task security dispatch
+    engine = {
+        "src/idraa/services/run_executor.py": "derivation",
+        "src/idraa/services/shapley.py": "derivation",
+        "src/idraa/services/calibration.py": "calibration",
+        "data/**": "calibration",
+    }
+    for glob, subject in engine.items():
+        assert paths[glob] == subject, glob
 
 
 def test_every_glob_matches_a_tracked_file() -> None:
@@ -170,6 +178,18 @@ def test_security_lane_files_are_escalation_paths() -> None:
     """Spec §3.1: the clerk design's 'security-lane files always escalate', done by configuration."""
     globs = _escalation_globs()
     lane = _lanes()["security"]["globs"]
+    uncovered = sorted(
+        f
+        for f in tracked()
+        if any(glob_match(g, f) for g in lane) and not any(glob_match(g, f) for g in globs)
+    )
+    assert uncovered == [], uncovered
+
+
+def test_methodology_lane_files_are_escalation_paths() -> None:
+    """FAIR math, calibration and derivations always escalate (CLAUDE.md: the methodology reviewer is mandatory)."""
+    globs = _escalation_globs()
+    lane = _lanes()["methodology"]["globs"]
     uncovered = sorted(
         f
         for f in tracked()

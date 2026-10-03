@@ -19,6 +19,10 @@
     "src/idraa/services/verification_workbook_let.py",
     "src/idraa/services/weight_robustness.py",
     "src/idraa/services/wizard_finalize.py",
+    "src/idraa/services/control_library_scoring.py",
+    "src/idraa/services/sample_codec.py",
+    "src/idraa/services/run_view_model.py",
+    "src/idraa/services/aggregate_run_view_model.py",
     "src/idraa/templates/help/articles/**"
    ],
    "subjects": ["fair-math", "calibration", "derivation"]
