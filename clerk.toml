@@ -96,6 +96,7 @@ subjects = [
 "scripts/lint_*.py" = "gate-integrity"
 "scripts/sca_gate.py" = "gate-integrity"
 "scripts/run_local_gate.py" = "gate-integrity"
+"scripts/clerk_manifests.py" = "gate-integrity"
 "security/**" = "gate-integrity"
 "docs/security/**" = "gate-integrity"
 "docs/reference/fair-departures-register.md" = "gate-integrity"

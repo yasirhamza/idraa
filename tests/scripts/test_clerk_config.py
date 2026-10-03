@@ -136,6 +136,7 @@ def test_escalation_subjects_and_paths() -> None:
         assert paths[own] == "gate-integrity", (
             own
         )  # a retag would drop the per-task security dispatch
+    assert paths["scripts/clerk_manifests.py"] == "gate-integrity"
     engine = {
         "src/idraa/services/run_executor.py": "derivation",
         "src/idraa/services/shapley.py": "derivation",
@@ -166,6 +167,7 @@ def test_lanes_manifest_four_lanes() -> None:
         assert lanes[name]["subjects"], name
     assert "clerk.toml" in lanes["security"]["globs"]
     assert ".clerk/**" in lanes["security"]["globs"]
+    assert "scripts/clerk_manifests.py" in lanes["security"]["globs"]
     assert "fair_cam/**" in lanes["methodology"]["globs"]
 
 

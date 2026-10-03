@@ -97,6 +97,7 @@
     "scripts/lint_*.py",
     "scripts/sca_gate.py",
     "scripts/run_local_gate.py",
+    "scripts/clerk_manifests.py",
     "clerk.toml",
     ".clerk/**",
     "tests/scripts/test_clerk_*.py",
