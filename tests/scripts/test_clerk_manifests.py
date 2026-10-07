@@ -522,7 +522,7 @@ def _tracked() -> set[str]:
 
 
 def test_committed_manifest_is_fresh() -> None:
-    """A citation edited without regenerating, or code moved under one, fails here (and in CI)."""
+    """A citation edited without regenerating, or code moved under its anchor, fails here (and in CI); an identical line sliding onto the anchor does not (threat model §13)."""
     built = cm.build(ROOT, cm.DOCS, cm.tracked_files(ROOT))
     assert built.excluded == ["fly.toml"]
     assert built.shifted == [], "a citation starts on its anchor line (spec §3.3)"

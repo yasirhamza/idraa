@@ -120,7 +120,7 @@ docstring).
   (`config.py:351-352`), not straight from `os.environ`, so it gets boot
   hardening like `SESSION_SECRET`: in prod an enabled pre-gate needs a 16+
   character password, a non-empty user and password ≠ user
-  (`_check_uat_basic_auth_hardening`, `config.py:501-527`), else the app
+  (`_check_uat_basic_auth_hardening`, `config.py:502-527`), else the app
   refuses to boot. Unset stays allowed (self-hosted, no pre-gate).
 - **S (timing)**: `secrets.compare_digest` on both user and password,
   assigned to locals and AND-ed at the end rather than short-circuited
@@ -920,14 +920,16 @@ document and in `docs/reference/fair-departures-register.md` are compiled by
 `scripts/clerk_manifests.py` into `.clerk/manifests/citations.json`, one entry per cited
 range, each pinned to the text of its first substantive line, on which the citation starts.
 `tests/scripts/test_clerk_manifests.py::test_committed_manifest_is_fresh` fails the merge gate
-when a cited line moves or a citation is edited without regenerating, and the generator
+when a cited anchor line moves or a citation is edited without regenerating, and the generator
 refuses to re-anchor code that moved under an unchanged citation unless the author names the
 site with `--accept-drift`, recorded as a line in the commit and PR bodies. What this pins: the
-first anchor line of every cited range. What it does not: lines inserted after the anchor
-inside a range; the prose counting claims; the meaning of a citation (a correct line can still
-support a wrong sentence); citations of `fly.toml` (deployment config, deliberately
-untracked); citations without a line number or not written in backticks; anything inside the
-fenced section 1 diagram. Those remain this
-section's re-audit scope. A bare file name that exists in two places (`auth.py`) and a bare
+first anchor line of every cited range. What it does not: lines inserted or deleted after the
+anchor inside a range, and where a range ends; which occurrence an anchor means when its line
+recurs in the same file (43 do today; `--verbose` lists them), so a sibling block inserted,
+deleted or reordered above such an anchor can leave a stale citation green; the prose counting
+claims; the meaning of a citation (a correct line can still support a wrong sentence);
+citations of `fly.toml` (deployment config, deliberately untracked); citations without a line
+number or not written in backticks; anything inside the fenced section 1 diagram. Those remain
+this section's re-audit scope. A bare file name that exists in two places (`auth.py`) and a bare
 continuation (`:NNN`) are refused by the generator, so every citation here names its file
 and, where needed, its directory.

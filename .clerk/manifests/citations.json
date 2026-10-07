@@ -21,7 +21,7 @@
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 384, "pattern": "max_request_body_bytes: int = Field(default=8 * 1024 * 1024, ge=1)", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 390, "pattern": "#   trusted_client_ip_header: a dedicated OVERWRITE-protected single-client-IP", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 401, "pattern": "auth_ip_max_failed_logins: int = Field(default=20, ge=0)", "regex": false},
-  {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 501, "pattern": "@model_validator(mode=\"after\")", "regex": false},
+  {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 502, "pattern": "def _check_uat_basic_auth_hardening(self) -> Settings:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/formatting.py", "line": 29, "pattern": "def linkify_https(text: str) -> Markup:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/formatting.py", "line": 62, "pattern": "def safe_https_href(url: object) -> str | None:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/csrf.py", "line": 122, "pattern": "async def _read_body_capped(request: Request, cap: int) -> bytes | None:", "regex": false},

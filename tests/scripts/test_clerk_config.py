@@ -231,7 +231,7 @@ def test_surfaces_manifest_sentences_present() -> None:
 
 
 def test_threat_model_cited_files_are_escalation_paths() -> None:
-    """Spec §3.1 coverage rule: every line-cited src/idraa/ file in the threat model carries a tag."""
+    """Spec §3.1 coverage rule over the manifest-pinned citations: every line-cited src/idraa/ file in the threat model carries a tag (the fenced §1 diagram is unpinned by design, §13)."""
     entries = json.loads(
         (ROOT / ".clerk" / "manifests" / "citations.json").read_text(encoding="utf-8")
     )["entries"]
