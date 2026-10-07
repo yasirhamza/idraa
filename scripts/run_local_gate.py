@@ -81,6 +81,7 @@ That cost is the point — it is the only automated gate this repo has.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -145,6 +146,8 @@ SKIP_TESTS_ENV = "IDRAA_GATE_SKIP_TESTS"
 SKIP_CSS_ENV = "IDRAA_GATE_SKIP_CSS"
 CLERK_ROOT_ENV = "IDRAA_CLERK_ROOT"
 SKIP_CLERK_ENV = "IDRAA_GATE_SKIP_CLERK"
+# Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
+CLERK_ORIGIN_REF = "refs/remotes/origin/main"
 CLERK_CONFIG = "clerk.toml"
 CLERK_MANIFEST = ".clerk/manifests/citations.json"
 
@@ -230,10 +233,25 @@ def _run(argv: list[str]) -> int:
 
 
 def clerk_base_sha() -> str | None:
-    """The full merge-base with origin/main, or None when there is none."""
-    proc = _git("merge-base", "HEAD", "origin/main")
+    """The full merge-base with origin/main, or None (after saying why) when there is none."""
+    proc = _git("merge-base", "HEAD", CLERK_ORIGIN_REF)
     sha = proc.stdout.strip()
-    return sha if proc.returncode == 0 and len(sha) == 40 else None
+    if proc.returncode != 0:
+        first = (proc.stderr.strip().splitlines() or [""])[0]
+        print(f"local gate: git merge-base exit {proc.returncode}: {first}")
+        return None
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        print(f"local gate: unexpected merge-base output {sha[:80]!r}")
+        return None
+    return sha
+
+
+def _has_clerk_config(rev: str) -> bool | None:
+    """True/False when git answered; None when git failed (never read an error as "absent")."""
+    proc = _git("ls-tree", "-z", rev, "--", CLERK_CONFIG)
+    if proc.returncode != 0:
+        return None
+    return bool(proc.stdout)
 
 
 def run_clerk_gate(root: str) -> int:
@@ -248,8 +266,14 @@ def run_clerk_gate(root: str) -> int:
     if base is None:
         print("local gate: SKIPPING clerk gate — no merge-base with origin/main")
         return 0
-    at_base = _git("cat-file", "-e", f"{base}:{CLERK_CONFIG}").returncode == 0
-    at_origin = _git("cat-file", "-e", f"origin/main:{CLERK_CONFIG}").returncode == 0
+    at_base = _has_clerk_config(base)
+    if at_base is None:
+        print(f"local gate: git could not read {CLERK_CONFIG} at base — input error")
+        return 2
+    at_origin = _has_clerk_config(CLERK_ORIGIN_REF)
+    if at_origin is None:
+        print(f"local gate: git could not read {CLERK_CONFIG} at origin/main — input error")
+        return 2
     mode = clerk_mode(at_base=at_base, at_origin_main=at_origin)
     if mode == "refuse":
         print("local gate: branch predates the clerk adoption — rebase onto origin/main")
@@ -279,6 +303,7 @@ def clerk_stage(env: Mapping[str, str]) -> int:
     if rc != 0:
         print(
             f"local gate: FAILED at clerk gate (exit {rc}: 1 = findings, 2 = input error or stale base)"
+            f"; bypass only this stage with {SKIP_CLERK_ENV}=1 (document why)"
         )
     return rc
 
