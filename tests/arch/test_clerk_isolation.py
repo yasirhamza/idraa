@@ -17,9 +17,11 @@ _MODULE = re.compile(rb"\bsuperpowers_clerk\b")
 # Every PEP 503 spelling of the distribution name: runs of separators collapse, so `superpowers__clerk`
 # and `superpowers-.-clerk` name the same distribution.
 _DIST = re.compile(rb"superpowers[-_.]+clerk", re.IGNORECASE)
-# Any of these in a tracked file marks it as part of the adoption.
+# Any of these in a tracked file marks it as part of the adoption. Case-insensitive like _DIST:
+# package names are (PEP 503), and a `SUPERPOWERS-CLERK` spelling must not escape the footprint scan.
 _TOKEN = re.compile(
-    rb"superpowers[-_.]+clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests"
+    rb"superpowers[-_.]+clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests",
+    re.IGNORECASE,
 )
 
 FOOTPRINT = frozenset(

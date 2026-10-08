@@ -179,7 +179,8 @@ def test_build_refuses_second_citation_of_site_in_one_document(tmp_path: Path) -
         cm.build(tmp_path, ["docs/a.md"], tracked)
     assert str(info.value) == (
         "docs/a.md:3: src/idraa/app.py:1 is already cited at docs/a.md:1;"
-        " cite each site once per document and refer back to it"
+        " if both citations mean this line, cite it once and refer back to it;"
+        " otherwise one of them was not re-cited after the code moved: re-cite it"
     )
     same_line = _tree(
         tmp_path / "same", {"src/idraa/app.py": APP, "docs/a.md": "`app.py:1` `app.py:1`\n"}
@@ -198,14 +199,18 @@ def test_build_refuses_second_citation_of_site_in_one_document(tmp_path: Path) -
         ("`src/idraa/c.py:27-29`", "`src/idraa/c.py:27`"),
         ("`src/idraa/c.py:12,27`", "`src/idraa/c.py:27`"),
         ("`src/idraa/c.py:27`", "`src/idraa/c.py:12,27-28`"),
+        # line 26 is too short to be an anchor, so the range 26-27 starts on :27 (not on :26)
+        ("`src/idraa/c.py:26-27`", "`src/idraa/c.py:27`"),
     ],
 )
 def test_build_counts_a_range_as_a_citation_of_its_anchor_line(
     tmp_path: Path, first: str, second: str
 ) -> None:
     """A multi-line range cites its anchor line; so does each item of a comma list."""
+    code = _numbered(40).splitlines(keepends=True)
+    code[25] = "short\n"  # line 26: under MIN_ANCHOR characters, so never an anchor
     tracked = _tree(
-        tmp_path, {"src/idraa/c.py": _numbered(40), "docs/a.md": f"{first}\n\n{second}\n"}
+        tmp_path, {"src/idraa/c.py": "".join(code), "docs/a.md": f"{first}\n\n{second}\n"}
     )
     with pytest.raises(
         cm.ManifestError,
@@ -220,10 +225,13 @@ def test_build_accepts_adjacent_distinct_sites(tmp_path: Path) -> None:
         tmp_path,
         {
             "src/idraa/c.py": _numbered(40),
-            "docs/a.md": "`src/idraa/c.py:27` `src/idraa/c.py:28` `src/idraa/c.py:29-30`\n",
+            "docs/a.md": (
+                "`src/idraa/c.py:27` `src/idraa/c.py:28` `src/idraa/c.py:29-30`"
+                " `src/idraa/c.py:26-30`\n"
+            ),
         },
     )
-    assert [e.line for e in cm.build(tmp_path, ["docs/a.md"], tracked).entries] == [27, 28, 29]
+    assert [e.line for e in cm.build(tmp_path, ["docs/a.md"], tracked).entries] == [26, 27, 28, 29]
 
 
 def test_build_keeps_one_entry_per_document_for_cross_document_citations(tmp_path: Path) -> None:
@@ -492,6 +500,13 @@ def test_drift_accepts_recite_collision(tmp_path: Path, capsys: pytest.CaptureFi
     assert "accept-drift" not in captured.out + captured.err
     assert _main(tmp_path, tracked, "--check") == 0
     assert "is fresh (2 entries)" in capsys.readouterr().out
+    # a chain of three equally spaced anchors (27, 28, 29), all re-cited +1: every changed entry
+    # sits on a key whose old text is still anchored by a non-stale entry, so a changed entry
+    # that is not stale still vouches and nothing is reported
+    doc, file = "docs/a.md", "src/idraa/c.py"
+    before = [cm.Entry(doc, file, n, f"text {t}") for n, t in ((27, "A"), (28, "B"), (29, "C"))]
+    after = [cm.Entry(doc, file, n, f"text {t}") for n, t in ((28, "A"), (29, "B"), (30, "C"))]
+    assert cm.drift(before, after, set()) == ([], [])
 
 
 def test_drift_still_refuses_code_moved_under_unchanged_citation() -> None:

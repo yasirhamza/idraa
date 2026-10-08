@@ -935,8 +935,11 @@ What it does not: lines inserted, deleted or edited after the anchor inside a ra
 range ends; which occurrence an anchor means when its line recurs in the same file (44 do today;
 `--verbose` lists them), so a sibling block inserted, deleted or reordered above such an anchor
 can leave a stale citation green; cited lines swapped or rotated in the code under unchanged
-citations; a stale citation offset by a newly added citation on the moved text (both are reported
-by the orchestrator's base-manifest `clerk gate` run, not by CI); the prose counting claims; the
+citations; a stale citation offset by a newly added citation on the moved text (one new citation
+can cover a whole chain of stale ones, or an in-place edit when it lands on an identical line, or
+copy an old line number while the original is re-cited); a citation re-cited to the wrong line,
+which can let a forgotten neighbour pass (the pre-flight accepts all of these; the orchestrator's
+base-manifest `clerk gate` run reports them, not CI); the prose counting claims; the
 meaning of a citation (a correct line can still support a wrong sentence);
 citations of `fly.toml` (deployment config, deliberately untracked); citations without a line
 number or not written in backticks; anything inside the fenced section 1 diagram. For this

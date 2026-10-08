@@ -25,7 +25,7 @@ pattern. Rules:
 - once per document: a site (file, anchor line) is cited at most once per governed document, so
   manifest entries equal citations; a second citation of it, including a range or comma-list item
   that anchors on the same line, is an error naming both document lines (refer back to the first
-  in prose, with no line number); the same site cited from BOTH governed documents is two entries;
+  in prose, with no line number, or re-cite whichever one is stale); the same site cited from BOTH governed documents is two entries;
 - drift guard: entries are keyed by (doc, file, line); `--write` refuses a key whose pattern
   changed AND whose old anchor text is now anchored fewer times in that (doc, file) than before
   (code moved under an unchanged citation), counting only entries not already judged stale,
@@ -34,18 +34,20 @@ pattern. Rules:
   else HEAD's copy, else empty;
 - output is deduplicated, sorted, one entry per line, trailing newline; `regex` is always false.
 
-The drift guard is the author's local pre-flight, not the authority. Measured on the round-3
+The drift guard is the author's local pre-flight, not the authority. Measured on the PR-gate
 scenario matrix it REFUSES in-place edits, forgotten and partial re-cites of singly-cited sites
-(the refusal list can be partial when cited lines are adjacent: re-cite what it reports and run
-again), drops in the count of a repeated anchor, and every cross-document case. It ACCEPTS, and
-only the orchestrator's base-manifest `clerk gate all` run reports (as a `citations` finding, where
-the review criterion checks every citation of the site): cited lines swapped or rotated in the
-code under unchanged citations, and a stale citation offset by a newly added citation on the moved
-text. A site cited twice in one document is refused at recognition, so the twin case cannot reach
-the guard. One legitimate shape is refused by every rule and needs `--accept-drift`: a citation
-deleted while its neighbour is re-cited onto its line. A commit that deletes the manifest leaves
-no HEAD copy to compare against; the security lane's review of the manifest diff covers that
-(adoption design §3.3, §5).
+(every key of a masking chain is reported: the count is iterated to a fixpoint), drops in the
+count of a repeated anchor, every cross-document case, and, at recognition, a site cited twice in
+one document. It ACCEPTS, and only the orchestrator's base-manifest `clerk gate` run reports (as a
+`citations` finding, where the claim-checking criterion covers every citation of the site): cited
+lines swapped or rotated in the code under unchanged citations; a stale citation offset by a newly
+added citation on the moved text (one new citation can cover a whole chain of stale ones, or an
+in-place edit when it lands on an identical line, or copy an old line number while the original
+is re-cited); and a citation re-cited to the WRONG line, which can let a forgotten neighbour pass.
+One legitimate shape is refused by every rule (S11) and needs one `--accept-drift` per site: a
+citation deleted while its neighbour is re-cited onto its line, which extends down an equally
+spaced chain. A commit that deletes the manifest leaves no HEAD copy to compare against; the
+security lane's review of the manifest diff covers that (adoption design §3.3, §5).
 
 `--check` exits 1 when a rule fails or the committed manifest differs from a fresh build;
 `--write` rewrites it. Excluded untracked names are always printed (stdout); a shifted anchor and a
@@ -323,7 +325,8 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
                         if (file, at) in cited_at:
                             raise ManifestError(
                                 f"{file}:{at} is already cited at {doc}:{cited_at[(file, at)]};"
-                                " cite each site once per document and refer back to it"
+                                " if both citations mean this line, cite it once and refer back to it;"
+                                " otherwise one of them was not re-cited after the code moved: re-cite it"
                             )
                         cited_at[(file, at)] = number
                         if at != first:
@@ -387,14 +390,18 @@ def drift(
     entry already judged stale cannot vouch that the text it now anchors is still anchored, so a
     forgotten re-cite does not hide the neighbouring key it slid under.
 
-    Measured refusals: in-place edits; forgotten and partial re-cites of singly-cited sites (the
-    list can be partial when cited lines are adjacent: re-run after re-citing); repeated-anchor
-    count drops; cross-document cases. A site cited twice in one document is refused by `build`,
-    so that twin case cannot reach this function. Residuals this function ACCEPTS, reported only
-    by the orchestrator's base-manifest `clerk gate` run as a `citations` finding: cited lines
-    swapped or rotated in the code under unchanged citations, and a stale citation offset by a
-    newly added citation on the moved text. A citation deleted while its neighbour is re-cited
-    onto its line is refused here and by every other rule; it needs `--accept-drift`.
+    Measured refusals: in-place edits; forgotten and partial re-cites of singly-cited sites (every
+    key of a masking chain is reported: the fixpoint); repeated-anchor count drops; cross-document
+    cases. A site cited twice in one document is refused by `build` at recognition, so that twin
+    case cannot reach this function. Residuals this function ACCEPTS, reported only by the
+    orchestrator's base-manifest `clerk gate` run as a `citations` finding, where the
+    claim-checking criterion covers every citation of the site: cited lines swapped or rotated in
+    the code under unchanged citations; a stale citation offset by a newly added citation on the
+    moved text (one new citation can cover a whole chain of stale ones, or an in-place edit when
+    it lands on an identical line, or copy an old line number while the original is re-cited); a
+    citation re-cited to the WRONG line, which can let a forgotten neighbour pass. A citation
+    deleted while its neighbour is re-cited onto its line (S11) is refused here and by every other
+    rule, and the refusal runs down an equally spaced chain; it needs one `--accept-drift` per site.
     """
     old = {(e.doc, e.file, e.line): e.pattern for e in before}
     had = Counter((e.doc, e.file, e.pattern) for e in before)
