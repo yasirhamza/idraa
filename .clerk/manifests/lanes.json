@@ -28,6 +28,17 @@
     "src/idraa/services/wizard_helpers.py",
     "src/idraa/services/dashboard_view_model.py",
     "src/idraa/services/industry_mapping.py",
+    "src/idraa/services/_starter_overlays_seed_data.py",
+    "src/idraa/services/run_caveats.py",
+    "src/idraa/services/wizard_questions.py",
+    "src/idraa/services/scenario_currency.py",
+    "src/idraa/services/attack_coverage.py",
+    "src/idraa/schemas/_unit_bounds.py",
+    "src/idraa/threat_community_provenance.py",
+    "scripts/build_*.py",
+    "scripts/derive_*.py",
+    "scripts/netdiligence_sigma_check.py",
+    "scripts/recurate_seed_entries.py",
     "src/idraa/templates/help/articles/**"
    ],
    "subjects": ["fair-math", "calibration", "derivation"]
@@ -40,6 +51,7 @@
     "src/idraa/app.py",
     "src/idraa/config.py",
     "src/idraa/db.py",
+    "src/idraa/services/run_executor.py",
     "alembic/**",
     "pyproject.toml",
     "uv.lock",
@@ -65,6 +77,8 @@
     "src/idraa/services/second_factor.py",
     "src/idraa/services/security_settings.py",
     "src/idraa/services/totp.py",
+    "src/idraa/services/users.py",
+    "src/idraa/services/org.py",
     "src/idraa/services/webauthn_*.py",
     "src/idraa/services/*import*.py",
     "src/idraa/services/*export*.py",
@@ -83,6 +97,7 @@
     "src/idraa/models/**",
     "src/idraa/templates/**",
     "src/idraa/static/js/csrf.js",
+    "src/idraa/static/js/webauthn.js",
     "src/idraa/app.py",
     "src/idraa/config.py",
     "src/idraa/db.py",
@@ -102,7 +117,14 @@
     ".clerk/**",
     "tests/scripts/test_clerk_*.py",
     "tests/scripts/test_run_local_gate*.py",
-    "tests/arch/**"
+    "tests/arch/**",
+    ".gitleaks.toml",
+    "scripts/sca_suppressions.txt",
+    "scripts/check_canonical_remote.py",
+    "pyproject.toml",
+    "**/conftest.py",
+    "tests/contracts/test_org_scoped_models_parity.py",
+    "tests/routes/test_threat_community_pages.py"
    ],
    "subjects": ["auth", "csrf", "org-scoping", "migration", "import-export", "templating", "rbac", "run-limits", "audit", "secrets", "gate-integrity"]
   }

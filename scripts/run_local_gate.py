@@ -144,12 +144,6 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 SKIP_TESTS_ENV = "IDRAA_GATE_SKIP_TESTS"
 SKIP_CSS_ENV = "IDRAA_GATE_SKIP_CSS"
-CLERK_ROOT_ENV = "IDRAA_CLERK_ROOT"
-SKIP_CLERK_ENV = "IDRAA_GATE_SKIP_CLERK"
-# Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
-CLERK_ORIGIN_REF = "refs/remotes/origin/main"
-CLERK_CONFIG = "clerk.toml"
-CLERK_MANIFEST = ".clerk/manifests/citations.json"
 
 
 def steps_to_run(env: dict[str, str] | None = None) -> list[tuple[str, tuple[str, ...]]]:
@@ -169,6 +163,15 @@ def run_step(label: str, argv: tuple[str, ...]) -> int:
         [sys.executable, *argv], cwd=REPO_ROOT, check=False
     )
     return proc.returncode
+
+
+# --- clerk stage: begin (rollback: delete this block; see adoption design §7) ---
+CLERK_ROOT_ENV = "IDRAA_CLERK_ROOT"
+SKIP_CLERK_ENV = "IDRAA_GATE_SKIP_CLERK"
+# Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
+CLERK_ORIGIN_REF = "refs/remotes/origin/main"
+CLERK_CONFIG = "clerk.toml"
+CLERK_MANIFEST = ".clerk/manifests/citations.json"
 
 
 def clerk_skip_reason(env: Mapping[str, str]) -> str | None:
@@ -276,7 +279,11 @@ def run_clerk_gate(root: str) -> int:
         return 2
     mode = clerk_mode(at_base=at_base, at_origin_main=at_origin)
     if mode == "refuse":
-        print("local gate: branch predates the clerk adoption — rebase onto origin/main")
+        print(
+            "local gate: branch predates the clerk adoption — rebase with"
+            " `git rebase --onto origin/main <old adoption tip>`"
+            " (a plain rebase replays the squashed adoption commits)"
+        )
         return 2
     if mode == "bootstrap":
         print(
@@ -306,6 +313,9 @@ def clerk_stage(env: Mapping[str, str]) -> int:
             f"; bypass only this stage with {SKIP_CLERK_ENV}=1 (document why)"
         )
     return rc
+
+
+# --- clerk stage: end ---
 
 
 def main() -> int:

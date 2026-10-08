@@ -301,7 +301,9 @@ def test_run_clerk_gate_refuses_stale_base(
     fake = _FakeGit(at_base=False, at_origin=True)
     runs = _patch(monkeypatch, fake, [])
     assert g.run_clerk_gate(str(tmp_path)) == 2
-    assert runs == [] and "rebase onto origin/main" in capsys.readouterr().out
+    assert (
+        runs == [] and "git rebase --onto origin/main <old adoption tip>" in capsys.readouterr().out
+    )
     assert fake.calls == _asked(str(tmp_path))
 
 

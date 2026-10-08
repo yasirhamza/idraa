@@ -311,6 +311,18 @@ def test_build_unreadable_cited_file_is_an_error(tmp_path: Path) -> None:
         cm.build(tmp_path, ["docs/a.md"], tracked)
 
 
+def test_build_refuses_missing_governed_document(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A deleted or renamed governed document is a refusal, never a traceback."""
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md: cannot read docs/a\.md"):
+        cm.build(tmp_path, ["docs/a.md"], frozenset())
+    for mode in ("--check", "--write"):
+        assert _main(tmp_path, frozenset(), mode) == 1
+        assert "docs/a.md: cannot read docs/a.md" in capsys.readouterr().err
+    assert not (tmp_path / cm.MANIFEST).exists()
+
+
 # ---- render, baseline, drift, main -------------------------------------------------------------
 
 
@@ -503,6 +515,37 @@ def test_shifted_anchor_refuses_check_and_write(
     assert "must start on its anchor line" in capsys.readouterr().err
 
 
+def test_main_reports_shift_and_drift_in_one_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One run lists the shifted anchors AND the drifted sites, so the author re-cites once."""
+    tracked = _tree(
+        tmp_path,
+        {
+            "docs/a.md": "`src/idraa/app.py:1-3` and `src/idraa/other.py:1`\n",
+            "src/idraa/app.py": APP + "x = 1\ny = 2\n",
+            "src/idraa/other.py": "import logging\n",
+        },
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    (tmp_path / "src/idraa/app.py").write_text("\n)\n" + APP, encoding="utf-8")  # anchor slides
+    (tmp_path / "src/idraa/other.py").write_text("import sys, os\n", encoding="utf-8")  # drift
+    for mode in ("--check", "--write"):
+        assert _main(tmp_path, tracked, mode) == 1
+        captured = capsys.readouterr()
+        assert "shifted anchor: docs/a.md:1: src/idraa/app.py:1 anchored at :3" in captured.out
+        drift_at = captured.err.index(
+            "src/idraa/other.py:1 changed under an unchanged citation in docs/a.md"
+        )
+        assert drift_at < captured.err.index("must start on its anchor line")
+        assert "and each drifted site" in captured.err
+    assert (
+        json.loads((tmp_path / cm.MANIFEST).read_text())["entries"][1]["pattern"]
+        == "import logging"
+    )  # the refused --write left the manifest alone
+
+
 def test_accept_drift_requires_write(tmp_path: Path) -> None:
     tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
     with pytest.raises(SystemExit) as info:
@@ -521,12 +564,46 @@ def _tracked() -> set[str]:
     return set(cm.tracked_files(ROOT))
 
 
+_REMEDY = (
+    "re-cite the reported sites in the document, then run"
+    " `uv run python scripts/clerk_manifests.py --write` (see .clerk/README.md)"
+)
+
+
+def _manifest_gap(committed: str, fresh: list[cm.Entry], limit: int = 5) -> str:
+    """A short summary of how the committed manifest differs from a fresh build."""
+    try:
+        old = cm.parse_manifest(committed)
+    except cm.ManifestError as exc:
+        return str(exc)
+    fresh_set, old_set = set(fresh), set(old)
+    stale = [e for e in old if e not in fresh_set]
+    missing = [e for e in fresh if e not in old_set]
+
+    def show(label: str, entries: list[cm.Entry]) -> str:
+        shown = "; ".join(f"{e.file}:{e.line} {e.pattern!r}" for e in entries[:limit])
+        more = f" (+{len(entries) - limit} more)" if len(entries) > limit else ""
+        return f"{label} ({len(entries)}): {shown}{more}" if entries else ""
+
+    parts = [
+        show("committed, no longer cited", stale),
+        show("cited, not committed", missing),
+    ]
+    return "\n".join(part for part in parts if part) or "entries equal; the file text differs"
+
+
 def test_committed_manifest_is_fresh() -> None:
     """A citation edited without regenerating, or code moved under its anchor, fails here (and in CI); an identical line sliding onto the anchor does not (threat model §13)."""
     built = cm.build(ROOT, cm.DOCS, cm.tracked_files(ROOT))
     assert built.excluded == ["fly.toml"]
-    assert built.shifted == [], "a citation starts on its anchor line (spec §3.3)"
-    assert (ROOT / cm.MANIFEST).read_text(encoding="utf-8") == cm.render(built.entries)
+    assert built.shifted == [], (
+        f"a citation must start on its anchor line; {_REMEDY}: {built.shifted}"
+    )
+    committed = (ROOT / cm.MANIFEST).read_text(encoding="utf-8")
+    fresh = committed == cm.render(
+        built.entries
+    )  # not asserted inline: pytest would print a full diff
+    assert fresh, f"{cm.MANIFEST} is stale; {_REMEDY}\n{_manifest_gap(committed, built.entries)}"
 
 
 def test_committed_citation_anchors_hold() -> None:
@@ -540,7 +617,7 @@ def test_committed_citation_anchors_hold() -> None:
         line = int(entry["line"])
         if line > len(lines) or str(entry["pattern"]) not in lines[line - 1]:
             stale.append(f"{rel}:{line} (cited in {entry['doc']})")
-    assert stale == []
+    assert stale == [], f"cited anchors moved; {_REMEDY}: {stale}"
 
 
 def test_committed_entries_cite_only_governed_docs() -> None:

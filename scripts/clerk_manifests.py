@@ -231,7 +231,11 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
     cache: dict[str, list[str]] = {}
     for doc in docs:
         try:
-            lines = masked_lines(_read_lines(_safe_path(root, doc)))
+            try:
+                raw = _read_lines(_safe_path(root, doc))
+            except OSError:
+                raise ManifestError(f"cannot read {doc}") from None
+            lines = masked_lines(raw)
         except ManifestError as exc:
             errors.append(f"{doc}: {exc}")
             continue
@@ -400,12 +404,15 @@ def main(
         return 1
     for name in built.excluded:
         print(f"clerk-manifests: excluded (untracked): {name}")
+    drifted, unused = drift(baseline, built.entries, set(args.accept_drift))
     for note in built.shifted:
         print(f"clerk-manifests: shifted anchor: {note}")
     if built.shifted:
+        for item in drifted:
+            print(f"clerk-manifests: {item}", file=sys.stderr)
         print(
             "clerk-manifests: a citation must start on its anchor line; re-cite each shifted range in the"
-            " document",
+            " document" + (" and each drifted site" if drifted else ""),
             file=sys.stderr,
         )
         return 1
@@ -416,7 +423,6 @@ def main(
         if args.verbose:
             for note in built.repeated:
                 print(f"clerk-manifests: repeated pattern: {note}")
-    drifted, unused = drift(baseline, built.entries, set(args.accept_drift))
     for site in unused:
         print(
             f"clerk-manifests: --accept-drift {site} matched no drifted citation", file=sys.stderr

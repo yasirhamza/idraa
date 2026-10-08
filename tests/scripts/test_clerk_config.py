@@ -132,6 +132,10 @@ def test_escalation_subjects_and_paths() -> None:
         "scripts/run_local_gate.py",
         "tests/scripts/test_clerk_*.py",
         "tests/arch/**",
+        ".gitleaks.toml",
+        "scripts/sca_suppressions.txt",
+        "docs/reference/fair-departures-register.md",
+        "docs/security/**",
     ):
         assert paths[own] == "gate-integrity", (
             own
@@ -189,7 +193,7 @@ def test_security_lane_files_are_escalation_paths() -> None:
 
 
 def test_methodology_lane_files_are_escalation_paths() -> None:
-    """FAIR math, calibration and derivations always escalate (CLAUDE.md: the methodology reviewer is mandatory)."""
+    """Every methodology-lane file escalates; the lane's completeness is the methodology-lane completeness audit (Task 6 Step 5 issue), which blocks graduation."""
     globs = _escalation_globs()
     lane = _lanes()["methodology"]["globs"]
     uncovered = sorted(
@@ -231,18 +235,11 @@ def test_surfaces_manifest_sentences_present() -> None:
 
 
 def test_threat_model_cited_files_are_escalation_paths() -> None:
-    """Spec §3.1 coverage rule over the manifest-pinned citations: every line-cited src/idraa/ file in the threat model carries a tag (the fenced §1 diagram is unpinned by design, §13)."""
+    """Spec §3.1 coverage rule over the manifest-pinned citations: every line-cited tracked file in the threat model carries a tag (the fenced §1 diagram is unpinned by design, §13)."""
     entries = json.loads(
         (ROOT / ".clerk" / "manifests" / "citations.json").read_text(encoding="utf-8")
     )["entries"]
-    cited = sorted(
-        {
-            str(e["file"])
-            for e in entries
-            if e["doc"] == "docs/security/threat-model.md"
-            and str(e["file"]).startswith("src/idraa/")
-        }
-    )
+    cited = sorted({str(e["file"]) for e in entries if e["doc"] == "docs/security/threat-model.md"})
     assert cited, "the threat model cites product files"
     globs = _escalation_globs()
     uncovered = [f for f in cited if not any(glob_match(g, f) for g in globs)]
