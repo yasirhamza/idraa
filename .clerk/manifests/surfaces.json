@@ -1,0 +1,14 @@
+{
+ "sentences": [
+  {"id": "sigma-default-1-7", "text": "σ = 1.7",
+   "surfaces": ["docs/reference/fair-departures-register.md", "docs/reference/within-scenario-sigma-calibration.md", "src/idraa/templates/help/articles/where-idraa-departs-from-fair.html"]},
+  {"id": "secondary-loss-branch-issue", "text": "issue #173",
+   "surfaces": ["docs/reference/fair-departures-register.md", "src/idraa/templates/help/articles/where-idraa-departs-from-fair.html"]},
+  {"id": "attribution-disclaimer", "text": "modelled-estimates disclaimer on screen",
+   "surfaces": ["docs/reference/fair-departures-register.md", "src/idraa/templates/help/articles/where-idraa-departs-from-fair.html"]},
+  {"id": "landmark-triple-label", "text": "5th · most likely · 95th",
+   "surfaces": ["docs/reference/fair-departures-register.md", "src/idraa/templates/library/threat_communities.html", "src/idraa/templates/library/threat_community_detail.html"]},
+  {"id": "jev-model-pin", "text": "jev-1.13.0",
+   "surfaces": ["scripts/curation_check/config.py", "scripts/curation_check/README.md", "clerk.toml"]}
+ ]
+}

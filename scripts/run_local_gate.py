@@ -55,6 +55,21 @@ Escape hatches:
   for emergency pushes when the Tailwind binary is unavailable; document
   the reason in the next commit.
 - ``git push --no-verify`` skips the whole pre-push stage (rare; document).
+- ``IDRAA_GATE_SKIP_CLERK=1`` skips the clerk stage (see below).
+
+Clerk stage (adoption design 2026-10-03, §4): when ``IDRAA_CLERK_ROOT`` names
+the superpowers-clerk checkout, the gate runs the clerk's deterministic gates as
+the author's pre-flight against the merge-base with origin/main: blocking
+``citations hygiene`` with the working-tree copy of the tracked citations
+manifest, then ``surfaces`` as advisory (the clerk has no working-copy manifest
+option for it yet). Unset, it prints one skip line — CI never sets it and never
+runs the clerk; citation freshness in CI is enforced by
+tests/scripts/test_clerk_manifests.py. Mode decision: clerk.toml at the
+merge-base → normal; absent there but present at origin/main → refuse (rebase);
+absent at both → bootstrap (hygiene only, ``--trust-worktree-config``). Runs
+before the ruff/mypy/pytest steps: it takes seconds and its findings are the
+cheapest to act on. It runs the ``uv`` binary with GIT_* and VIRTUAL_ENV
+removed, so like ``uv lock --check`` it sits outside GATE_STEPS.
 
 Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 (pytest) runs under
 ``pytest-xdist -n auto`` — wall-clock scales with core count (the ~5.9k-test
@@ -66,8 +81,10 @@ That cost is the point — it is the only automated gate this repo has.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -148,6 +165,159 @@ def run_step(label: str, argv: tuple[str, ...]) -> int:
     return proc.returncode
 
 
+# --- clerk stage: begin (rollback: delete this block; see adoption design §7) ---
+CLERK_ROOT_ENV = "IDRAA_CLERK_ROOT"
+SKIP_CLERK_ENV = "IDRAA_GATE_SKIP_CLERK"
+# Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
+CLERK_ORIGIN_REF = "refs/remotes/origin/main"
+CLERK_CONFIG = "clerk.toml"
+CLERK_MANIFEST = ".clerk/manifests/citations.json"
+
+
+def clerk_skip_reason(env: Mapping[str, str]) -> str | None:
+    """Why the clerk stage is skipped, or None when it runs."""
+    if env.get(SKIP_CLERK_ENV) == "1":
+        return f"{SKIP_CLERK_ENV}=1 (escape hatch; document the reason in the next commit)"
+    if not env.get(CLERK_ROOT_ENV):
+        return f"{CLERK_ROOT_ENV} unset (CI always skips; point it at the superpowers-clerk checkout to run)"
+    return None
+
+
+def clerk_mode(*, at_base: bool, at_origin_main: bool) -> str:
+    """normal: config at the merge-base; refuse: only origin/main has it (rebase); bootstrap: neither."""
+    if at_base:
+        return "normal"
+    return "refuse" if at_origin_main else "bootstrap"
+
+
+def clerk_gate_command(root: str, base_sha: str, *, mode: str) -> list[str]:
+    prefix = ["uv", "run", "--frozen", "--project", root, "clerk", "gate"]
+    common = ["--config", CLERK_CONFIG, "--base", base_sha]
+    if mode == "normal":
+        return [
+            *prefix,
+            "citations",
+            "hygiene",
+            *common,
+            "--manifest",
+            CLERK_MANIFEST,
+            "--range",
+            f"{base_sha}..HEAD",
+        ]
+    if mode == "surfaces":
+        return [*prefix, "surfaces", *common]
+    if mode == "bootstrap":
+        return [
+            *prefix,
+            "hygiene",
+            *common,
+            "--range",
+            f"{base_sha}..HEAD",
+            "--trust-worktree-config",
+        ]
+    raise ValueError(f"no clerk command for mode {mode!r}")
+
+
+def _clean_env() -> dict[str, str]:
+    """GIT_* leaks from the pre-push hook; VIRTUAL_ENV is Idraa's venv and makes the nested uv warn."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "VIRTUAL_ENV"}
+
+
+def _git(*args: str, cwd: Path | str = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 — argv is built from constants and a recorded sha
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False, env=_clean_env()
+    )
+
+
+def _run(argv: list[str]) -> int:
+    return subprocess.run(  # noqa: S603 — see clerk_gate_command
+        argv, cwd=REPO_ROOT, check=False, env=_clean_env()
+    ).returncode
+
+
+def clerk_base_sha() -> str | None:
+    """The full merge-base with origin/main, or None (after saying why) when there is none."""
+    proc = _git("merge-base", "HEAD", CLERK_ORIGIN_REF)
+    sha = proc.stdout.strip()
+    if proc.returncode != 0:
+        first = (proc.stderr.strip().splitlines() or [""])[0]
+        print(f"local gate: git merge-base exit {proc.returncode}: {first}")
+        return None
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        print(f"local gate: unexpected merge-base output {sha[:80]!r}")
+        return None
+    return sha
+
+
+def _has_clerk_config(rev: str) -> bool | None:
+    """True/False when git answered; None when git failed (never read an error as "absent")."""
+    proc = _git("ls-tree", "-z", rev, "--", CLERK_CONFIG)
+    if proc.returncode != 0:
+        return None
+    return bool(proc.stdout)
+
+
+def run_clerk_gate(root: str) -> int:
+    if not Path(root).is_dir():
+        print(f"local gate: {CLERK_ROOT_ENV}={root!r} is not a directory")
+        return 2
+    described = (
+        _git("describe", "--tags", "--dirty", "--always", cwd=root).stdout.strip() or "unknown"
+    )
+    print(f"local gate: clerk at {root} ({described})")
+    base = clerk_base_sha()
+    if base is None:
+        print("local gate: SKIPPING clerk gate — no merge-base with origin/main")
+        return 0
+    at_base = _has_clerk_config(base)
+    if at_base is None:
+        print(f"local gate: git could not read {CLERK_CONFIG} at base — input error")
+        return 2
+    at_origin = _has_clerk_config(CLERK_ORIGIN_REF)
+    if at_origin is None:
+        print(f"local gate: git could not read {CLERK_CONFIG} at origin/main — input error")
+        return 2
+    mode = clerk_mode(at_base=at_base, at_origin_main=at_origin)
+    if mode == "refuse":
+        print(
+            "local gate: branch predates the clerk adoption — rebase with"
+            " `git rebase --onto origin/main <old adoption tip>`"
+            " (a plain rebase replays the squashed adoption commits)"
+        )
+        return 2
+    if mode == "bootstrap":
+        print(
+            f"local gate: {CLERK_CONFIG} absent at the merge-base and at origin/main"
+            " — bootstrap run (--trust-worktree-config)"
+        )
+    print("== local gate: clerk gate ==", flush=True)
+    rc = _run(clerk_gate_command(root, base, mode=mode))
+    if rc != 0 or mode == "bootstrap":
+        return rc
+    print("== local gate: clerk gate surfaces (advisory) ==", flush=True)
+    advisory = _run(clerk_gate_command(root, base, mode="surfaces"))
+    if advisory != 0:
+        print(f"local gate: clerk surfaces advisory exit {advisory} (not blocking)")
+    return 0
+
+
+def clerk_stage(env: Mapping[str, str]) -> int:
+    reason = clerk_skip_reason(env)
+    if reason is not None:
+        print(f"local gate: SKIPPING clerk gate — {reason}")
+        return 0
+    rc = run_clerk_gate(env[CLERK_ROOT_ENV])
+    if rc != 0:
+        print(
+            f"local gate: FAILED at clerk gate (exit {rc}: 1 = findings, 2 = input error or stale base)"
+            f"; bypass only this stage with {SKIP_CLERK_ENV}=1 (document why)"
+        )
+    return rc
+
+
+# --- clerk stage: end ---
+
+
 def main() -> int:
     skipped_tests = os.environ.get(SKIP_TESTS_ENV) == "1"
     if skipped_tests:
@@ -176,6 +346,10 @@ def main() -> int:
         if audit.returncode != 0:
             print("local gate: FAILED at pip-audit — fix, or suppress with rationale")
             return audit.returncode
+
+    rc = clerk_stage(os.environ)
+    if rc != 0:
+        return rc
 
     for label, argv in steps_to_run():
         rc = run_step(label, argv)

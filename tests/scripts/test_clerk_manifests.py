@@ -1,0 +1,936 @@
+"""scripts/clerk_manifests.py — the citations manifest generator (spec §3.3)."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from scripts import clerk_manifests as cm
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+APP = "from fastapi import FastAPI\n"
+
+
+def _tree(tmp_path: Path, files: dict[str, str]) -> frozenset[str]:
+    for rel, text in files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return frozenset(files)
+
+
+def _main(tmp_path: Path, tracked: frozenset[str], *argv: str, head_text: str | None = None) -> int:
+    return cm.main(
+        list(argv), root=tmp_path, tracked=tracked, docs=["docs/a.md"], head_text=head_text
+    )
+
+
+def _numbered(count: int) -> str:
+    """A file whose line N reads `anchor line number NN`: every line is a unique, qualifying anchor."""
+    return "".join(f"anchor line number {number:02d}\n" for number in range(1, count + 1))
+
+
+# ---- resolution --------------------------------------------------------------------------------
+
+
+def test_resolve_exact_then_src_idraa_then_fair_cam() -> None:
+    tracked = frozenset(
+        {
+            "config.py",
+            "src/idraa/config.py",
+            "src/idraa/x.py",
+            "fair_cam/x.py",
+            "fair_cam/composition.py",
+        }
+    )
+    assert cm.resolve("config.py", tracked) == "config.py"
+    assert cm.resolve("x.py", tracked) == "src/idraa/x.py"
+    assert cm.resolve("composition.py", tracked) == "fair_cam/composition.py"
+
+
+def test_resolve_unique_suffix() -> None:
+    tracked = frozenset({"src/idraa/routes/deps.py", "fair_cam/parameters/industry_calibration.py"})
+    assert cm.resolve("deps.py", tracked) == "src/idraa/routes/deps.py"
+    assert (
+        cm.resolve("industry_calibration.py", tracked)
+        == "fair_cam/parameters/industry_calibration.py"
+    )
+
+
+def test_resolve_ambiguous_raises() -> None:
+    tracked = frozenset({"src/idraa/routes/auth.py", "src/idraa/services/auth.py"})
+    with pytest.raises(
+        cm.ManifestError,
+        match=r"ambiguous citation 'auth\.py'.*qualify the citation with its directory",
+    ):
+        cm.resolve("auth.py", tracked)
+
+
+def test_resolve_untracked_returns_none() -> None:
+    assert cm.resolve("fly.toml", frozenset({"src/idraa/app.py"})) is None
+
+
+# ---- ranges, lines, anchors --------------------------------------------------------------------
+
+
+def test_ranges_parses_comma_lists() -> None:
+    assert cm.ranges("4") == [(4, 4)]
+    assert cm.ranges("4-5") == [(4, 5)]
+    assert cm.ranges("28,295-311,362-378") == [(28, 28), (295, 311), (362, 378)]
+    with pytest.raises(cm.ManifestError, match=r"malformed line range '5-4'"):
+        cm.ranges("5-4")
+    with pytest.raises(cm.ManifestError, match=r"malformed line range '0'"):
+        cm.ranges("0")
+
+
+def test_lines_of_counts_without_trailing_empty() -> None:
+    assert cm.lines_of("x\n") == ["x"]
+    assert cm.lines_of("x\ny") == ["x", "y"]
+    assert cm.lines_of("") == []
+
+
+def test_masked_lines_blank_fenced_blocks_keep_numbering() -> None:
+    lines = ["a `x.py:1`", "```", "inside `y.py:2`", "```", "b `z.py:3`"]
+    assert cm.masked_lines(lines) == ["a `x.py:1`", "", "", "", "b `z.py:3`"]
+
+
+def test_masked_lines_unclosed_fence_raises() -> None:
+    with pytest.raises(cm.ManifestError, match=r"unclosed fenced block opened at line 2"):
+        cm.masked_lines(["a", "```", "b `x.py:1`"])
+
+
+def test_anchor_first_of_several_qualifying_lines() -> None:
+    lines = ["abc", "x = compute_a()", "y = compute_bbbbbbbb()"]
+    assert cm.anchor(lines, 1, 3) == (2, "x = compute_a()")
+
+
+def test_anchor_twelve_character_boundary() -> None:
+    assert cm.anchor(["a" * 11, "b" * 12], 1, 2) == (2, "b" * 12)
+    assert cm.anchor(["a" * 11], 1, 1) == (1, "a" * 11)
+
+
+def test_anchor_fallback_boundary() -> None:
+    assert cm.anchor(["abcd", "wxyz"], 1, 2) == (1, "abcd")
+    assert cm.anchor(["abcd", "x"], 1, 1) == (1, "abcd")
+    with pytest.raises(cm.ManifestError, match=r"line 1 anchor 'abc' is too short to pin"):
+        cm.anchor(["abc", "x"], 1, 1)
+
+
+def test_anchor_blank_line_raises() -> None:
+    with pytest.raises(cm.ManifestError, match=r"line 2 is blank"):
+        cm.anchor(["a", "", "b"], 2, 2)
+
+
+def test_anchor_past_eof_raises() -> None:
+    with pytest.raises(cm.ManifestError, match=r"line 9 is past the end of the file \(2 lines\)"):
+        cm.anchor(["a", "b"], 9, 12)
+    with pytest.raises(
+        cm.ManifestError, match=r"range end 12 is past the end of the file \(2 lines\)"
+    ):
+        cm.anchor(["a", "b"], 1, 12)
+
+
+# ---- build -------------------------------------------------------------------------------------
+
+
+def test_build_one_entry_per_range_sorted_across_docs(tmp_path: Path) -> None:
+    deps = (
+        "import x\n\n\ndef client_ip(request):\n    return None\n"
+        + "z\n" * 89
+        + "def audit_client_ip(request):\n"
+        + "z\n" * 10
+    )
+    tracked = _tree(
+        tmp_path,
+        {
+            "src/idraa/routes/deps.py": deps,
+            "docs/b.md": "`deps.py:4,95-96`\n",
+            "docs/a.md": "`routes/deps.py:4`\n",
+        },
+    )
+    built = cm.build(tmp_path, ["docs/b.md", "docs/a.md"], tracked)
+    assert built.excluded == [] and built.shifted == []
+    assert built.entries == [
+        cm.Entry("docs/a.md", "src/idraa/routes/deps.py", 4, "def client_ip(request):"),
+        cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 4, "def client_ip(request):"),
+        cm.Entry("docs/b.md", "src/idraa/routes/deps.py", 95, "def audit_client_ip(request):"),
+    ]
+    many = tmp_path / "many"
+    body = "".join(f"line number {i:02d} long enough\n" for i in range(1, 13))
+    cites = " ".join(f"`app.py:{i}`" for i in (12, 3, 9, 1, 7, 11, 5, 2, 10, 4))
+    tracked_many = _tree(many, {"src/idraa/app.py": body, "docs/a.md": cites + "\n"})
+    built_many = cm.build(many, ["docs/a.md"], tracked_many)
+    assert [e.line for e in built_many.entries] == [1, 2, 3, 4, 5, 7, 9, 10, 11, 12]
+
+
+def test_build_refuses_second_citation_of_site_in_one_document(tmp_path: Path) -> None:
+    """Entries must equal citations: the drift guard counts entries, so a twin could hide a stale one."""
+    tracked = _tree(
+        tmp_path,
+        {
+            "src/idraa/app.py": APP,
+            "docs/a.md": "`src/idraa/app.py:1`\n\nlater, again `app.py:1`.\n",
+        },
+    )
+    with pytest.raises(cm.ManifestError) as info:
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert str(info.value) == (
+        "docs/a.md:3: src/idraa/app.py:1 is already cited at docs/a.md:1;"
+        " if both citations mean this line, cite it once and refer back to it;"
+        " otherwise one of them was not re-cited after the code moved: re-cite it"
+    )
+    same_line = _tree(
+        tmp_path / "same", {"src/idraa/app.py": APP, "docs/a.md": "`app.py:1` `app.py:1`\n"}
+    )
+    with pytest.raises(
+        cm.ManifestError,
+        match=r"docs/a\.md:1: src/idraa/app\.py:1 is already cited at docs/a\.md:1;",
+    ):
+        cm.build(tmp_path / "same", ["docs/a.md"], same_line)
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("`src/idraa/c.py:27`", "`src/idraa/c.py:27-29`"),
+        ("`src/idraa/c.py:27-29`", "`src/idraa/c.py:27`"),
+        ("`src/idraa/c.py:12,27`", "`src/idraa/c.py:27`"),
+        ("`src/idraa/c.py:27`", "`src/idraa/c.py:12,27-28`"),
+        # line 26 is too short to be an anchor, so the range 26-27 starts on :27 (not on :26)
+        ("`src/idraa/c.py:26-27`", "`src/idraa/c.py:27`"),
+    ],
+)
+def test_build_counts_a_range_as_a_citation_of_its_anchor_line(
+    tmp_path: Path, first: str, second: str
+) -> None:
+    """A multi-line range cites its anchor line; so does each item of a comma list."""
+    code = _numbered(40).splitlines(keepends=True)
+    code[25] = "short\n"  # line 26: under MIN_ANCHOR characters, so never an anchor
+    tracked = _tree(
+        tmp_path, {"src/idraa/c.py": "".join(code), "docs/a.md": f"{first}\n\n{second}\n"}
+    )
+    with pytest.raises(
+        cm.ManifestError,
+        match=r"docs/a\.md:3: src/idraa/c\.py:27 is already cited at docs/a\.md:1;",
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_accepts_adjacent_distinct_sites(tmp_path: Path) -> None:
+    """Only the same (file, anchor line) collides: neighbours and overlapping ranges with other anchors do not."""
+    tracked = _tree(
+        tmp_path,
+        {
+            "src/idraa/c.py": _numbered(40),
+            "docs/a.md": (
+                "`src/idraa/c.py:27` `src/idraa/c.py:28` `src/idraa/c.py:29-30`"
+                " `src/idraa/c.py:26-30`\n"
+            ),
+        },
+    )
+    assert [e.line for e in cm.build(tmp_path, ["docs/a.md"], tracked).entries] == [26, 27, 28, 29]
+
+
+def test_build_keeps_one_entry_per_document_for_cross_document_citations(tmp_path: Path) -> None:
+    """The same site cited from both governed documents is two entries, one per document."""
+    tracked = _tree(
+        tmp_path,
+        {
+            "src/idraa/app.py": APP,
+            "docs/a.md": "`app.py:1`\n",
+            "docs/b.md": "`src/idraa/app.py:1`\n",
+        },
+    )
+    built = cm.build(tmp_path, ["docs/a.md", "docs/b.md"], tracked)
+    assert built.entries == [
+        cm.Entry("docs/a.md", "src/idraa/app.py", 1, "from fastapi import FastAPI"),
+        cm.Entry("docs/b.md", "src/idraa/app.py", 1, "from fastapi import FastAPI"),
+    ]
+
+
+def test_build_accepts_leading_dot_path(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": "name: CI\non: push\n",
+            "docs/a.md": "`.github/workflows/ci.yml:2`\n",
+        },
+    )
+    assert cm.build(tmp_path, ["docs/a.md"], tracked).entries == [
+        cm.Entry("docs/a.md", ".github/workflows/ci.yml", 2, "on: push")
+    ]
+
+
+def test_build_skips_fenced_blocks(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path,
+        {"src/idraa/app.py": APP, "docs/a.md": "```\nnope.py:7 and `gone.py:9`\n```\n`app.py:1`\n"},
+    )
+    assert [e.line for e in cm.build(tmp_path, ["docs/a.md"], tracked).entries] == [1]
+
+
+def test_build_accepts_wrapped_code_span_before_citation(tmp_path: Path) -> None:
+    """A prose code span that wraps across a line break must not steal the next citation's backtick."""
+    tracked = _tree(
+        tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "x `f(a,\n b)` (`app.py:1`)\n"}
+    )
+    assert cm.build(tmp_path, ["docs/a.md"], tracked).entries == [
+        cm.Entry("docs/a.md", "src/idraa/app.py", 1, "from fastapi import FastAPI")
+    ]
+
+
+def test_build_refuses_unpaired_backtick(tmp_path: Path) -> None:
+    """One stray backtick must not shift the pairing of later blocks and hide their errors."""
+    tracked = _tree(
+        tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "a ` b\n\n`app.py:1` and `:2`\n"}
+    )
+    with pytest.raises(cm.ManifestError) as info:
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert "docs/a.md:1: unpaired backtick in this block; balance the backticks" in str(info.value)
+    assert "docs/a.md:3: bare continuation citation `:2`; name the file" in str(info.value)
+
+
+def test_build_refuses_pairing_disagreement(tmp_path: Path) -> None:
+    """Pairs and the per-line scan must select the same citations, or a real one could be dropped."""
+    files = {
+        "src/idraa/app.py": APP + "x = 1\n",
+        "src/idraa/b.py": APP,
+        "docs/a.md": "x `a`b.py:1`app.py:2` y\n",
+    }
+    tracked = _tree(tmp_path, files)
+    with pytest.raises(
+        cm.ManifestError,
+        match=r"docs/a\.md:1: backtick pairing is ambiguous here; separate the code spans with a space",
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+    (tmp_path / "docs/a.md").write_text(
+        "- a ` b\n- `:2` c ` d\n", encoding="utf-8"
+    )  # two strays in one tight list
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md:2: backtick pairing is ambiguous here"):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_reports_shifted_anchor(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"src/idraa/app.py": "\n)\n" + APP, "docs/a.md": "`app.py:1-3`\n"})
+    built = cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert built.entries == [
+        cm.Entry("docs/a.md", "src/idraa/app.py", 3, "from fastapi import FastAPI")
+    ]
+    assert built.shifted == ["docs/a.md:1: app.py:1 anchored at :3"]
+
+
+def test_build_reports_repeated_pattern(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path,
+        {
+            "src/idraa/app.py": "gc.collect()\nx = 1\ngc.collect()\n",
+            "docs/a.md": "`app.py:1`\n",
+        },
+    )
+    assert cm.build(tmp_path, ["docs/a.md"], tracked).repeated == [
+        "docs/a.md:1: app.py:1 pattern 'gc.collect()' occurs 2 times in the file"
+    ]
+
+
+def test_build_refuses_bare_continuation(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "`app.py:1` and `:1`.\n"})
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: bare continuation citation `:1`; name the file"
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_refuses_unrecognised_form(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "`app.py:1–3` and `app.py: 1`.\n"}
+    )
+    with pytest.raises(cm.ManifestError) as info:
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert "docs/a.md:1: unrecognised citation form `app.py:1–3`; write it as `file:line`" in str(
+        info.value
+    )
+    assert "docs/a.md:1: unrecognised citation form `app.py: 1`" in str(info.value)
+
+
+def test_build_refuses_wrapped_citation(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "see `src/idraa/app.py:\n1` here\n"}
+    )
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: citation wrapped across lines; keep it on one line"
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_excludes_listed_untracked_and_reports(tmp_path: Path) -> None:
+    tracked = _tree(
+        tmp_path,
+        {"docs/a.md": "`fly.toml:27-31` and `src/idraa/app.py:1`.\n", "src/idraa/app.py": APP},
+    )
+    built = cm.build(tmp_path, ["docs/a.md"], tracked)
+    assert built.excluded == ["fly.toml"]
+    assert [e.file for e in built.entries] == ["src/idraa/app.py"]
+
+
+def test_build_unknown_untracked_is_an_error(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`secret.toml:3`.\n"})
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: 'secret\.toml' is not a tracked file"
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_unreadable_cited_file_is_an_error(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/gone.py:1`.\n"}) | {"src/idraa/gone.py"}
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md:1: cannot read src/idraa/gone\.py"):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+
+
+def test_build_refuses_missing_governed_document(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A deleted or renamed governed document is a refusal, never a traceback."""
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md: cannot read docs/a\.md"):
+        cm.build(tmp_path, ["docs/a.md"], frozenset())
+    for mode in ("--check", "--write"):
+        assert _main(tmp_path, frozenset(), mode) == 1
+        assert "docs/a.md: cannot read docs/a.md" in capsys.readouterr().err
+    assert not (tmp_path / cm.MANIFEST).exists()
+
+
+# ---- render, baseline, drift, main -------------------------------------------------------------
+
+
+def test_render_shape() -> None:
+    text = cm.render([cm.Entry("docs/a.md", "src/idraa/app.py", 1, "from fastapi import FastAPI")])
+    assert json.loads(text) == {
+        "entries": [
+            {
+                "doc": "docs/a.md",
+                "file": "src/idraa/app.py",
+                "line": 1,
+                "pattern": "from fastapi import FastAPI",
+                "regex": False,
+            }
+        ]
+    }
+    assert text.endswith("\n") and text.count("\n") == 5  # {, "entries": [, the entry, ], }
+
+
+def test_parse_manifest_rejects_garbage() -> None:
+    with pytest.raises(cm.ManifestError, match=r"not a valid citations manifest.*git checkout"):
+        cm.parse_manifest("<<<<<<< HEAD\n{}\n")
+
+
+def test_check_and_write_roundtrip(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    assert _main(tmp_path, tracked, "--check") == 1
+    assert "document citations changed" in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write") == 0
+    assert (tmp_path / cm.MANIFEST).is_file()
+    assert _main(tmp_path, tracked, "--check") == 0
+    assert "is fresh (1 entries)" in capsys.readouterr().out
+
+
+def test_write_refuses_drift_without_accept(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    assert _main(tmp_path, tracked, "--write") == 0
+    (tmp_path / "src/idraa/app.py").write_text(
+        "import logging\n" + APP, encoding="utf-8"
+    )  # code moved under the citation
+    assert _main(tmp_path, tracked, "--write") == 1
+    err = capsys.readouterr().err
+    assert (
+        "src/idraa/app.py:1 changed under an unchanged citation in docs/a.md" in err
+        and "--accept-drift" in err
+    )
+    assert _main(tmp_path, tracked, "--check") == 1
+    assert "fix the citation in the document first" in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/app.py:1") == 0
+    assert (
+        "record in the commit and PR bodies: accept-drift src/idraa/app.py:1 (claim: <section>)"
+        in capsys.readouterr().out
+    )
+    assert (
+        json.loads((tmp_path / cm.MANIFEST).read_text())["entries"][0]["pattern"]
+        == "import logging"
+    )
+
+
+def test_drift_accepts_recite_collision(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A correct re-cite onto a line another citation's anchor held is not drift.
+
+    One line is inserted above two adjacent anchors (lines 27 and 28) and both citations are
+    re-cited (28 and 29). Citation 28 now anchors the text that citation 27 held, so the key
+    `(doc, file, 28)` changed pattern, but the old text of line 28 is still anchored (at 29).
+    """
+    target = tmp_path / "src/idraa/c.py"
+    tracked = _tree(
+        tmp_path,
+        {
+            "docs/a.md": "`src/idraa/c.py:27` and `src/idraa/c.py:28`\n",
+            "src/idraa/c.py": _numbered(30),
+        },
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    baseline = cm.parse_manifest((tmp_path / cm.MANIFEST).read_text(encoding="utf-8"))
+    assert [(e.line, e.pattern) for e in baseline] == [
+        (27, "anchor line number 27"),
+        (28, "anchor line number 28"),
+    ]
+    target.write_text("# one line inserted above both anchors\n" + _numbered(30), encoding="utf-8")
+    (tmp_path / "docs/a.md").write_text(
+        "`src/idraa/c.py:28` and `src/idraa/c.py:29`\n", encoding="utf-8"
+    )
+    rebuilt = cm.build(tmp_path, ["docs/a.md"], tracked).entries
+    assert [(e.line, e.pattern) for e in rebuilt] == [
+        (28, "anchor line number 27"),
+        (29, "anchor line number 28"),
+    ]
+    assert cm.drift(baseline, rebuilt, set()) == ([], [])
+    assert _main(tmp_path, tracked, "--write") == 0
+    captured = capsys.readouterr()
+    assert "changed under an unchanged citation" not in captured.err
+    assert "accept-drift" not in captured.out + captured.err
+    assert _main(tmp_path, tracked, "--check") == 0
+    assert "is fresh (2 entries)" in capsys.readouterr().out
+    # a chain of three equally spaced anchors (27, 28, 29), all re-cited +1: every changed entry
+    # sits on a key whose old text is still anchored by a non-stale entry, so a changed entry
+    # that is not stale still vouches and nothing is reported
+    doc, file = "docs/a.md", "src/idraa/c.py"
+    before = [cm.Entry(doc, file, n, f"text {t}") for n, t in ((27, "A"), (28, "B"), (29, "C"))]
+    after = [cm.Entry(doc, file, n, f"text {t}") for n, t in ((28, "A"), (29, "B"), (30, "C"))]
+    assert cm.drift(before, after, set()) == ([], [])
+
+
+def test_drift_still_refuses_code_moved_under_unchanged_citation() -> None:
+    """The pure-function pin of the guard's original purpose.
+
+    The old anchor text no longer anchors anywhere in that (doc, file), so the key is drift and
+    only `--accept-drift` for exactly that site clears it. The end-to-end pin (refusal message,
+    exit code, the printed record line) is `test_write_refuses_drift_without_accept`.
+    """
+    doc, file = "docs/a.md", "src/idraa/app.py"
+    before = [cm.Entry(doc, file, 1, "from fastapi import FastAPI")]
+    after = [cm.Entry(doc, file, 1, "import logging")]
+    message = f"{file}:1 changed under an unchanged citation in {doc}"
+    assert cm.drift(before, after, set()) == ([message], [])
+    assert cm.drift(before, after, {f"{file}:1"}) == ([], [])
+    assert cm.drift(before, after, {f"{file}:9"}) == ([message], [f"{file}:9"])
+    # an old anchor text anchored in a DIFFERENT file does not excuse the key
+    elsewhere = [*after, cm.Entry(doc, "src/idraa/other.py", 4, "from fastapi import FastAPI")]
+    assert cm.drift(before, elsewhere, set()) == ([message], [])
+    # nor does it help that ANOTHER governed document anchors the vanished text in the same file:
+    # the count is per (document, file), not per file
+    other_doc = [*after, cm.Entry("docs/b.md", file, 4, "from fastapi import FastAPI")]
+    assert cm.drift(before, other_doc, set()) == ([message], [])
+
+
+def test_drift_refuses_when_old_anchor_count_drops_despite_collision(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A surviving identical anchor elsewhere must not launder real drift.
+
+    Two citations are anchored on identical text (lines 1 and 2). Line 1's code is replaced under
+    its unchanged citation; line 2 is untouched, so the old text is still anchored once, but it
+    was anchored twice. The count dropped (2 -> 1): refused.
+    """
+    same = "repeated anchor text here\n"
+    tracked = _tree(
+        tmp_path,
+        {"docs/a.md": "`src/idraa/c.py:1` and `src/idraa/c.py:2`\n", "src/idraa/c.py": same * 2},
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    baseline = cm.parse_manifest((tmp_path / cm.MANIFEST).read_text(encoding="utf-8"))
+    assert [e.pattern for e in baseline] == ["repeated anchor text here"] * 2
+    (tmp_path / "src/idraa/c.py").write_text("replaced first line\n" + same, encoding="utf-8")
+    rebuilt = cm.build(tmp_path, ["docs/a.md"], tracked).entries
+    message = "src/idraa/c.py:1 changed under an unchanged citation in docs/a.md"
+    assert cm.drift(baseline, rebuilt, set()) == ([message], [])
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert message in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/c.py:1") == 0
+    assert "accept-drift src/idraa/c.py:1" in capsys.readouterr().out
+
+
+def test_drift_reports_every_key_in_a_masking_chain() -> None:
+    """A stale citation cannot vouch that the text it now anchors is still anchored.
+
+    One line inserted above cited anchors that sit exactly the shift distance apart, nothing
+    re-cited: each key now anchors the text the key above it held, so counting every `after`
+    entry would clear all but the last of the run. The fixpoint reports the whole run.
+    """
+    doc, file = "docs/a.md", "src/idraa/c.py"
+
+    def message(line: int) -> str:
+        return f"{file}:{line} changed under an unchanged citation in {doc}"
+
+    # distance 1: the pair (27, 28)
+    before = [cm.Entry(doc, file, 27, "text A"), cm.Entry(doc, file, 28, "text B")]
+    after = [cm.Entry(doc, file, 27, "text NEW"), cm.Entry(doc, file, 28, "text A")]
+    assert cm.drift(before, after, set()) == ([message(27), message(28)], [])
+    # distance 2: the shift distance is the gap between the two cited lines
+    before = [cm.Entry(doc, file, 10, "text A"), cm.Entry(doc, file, 12, "text B")]
+    after = [cm.Entry(doc, file, 10, "text NEW"), cm.Entry(doc, file, 12, "text A")]
+    assert cm.drift(before, after, set()) == ([message(10), message(12)], [])
+    # a chain of three
+    before = [cm.Entry(doc, file, n, f"text {t}") for n, t in ((27, "A"), (28, "B"), (29, "C"))]
+    after = [
+        cm.Entry(doc, file, 27, "text NEW"),
+        cm.Entry(doc, file, 28, "text A"),
+        cm.Entry(doc, file, 29, "text B"),
+    ]
+    assert cm.drift(before, after, set()) == ([message(27), message(28), message(29)], [])
+    # acceptance is still per site: naming the whole run clears it, naming the tail does not
+    assert cm.drift(before, after, {f"{file}:{n}" for n in (27, 28, 29)}) == ([], [])
+    assert cm.drift(before, after, {f"{file}:29"}) == ([message(27), message(28)], [])
+
+
+def test_drift_accept_of_reported_sites_does_not_launder_the_masked_key(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """End to end: accepting only what the previous rule reported must still refuse the masked key.
+
+    Two adjacent anchors (27, 28) are cited; one line is inserted above them and nothing is
+    re-cited. The multiplicity rule without the fixpoint reported only `:28`, and `--accept-drift`
+    for it wrote `:27` (now the inserted line) with no acceptance and no record line.
+    """
+    target = tmp_path / "src/idraa/c.py"
+    tracked = _tree(
+        tmp_path,
+        {
+            "docs/a.md": "`src/idraa/c.py:27` and `src/idraa/c.py:28`\n",
+            "src/idraa/c.py": _numbered(30),
+        },
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    target.write_text("# one line inserted above both anchors\n" + _numbered(30), encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write") == 1
+    err = capsys.readouterr().err
+    assert "src/idraa/c.py:27 changed under an unchanged citation in docs/a.md" in err
+    assert "src/idraa/c.py:28 changed under an unchanged citation in docs/a.md" in err
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/c.py:28") == 1
+    err = capsys.readouterr().err
+    assert "src/idraa/c.py:27 changed under an unchanged citation in docs/a.md" in err
+    assert "c.py:28 changed under" not in err
+    assert [e["line"] for e in json.loads((tmp_path / cm.MANIFEST).read_text())["entries"]] == [
+        27,
+        28,
+    ]  # the refused --write left the baseline alone
+    assert (
+        _main(
+            tmp_path,
+            tracked,
+            "--write",
+            "--accept-drift",
+            "src/idraa/c.py:27",
+            "--accept-drift",
+            "src/idraa/c.py:28",
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "accept-drift src/idraa/c.py:27" in out and "accept-drift src/idraa/c.py:28" in out
+
+
+def test_write_refuses_twin_before_drift_runs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The twin shape is refused at recognition, so it never reaches the multiplicity rule.
+
+    A site cited twice in one document counts once in the manifest, so after a line is inserted
+    and only ONE occurrence is re-cited the entry-level picture looks like a clean re-cite
+    collision (the old text is still anchored once, at the new line) and `drift()` alone accepts
+    it. The generator therefore refuses the second citation outright, before any baseline is
+    consulted; with the twin replaced by a back-reference the same move is accepted.
+    """
+    target = tmp_path / "src/idraa/c.py"
+    twin = "`src/idraa/c.py:27` pins it.\n\nLater, again `src/idraa/c.py:27`.\n"
+    once = "`src/idraa/c.py:27` pins it.\n\nLater, the cited site above.\n"
+    tracked = _tree(tmp_path, {"docs/a.md": once, "src/idraa/c.py": _numbered(40)})
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    baseline = (tmp_path / cm.MANIFEST).read_text(encoding="utf-8")
+    # drift() alone would accept the S6 shape: the site's key changed, its old text is still anchored
+    old = cm.parse_manifest(baseline)
+    s6_after = [
+        cm.Entry("docs/a.md", "src/idraa/c.py", 27, "# inserted comment"),
+        cm.Entry("docs/a.md", "src/idraa/c.py", 28, "anchor line number 27"),
+    ]
+    assert cm.drift(old, s6_after, set()) == ([], [])
+    # the twin is refused at recognition, before or after the code moves
+    (tmp_path / "docs/a.md").write_text(twin, encoding="utf-8")
+    target.write_text("# inserted comment\n" + _numbered(40), encoding="utf-8")
+    for mode in ("--write", "--check"):
+        assert _main(tmp_path, tracked, mode) == 1
+        err = capsys.readouterr().err
+        assert "docs/a.md:3: src/idraa/c.py:27 is already cited at docs/a.md:1;" in err
+        assert "changed under an unchanged citation" not in err  # drift() never ran
+    assert (tmp_path / cm.MANIFEST).read_text(encoding="utf-8") == baseline
+    # the twin removed: the re-cite is accepted
+    (tmp_path / "docs/a.md").write_text(once.replace(":27`", ":28`"), encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write") == 0
+    entries = json.loads((tmp_path / cm.MANIFEST).read_text())["entries"]
+    assert [(e["line"], e["pattern"]) for e in entries] == [(28, "anchor line number 27")]
+    # and with the single citation, a forgotten re-cite after the next insertion is a drift refusal
+    target.write_text(
+        "# another comment\n" + "# inserted comment\n" + _numbered(40), encoding="utf-8"
+    )
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert "src/idraa/c.py:28 changed under an unchanged citation" in capsys.readouterr().err
+
+
+def test_write_uses_head_baseline_when_working_copy_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    assert _main(tmp_path, tracked, "--write") == 0
+    committed = (tmp_path / cm.MANIFEST).read_text(encoding="utf-8")
+    (tmp_path / cm.MANIFEST).unlink()  # the "delete it and regenerate" reflex
+    (tmp_path / "src/idraa/app.py").write_text("import logging\n" + APP, encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write", head_text=committed) == 1
+    assert "changed under an unchanged citation" in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write", head_text=None) == 0, (
+        "no HEAD copy either: nothing to compare against"
+    )
+
+
+def test_write_uses_head_baseline_when_working_copy_conflicted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    assert _main(tmp_path, tracked, "--write") == 0
+    committed = (tmp_path / cm.MANIFEST).read_text(encoding="utf-8")
+    (tmp_path / cm.MANIFEST).write_text(
+        "<<<<<<< HEAD\n" + committed, encoding="utf-8"
+    )  # a half-merged file
+    (tmp_path / "src/idraa/app.py").write_text("import logging\n" + APP, encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write", head_text=committed) == 1
+    assert "changed under an unchanged citation" in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write", head_text=None) == 1
+    assert "not a valid citations manifest" in capsys.readouterr().err
+
+
+def test_unused_accept_drift_is_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/app.py:99") == 0
+    assert (
+        "--accept-drift src/idraa/app.py:99 matched no drifted citation" in capsys.readouterr().err
+    )
+
+
+def test_check_refuses_unclosed_fence(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    tracked = _tree(tmp_path, {"src/idraa/app.py": APP, "docs/a.md": "```\n`app.py:1`\n"})
+    assert _main(tmp_path, tracked, "--check") == 1
+    assert "docs/a.md: unclosed fenced block opened at line 1" in capsys.readouterr().err
+
+
+def test_check_reports_rule_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:7`\n", "src/idraa/app.py": "x\n"})
+    assert _main(tmp_path, tracked, "--check") == 1
+    assert "docs/a.md:1: line 7 is past the end of the file (1 lines)" in capsys.readouterr().err
+
+
+def test_accept_drift_is_scoped_to_its_site(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One acceptance must not clear a second drifted site."""
+    files = {
+        "docs/a.md": "`src/idraa/app.py:1` and `src/idraa/b.py:1`\n",
+        "src/idraa/app.py": APP,
+        "src/idraa/b.py": APP,
+    }
+    tracked = _tree(tmp_path, files)
+    assert _main(tmp_path, tracked, "--write") == 0
+    (tmp_path / "src/idraa/app.py").write_text("import logging\n" + APP, encoding="utf-8")
+    (tmp_path / "src/idraa/b.py").write_text("import logging\n" + APP, encoding="utf-8")
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/app.py:1") == 1
+    assert "src/idraa/b.py:1 changed under an unchanged citation" in capsys.readouterr().err
+    same = tmp_path / "same-file"
+    two = "first long anchor line\nsecond long anchor line\n"
+    tracked_same = _tree(
+        same, {"docs/a.md": "`src/idraa/c.py:1` and `src/idraa/c.py:2`\n", "src/idraa/c.py": two}
+    )
+    assert _main(same, tracked_same, "--write") == 0
+    (same / "src/idraa/c.py").write_text(
+        "changed first anchor line\nchanged second anchor line\n", encoding="utf-8"
+    )
+    assert _main(same, tracked_same, "--write", "--accept-drift", "src/idraa/c.py:1") == 1
+    assert "src/idraa/c.py:2 changed under an unchanged citation" in capsys.readouterr().err
+
+
+def test_build_refuses_symlinked_cited_file(tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+    outside.write_text("TOP-SECRET-LINE-0123456789\n", encoding="utf-8")
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n"}) | {"src/idraa/app.py"}
+    (tmp_path / "src/idraa").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src/idraa/app.py").symlink_to(outside)
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: src/idraa/app\.py goes through a symlink"
+    ):
+        cm.build(tmp_path, ["docs/a.md"], tracked)
+    linked = tmp_path / "linked-doc"
+    outside_doc = tmp_path.parent / f"{tmp_path.name}-outside-doc.md"
+    outside_doc.write_text("`app.py:1`\n", encoding="utf-8")
+    (linked / "docs").mkdir(parents=True)
+    (linked / "docs/a.md").symlink_to(outside_doc)
+    with pytest.raises(cm.ManifestError, match=r"docs/a\.md: docs/a\.md goes through a symlink"):
+        cm.build(linked, ["docs/a.md"], frozenset({"docs/a.md"}))
+    fifo = tmp_path / "fifo"
+    tracked_fifo = _tree(fifo, {"docs/a.md": "`src/idraa/app.py:1`\n"}) | {"src/idraa/app.py"}
+    (fifo / "src/idraa").mkdir(parents=True)
+    os.mkfifo(fifo / "src/idraa/app.py")
+    with pytest.raises(
+        cm.ManifestError, match=r"docs/a\.md:1: src/idraa/app\.py is not a regular file"
+    ):
+        cm.build(fifo, ["docs/a.md"], tracked_fifo)
+
+
+def test_write_refuses_symlinked_manifest_dir(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-dir"
+    outside.mkdir()
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    (tmp_path / ".clerk").symlink_to(outside, target_is_directory=True)
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert "goes through a symlink (.clerk)" in capsys.readouterr().err
+    assert not (outside / "manifests" / "citations.json").exists()
+
+
+def test_shifted_anchor_refuses_check_and_write(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracked = _tree(tmp_path, {"src/idraa/app.py": "\n)\n" + APP, "docs/a.md": "`app.py:1-3`\n"})
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert "must start on its anchor line" in capsys.readouterr().err
+    assert not (tmp_path / cm.MANIFEST).exists()
+    assert _main(tmp_path, tracked, "--check") == 1
+    assert "must start on its anchor line" in capsys.readouterr().err
+
+
+def test_main_reports_shift_and_drift_in_one_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One run lists the shifted anchors AND the drifted sites, so the author re-cites once."""
+    tracked = _tree(
+        tmp_path,
+        {
+            "docs/a.md": "`src/idraa/app.py:1-3` and `src/idraa/other.py:1`\n",
+            "src/idraa/app.py": APP + "x = 1\ny = 2\n",
+            "src/idraa/other.py": "import logging\n",
+        },
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    (tmp_path / "src/idraa/app.py").write_text("\n)\n" + APP, encoding="utf-8")  # anchor slides
+    (tmp_path / "src/idraa/other.py").write_text("import sys, os\n", encoding="utf-8")  # drift
+    for mode in ("--check", "--write"):
+        assert _main(tmp_path, tracked, mode) == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""  # both lists and the closing message are refusals: one stream
+        shifted_at = captured.err.index(
+            "shifted anchor: docs/a.md:1: src/idraa/app.py:1 anchored at :3"
+        )
+        drift_at = captured.err.index(
+            "src/idraa/other.py:1 changed under an unchanged citation in docs/a.md"
+        )
+        assert shifted_at < drift_at < captured.err.index("must start on its anchor line")
+        assert "and each drifted site" in captured.err
+    assert (
+        json.loads((tmp_path / cm.MANIFEST).read_text())["entries"][1]["pattern"]
+        == "import logging"
+    )  # the refused --write left the manifest alone
+
+
+def test_accept_drift_requires_write(tmp_path: Path) -> None:
+    tracked = _tree(tmp_path, {"docs/a.md": "`src/idraa/app.py:1`\n", "src/idraa/app.py": APP})
+    with pytest.raises(SystemExit) as info:
+        _main(tmp_path, tracked, "--check", "--accept-drift", "src/idraa/app.py:1")
+    assert info.value.code == 2
+
+
+# ---- the committed manifest, against this repository -------------------------------------------
+
+
+def _committed() -> list[dict[str, object]]:
+    return json.loads((ROOT / cm.MANIFEST).read_text(encoding="utf-8"))["entries"]
+
+
+def _tracked() -> set[str]:
+    return set(cm.tracked_files(ROOT))
+
+
+_REMEDY = (
+    "re-cite the reported sites in the document, then run"
+    " `uv run python scripts/clerk_manifests.py --write` (see .clerk/README.md)"
+)
+
+
+def _manifest_gap(committed: str, fresh: list[cm.Entry], limit: int = 5) -> str:
+    """A short summary of how the committed manifest differs from a fresh build."""
+    try:
+        old = cm.parse_manifest(committed)
+    except cm.ManifestError as exc:
+        return str(exc)
+    fresh_set, old_set = set(fresh), set(old)
+    stale = [e for e in old if e not in fresh_set]
+    missing = [e for e in fresh if e not in old_set]
+
+    def show(label: str, entries: list[cm.Entry]) -> str:
+        shown = "; ".join(f"{e.file}:{e.line} {e.pattern!r}" for e in entries[:limit])
+        more = f" (+{len(entries) - limit} more)" if len(entries) > limit else ""
+        return f"{label} ({len(entries)}): {shown}{more}" if entries else ""
+
+    parts = [
+        show("committed, no longer cited", stale),
+        show("cited, not committed", missing),
+    ]
+    return "\n".join(part for part in parts if part) or "entries equal; the file text differs"
+
+
+def test_committed_manifest_is_fresh() -> None:
+    """A citation edited without regenerating, or code moved under its anchor, fails here (and in CI); an identical line sliding onto the anchor does not (threat model §13)."""
+    built = cm.build(ROOT, cm.DOCS, cm.tracked_files(ROOT))
+    assert built.excluded == ["fly.toml"]
+    assert built.shifted == [], (
+        f"a citation must start on its anchor line; {_REMEDY}: {built.shifted}"
+    )
+    committed = (ROOT / cm.MANIFEST).read_text(encoding="utf-8")
+    fresh = committed == cm.render(
+        built.entries
+    )  # not asserted inline: pytest would print a full diff
+    assert fresh, f"{cm.MANIFEST} is stale; {_REMEDY}\n{_manifest_gap(committed, built.entries)}"
+
+
+def test_committed_citation_anchors_hold() -> None:
+    """The clerk's citations gate, mirrored (implied by freshness; kept for its clearer message)."""
+    files = _tracked()
+    stale = []
+    for entry in _committed():
+        rel = str(entry["file"])
+        assert rel in files and ".." not in rel.split("/"), rel
+        lines = cm.lines_of((ROOT / rel).read_bytes().decode("utf-8"))
+        line = int(entry["line"])
+        if line > len(lines) or str(entry["pattern"]) not in lines[line - 1]:
+            stale.append(f"{rel}:{line} (cited in {entry['doc']})")
+    assert stale == [], f"cited anchors moved; {_REMEDY}: {stale}"
+
+
+def test_committed_entries_cite_only_governed_docs() -> None:
+    entries = _committed()
+    assert len(entries) >= 100, "the manifest must hold the threat model's citations"
+    assert {str(e["doc"]) for e in entries} <= set(cm.DOCS)
+    assert all(e["regex"] is False for e in entries)
+    keys = [(e["doc"], e["file"], e["line"], e["pattern"]) for e in entries]
+    assert keys == sorted(keys) and len(keys) == len(set(keys))
