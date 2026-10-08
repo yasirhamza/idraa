@@ -9,13 +9,17 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+SELF = Path(__file__).resolve().relative_to(ROOT).as_posix()
 
-_IMPORT = re.compile(r"^\s*(?:from|import)\s+superpowers_clerk\b", re.MULTILINE)
+# Any use of the module name in Python source: import statements in every form, importlib,
+# pytest.importorskip, find_spec. This file is the one exception (its patterns name the module).
+_MODULE = re.compile(rb"\bsuperpowers_clerk\b")
+# Every PEP 503 spelling of the distribution name.
+_DIST = re.compile(rb"superpowers[-_.]clerk", re.IGNORECASE)
 # Any of these in a tracked file marks it as part of the adoption.
 _TOKEN = re.compile(
-    r"superpowers[-_]clerk|clerk\.toml|IDRAA_CLERK|\.clerk/manifests|clerk_manifests"
+    rb"superpowers[-_]clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests"
 )
-_SCANNED_TREES = {"src", "fair_cam", "scripts", "security", "tests"}
 
 FOOTPRINT = frozenset(
     {
@@ -29,7 +33,8 @@ FOOTPRINT = frozenset(
         "tests/scripts/test_clerk_manifests.py",
         "tests/scripts/test_run_local_gate_clerk.py",
         "tests/arch/test_clerk_isolation.py",
-        "docs/security/threat-model.md",  # its sections 12 and 13 name clerk.toml and the generator (Task 3)
+        # Its sections 12 and 13 name clerk.toml and the generator (Task 3).
+        "docs/security/threat-model.md",
     }
 )
 GENERATED = (
@@ -45,26 +50,25 @@ def _tracked() -> list[str]:
     return [p for p in out.stdout.decode("utf-8").split("\0") if p]
 
 
-def _text(rel: str) -> str:
+def _bytes(rel: str) -> bytes:
+    """Raw bytes, as the rollback check's grep reads them: an undecodable file still scans."""
     try:
-        return (ROOT / rel).read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
-        return ""
+        return (ROOT / rel).read_bytes()
+    except OSError:
+        return b""
 
 
 def test_nothing_imports_the_clerk() -> None:
-    offenders = [
-        p
-        for p in _tracked()
-        if p.endswith(".py") and p.split("/")[0] in _SCANNED_TREES and _IMPORT.search(_text(p))
-    ]
-    assert offenders == []
-    assert "superpowers-clerk" not in _text("pyproject.toml")
-    assert "superpowers-clerk" not in _text("uv.lock")
+    py = [p for p in _tracked() if p.endswith((".py", ".pyi", ".ipynb"))]
+    assert SELF in py and "scripts/run_local_gate.py" in py  # the scan is not vacuous
+    assert [p for p in py if p != SELF and _MODULE.search(_bytes(p))] == []
+    assert not _DIST.search(_bytes("pyproject.toml"))
+    assert not _DIST.search(_bytes("uv.lock"))
 
 
 def test_adoption_footprint_is_the_allowlist() -> None:
     tracked = _tracked()
-    touched = {p for p in tracked if p != GENERATED and _TOKEN.search(_text(p))}
+    touched = {p for p in tracked if p != GENERATED and _TOKEN.search(_bytes(p))}
     assert touched == FOOTPRINT, {"unexpected": touched - FOOTPRINT, "missing": FOOTPRINT - touched}
-    assert GENERATED in tracked and (ROOT / GENERATED).is_file()
+    assert GENERATED in tracked, f"{GENERATED} is not tracked"
+    assert (ROOT / GENERATED).is_file(), f"{GENERATED} is missing from the working tree"
