@@ -29,6 +29,7 @@
     "src/idraa/services/dashboard_view_model.py",
     "src/idraa/services/industry_mapping.py",
     "src/idraa/services/_starter_overlays_seed_data.py",
+    "src/idraa/services/overlays.py",
     "src/idraa/services/run_caveats.py",
     "src/idraa/services/wizard_questions.py",
     "src/idraa/services/scenario_currency.py",

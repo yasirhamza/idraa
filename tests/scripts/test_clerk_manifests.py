@@ -384,6 +384,98 @@ def test_write_refuses_drift_without_accept(
     )
 
 
+def _numbered(count: int) -> str:
+    """A file whose line N reads `anchor line number NN`: every line is a unique, qualifying anchor."""
+    return "".join(f"anchor line number {number:02d}\n" for number in range(1, count + 1))
+
+
+def test_drift_accepts_recite_collision(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A correct re-cite onto a line another citation's anchor held is not drift.
+
+    One line is inserted above two adjacent anchors (lines 27 and 28) and both citations are
+    re-cited (28 and 29). Citation 28 now anchors the text that citation 27 held, so the key
+    `(doc, file, 28)` changed pattern, but the old text of line 28 is still anchored (at 29).
+    """
+    target = tmp_path / "src/idraa/c.py"
+    tracked = _tree(
+        tmp_path,
+        {
+            "docs/a.md": "`src/idraa/c.py:27` and `src/idraa/c.py:28`\n",
+            "src/idraa/c.py": _numbered(30),
+        },
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    baseline = cm.parse_manifest((tmp_path / cm.MANIFEST).read_text(encoding="utf-8"))
+    assert [(e.line, e.pattern) for e in baseline] == [
+        (27, "anchor line number 27"),
+        (28, "anchor line number 28"),
+    ]
+    target.write_text("# one line inserted above both anchors\n" + _numbered(30), encoding="utf-8")
+    (tmp_path / "docs/a.md").write_text(
+        "`src/idraa/c.py:28` and `src/idraa/c.py:29`\n", encoding="utf-8"
+    )
+    rebuilt = cm.build(tmp_path, ["docs/a.md"], tracked).entries
+    assert [(e.line, e.pattern) for e in rebuilt] == [
+        (28, "anchor line number 27"),
+        (29, "anchor line number 28"),
+    ]
+    assert cm.drift(baseline, rebuilt, set()) == ([], [])
+    assert _main(tmp_path, tracked, "--write") == 0
+    captured = capsys.readouterr()
+    assert "changed under an unchanged citation" not in captured.err
+    assert "accept-drift" not in captured.out + captured.err
+    assert _main(tmp_path, tracked, "--check") == 0
+    assert "is fresh (2 entries)" in capsys.readouterr().out
+
+
+def test_drift_still_refuses_code_moved_under_unchanged_citation() -> None:
+    """The pure-function pin of the guard's original purpose.
+
+    The old anchor text no longer anchors anywhere in that (doc, file), so the key is drift and
+    only `--accept-drift` for exactly that site clears it. The end-to-end pin (refusal message,
+    exit code, the printed record line) is `test_write_refuses_drift_without_accept`.
+    """
+    doc, file = "docs/a.md", "src/idraa/app.py"
+    before = [cm.Entry(doc, file, 1, "from fastapi import FastAPI")]
+    after = [cm.Entry(doc, file, 1, "import logging")]
+    message = f"{file}:1 changed under an unchanged citation in {doc}"
+    assert cm.drift(before, after, set()) == ([message], [])
+    assert cm.drift(before, after, {f"{file}:1"}) == ([], [])
+    assert cm.drift(before, after, {f"{file}:9"}) == ([message], [f"{file}:9"])
+    # an old anchor text anchored in a DIFFERENT file does not excuse the key
+    elsewhere = [*after, cm.Entry(doc, "src/idraa/other.py", 4, "from fastapi import FastAPI")]
+    assert cm.drift(before, elsewhere, set()) == ([message], [])
+
+
+def test_drift_refuses_when_old_anchor_count_drops_despite_collision(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A surviving identical anchor elsewhere must not launder real drift.
+
+    Two citations are anchored on identical text (lines 1 and 2). Line 1's code is replaced under
+    its unchanged citation; line 2 is untouched, so the old text is still anchored once, but it
+    was anchored twice. The count dropped (2 -> 1): refused.
+    """
+    same = "repeated anchor text here\n"
+    tracked = _tree(
+        tmp_path,
+        {"docs/a.md": "`src/idraa/c.py:1` and `src/idraa/c.py:2`\n", "src/idraa/c.py": same * 2},
+    )
+    assert _main(tmp_path, tracked, "--write") == 0
+    capsys.readouterr()
+    baseline = cm.parse_manifest((tmp_path / cm.MANIFEST).read_text(encoding="utf-8"))
+    assert [e.pattern for e in baseline] == ["repeated anchor text here"] * 2
+    (tmp_path / "src/idraa/c.py").write_text("replaced first line\n" + same, encoding="utf-8")
+    rebuilt = cm.build(tmp_path, ["docs/a.md"], tracked).entries
+    message = "src/idraa/c.py:1 changed under an unchanged citation in docs/a.md"
+    assert cm.drift(baseline, rebuilt, set()) == ([message], [])
+    assert _main(tmp_path, tracked, "--write") == 1
+    assert message in capsys.readouterr().err
+    assert _main(tmp_path, tracked, "--write", "--accept-drift", "src/idraa/c.py:1") == 0
+    assert "accept-drift src/idraa/c.py:1" in capsys.readouterr().out
+
+
 def test_write_uses_head_baseline_when_working_copy_missing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -534,11 +626,14 @@ def test_main_reports_shift_and_drift_in_one_pass(
     for mode in ("--check", "--write"):
         assert _main(tmp_path, tracked, mode) == 1
         captured = capsys.readouterr()
-        assert "shifted anchor: docs/a.md:1: src/idraa/app.py:1 anchored at :3" in captured.out
+        assert captured.out == ""  # both lists and the closing message are refusals: one stream
+        shifted_at = captured.err.index(
+            "shifted anchor: docs/a.md:1: src/idraa/app.py:1 anchored at :3"
+        )
         drift_at = captured.err.index(
             "src/idraa/other.py:1 changed under an unchanged citation in docs/a.md"
         )
-        assert drift_at < captured.err.index("must start on its anchor line")
+        assert shifted_at < drift_at < captured.err.index("must start on its anchor line")
         assert "and each drifted site" in captured.err
     assert (
         json.loads((tmp_path / cm.MANIFEST).read_text())["entries"][1]["pattern"]

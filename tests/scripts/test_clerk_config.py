@@ -134,6 +134,9 @@ def test_escalation_subjects_and_paths() -> None:
         "tests/arch/**",
         ".gitleaks.toml",
         "scripts/sca_suppressions.txt",
+        "scripts/check_canonical_remote.py",
+        "pyproject.toml",
+        "**/conftest.py",
         "docs/reference/fair-departures-register.md",
         "docs/security/**",
     ):

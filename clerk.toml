@@ -56,6 +56,7 @@ subjects = [
 "src/idraa/threat_community_provenance.py" = "derivation"
 "src/idraa/services/industry_mapping.py" = "calibration"
 "src/idraa/services/_starter_overlays_seed_data.py" = "calibration"
+"src/idraa/services/overlays.py" = "calibration"
 "scripts/build_*.py" = "calibration"
 "scripts/derive_*.py" = "calibration"
 "scripts/netdiligence_sigma_check.py" = "calibration"

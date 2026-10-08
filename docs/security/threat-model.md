@@ -383,7 +383,7 @@ docstring).
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
-  transitively safe because `control` was org-verified two lines earlier
+  transitively safe because `control` was org-verified earlier in the same handler
   (`routes/controls.py:692-693`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
@@ -873,12 +873,13 @@ watching:
     server-side and intact); a one-shot "session changed" notice is a UX
     follow-up.
 11. **Out of scope: developer tooling.** Two developer-machine tools send excerpts of this
-    repository, including unpublished head-commit content (runs on embargoed work use
-    `--no-external`), and review text (claims, findings) to the TypeSafe API: the curation
-    checker (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; see
-    `.clerk/README.md`). The clerk reads the API key only from the OS keyring (macOS
-    Keychain; on Linux the secret service); the checker from the Keychain or, off macOS, from a
-    per-command environment variable. CI never
+    repository and review text (claims, findings) to the TypeSafe API: the curation checker
+    (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; see
+    `.clerk/README.md`). The clerk's judge runs include unpublished head-commit content in those
+    excerpts unless the run is `--no-external`, which every run on embargoed work is; the
+    curation checker has no external mode of its own beyond its key path. The clerk reads the
+    API key only from the OS keyring (macOS Keychain; on Linux the secret service); the checker
+    from the Keychain or, off macOS, from a per-command environment variable. CI never
     holds the key, and neither tool is a boundary of the running application. Listed so the
     quarterly re-audit knows the flows exist.
 

@@ -23,7 +23,9 @@ pattern. Rules:
   first line is reported (the committed manifest carries none: re-cite the range to start there);
   anchors whose pattern occurs more than once in their file are counted (`--verbose` lists them);
 - drift guard: entries are keyed by (doc, file, line); `--write` refuses a key whose pattern
-  changed (code moved under an unchanged citation) unless `--accept-drift <file>:<line>` names it;
+  changed AND whose old anchor text is now anchored fewer times in that (doc, file) than before
+  (code moved under an unchanged citation) unless `--accept-drift <file>:<line>` names it; a
+  re-cite that merely carries an anchor onto a line another citation's anchor held is not drift;
   the baseline is the working-tree manifest, else HEAD's copy, else empty;
 - output is deduplicated, sorted, one entry per line, trailing newline; `regex` is always false.
 
@@ -32,7 +34,8 @@ HEAD copy to compare against, and the authority is the orchestrator's base-manif
 all` run and the security lane's review of the manifest diff (adoption design §3.3, §5).
 
 `--check` exits 1 when a rule fails or the committed manifest differs from a fresh build;
-`--write` rewrites it. Excluded untracked names and shifted anchors are always printed.
+`--write` rewrites it. Excluded untracked names are always printed (stdout); a shifted anchor and a
+drifted site are refusals, listed together on stderr before the closing message.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ import re
 import stat
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -348,13 +352,29 @@ def load_baseline(root: Path, head_text: str | None) -> list[Entry]:
 def drift(
     before: list[Entry], after: list[Entry], accepted: set[str]
 ) -> tuple[list[str], list[str]]:
-    """(drifted messages, unused acceptances). A drifted key: code moved under an unchanged citation."""
+    """(drifted messages, unused acceptances). A drifted key: code moved under an unchanged citation.
+
+    The rule is multiplicity, not key identity. A key `(doc, file, line)` whose pattern changed is
+    drift ONLY when the old anchor text is now anchored fewer times than before within the same
+    `(doc, file)`: the text the citation pinned has vanished from the anchored set. If the old text
+    is still anchored as often (just at another line), the anchor merely moved. That is the re-cite
+    collision: one line inserted above `services/auth.py:27` and every citation correctly re-cited,
+    so the new anchor line `28` previously held another citation's anchor. Refusing it would leave
+    `--accept-drift`, a false record, as the only exit. A real drift, a forgotten re-cite and a
+    partial re-cite all lose an anchor and stay refused; two cited lines swapped under unchanged
+    citations is the residual that only the base-manifest `clerk gate` run reports.
+    """
     old = {(e.doc, e.file, e.line): e.pattern for e in before}
+    had = Counter((e.doc, e.file, e.pattern) for e in before)
+    kept = Counter((e.doc, e.file, e.pattern) for e in after)
     drifted: set[str] = set()
     used: set[str] = set()
     for e in after:
         key = (e.doc, e.file, e.line)
         if key in old and old[key] != e.pattern:
+            moved = (e.doc, e.file, old[key])
+            if kept[moved] >= had[moved]:
+                continue  # re-cite collision: the old anchor text is still anchored, at a new line
             site = f"{e.file}:{e.line}"
             if site in accepted:
                 used.add(site)
@@ -405,9 +425,9 @@ def main(
     for name in built.excluded:
         print(f"clerk-manifests: excluded (untracked): {name}")
     drifted, unused = drift(baseline, built.entries, set(args.accept_drift))
-    for note in built.shifted:
-        print(f"clerk-manifests: shifted anchor: {note}")
     if built.shifted:
+        for note in built.shifted:
+            print(f"clerk-manifests: shifted anchor: {note}", file=sys.stderr)
         for item in drifted:
             print(f"clerk-manifests: {item}", file=sys.stderr)
         print(

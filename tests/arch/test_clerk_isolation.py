@@ -14,8 +14,9 @@ SELF = Path(__file__).resolve().relative_to(ROOT).as_posix()
 # Any use of the module name in Python source: import statements in every form, importlib,
 # pytest.importorskip, find_spec. This file is the one exception (its patterns name the module).
 _MODULE = re.compile(rb"\bsuperpowers_clerk\b")
-# Every PEP 503 spelling of the distribution name.
-_DIST = re.compile(rb"superpowers[-_.]clerk", re.IGNORECASE)
+# Every PEP 503 spelling of the distribution name: runs of separators collapse, so `superpowers__clerk`
+# and `superpowers-.-clerk` name the same distribution.
+_DIST = re.compile(rb"superpowers[-_.]+clerk", re.IGNORECASE)
 # Any of these in a tracked file marks it as part of the adoption.
 _TOKEN = re.compile(
     rb"superpowers[-_]clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests"
