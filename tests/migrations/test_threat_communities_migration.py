@@ -19,6 +19,11 @@ _spec.loader.exec_module(mod)  # type: ignore[union-attr]
 PRE, REV = mod.down_revision, mod.revision
 _ORG = uuid.uuid4().hex
 
+(_MIG_209,) = (_ROOT / "alembic" / "versions").glob("c7d2e9f4a1b3_*.py")
+_spec_209 = importlib.util.spec_from_file_location("_tc_mig_209", _MIG_209)
+mod_209 = importlib.util.module_from_spec(_spec_209)
+_spec_209.loader.exec_module(mod_209)  # type: ignore[union-attr]
+
 
 def _insert_org(conn) -> None:
     conn.execute(
@@ -85,6 +90,17 @@ def _seed_map(key: str) -> dict[str, str]:
     }
 
 
+def _p1_community_map() -> dict[str, str]:
+    """The entry -> community map AS OF P1 (a1c9e4d2b7f0): the live seed JSON with the later
+    issue-#209 re-maps (c7d2e9f4a1b3) applied in reverse. Each re-map's `new` is asserted
+    against the JSON here too, so the two migrations and the JSON stay consistent."""
+    expected = _seed_map("threat_community")
+    for slug, old, new, _rationale in mod_209._REMAPS:
+        assert expected[slug] == new, (slug, expected[slug], new)
+        expected[slug] = old
+    return expected
+
+
 def _legacy_of(conn, slug: str) -> str:
     return conn.execute(
         sa.text("SELECT threat_actor_type FROM scenario_library_entries WHERE slug=:s"), {"s": slug}
@@ -92,12 +108,12 @@ def _legacy_of(conn, slug: str) -> str:
 
 
 def test_frozen_maps_match_seed_json() -> None:
-    assert _seed_map("threat_community") == mod._ENTRY_COMMUNITY
+    assert _p1_community_map() == mod._ENTRY_COMMUNITY
     assert _seed_map("threat_actor_type") == mod._ENTRY_LEGACY
 
 
 def test_upgrade_rules(alembic_runner, alembic_engine) -> None:
-    seed = _seed_map("threat_community")
+    seed = _p1_community_map()
     remapped_slug = next(
         s
         for s, c in seed.items()
@@ -184,7 +200,7 @@ def test_upgrade_follows_pin_into_nonprivileged_insider_specifically(
     the pinned entry's own community (nonprivileged_insider, not the split-default
     privileged_insider a bare 'insider_malicious' tat would otherwise fall to), provenance
     'migrated' (the pin resolves the ambiguity -- NOT 'migrated_split_default')."""
-    seed = _seed_map("threat_community")
+    seed = _p1_community_map()
     np_slug = next(s for s, c in seed.items() if c == "nonprivileged_insider")
     alembic_runner.migrate_up_to(PRE)
     with alembic_engine.begin() as conn:

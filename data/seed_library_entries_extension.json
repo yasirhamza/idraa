@@ -736,7 +736,7 @@
     "threat_actor_type": "insider_accidental",
     "threat_community": "insider_accidental",
     "asset_class": "data",
-    "attack_vector": "privileged_access_misuse",
+    "attack_vector": "misdelivery_or_misconfiguration",
     "tags": [
       "insider_threat",
       "accidental",
@@ -745,7 +745,7 @@
       "data_exposure",
       "pii"
     ],
-    "description": "A non-malicious insider exposes sensitive data through error — emailing a file to the wrong recipient, attaching the wrong document, mis-setting a SharePoint/cloud-share permission, leaving a database or mailbox publicly accessible, or mis-publishing a report. There is no adversary motive; the loss is driven by what was exposed and the resulting breach-notification and regulatory obligations. Miscellaneous errors (misdelivery, misconfiguration, publishing error) are consistently one of the largest breach-cause categories in industry reporting, yet are under-represented relative to attack-driven scenarios in this library.",
+    "description": "A non-malicious insider exposes sensitive data through error — emailing a file to the wrong recipient, attaching the wrong document, mis-setting a SharePoint/cloud-share permission, leaving a database or mailbox publicly accessible, or mis-publishing a report. There is no adversary motive; the loss is driven by what was exposed and the resulting breach-notification and regulatory obligations. Miscellaneous errors (misdelivery, misconfiguration, publishing error) are consistently one of the largest breach-cause categories in industry reporting, yet are under-represented relative to attack-driven scenarios in this library. The threat event is the error that would expose the data — counted even when a control catches it, as the accidental-insider counting rule requires — and the loss event is the resulting exposure with its notification, regulatory and remediation cost, whether or not an outsider ever reads the exposed data; an outsider harvesting an exposed store is a separate threat event with its own frequency and community (opportunistic hackers), which the cloud storage misconfiguration entry carries for cloud object storage.",
     "example_incidents": "Misdelivery (wrong-recipient email/fax) is a recurring top error pattern in Verizon DBIR breach data; municipal and healthcare mis-publishing incidents (public-facing portals exposing PII) reported routinely to HHS OCR and state AGs; cloud-share misconfiguration exposures of internal HR and customer files.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
@@ -1751,7 +1751,7 @@
     "status": "published",
     "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
-    "threat_community": "privileged_insider",
+    "threat_community": "nonprivileged_insider",
     "asset_class": "data",
     "attack_vector": "insider_access_abuse",
     "tags": [
@@ -1762,7 +1762,7 @@
       "pms",
       "gdpr"
     ],
-    "description": "A malicious insider — front-desk staff, reservation agent, or IT employee — abuses privileged access to the property-management system (PMS) or central reservation system to exfiltrate guest personal and payment data for sale or personal use. Hospitality organizations hold dense guest profiles (travel patterns, credit card data, VIP preferences, room-access codes), making them a high-value insider exfiltration target. Loss includes breach notification, PCI-DSS remediation, GDPR/CCPA regulatory fines, and litigation from impacted guests.",
+    "description": "A malicious insider with ordinary role access — front-desk staff or a reservation agent — abuses that access to the property-management system (PMS) or central reservation system to exfiltrate guest personal and payment data for sale or personal use; an IT administrator doing the same with elevated rights is the privileged-insider variant. Hospitality organizations hold dense guest profiles (travel patterns, credit card data, VIP preferences, room-access codes), making them a high-value insider exfiltration target. Loss includes breach notification, PCI-DSS remediation, GDPR/CCPA regulatory fines, and litigation from impacted guests.",
     "example_incidents": "Multiple hotel chains have disclosed smaller insider PMS data access incidents in state attorney-general breach notifications. Routine incidents of front-desk staff accessing celebrity/VIP guest records for personal purposes reported without public financial disclosure.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
@@ -3557,11 +3557,11 @@
   },
   {
     "slug": "crop-science-ip-exfiltration",
-    "name": "Crop-Science IP Exfiltration — Competitor-Sponsored Theft of Seed Genetics and Agrochemical IP",
+    "name": "Crop-Science IP Exfiltration — State-Sponsored Theft of Seed Genetics and Agrochemical IP",
     "status": "published",
     "threat_event_type": "data_disclosure",
     "threat_actor_type": "competitors",
-    "threat_community": "competitors",
+    "threat_community": "nation_state",
     "asset_class": "data",
     "attack_vector": "external_network_exploitation",
     "tags": [
@@ -3570,11 +3570,11 @@
       "crop_science",
       "seed_genetics",
       "agrochemical",
-      "competitors",
+      "nation_state",
       "nation_state_proxy",
       "trade_secret"
     ],
-    "description": "Competitor-sponsored actors — including nation-state proxies acting on behalf of foreign agri-chemical firms — conduct long-dwell intrusions against crop-science companies (NAICS 325311-325320, 5417) to exfiltrate proprietary seed genetics, pesticide and herbicide formulation data, and precision-agriculture algorithms. Target organizations include major agri-chemical companies (NAICS 325311-325320) and agricultural R&D firms. Loss components include the economic value of the stolen IP (competitive advantage erosion), litigation costs (trade-secret misappropriation under the Defend Trade Secrets Act), and remediation of the intrusion. The long-dwell nature of the attack (months to years before detection) amplifies the IP exposure.",
+    "description": "State-directed operators and their proxies, for the benefit of their own state's agri-chemical champions, conduct long-dwell intrusions against crop-science companies (NAICS 325311-325320, 5417) to exfiltrate proprietary seed genetics, pesticide and herbicide formulation data, and precision-agriculture algorithms. Target organizations include major agri-chemical companies (NAICS 325311-325320) and agricultural R&D firms. The sponsorship decides the community: the operators described are state-directed — FBI counterintelligence and DOJ prosecutions document sustained Chinese state targeting of the sector, and the advisory behind the entry's ATT&CK mappings (AA21-200A) documents the intrusion method — while a rival firm acting on its own account, through its own staff or arm's-length recruits, investigators or brokers, is the competitors community instead. Loss components include the economic value of the stolen IP (competitive advantage erosion), litigation costs (trade-secret misappropriation under the Defend Trade Secrets Act), and remediation of the intrusion. The long-dwell nature of the attack (months to years before detection) amplifies the IP exposure.",
     "example_incidents": "Multiple US DOJ trade-secret / economic-espionage prosecutions (2011–2019) have charged theft of US agri-chemical and seed-genetics trade secrets by China-linked actors, spanning insecticide formulation data (Dow AgroSciences) and inbred corn-seed genetics (Southern District of Iowa). FBI counterintelligence and DOJ prosecutions have documented sustained Chinese state-actor targeting of US agricultural and crop-science trade secrets.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)",
@@ -6328,21 +6328,23 @@
   },
   {
     "slug": "higher-ed-insider-ddos",
-    "name": "Higher-Education Insider-Motivated Botnet DDoS Against Campus Network",
+    "name": "Higher-Education DDoS Against Campus Network — Affiliate-Directed Botnet or Booter",
     "status": "published",
     "threat_event_type": "denial_of_service",
     "threat_actor_type": "insider_malicious",
-    "threat_community": "nonprivileged_insider",
+    "threat_community": "cybercriminals",
     "asset_class": "systems",
     "attack_vector": "volumetric_ddos_botnet",
     "tags": [
       "education",
       "higher_education",
       "ddos",
-      "insider",
+      "botnet",
+      "booter",
+      "cybercriminals",
       "availability"
     ],
-    "description": "An enrolled affiliate (a student), motivated by personal grudge, directs an external botnet to launch volumetric distributed denial-of-service attacks against a university's own network - central authentication, registration, and coursework systems - causing repeated availability outages during high-load periods. The attacker is an insider by trust/affiliation, but the DDoS is external and distributed, not conducted through granted network access.",
+    "description": "An enrolled affiliate (a student) acting on a personal grudge directs volumetric distributed denial-of-service attacks against a university's own network - central authentication, registration, and coursework systems - causing repeated availability outages during high-load periods such as registration and examinations; the capacity is a botnet the student runs, as in the Rutgers case, or a rented DDoS-for-hire (booter) service. The act is deliberate and uses no granted access, so none of the insider communities applies, and no extortion demand is made. The capability used and the control that matters (DDoS protection) are those of the commercial DDoS entries, which places the entry with cybercriminals; when a booter is rented, its operator is itself a financially motivated criminal acting to disrupt. Its frequency counts only attacks an affiliate directs, through their own botnet or a hired booter; DDoS that criminals mount on their own account, for extortion or otherwise, is a separate scenario with its own frequency.",
     "example_incidents": "Paras Jha, a Rutgers University student, ran a botnet DDoS campaign against Rutgers' central authentication and registration systems from Nov 2014 to Sep 2016; he pleaded guilty in the District of New Jersey and was ordered to pay $8.6M restitution (DOJ USAO-NJ, 2018).",
     "canonical_fair_gap": "The only insider-motivated denial-of-service archetype in the library. Distinct from external-extortion and seasonal-revenue DDoS entries (different motive, no extortion) and from physical campus tampering. Single well-documented exemplar (Rutgers/Jha); framed narrowly as insider-motivated external botnet DDoS against campus availability.",
     "applicable_industries": [

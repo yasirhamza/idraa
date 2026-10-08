@@ -1,0 +1,133 @@
+[
+  {
+    "slug": "accidental-insider-exposure",
+    "column": "attack_vector",
+    "old": "privileged_access_misuse"
+  },
+  {
+    "slug": "accidental-insider-exposure",
+    "column": "description",
+    "old": "A non-malicious insider exposes sensitive data through error — emailing a file to the wrong recipient, attaching the wrong document, mis-setting a SharePoint/cloud-share permission, leaving a database or mailbox publicly accessible, or mis-publishing a report. There is no adversary motive; the loss is driven by what was exposed and the resulting breach-notification and regulatory obligations. Miscellaneous errors (misdelivery, misconfiguration, publishing error) are consistently one of the largest breach-cause categories in industry reporting, yet are under-represented relative to attack-driven scenarios in this library."
+  },
+  {
+    "slug": "credential-stuffing-consumer-portal",
+    "column": "description",
+    "old": "Automated credential stuffing tools (Sentry MBA, Snipr, Openbullet) test username/password combinations from breached credential databases against consumer-facing portals (loyalty accounts, banking, retail, streaming). Successful matches grant account takeover — attackers drain loyalty points, redirect payment instruments, make fraudulent purchases, or sell valid account credentials. Akamai reports credential stuffing as the dominant attack category for retail and financial portals by traffic volume. Low sophistication required; tools and breach databases are commoditized."
+  },
+  {
+    "slug": "crop-science-ip-exfiltration",
+    "column": "description",
+    "old": "Competitor-sponsored actors — including nation-state proxies acting on behalf of foreign agri-chemical firms — conduct long-dwell intrusions against crop-science companies (NAICS 325311-325320, 5417) to exfiltrate proprietary seed genetics, pesticide and herbicide formulation data, and precision-agriculture algorithms. Target organizations include major agri-chemical companies (NAICS 325311-325320) and agricultural R&D firms. Loss components include the economic value of the stolen IP (competitive advantage erosion), litigation costs (trade-secret misappropriation under the Defend Trade Secrets Act), and remediation of the intrusion. The long-dwell nature of the attack (months to years before detection) amplifies the IP exposure."
+  },
+  {
+    "slug": "crop-science-ip-exfiltration",
+    "column": "name",
+    "old": "Crop-Science IP Exfiltration — Competitor-Sponsored Theft of Seed Genetics and Agrochemical IP"
+  },
+  {
+    "slug": "crop-science-ip-exfiltration",
+    "column": "tags",
+    "old": [
+      "food_agriculture",
+      "ip_theft",
+      "crop_science",
+      "seed_genetics",
+      "agrochemical",
+      "competitors",
+      "nation_state_proxy",
+      "trade_secret"
+    ]
+  },
+  {
+    "slug": "higher-ed-insider-ddos",
+    "column": "description",
+    "old": "An enrolled affiliate (a student), motivated by personal grudge, directs an external botnet to launch volumetric distributed denial-of-service attacks against a university's own network - central authentication, registration, and coursework systems - causing repeated availability outages during high-load periods. The attacker is an insider by trust/affiliation, but the DDoS is external and distributed, not conducted through granted network access."
+  },
+  {
+    "slug": "higher-ed-insider-ddos",
+    "column": "name",
+    "old": "Higher-Education Insider-Motivated Botnet DDoS Against Campus Network"
+  },
+  {
+    "slug": "higher-ed-insider-ddos",
+    "column": "tags",
+    "old": [
+      "education",
+      "higher_education",
+      "ddos",
+      "insider",
+      "availability"
+    ]
+  },
+  {
+    "slug": "hospitality-guest-data-insider",
+    "column": "description",
+    "old": "A malicious insider — front-desk staff, reservation agent, or IT employee — abuses privileged access to the property-management system (PMS) or central reservation system to exfiltrate guest personal and payment data for sale or personal use. Hospitality organizations hold dense guest profiles (travel patterns, credit card data, VIP preferences, room-access codes), making them a high-value insider exfiltration target. Loss includes breach notification, PCI-DSS remediation, GDPR/CCPA regulatory fines, and litigation from impacted guests."
+  },
+  {
+    "slug": "insider-ip-theft-manufacturing",
+    "column": "attack_vector",
+    "old": "privileged_access_misuse"
+  },
+  {
+    "slug": "insider-ip-theft-manufacturing",
+    "column": "description",
+    "old": "Engineering employee or contractor exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets — often in the context of departure to a competing employer or in response to foreign intelligence tasking. The US Department of Justice prosecutes dozens of such cases annually. Unlike financial-data insider theft, IP theft has a primary loss dominated by competitive advantage loss (difficult to quantify) and a secondary loss dominated by litigation costs and potential criminal investigation exposure."
+  },
+  {
+    "slug": "insider-ip-theft-manufacturing",
+    "column": "tags",
+    "old": [
+      "insider_threat",
+      "ip_theft",
+      "manufacturing",
+      "trade_secrets",
+      "economic_espionage"
+    ]
+  },
+  {
+    "slug": "ot-network-scanning-reconnaissance",
+    "column": "attack_vector",
+    "old": "passive_network_scanning_and_active_probing"
+  },
+  {
+    "slug": "ot-network-scanning-reconnaissance",
+    "column": "canonical_fair_gap",
+    "old": "FAIR models threat events as discrete loss-causing incidents; reconnaissance is a pre-incident activity that does not directly cause a loss event but materially increases the probability and magnitude of future attacks. FAIR has no standard mechanism for modeling the value of intelligence delivered to an adversary during reconnaissance as a loss component, nor for modeling how reconnaissance pre-positioning elevates the frequency parameter for future attack archetypes. A two-stage model linking reconnaissance to downstream attack frequency is absent from the canonical taxonomy."
+  },
+  {
+    "slug": "ot-network-scanning-reconnaissance",
+    "column": "description",
+    "old": "Nation-state actors and sophisticated threat groups conduct systematic reconnaissance of OT networks using passive scanning (Shodan, Censys), active probing of exposed ICS protocols (Modbus, DNP3, BACnet, EtherNet/IP), and spearphishing for engineering documentation. Volt Typhoon's CISA-documented campaigns (2023-2024) demonstrated persistent pre-positioning reconnaissance in US critical infrastructure OT networks specifically for future disruptive capability. The loss event at the reconnaissance stage is primarily the value of intelligence delivered to the adversary; the downstream loss if reconnaissance enables a follow-on attack is the key risk."
+  },
+  {
+    "slug": "ot-network-scanning-reconnaissance",
+    "column": "name",
+    "old": "OT Network Scanning and Reconnaissance — Pre-Attack Footprinting"
+  },
+  {
+    "slug": "crop-science-ip-exfiltration",
+    "column": "threat_community",
+    "old": "competitors"
+  },
+  {
+    "slug": "higher-ed-insider-ddos",
+    "column": "threat_community",
+    "old": "nonprivileged_insider"
+  },
+  {
+    "slug": "hospitality-guest-data-insider",
+    "column": "threat_community",
+    "old": "privileged_insider"
+  },
+  {
+    "slug": "insider-ip-theft-manufacturing",
+    "column": "threat_community",
+    "old": "privileged_insider"
+  },
+  {
+    "slug": "_merge_base",
+    "column": "sha",
+    "old": "7fd06be2b854fda8106292348a98633c5dd698cc"
+  }
+]

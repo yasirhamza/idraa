@@ -1317,17 +1317,16 @@
     "status": "published",
     "threat_event_type": "insider_misuse",
     "threat_actor_type": "insider_malicious",
-    "threat_community": "privileged_insider",
+    "threat_community": "nonprivileged_insider",
     "asset_class": "data",
-    "attack_vector": "privileged_access_misuse",
+    "attack_vector": "insider_access_abuse",
     "tags": [
       "insider_threat",
       "ip_theft",
       "manufacturing",
-      "trade_secrets",
-      "economic_espionage"
+      "trade_secrets"
     ],
-    "description": "Engineering employee or contractor exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets — often in the context of departure to a competing employer or in response to foreign intelligence tasking. The US Department of Justice prosecutes dozens of such cases annually. Unlike financial-data insider theft, IP theft has a primary loss dominated by competitive advantage loss (difficult to quantify) and a secondary loss dominated by litigation costs and potential criminal investigation exposure.",
+    "description": "Engineering employee or contractor exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets — typically on their own initiative ahead of a move to a competing employer. The access abused is ordinary and role-based — the engineer legitimately reads the designs they work on, and no elevated rights are used — which places the entry with the non-privileged insider; an administrator exfiltrating repositories they do not work on is the privileged-insider variant. When a rival solicited the theft it is the competitors community, and when a foreign service tasked it (the cited GE case was charged as economic espionage) the sponsor decides the community, as for crop-science. The US Department of Justice prosecutes dozens of such cases annually. Unlike financial-data insider theft, IP theft has a primary loss dominated by competitive advantage loss (difficult to quantify) and a secondary loss dominated by litigation costs and potential criminal investigation exposure.",
     "example_incidents": "Multiple DOJ Economic Espionage Act prosecutions 2020-2024 (semiconductor IP theft cases involving TSMC, Apple, Micron, and Google). General Electric IP theft case 2023 (former GE engineer convicted of stealing turbine technology for China).",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)",
@@ -2718,7 +2717,7 @@
       "financial",
       "automation"
     ],
-    "description": "Automated credential stuffing tools (Sentry MBA, Snipr, Openbullet) test username/password combinations from breached credential databases against consumer-facing portals (loyalty accounts, banking, retail, streaming). Successful matches grant account takeover — attackers drain loyalty points, redirect payment instruments, make fraudulent purchases, or sell valid account credentials. Akamai reports credential stuffing as the dominant attack category for retail and financial portals by traffic volume. Low sophistication required; tools and breach databases are commoditized.",
+    "description": "Automated credential stuffing tools (Sentry MBA, Snipr, Openbullet) test username/password combinations from breached credential databases against consumer-facing portals (loyalty accounts, banking, retail, streaming). Successful matches grant account takeover — attackers drain loyalty points, redirect payment instruments, make fraudulent purchases, or sell valid account credentials. Akamai reports credential stuffing as the dominant attack category for retail and financial portals by traffic volume. Low sophistication required; tools and breach databases are commoditized. Run as an organised account-takeover operation, with the persistence and monetisation infrastructure behind it, this is the cybercriminals community; an untargeted run against a public login by an unaffiliated individual or small crew, even one that resells what falls out, is the opportunistic hacker's.",
     "example_incidents": "Dunkin Donuts 2019 (credential stuffing of loyalty app; FTC settlement); Chipotle 2017 loyalty account compromise via stuffing; NCSC UK multiple financial sector credential stuffing advisory 2022; Okta 2022 customer portal credential stuffing incident.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
@@ -3026,13 +3025,13 @@
   },
   {
     "slug": "ot-network-scanning-reconnaissance",
-    "name": "OT Network Scanning and Reconnaissance — Pre-Attack Footprinting",
+    "name": "OT Pre-Positioning Reconnaissance — Access Attempts Against Exposed ICS Services",
     "status": "published",
     "threat_event_type": "ot_availability",
     "threat_actor_type": "nation_state",
     "threat_community": "nation_state",
     "asset_class": "ot_systems",
-    "attack_vector": "passive_network_scanning_and_active_probing",
+    "attack_vector": "network_intrusion",
     "tags": [
       "ot_ics",
       "reconnaissance",
@@ -3041,12 +3040,12 @@
       "pre_positioning",
       "shodan"
     ],
-    "description": "Nation-state actors and sophisticated threat groups conduct systematic reconnaissance of OT networks using passive scanning (Shodan, Censys), active probing of exposed ICS protocols (Modbus, DNP3, BACnet, EtherNet/IP), and spearphishing for engineering documentation. Volt Typhoon's CISA-documented campaigns (2023-2024) demonstrated persistent pre-positioning reconnaissance in US critical infrastructure OT networks specifically for future disruptive capability. The loss event at the reconnaissance stage is primarily the value of intelligence delivered to the adversary; the downstream loss if reconnaissance enables a follow-on attack is the key risk.",
+    "description": "Nation-state actors and sophisticated threat groups prepare disruptive capability against OT networks by attempting access to exposed ICS services (Modbus, DNP3, BACnet, EtherNet/IP), engineering workstations and remote-access paths, and by spearphishing for engineering documentation. Scanning — passive (Shodan, Censys) or active protocol enumeration — is not a threat event under the nation-state counting rule and is not counted; a threat event is one intrusion attempt (a campaign of access attempts or spearphishing against the organisation), counted whether or not it succeeds, so the TEF below is in campaigns per year. Volt Typhoon's CISA-documented campaigns (2023-2024) demonstrated persistent pre-positioning in US critical infrastructure OT networks specifically for future disruptive capability. A loss event is a successful access or theft of documentation; its modelled cost is the incident response it forces, while the loss from any follow-on attack belongs to that attack's own scenario.",
     "example_incidents": "Volt Typhoon 2023-2024 — CISA AA24-038A documented pre-positioning in US water, power, and communications OT networks; attributed to PRC state-sponsored actors for future disruption capability; CISA Shields Up advisories 2022 noting increased OT reconnaissance by Russian threat actors.",
     "source_citations": [
       "IRIS 2025 Figure A3, p. 35 (sector loss envelope; Epic D-iii envelopexshare model)"
     ],
-    "canonical_fair_gap": "FAIR models threat events as discrete loss-causing incidents; reconnaissance is a pre-incident activity that does not directly cause a loss event but materially increases the probability and magnitude of future attacks. FAIR has no standard mechanism for modeling the value of intelligence delivered to an adversary during reconnaissance as a loss component, nor for modeling how reconnaissance pre-positioning elevates the frequency parameter for future attack archetypes. A two-stage model linking reconnaissance to downstream attack frequency is absent from the canonical taxonomy.",
+    "canonical_fair_gap": "FAIR counts a threat event whether or not it succeeds, and a loss event only when it does. Scanning and protocol enumeration come before any attempt and are not counted here (the nation-state counting rule excludes scans). The counted threat event is a state-directed intrusion attempt — a campaign of access attempts or spearphishing against the organisation — and a successful access or theft of documentation is a loss event, costed as the incident response it forces. FAIR has no loss form for the intelligence an adversary gains, and no canonical mechanism linking pre-positioning to the frequency of a later disruptive attack, so that attack is modelled as its own scenario.",
     "applicable_industries": [
       "utilities",
       "transportation",
