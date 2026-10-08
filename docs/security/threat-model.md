@@ -384,7 +384,7 @@ docstring).
   `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified two lines earlier
-  (`routes/controls.py:693`).
+  (`routes/controls.py:692-693`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
@@ -693,7 +693,7 @@ new export format must re-implement, not assume is "someone else's problem."
   event-loop block for a cross-boundary starvation DoS. New RAM term: each
   concurrent Argon2 verify holds ~64 MiB (`m=65536`), so the pool adds
   `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
-  budget (`config.py:71-77`) — fits the 4 GB VM; re-derive with the MC caps if
+  budget (`config.py:275-279`) — fits the 4 GB VM; re-derive with the MC caps if
   the VM shape changes.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
@@ -873,9 +873,10 @@ watching:
     server-side and intact); a one-shot "session changed" notice is a UX
     follow-up.
 11. **Out of scope: developer tooling.** Two developer-machine tools send excerpts of this
-    repository and review text (claims, findings) to the TypeSafe API: the curation checker
-    (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; adoption
-    design 2026-10-03, local). The clerk reads the API key only from the OS keyring (macOS
+    repository, including unpublished head-commit content (runs on embargoed work use
+    `--no-external`), and review text (claims, findings) to the TypeSafe API: the curation
+    checker (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; see
+    `.clerk/README.md`). The clerk reads the API key only from the OS keyring (macOS
     Keychain; on Linux the secret service); the checker from the Keychain or, off macOS, from a
     per-command environment variable. CI never
     holds the key, and neither tool is a boundary of the running application. Listed so the
@@ -923,13 +924,18 @@ range, each pinned to the text of its first substantive line, on which the citat
 when a cited anchor line moves or a citation is edited without regenerating, and the generator
 refuses to re-anchor code that moved under an unchanged citation unless the author names the
 site with `--accept-drift`, recorded as a line in the commit and PR bodies. What this pins: the
-first anchor line of every cited range. What it does not: lines inserted or deleted after the
-anchor inside a range, and where a range ends; which occurrence an anchor means when its line
-recurs in the same file (43 do today; `--verbose` lists them), so a sibling block inserted,
+first anchor line of every cited range. What it does not: lines inserted, deleted or edited after
+the anchor inside a range, and where a range ends; which occurrence an anchor means when its line
+recurs in the same file (44 do today; `--verbose` lists them), so a sibling block inserted,
 deleted or reordered above such an anchor can leave a stale citation green; the prose counting
 claims; the meaning of a citation (a correct line can still support a wrong sentence);
 citations of `fly.toml` (deployment config, deliberately untracked); citations without a line
-number or not written in backticks; anything inside the fenced section 1 diagram. Those remain
-this section's re-audit scope. A bare file name that exists in two places (`auth.py`) and a bare
-continuation (`:NNN`) are refused by the generator, so every citation here names its file
-and, where needed, its directory.
+number or not written in backticks; anything inside the fenced section 1 diagram. For this
+document those remain this section's re-audit scope; for the departures register they are owned
+by the per-PR methodology review (the `methodology-reviewer` skill's register checklist), not by
+this section's periodic re-audit, which covers this threat model only. A bare file name that
+exists in two places (`auth.py`) and a bare continuation (`:NNN`) are refused by the generator,
+so every citation here names its file and, where needed, its directory. The drift guard is the
+author's pre-flight: a hand-edited manifest, or one regenerated with `--accept-drift`, passes
+the CI freshness test; the orchestrator's base-manifest `clerk gate` run and the security
+review of the manifest diff are the checks that catch it.
