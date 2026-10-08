@@ -196,7 +196,7 @@ def test_security_lane_files_are_escalation_paths() -> None:
 
 
 def test_methodology_lane_files_are_escalation_paths() -> None:
-    """Every methodology-lane file escalates; the lane's completeness is the methodology-lane completeness audit (Task 6 Step 5 issue), which blocks graduation."""
+    """Every methodology-lane file escalates; the lane's completeness is the methodology-lane completeness audit (the methodology-lane completeness-audit issue, filed after the adoption merges), which blocks graduation."""
     globs = _escalation_globs()
     lane = _lanes()["methodology"]["globs"]
     uncovered = sorted(

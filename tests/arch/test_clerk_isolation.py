@@ -19,7 +19,7 @@ _MODULE = re.compile(rb"\bsuperpowers_clerk\b")
 _DIST = re.compile(rb"superpowers[-_.]+clerk", re.IGNORECASE)
 # Any of these in a tracked file marks it as part of the adoption.
 _TOKEN = re.compile(
-    rb"superpowers[-_]clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests"
+    rb"superpowers[-_.]+clerk|clerk\.toml|IDRAA_CLERK|IDRAA_GATE_SKIP_CLERK|\.clerk(?:/|[\"'])|clerk_manifests"
 )
 
 FOOTPRINT = frozenset(

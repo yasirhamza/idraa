@@ -538,7 +538,7 @@ only where it applies (the XLSX-capable module — the other has no zip path).
 extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 `services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
 module docstring — it has no XLSX path). Guards: 5 MB upload cap via
-`Content-Length` (`routes/deps.py:23`; enforced in
+`Content-Length` (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
 `routes/register_import.py:253-257`, `routes/scenario_import.py:124-128`,
 `library_import.py:80-84`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
@@ -684,8 +684,8 @@ new export format must re-implement, not assume is "someone else's problem."
   standard runs (fail-closed, far likelier to hit in normal use than the
   high-fidelity cap of 2).
 - **D (Argon2 executor isolation, A3, 2026-08-15).** Argon2 password/recovery
-  hashing runs on a DEDICATED `ThreadPoolExecutor` (`_HASH_POOL`,
-  `services/auth.py:39-59`, size `argon2_max_threads` default 4), NOT the
+  hashing runs on a DEDICATED `ThreadPoolExecutor` (`_HASH_POOL`, the
+  `services/auth.py` pool cited in §3 (B2), size `argon2_max_threads` default 4), NOT the
   default event-loop executor that the Monte-Carlo `to_thread` computes above
   saturate. Without this isolation, offloading Argon2 (A3) would have made a
   login queue behind up to ~10 concurrent multi-second run computes on the
@@ -740,7 +740,7 @@ gap, not a finding of an actual miss.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
-  a `user.login_failed` row (`routes/auth.py:188`), not only the attempt that trips
+  a `user.login_failed` row (the `routes/auth.py` call cited above), not only the attempt that trips
   the lockout. A low-and-slow campaign staying under the threshold (or running
   with lockout disabled, `auth_max_failed_logins=0`) is no longer invisible.
   Mirrors the `/login/mfa` path's per-attempt audit. **Row-count bounds, in
@@ -753,7 +753,7 @@ gap, not a finding of an actual miss.
   only disk cost. Unknown emails still write nothing (no user to attribute to;
   no enumeration oracle).
 - **C1** — RBAC denials now emit a `rbac_denied` WARNING at the `require_role`
-  chokepoint (§6, `deps.py:180-186`). Deliberately a log line, not an
+  chokepoint (§6, the `rbac_denied` log call in `deps.py` cited there). Deliberately a log line, not an
   `AuditLog` row: an unauthenticated/cross-org prober must not be able to drive
   unbounded DB writes (that would compound §10 / the disk-guard). The
   complementary gap — a request-level access log carrying user identity on
@@ -877,7 +877,9 @@ watching:
     (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; see
     `.clerk/README.md`). The clerk's judge runs include unpublished head-commit content in those
     excerpts unless the run is `--no-external`, which every run on embargoed work is; the
-    curation checker has no external mode of its own beyond its key path. The clerk reads the
+    curation checker has no `--no-external` switch: a live run (`--judge jev`, the default) sends
+    the working tree's library entries, unpushed edits included, and `--judge replay` sends
+    nothing. The clerk reads the
     API key only from the OS keyring (macOS Keychain; on Linux the secret service); the checker
     from the Keychain or, off macOS, from a per-command environment variable. CI never
     holds the key, and neither tool is a boundary of the running application. Listed so the
@@ -885,7 +887,7 @@ watching:
 
 ## 13. Keeping this document current
 
-This is a living document, kept current two ways.
+This is a living document, kept current three ways.
 
 **Reactive (per-PR).** `CLAUDE.md` → Review ceremony → Security-auditor
 persona requires the security-auditor role to check, at every milestone
@@ -922,14 +924,20 @@ document and in `docs/reference/fair-departures-register.md` are compiled by
 `scripts/clerk_manifests.py` into `.clerk/manifests/citations.json`, one entry per cited
 range, each pinned to the text of its first substantive line, on which the citation starts.
 `tests/scripts/test_clerk_manifests.py::test_committed_manifest_is_fresh` fails the merge gate
-when a cited anchor line moves or a citation is edited without regenerating, and the generator
-refuses to re-anchor code that moved under an unchanged citation unless the author names the
-site with `--accept-drift`, recorded as a line in the commit and PR bodies. What this pins: the
-first anchor line of every cited range. What it does not: lines inserted, deleted or edited after
-the anchor inside a range, and where a range ends; which occurrence an anchor means when its line
-recurs in the same file (44 do today; `--verbose` lists them), so a sibling block inserted,
-deleted or reordered above such an anchor can leave a stale citation green; the prose counting
-claims; the meaning of a citation (a correct line can still support a wrong sentence);
+when a cited anchor line moves or a citation is edited without regenerating. The generator
+refuses to re-anchor code that moved under an unchanged citation when that anchor text is no
+longer anchored as often in the same document and file, unless the author names the site with
+`--accept-drift`, recorded as a line in the commit and PR bodies; it accepts a re-cite collision (a
+correct re-cite whose new anchor line held another citation's anchor); and it refuses a second
+citation of the same site within one document, so each site is cited once per document and later
+mentions refer back to it in prose. What this pins: the first anchor line of every cited range.
+What it does not: lines inserted, deleted or edited after the anchor inside a range, and where a
+range ends; which occurrence an anchor means when its line recurs in the same file (44 do today;
+`--verbose` lists them), so a sibling block inserted, deleted or reordered above such an anchor
+can leave a stale citation green; cited lines swapped or rotated in the code under unchanged
+citations; a stale citation offset by a newly added citation on the moved text (both are reported
+by the orchestrator's base-manifest `clerk gate` run, not by CI); the prose counting claims; the
+meaning of a citation (a correct line can still support a wrong sentence);
 citations of `fly.toml` (deployment config, deliberately untracked); citations without a line
 number or not written in backticks; anything inside the fenced section 1 diagram. For this
 document those remain this section's re-audit scope; for the departures register they are owned

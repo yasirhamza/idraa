@@ -22,16 +22,30 @@ pattern. Rules:
   line or range end past the end of the file is an error; an anchor that differs from the cited
   first line is reported (the committed manifest carries none: re-cite the range to start there);
   anchors whose pattern occurs more than once in their file are counted (`--verbose` lists them);
+- once per document: a site (file, anchor line) is cited at most once per governed document, so
+  manifest entries equal citations; a second citation of it, including a range or comma-list item
+  that anchors on the same line, is an error naming both document lines (refer back to the first
+  in prose, with no line number); the same site cited from BOTH governed documents is two entries;
 - drift guard: entries are keyed by (doc, file, line); `--write` refuses a key whose pattern
   changed AND whose old anchor text is now anchored fewer times in that (doc, file) than before
-  (code moved under an unchanged citation) unless `--accept-drift <file>:<line>` names it; a
-  re-cite that merely carries an anchor onto a line another citation's anchor held is not drift;
-  the baseline is the working-tree manifest, else HEAD's copy, else empty;
+  (code moved under an unchanged citation), counting only entries not already judged stale,
+  unless `--accept-drift <file>:<line>` names it; a re-cite that merely carries an anchor onto a
+  line another citation's anchor held is not drift; the baseline is the working-tree manifest,
+  else HEAD's copy, else empty;
 - output is deduplicated, sorted, one entry per line, trailing newline; `regex` is always false.
 
-The drift guard is the author's local pre-flight: a commit that deletes the manifest leaves no
-HEAD copy to compare against, and the authority is the orchestrator's base-manifest `clerk gate
-all` run and the security lane's review of the manifest diff (adoption design §3.3, §5).
+The drift guard is the author's local pre-flight, not the authority. Measured on the round-3
+scenario matrix it REFUSES in-place edits, forgotten and partial re-cites of singly-cited sites
+(the refusal list can be partial when cited lines are adjacent: re-cite what it reports and run
+again), drops in the count of a repeated anchor, and every cross-document case. It ACCEPTS, and
+only the orchestrator's base-manifest `clerk gate all` run reports (as a `citations` finding, where
+the review criterion checks every citation of the site): cited lines swapped or rotated in the
+code under unchanged citations, and a stale citation offset by a newly added citation on the moved
+text. A site cited twice in one document is refused at recognition, so the twin case cannot reach
+the guard. One legitimate shape is refused by every rule and needs `--accept-drift`: a citation
+deleted while its neighbour is re-cited onto its line. A commit that deletes the manifest leaves
+no HEAD copy to compare against; the security lane's review of the manifest diff covers that
+(adoption design §3.3, §5).
 
 `--check` exits 1 when a rule fails or the committed manifest differs from a fresh build;
 `--write` rewrites it. Excluded untracked names are always printed (stdout); a shifted anchor and a
@@ -234,6 +248,9 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
     errors: list[str] = []
     cache: dict[str, list[str]] = {}
     for doc in docs:
+        cited_at: dict[
+            tuple[str, int], int
+        ] = {}  # (file, anchor line) -> document line of its citation
         try:
             try:
                 raw = _read_lines(_safe_path(root, doc))
@@ -303,6 +320,12 @@ def build(root: Path, docs: Iterable[str], tracked: frozenset[str]) -> Build:
                     cited_lines = cache[file]
                     for first, last in ranges(match.group(2)):
                         at, pattern = anchor(cited_lines, first, last)
+                        if (file, at) in cited_at:
+                            raise ManifestError(
+                                f"{file}:{at} is already cited at {doc}:{cited_at[(file, at)]};"
+                                " cite each site once per document and refer back to it"
+                            )
+                        cited_at[(file, at)] = number
                         if at != first:
                             shifted.append(f"{doc}:{number}: {cited}:{first} anchored at :{at}")
                         hits = sum(pattern in text for text in cited_lines)
@@ -360,26 +383,42 @@ def drift(
     is still anchored as often (just at another line), the anchor merely moved. That is the re-cite
     collision: one line inserted above `services/auth.py:27` and every citation correctly re-cited,
     so the new anchor line `28` previously held another citation's anchor. Refusing it would leave
-    `--accept-drift`, a false record, as the only exit. A real drift, a forgotten re-cite and a
-    partial re-cite all lose an anchor and stay refused; two cited lines swapped under unchanged
-    citations is the residual that only the base-manifest `clerk gate` run reports.
+    `--accept-drift`, a false record, as the only exit. The count is iterated to a fixpoint: an
+    entry already judged stale cannot vouch that the text it now anchors is still anchored, so a
+    forgotten re-cite does not hide the neighbouring key it slid under.
+
+    Measured refusals: in-place edits; forgotten and partial re-cites of singly-cited sites (the
+    list can be partial when cited lines are adjacent: re-run after re-citing); repeated-anchor
+    count drops; cross-document cases. A site cited twice in one document is refused by `build`,
+    so that twin case cannot reach this function. Residuals this function ACCEPTS, reported only
+    by the orchestrator's base-manifest `clerk gate` run as a `citations` finding: cited lines
+    swapped or rotated in the code under unchanged citations, and a stale citation offset by a
+    newly added citation on the moved text. A citation deleted while its neighbour is re-cited
+    onto its line is refused here and by every other rule; it needs `--accept-drift`.
     """
     old = {(e.doc, e.file, e.line): e.pattern for e in before}
     had = Counter((e.doc, e.file, e.pattern) for e in before)
-    kept = Counter((e.doc, e.file, e.pattern) for e in after)
+    changed = [e for e in after if old.get((e.doc, e.file, e.line), e.pattern) != e.pattern]
+    stale: set[Entry] = set()
+    while True:  # a stale citation cannot vouch that the text it now anchors is still anchored
+        kept = Counter((e.doc, e.file, e.pattern) for e in after if e not in stale)
+        lost = {
+            e
+            for e in changed
+            if kept[(e.doc, e.file, old[(e.doc, e.file, e.line)])]
+            < had[(e.doc, e.file, old[(e.doc, e.file, e.line)])]
+        }
+        if lost <= stale:
+            break
+        stale |= lost
     drifted: set[str] = set()
     used: set[str] = set()
-    for e in after:
-        key = (e.doc, e.file, e.line)
-        if key in old and old[key] != e.pattern:
-            moved = (e.doc, e.file, old[key])
-            if kept[moved] >= had[moved]:
-                continue  # re-cite collision: the old anchor text is still anchored, at a new line
-            site = f"{e.file}:{e.line}"
-            if site in accepted:
-                used.add(site)
-            else:
-                drifted.add(f"{site} changed under an unchanged citation in {e.doc}")
+    for e in stale:
+        site = f"{e.file}:{e.line}"
+        if site in accepted:
+            used.add(site)
+        else:
+            drifted.add(f"{site} changed under an unchanged citation in {e.doc}")
     return sorted(drifted), sorted(accepted - used)
 
 
