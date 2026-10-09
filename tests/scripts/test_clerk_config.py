@@ -96,7 +96,7 @@ def test_clerk_toml_parses_and_pins() -> None:
         "backend": "jev",
         "model": "jev-1.13.0",
         "keychain_service": "jev-eval-typesafe-key",
-        "allow_external_judge": True,
+        "allow_external_judge": "per-run",
     }
     assert cfg["trust"] == {"confidence": 0.95, "min_actionable": 19}
     assert cfg["boundary"] == {

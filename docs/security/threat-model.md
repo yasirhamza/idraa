@@ -875,8 +875,9 @@ watching:
 11. **Out of scope: developer tooling.** Two developer-machine tools send excerpts of this
     repository and review text (claims, findings) to the TypeSafe API: the curation checker
     (`scripts/curation_check/`) and the review clerk (configured by `clerk.toml`; see
-    `.clerk/README.md`). The clerk's judge runs include unpublished head-commit content in those
-    excerpts unless the run is `--no-external`, which every run on embargoed work is; the
+    `.clerk/README.md`). Unpublished head-commit content leaves the machine through the clerk's
+    judge only on a run given `--external` (`clerk.toml` sets `allow_external_judge = "per-run"`);
+    embargoed work and every plan-gate run `--no-external`, which refuses `--external`; the
     curation checker has no `--no-external` switch: a live run (`--judge jev`, the default) sends
     the working tree's library entries, unpushed edits included, and `--judge replay` sends
     nothing. The clerk reads the

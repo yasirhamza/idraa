@@ -57,19 +57,25 @@ Escape hatches:
 - ``git push --no-verify`` skips the whole pre-push stage (rare; document).
 - ``IDRAA_GATE_SKIP_CLERK=1`` skips the clerk stage (see below).
 
-Clerk stage (adoption design 2026-10-03, §4): when ``IDRAA_CLERK_ROOT`` names
-the superpowers-clerk checkout, the gate runs the clerk's deterministic gates as
-the author's pre-flight against the merge-base with origin/main: blocking
+Clerk stage (adoption design 2026-10-03, §4; plugin-install design 2026-10-09):
+the gate runs the superpowers-clerk that the Claude Code plugin system installed
+(``superpowers-clerk@superpowers-clerk``, user scope, read from
+``<CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json``), or the
+checkout ``IDRAA_CLERK_ROOT`` names when that is set (a development override
+that wins over the plugin). It runs the clerk's deterministic gates as the
+author's pre-flight against the merge-base with origin/main, both blocking:
 ``citations hygiene`` with the working-tree copy of the tracked citations
-manifest, then ``surfaces`` as advisory (the clerk has no working-copy manifest
-option for it yet). Unset, it prints one skip line — CI never sets it and never
-runs the clerk; citation freshness in CI is enforced by
-tests/scripts/test_clerk_manifests.py. Mode decision: clerk.toml at the
-merge-base → normal; absent there but present at origin/main → refuse (rebase);
-absent at both → bootstrap (hygiene only, ``--trust-worktree-config``). Runs
-before the ruff/mypy/pytest steps: it takes seconds and its findings are the
-cheapest to act on. It runs the ``uv`` binary with GIT_* and VIRTUAL_ENV
-removed, so like ``uv lock --check`` it sits outside GATE_STEPS.
+manifest, then ``surfaces`` with the tracked surfaces manifest. The stage
+prints which clerk ran (``clerk at <root> (<version>; <source>)``; the version
+comes from the plugin manifest, so no git is needed and the installed version
+is the pin). With neither the plugin nor the variable it prints one skip line
+— CI has neither and never runs the clerk; citation freshness in CI is
+enforced by tests/scripts/test_clerk_manifests.py. Mode decision: clerk.toml at
+the merge-base → normal; absent there but present at origin/main → refuse
+(rebase); absent at both → bootstrap (hygiene only, ``--trust-worktree-config``,
+no surfaces run). Runs before the ruff/mypy/pytest steps: it takes seconds and
+its findings are the cheapest to act on. It runs the ``uv`` binary with GIT_*
+and VIRTUAL_ENV removed, so like ``uv lock --check`` it sits outside GATE_STEPS.
 
 Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 (pytest) runs under
 ``pytest-xdist -n auto`` — wall-clock scales with core count (the ~5.9k-test
@@ -80,12 +86,14 @@ That cost is the point — it is the only automated gate this repo has.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -168,18 +176,82 @@ def run_step(label: str, argv: tuple[str, ...]) -> int:
 # --- clerk stage: begin (rollback: delete this block; see adoption design §7) ---
 CLERK_ROOT_ENV = "IDRAA_CLERK_ROOT"
 SKIP_CLERK_ENV = "IDRAA_GATE_SKIP_CLERK"
+CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR"
+# The key Claude Code files the clerk under in installed_plugins.json (`<plugin>@<marketplace>`).
+CLERK_PLUGIN_KEY = "superpowers-clerk@superpowers-clerk"
+CLERK_SOURCE_OVERRIDE = f"{CLERK_ROOT_ENV} override"
+CLERK_SOURCE_INSTALLED = "installed plugin"
 # Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
 CLERK_ORIGIN_REF = "refs/remotes/origin/main"
+CLERK_PROJECT_FILES = ("pyproject.toml", "uv.lock")
 CLERK_CONFIG = "clerk.toml"
 CLERK_MANIFEST = ".clerk/manifests/citations.json"
+CLERK_SURFACES_MANIFEST = ".clerk/manifests/surfaces.json"
+CLERK_NOT_INSTALLED_REASON = (
+    f"superpowers-clerk not installed (claude plugin install {CLERK_PLUGIN_KEY})"
+    f" and {CLERK_ROOT_ENV} unset (CI always skips)"
+)
+
+
+def _installed_clerk_record(env: Mapping[str, str]) -> dict[str, Any] | None:
+    """The first user-scope record of the clerk plugin in Claude Code's registry, or None; never raises.
+
+    Reads `<CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json` and nothing else
+    under the config directory. A missing or unreadable file, malformed JSON, a missing key,
+    an empty list, no record of `scope == "user"`, or a first user-scope record without a string
+    `installPath` all mean "not installed". The registry holds every scope's installs, and a
+    project- or local-scope record made while working in another repository must not become the
+    clerk this repository's gate runs, so only user scope counts (the first such record decides).
+    """
+    try:
+        config_dir = Path(env.get(CLAUDE_CONFIG_DIR_ENV) or Path.home() / ".claude")
+        registry = json.loads(
+            (config_dir / "plugins" / "installed_plugins.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, RuntimeError):  # RuntimeError: no home dir, JSON nesting depth
+        return None
+    plugins = registry.get("plugins") if isinstance(registry, dict) else None
+    records = plugins.get(CLERK_PLUGIN_KEY) if isinstance(plugins, dict) else None
+    if not isinstance(records, list) or not records:
+        return None
+    record = next((r for r in records if isinstance(r, dict) and r.get("scope") == "user"), None)
+    if record is None:
+        return None
+    install_path = record.get("installPath")
+    if not isinstance(install_path, str) or not install_path:
+        return None
+    return record
+
+
+def clerk_root(env: Mapping[str, str]) -> tuple[str, str] | None:
+    """`(root, source)` of the clerk to run, or None when there is none.
+
+    `IDRAA_CLERK_ROOT` (a development checkout) wins; otherwise the installed plugin's
+    `installPath`. Whether that path is absolute, a directory and a clerk is `run_clerk_gate`'s
+    check (exit 2).
+    """
+    override = env.get(CLERK_ROOT_ENV)
+    if override:
+        return override, CLERK_SOURCE_OVERRIDE
+    record = _installed_clerk_record(env)
+    if record is None:
+        return None
+    return str(record["installPath"]), CLERK_SOURCE_INSTALLED
+
+
+def clerk_installed_sha(env: Mapping[str, str]) -> str | None:
+    """The installed record's `gitCommitSha` when it is a non-empty string, else None."""
+    record = _installed_clerk_record(env)
+    sha = record.get("gitCommitSha") if record is not None else None
+    return sha if isinstance(sha, str) and sha else None
 
 
 def clerk_skip_reason(env: Mapping[str, str]) -> str | None:
     """Why the clerk stage is skipped, or None when it runs."""
     if env.get(SKIP_CLERK_ENV) == "1":
         return f"{SKIP_CLERK_ENV}=1 (escape hatch; document the reason in the next commit)"
-    if not env.get(CLERK_ROOT_ENV):
-        return f"{CLERK_ROOT_ENV} unset (CI always skips; point it at the superpowers-clerk checkout to run)"
+    if clerk_root(env) is None:
+        return CLERK_NOT_INSTALLED_REASON
     return None
 
 
@@ -205,7 +277,7 @@ def clerk_gate_command(root: str, base_sha: str, *, mode: str) -> list[str]:
             f"{base_sha}..HEAD",
         ]
     if mode == "surfaces":
-        return [*prefix, "surfaces", *common]
+        return [*prefix, "surfaces", *common, "--manifest", CLERK_SURFACES_MANIFEST]
     if mode == "bootstrap":
         return [
             *prefix,
@@ -257,14 +329,49 @@ def _has_clerk_config(rev: str) -> bool | None:
     return bool(proc.stdout)
 
 
-def run_clerk_gate(root: str) -> int:
-    if not Path(root).is_dir():
-        print(f"local gate: {CLERK_ROOT_ENV}={root!r} is not a directory")
-        return 2
-    described = (
-        _git("describe", "--tags", "--dirty", "--always", cwd=root).stdout.strip() or "unknown"
+def clerk_version(root: str) -> str:
+    """`version` from the plugin manifest; else git describe (a checkout); else "unknown".
+
+    The installed plugin copy has no `.git`, so git alone cannot report its version.
+    """
+    try:
+        manifest = json.loads(
+            (Path(root) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, RuntimeError):
+        manifest = None
+    version = manifest.get("version") if isinstance(manifest, dict) else None
+    if isinstance(version, str) and version.strip():
+        return version.strip()
+    return _git("describe", "--tags", "--dirty", "--always", cwd=root).stdout.strip() or "unknown"
+
+
+def run_clerk_gate(root: str, source: str = CLERK_SOURCE_OVERRIDE, sha: str | None = None) -> int:
+    installed = source == CLERK_SOURCE_INSTALLED
+    repair = f" — repair it with `claude plugin update {CLERK_PLUGIN_KEY}`" if installed else ""
+    subject = (
+        f"the installed {CLERK_PLUGIN_KEY} record points at {root!r}, which"
+        if installed
+        else f"{CLERK_ROOT_ENV}={root!r}"
     )
-    print(f"local gate: clerk at {root} ({described})")
+    # A relative record would resolve under the repository being reviewed; refuse before is_dir().
+    if installed and not Path(root).is_absolute():
+        print(f"local gate: {subject} is not an absolute path{repair}")
+        return 2
+    if not Path(root).is_dir():
+        print(f"local gate: {subject} is not a directory{repair}")
+        return 2
+    # `uv run --frozen --project <root>` needs both; check before any git or clerk invocation.
+    if not all((Path(root) / name).is_file() for name in CLERK_PROJECT_FILES):
+        print(
+            f"local gate: {root!r} has no {'/'.join(CLERK_PROJECT_FILES)}"
+            f" — not a superpowers-clerk checkout{repair}"
+        )
+        return 2
+    version = clerk_version(root)
+    if sha:
+        version = f"{version} {sha[:12]}"
+    print(f"local gate: clerk at {root} ({version}; {source})")
     base = clerk_base_sha()
     if base is None:
         print("local gate: SKIPPING clerk gate — no merge-base with origin/main")
@@ -294,19 +401,19 @@ def run_clerk_gate(root: str) -> int:
     rc = _run(clerk_gate_command(root, base, mode=mode))
     if rc != 0 or mode == "bootstrap":
         return rc
-    print("== local gate: clerk gate surfaces (advisory) ==", flush=True)
-    advisory = _run(clerk_gate_command(root, base, mode="surfaces"))
-    if advisory != 0:
-        print(f"local gate: clerk surfaces advisory exit {advisory} (not blocking)")
-    return 0
+    print("== local gate: clerk gate surfaces ==", flush=True)
+    return _run(clerk_gate_command(root, base, mode="surfaces"))
 
 
 def clerk_stage(env: Mapping[str, str]) -> int:
     reason = clerk_skip_reason(env)
-    if reason is not None:
-        print(f"local gate: SKIPPING clerk gate — {reason}")
+    resolved = clerk_root(env) if reason is None else None
+    if resolved is None:
+        print(f"local gate: SKIPPING clerk gate — {reason or CLERK_NOT_INSTALLED_REASON}")
         return 0
-    rc = run_clerk_gate(env[CLERK_ROOT_ENV])
+    root, source = resolved
+    sha = clerk_installed_sha(env) if source == CLERK_SOURCE_INSTALLED else None
+    rc = run_clerk_gate(root, source, sha)
     if rc != 0:
         print(
             f"local gate: FAILED at clerk gate (exit {rc}: 1 = findings, 2 = input error or stale base)"

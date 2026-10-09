@@ -7,7 +7,11 @@ project = "idraa"
 backend = "jev"
 model = "jev-1.13.0"                  # pinned, same as scripts/curation_check/config.py; never the moving alias
 keychain_service = "jev-eval-typesafe-key"   # macOS Keychain item the curation checker also accepts
-allow_external_judge = true           # public repository; the clerk has no per-run opt-in (adoption design §3.1, §8)
+# "per-run": the judge leaves the machine only on a run given --external (clerk 0.1.1, superpowers-clerk#2),
+# which replaces the 0.1.0 `true` that sent every run. A public, non-embargoed run passes --external after the
+# push-target check; plan-gates and embargoed work (sec/ghsa/advisory branches, GHSA ids) pass --no-external
+# (CLAUDE.md, Review ceremony).
+allow_external_judge = "per-run"
 
 [trust]                               # the clerk's floors; Idraa does not tighten in P1
 confidence = 0.95
