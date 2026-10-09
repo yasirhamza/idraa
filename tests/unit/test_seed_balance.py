@@ -106,7 +106,7 @@ def _is_ot(entry: dict) -> bool:
 
 # Each predicate takes a published entry dict and returns True if the entry
 # belongs to the named sector.  Sector membership is derived from
-# ``applicable_industries`` (primary) and ``tags`` (supplementary for telecom).
+# ``applicable_industries`` (primary) and ``tags`` (the sole signal for telecom).
 #
 # TELECOM NOTE: every telecom entry carries applicable_industries containing 'information'
 # with 'telecom' in tags; 'telecom' is not an IndustryType value, so the telecom predicate is

@@ -369,7 +369,7 @@ def _classify_slug_group(
     cells: tuple[tuple[str, object, object], ...],
     found_raw: dict[str, tuple[bool, object]],
 ) -> tuple[dict[str, Literal["apply", "already", "drift"]], tuple[str, ...]]:
-    """Per-slug atomicity (spec §4.1 amendment, M4-1): classifies every cell of one
+    """Per-slug atomicity (inherited verbatim from c7d2e9f4a1b3 — #209 spec §4.1 amendment M4-1): classifies every cell of one
     slug's group first (`cells` as (column, target_from, target_to) -- already
     direction-adjusted by the caller), then enforces the group guard: if ANY cell is
     genuinely "drift" (found but neither `target_from` nor `target_to`) or its row is
