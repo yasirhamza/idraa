@@ -1,0 +1,235 @@
+[
+  {
+    "slug": "branch-atm-physical-tamper",
+    "column": "applicable_industries",
+    "old": [
+      "finance_and_insurance"
+    ]
+  },
+  {
+    "slug": "branch-atm-physical-tamper",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "finance_and_insurance",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — ATM USB ports not disabled; hard drive not encrypted; cabinet tamper switches not monitored; no ATM integrity-monitoring software (Wincor/Diebold security suite absent)",
+      "loss_anchor": "unbounded analyst PERT — ATM jackpotting outside the IRIS cyber-loss corpus. Primary PERT reasoned from physical hardware constraints: single-machine cash dispense $20K–$200K per cassette (industry estimate); mode $150K reflects coordinated multi-machine attack on a branch; high $1.5M reflects a regional campaign of 8–10 machines. Financial IRIS (p50=$1M, p95=$194M) explicitly NOT applied — those figures reflect all-incident cyber losses including ransomware tail; applying them would materially overclaim for a physically-bounded cash-dispense event. Secondary = hardware replacement + field-engineer + regulatory reporting ~27% of primary."
+    }
+  },
+  {
+    "slug": "education-campus-facility-tamper",
+    "column": "applicable_industries",
+    "old": [
+      "education_services"
+    ]
+  },
+  {
+    "slug": "education-campus-facility-tamper",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "education_services",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no tamper alerting on network-infrastructure cabinets; campus buildings rely on standard mechanical locks; no physical intrusion detection in server rooms or comms closets; no camera monitoring of IT infrastructure locations",
+      "loss_anchor": "unbounded analyst PERT — campus physical facility tampering outside the IRIS cyber-loss corpus. Primary PERT reasoned from repair and downtime economics: network-cable repair/replacement $5K–$50K per incident; access-control or server-room disruption with research downtime $50K–$500K; multi-building campaign up to $2M. Education IRIS (p50=$249K, p95=$6M) noted for reference but not applied — IRIS captures cyber incidents, not physical facility tampering. Secondary = emergency response + student/faculty notification + security upgrade planning ~30% of primary."
+    }
+  },
+  {
+    "slug": "education-research-ip-exfiltration",
+    "column": "applicable_industries",
+    "old": [
+      "education_services"
+    ]
+  },
+  {
+    "slug": "education-research-ip-exfiltration",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "education_services",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no network segmentation of research servers; researcher workstations unmanaged; no DLP or outbound data monitoring on research repositories",
+      "loss_anchor": "sanity-bounded against Education IRIS (IRIS 2025 Figure A3, p.35, Education sector p50=$249K, p95=$6M). Analyst PERT primary reflects incident-response + remediation costs (financiable component); mode $350K above IRIS Education p50=$249K — consistent with a larger research department or multi-year campaign exposure; high $3M near IRIS p95 ($6M), appropriate for extended discovery of a sustained intrusion. The strategic R&D-value-destruction component is qualitatively dominant but not captured in financial loss distributions and is excluded from the PERT. Secondary = regulatory/grant compliance + notification + reputational impact ~29% of primary. Unbounded analyst PERT for the IP-value component — nation-state R&D IP exfiltration outside the IRIS cyber-loss corpus."
+    }
+  },
+  {
+    "slug": "energy-billing-system-tamper",
+    "column": "applicable_industries",
+    "old": [
+      "utilities",
+      "energy"
+    ]
+  },
+  {
+    "slug": "financial-call-center-social-eng",
+    "column": "applicable_industries",
+    "old": [
+      "finance_and_insurance"
+    ]
+  },
+  {
+    "slug": "financial-call-center-social-eng",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "finance_and_insurance",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no voice biometrics or knowledge-based authentication for high-risk transactions; agents trained on basic verification scripts only; no real-time transaction-velocity anomaly detection at the call center authorization layer; single-factor voice verification bypassable via pretexting",
+      "loss_anchor": "sanity-bounded against Financial IRIS (IRIS 2025 Figure A3, p.35, Financial sector p50=$1M, p95=$194M). Analyst PERT primary reflects authorized-transfer fraud + customer remediation: mode $200K plausible for a targeted vishing campaign resulting in one to several successful fraudulent transfers (per-complaint avg IC3 2024 fraud categories $10K–$50K; institutional loss per event higher due to aggregation across call center scale); high $5M well below IRIS p95. Secondary = regulatory + CS remediation + customer compensation ~25% of primary. No per-org call-center vishing loss distribution found (C-iii-b T2b negative outcome catalogued)."
+    }
+  },
+  {
+    "slug": "financial-transaction-tampering",
+    "column": "applicable_industries",
+    "old": [
+      "finance_and_insurance"
+    ]
+  },
+  {
+    "slug": "financial-transaction-tampering",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "finance_and_insurance",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no dual-control enforcement on privileged-access transaction modifications; no real-time anomaly detection on wire transfers; no segregation of initiation and approval roles for privileged users",
+      "loss_anchor": "sanity-bounded against Financial IRIS (IRIS 2025 Figure A3, p.35, Financial sector p50=$1M, p95=$194M). Analyst PERT primary reflects direct-funds-diversion-dominant loss: mode $500K plausible for an operations-level insider with branch/department transaction authority; high $10M reflects a privileged-system-level insider (settlements desk, correspondent banking); high well below IRIS p95. Secondary = audit + regulatory + remediation ~30% of primary. No per-org loss distribution for insider financial transaction tampering found (C-iii-b T2b negative outcome catalogued)."
+    }
+  },
+  {
+    "slug": "gov-citizen-portal-ddos",
+    "column": "applicable_industries",
+    "old": [
+      "public",
+      "government"
+    ]
+  },
+  {
+    "slug": "gov-employee-insider-leak",
+    "column": "applicable_industries",
+    "old": [
+      "public",
+      "government"
+    ]
+  },
+  {
+    "slug": "gov-records-tampering",
+    "column": "applicable_industries",
+    "old": [
+      "public",
+      "government"
+    ]
+  },
+  {
+    "slug": "healthcare-record-alteration",
+    "column": "applicable_industries",
+    "old": [
+      "health_care_and_social_assistance"
+    ]
+  },
+  {
+    "slug": "healthcare-record-alteration",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "health_care_and_social_assistance",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no EHR audit-log monitoring or alerting on anomalous record modification patterns; minimum-necessary access policy not enforced; no separation between record-read and record-modify privileges for clinical staff",
+      "loss_anchor": "sanity-bounded against Healthcare IRIS (IRIS 2025 Figure A3, p.35, Healthcare sector p50=$557K, p95=$14M). Analyst PERT primary reflects billing-fraud + malpractice-liability-dominant loss: mode $250K plausible for a mid-scale insider billing fraud scheme; high $5M reflects a sustained scheme with patient-harm malpractice claims; high well below IRIS p95. Secondary = HIPAA OCR + remediation + reputation ~40% of primary (regulatory tail elevated for data-integrity violations vs. breach). No per-org loss distribution for insider EHR record alteration found (C-iii-b T2b negative outcome catalogued)."
+    }
+  },
+  {
+    "slug": "ip-theft-by-competitor",
+    "column": "applicable_industries",
+    "old": [
+      "manufacturing",
+      "technology"
+    ]
+  },
+  {
+    "slug": "logistics-tms-data-tampering",
+    "column": "applicable_industries",
+    "old": [
+      "transportation_and_warehousing"
+    ]
+  },
+  {
+    "slug": "logistics-tms-data-tampering",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "transportation_and_warehousing",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — TMS credentials shared among dispatchers; no change-audit trail on manifest modifications; no anomaly detection on out-of-pattern route changes",
+      "loss_anchor": "sanity-bounded against Transportation IRIS (IRIS 2025 Figure A3, p.35, Transportation sector p50=$490K, p95=$23M). Analyst PERT primary reflects cargo-value-dominant loss: mode $300K plausible for a single diverted full-truckload shipment ($150K–$500K commodity value range per TAPA Cargo Crime Report categories); high $5M well below IRIS p95. Secondary = dispute resolution + regulatory + TMS remediation ~27% of primary. No primary-cited per-org TMS-fraud loss distribution found (C-iii-b T2b negative outcome catalogued)."
+    }
+  },
+  {
+    "slug": "logistics-warehouse-physical-intrusion",
+    "column": "applicable_industries",
+    "old": [
+      "transportation_and_warehousing"
+    ]
+  },
+  {
+    "slug": "logistics-warehouse-physical-intrusion",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "transportation_and_warehousing",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no tamper alerting on access-control panels; CCTV lacks integrity monitoring; no real-time access-anomaly detection; single-factor badge-based entry only",
+      "loss_anchor": "unbounded analyst PERT — physical warehouse intrusion outside the IRIS cyber-loss corpus. Primary PERT reasoned from cargo theft value profiles: TAPA reports high-value cargo thefts typically range $100K–$5M per incident for electronics/pharma; mode $400K reflects mid-tier warehouse cargo density. Transportation IRIS (p50=$490K, p95=$23M) noted for reference but not applied as a bound given IRIS captures cyber-financial incidents, not physical cargo theft events. Secondary = CCTV/access-control remediation + customer penalties + investigation ~25% of primary."
+    }
+  },
+  {
+    "slug": "professional-office-physical-theft",
+    "column": "applicable_industries",
+    "old": [
+      "professional_and_business_services"
+    ]
+  },
+  {
+    "slug": "professional-office-physical-theft",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "professional_and_business_services",
+      "revenue_tier": "10m_to_100m",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no full-disk encryption on laptops; no remote-wipe capability; physical office perimeter relies on standard locks with no intrusion monitoring; no data-classification policy distinguishing regulated-PII from general business data on portable devices",
+      "loss_anchor": "unbounded analyst PERT — physical office theft outside the IRIS cyber-loss corpus. Primary PERT reasoned from hardware replacement + breach-notification: device replacement $1K–$5K per unit; breach-notification legal + mailing costs $50K–$500K for mid-size firm with client PII exposure; mode $80K reflects 1–2 device theft with limited PII scope. Professional IRIS (p50=$736K, p95=$17M) noted for reference but not applied — IRIS captures cyber incidents, not physical theft. Secondary = client notification + reputation + litigation ~38% of primary."
+    }
+  },
+  {
+    "slug": "retail-ecommerce-checkout-ddos",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "retail_trade",
+      "revenue_tier": "100m_to_1b",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no DDoS scrubbing or CDN-layer absorption; payment API routes directly to origin servers; no traffic-shaping or rate-limiting at the network perimeter",
+      "loss_anchor": "sanity-bounded against Retail IRIS (IRIS 2025 Figure A3, p.35, Retail sector p50=$746K, p95=$45M). Analyst PERT primary reflects revenue-disruption-dominant loss: mode $400K reflects 1–4 hours of checkout outage for a mid-market retailer (estimate: $100K/hour during peak season at 10K orders/hr × $100 AOV); high $10M reflects a sustained peak-day attack well below IRIS p95. Secondary = brand damage + customer compensation + expedited CDN deployment ~25% of primary. No per-org DDoS loss distribution for retail e-commerce found (C-iii-b T2b negative outcome catalogued)."
+    }
+  },
+  {
+    "slug": "retail-store-employee-fraud",
+    "column": "applicable_industries",
+    "old": [
+      "retail_trade"
+    ]
+  },
+  {
+    "slug": "retail-store-employee-fraud",
+    "column": "calibration_anchor",
+    "old": {
+      "industry": "retail_trade",
+      "revenue_tier": "10m_to_100m",
+      "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no POS transaction anomaly detection; transaction-void authority not segregated from cash-handling; inventory counts not reconciled against POS records; no CCTV monitoring of POS stations",
+      "loss_anchor": "sanity-bounded against Retail IRIS (IRIS 2025 Figure A3, p.35, Retail sector p50=$746K, p95=$45M). Analyst PERT primary reflects direct-cash/inventory-loss-dominant profile: mode $80K consistent with ACFE median occupational fraud of $145K across all industries (ACFE 2024 p.7 — used as order-of-magnitude reference, not a per-org distribution anchor); high $1.5M reflects a sustained multi-location scheme; well below IRIS p95. Secondary = investigation + POS remediation + process redesign ~25% of primary. NRF aggregate shrinkage statistics used for plausibility only (aggregate totals prohibited as per-org anchors per C-iii research protocol §1)."
+    }
+  },
+  {
+    "slug": "telecom-subscriber-data-breach",
+    "column": "applicable_industries",
+    "old": [
+      "information",
+      "telecom"
+    ]
+  },
+  {
+    "slug": "_merge_base",
+    "column": "sha",
+    "old": "5fe95ff0510529673b3875a9eac8b437c841b7fc"
+  }
+]

@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from idraa.models.enums import IndustryType
+
 # Allowed revenue tier slugs — must match _REVENUE_TIER_SLUGS at
 # services/library_calibration.py and the v3 tier taxonomy. Duplicated here
 # instead of imported to keep the seed loader independent of the
@@ -26,6 +28,12 @@ _REVENUE_TIER_SLUGS: frozenset[str] = frozenset(
         "more_than_100b",
     }
 )
+
+# Allowed industry slugs for ``applicable_industries`` items and ``calibration_anchor.industry``:
+# exactly the ``IndustryType`` values. The library browse filter keeps only query values that
+# are ``IndustryType`` members and matches ``applicable_industries`` against them, so any other
+# string would surface as a facet option that applies no filter (idraa#203).
+_INDUSTRY_TYPE_VALUES: frozenset[str] = frozenset(m.value for m in IndustryType)
 
 # Threat Agent Library: fields kept on LibraryEntrySeed ONLY for back-compat parsing
 # of pre-P1 bundles. Never read by the P1+ insert path.
@@ -152,13 +160,28 @@ class LibraryEntrySeed(BaseModel):
             raise ValueError("must be non-whitespace")
         return v
 
+    @field_validator("applicable_industries")
+    @classmethod
+    def _applicable_industries_are_industry_types(cls, v: list[str] | None) -> list[str] | None:
+        """Every item must be an ``IndustryType`` value. ``None`` ("applies to all") passes
+        through unchanged; items are checked only when a list is present."""
+        if v is None:
+            return v
+        for item in v:
+            if item not in _INDUSTRY_TYPE_VALUES:
+                raise ValueError(
+                    f"applicable_industries item {item!r} is not an IndustryType value; "
+                    f"allowed: {sorted(_INDUSTRY_TYPE_VALUES)}"
+                )
+        return v
+
     @field_validator("calibration_anchor")
     @classmethod
     def _validate_calibration_anchor(cls, v: dict[str, str | None]) -> dict[str, str | None]:
         """Shape: required keys {'industry', 'revenue_tier'} + optional {'loss_anchor', 'vuln_posture'}.
 
         Required keys:
-          - 'industry': any non-empty string (advisory; IRIS Table 1 is industry-aggregate)
+          - 'industry': an ``IndustryType`` value (the same slugs the library industry filter matches)
           - 'revenue_tier': one of the six IRIS revenue tier slugs
 
         Allowed optional keys (C-iii-a provenance fields):
@@ -185,6 +208,11 @@ class LibraryEntrySeed(BaseModel):
         revenue_tier = v["revenue_tier"]
         if not isinstance(industry, str) or not industry:
             raise ValueError("calibration_anchor.industry must be a non-empty string")
+        if industry not in _INDUSTRY_TYPE_VALUES:
+            raise ValueError(
+                f"calibration_anchor.industry {industry!r} is not an IndustryType value; "
+                f"allowed: {sorted(_INDUSTRY_TYPE_VALUES)}"
+            )
         if revenue_tier not in _REVENUE_TIER_SLUGS:
             raise ValueError(
                 f"calibration_anchor.revenue_tier must be one of "

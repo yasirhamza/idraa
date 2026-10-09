@@ -1438,8 +1438,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_DISCLOSURE archetype does not capture the telecom carrier's subscriber-data profile: call detail records and SIM/device identifiers are distinct from enterprise PII, the FCC CPNI regulatory framework adds sector-specific secondary exposure beyond GDPR/CCPA, and aggregated subscriber counts drive magnitude non-linearly with breach scale.",
     "applicable_industries": [
-      "information",
-      "telecom"
+      "information"
     ],
     "applicable_sub_sectors": [
       "wireless_carrier",
@@ -1982,8 +1981,7 @@
     ],
     "canonical_fair_gap": "FAIR's DENIAL_OF_SERVICE archetype models availability loss as direct business-interruption revenue; for government citizen portals the loss is operational-productivity disruption and downstream service-delay costs rather than revenue, and the secondary loss is primarily reputational/public-trust (non-monetized in FAIR's standard secondary model) — requiring analyst judgment to translate service disruption into monetary equivalents. TEF is campaign-level: a Killnet-class campaign is one TEF event regardless of the packet-per-second rate.",
     "applicable_industries": [
-      "public",
-      "government"
+      "public"
     ],
     "applicable_sub_sectors": [
       "federal_government",
@@ -2074,8 +2072,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_TAMPERING archetype targets the integrity of IT data at rest; it does not model government records alteration where the primary harm is to the legal validity of official public records (with civic and constitutional implications), and the secondary loss includes both legal remediation of downstream decisions made on corrupted records and public-trust harm — neither cleanly maps to FAIR's standard secondary loss categories.",
     "applicable_industries": [
-      "public",
-      "government"
+      "public"
     ],
     "applicable_sub_sectors": [
       "federal_government",
@@ -2182,8 +2179,7 @@
     ],
     "canonical_fair_gap": "FAIR's INSIDER_MISUSE archetype focuses on direct financial loss from unauthorized data access; government insider leaks also generate harm to individuals (clearance holders, informants, protected sources) whose safety may be jeopardized — a consequence class FAIR's financial-primary model does not represent, and the investigation/remediation secondary can exceed the primary when national-security programs are compromised.",
     "applicable_industries": [
-      "public",
-      "government"
+      "public"
     ],
     "applicable_sub_sectors": [
       "federal_government",
@@ -2284,7 +2280,7 @@
     "canonical_fair_gap": "FAIR's INSIDER_MISUSE archetype models individual-actor misuse; competitor-orchestrated IP theft involves a coordinating external actor (the competitor) not modeled as a FAIR threat community, and the primary loss is IP-economic-value destruction (requiring analyst substitution of litigation and competitive-harm proxies for the canonical loss form, since FAIR's LM does not directly model IP value).",
     "applicable_industries": [
       "manufacturing",
-      "technology"
+      "information"
     ],
     "applicable_sub_sectors": [
       "process_manufacturing",
@@ -2688,8 +2684,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_TAMPERING archetype does not represent AMI/billing-system fraud, where the asset at risk is the billing (revenue) process and the tampered records are revenue-accounting data (meter reads and billing records) rather than operational or personal data, and the primary loss is unrecovered revenue (ongoing fraud drain) rather than a discrete breach event — requiring loss-period modeling distinct from the single-incident LM that FAIR's canonical form assumes.",
     "applicable_industries": [
-      "utilities",
-      "energy"
+      "utilities"
     ],
     "applicable_sub_sectors": [
       "electric_utility",
@@ -3777,7 +3772,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_DISCLOSURE archetype models the cost of data becoming available to unauthorized parties. Nation-state university research exfiltration has a structurally different primary-loss profile: the dominant harm is strategic economic value destruction (loss of competitive R&D advantage, pre-commercialization IP value) which is not captured by the breach-notification cost model that dominates FAIR secondary loss estimates. Remediation and response costs are the only financiable primary-loss component that has any statistical basis; the R&D value destruction is qualitatively large but not actuarially measurable per event. Attribution is prospective for any given university incident — the analyst-judged threat_actor_type reflects the population of threat actors documented across the education sector's research IP-theft threat profile (FBI/CISA sector advisories); individual incidents may have different specific attributions.",
     "applicable_industries": [
-      "education_services"
+      "education"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -3810,7 +3805,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "education_services",
+      "industry": "education",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no network segmentation of research servers; researcher workstations unmanaged; no DLP or outbound data monitoring on research repositories",
       "loss_anchor": "sanity-bounded against Education IRIS (IRIS 2025 Figure A3, p.35, Education sector p50=$249K, p95=$6M). Analyst PERT primary reflects incident-response + remediation costs (financiable component); mode $350K above IRIS Education p50=$249K — consistent with a larger research department or multi-year campaign exposure; high $3M near IRIS p95 ($6M), appropriate for extended discovery of a sustained intrusion. The strategic R&D-value-destruction component is qualitatively dominant but not captured in financial loss distributions and is excluded from the PERT. Secondary = regulatory/grant compliance + notification + reputational impact ~29% of primary. Unbounded analyst PERT for the IP-value component — nation-state R&D IP exfiltration outside the IRIS cyber-loss corpus."
@@ -3881,7 +3876,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_TAMPERING archetype models unauthorized modification of data. TMS manifest-falsification fraud has a primary-loss profile dominated by cargo value (physical goods diverted) rather than by data-breach remediation costs, making the standard secondary-tail model structurally incorrect. The primary loss is the replacement cost of the diverted cargo plus the operational disruption cost of the rerouting investigation, not notification or regulatory penalties. Vulnerability is in TMS authorization controls (credential reuse, weak segregation of duties), not in network perimeter defenses. TEF counts fraud-enabled cargo-diversion events per year, not individual manifest-line edits.",
     "applicable_industries": [
-      "transportation_and_warehousing"
+      "transportation"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -3915,7 +3910,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "transportation_and_warehousing",
+      "industry": "transportation",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — TMS credentials shared among dispatchers; no change-audit trail on manifest modifications; no anomaly detection on out-of-pattern route changes",
       "loss_anchor": "sanity-bounded against Transportation IRIS (IRIS 2025 Figure A3, p.35, Transportation sector p50=$490K, p95=$23M). Analyst PERT primary reflects cargo-value-dominant loss: mode $300K plausible for a single diverted full-truckload shipment ($150K–$500K commodity value range per TAPA Cargo Crime Report categories); high $5M well below IRIS p95. Secondary = dispute resolution + regulatory + TMS remediation ~27% of primary. No primary-cited per-org TMS-fraud loss distribution found (C-iii-b T2b negative outcome catalogued)."
@@ -3985,7 +3980,7 @@
     ],
     "canonical_fair_gap": "FAIR's PHYSICAL_TAMPERING archetype addresses physical-access threats, but cyber-assisted warehouse intrusion has a loss profile dominated by physical cargo value (not cyber-incident notification costs). The cyber enabler (access-control bypass) and the physical effect (cargo theft) must be modeled together, with the TEF representing intrusion events enabled by cyber exploitation of access controls (not the underlying credential-theft events). Vulnerability is P(cyber-enabled access → successful cargo theft), incorporating both the physical access success and the probability of sufficient dwell time before detection. Unbounded analyst PERT — physical warehouse intrusion outside the IRIS cyber-loss corpus.",
     "applicable_industries": [
-      "transportation_and_warehousing"
+      "transportation"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4014,7 +4009,7 @@
     "secondary_loss": null,
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "transportation_and_warehousing",
+      "industry": "transportation",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no tamper alerting on access-control panels; CCTV lacks integrity monitoring; no real-time access-anomaly detection; single-factor badge-based entry only",
       "loss_anchor": "unbounded analyst PERT — physical warehouse intrusion outside the IRIS cyber-loss corpus. Primary PERT reasoned from cargo theft value profiles: TAPA reports high-value cargo thefts typically range $100K–$5M per incident for electronics/pharma; mode $400K reflects mid-tier warehouse cargo density. Transportation IRIS (p50=$490K, p95=$23M) noted for reference but not applied as a bound given IRIS captures cyber-financial incidents, not physical cargo theft events. Secondary = CCTV/access-control remediation + customer penalties + investigation ~25% of primary."
@@ -4289,7 +4284,7 @@
     ],
     "canonical_fair_gap": "FAIR's PHYSICAL_TAMPERING archetype addresses physical modification of assets. ATM jackpotting has a loss profile tightly bounded by physical hardware constraints (cash-per-cassette capacity, number of machines in a campaign) rather than by data-breach-cost distributions. The primary loss is directly bounded cash dispensed plus restoration costs, not notification or regulatory penalties. The control failure is in ATM physical cabinet security (hard drive encryption, USB port blocking, cabinet tamper detection), not in network perimeter defenses. Per-cassette cash capacity creates a natural primary-loss ceiling not present in typical cyber-breach scenarios. Unbounded analyst PERT — ATM physical tampering outside the IRIS cyber-loss corpus. TEF counts coordinated jackpotting campaigns (one or more machines targeted in a single operational session) rather than per-machine attack frequency.",
     "applicable_industries": [
-      "finance_and_insurance"
+      "financial"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4318,7 +4313,7 @@
     "secondary_loss": null,
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "finance_and_insurance",
+      "industry": "financial",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — ATM USB ports not disabled; hard drive not encrypted; cabinet tamper switches not monitored; no ATM integrity-monitoring software (Wincor/Diebold security suite absent)",
       "loss_anchor": "unbounded analyst PERT — ATM jackpotting outside the IRIS cyber-loss corpus. Primary PERT reasoned from physical hardware constraints: single-machine cash dispense $20K–$200K per cassette (industry estimate); mode $150K reflects coordinated multi-machine attack on a branch; high $1.5M reflects a regional campaign of 8–10 machines. Financial IRIS (p50=$1M, p95=$194M) explicitly NOT applied — those figures reflect all-incident cyber losses including ransomware tail; applying them would materially overclaim for a physically-bounded cash-dispense event. Secondary = hardware replacement + field-engineer + regulatory reporting ~27% of primary."
@@ -4387,7 +4382,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_TAMPERING archetype models unauthorized modification of data records. Insider financial transaction tampering has a primary loss profile dominated by direct financial (diverted funds), not by data-breach notification costs. The loss magnitude is bounded by transaction sizes the insider can authorize or modify — a function of their access tier and dual-control bypass capability. TEF is campaign-level: one insider fraud scheme targeting a payment workflow is one TEF event; per-transaction-modification frequency is NOT the TEF unit (an insider may make dozens of small modifications before detection — each is not a separate TEF event). Vulnerability is P(access → unauthorized transaction → successful fund diversion before detection), incorporating the probability of successful dual-control bypass.",
     "applicable_industries": [
-      "finance_and_insurance"
+      "financial"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4421,7 +4416,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "finance_and_insurance",
+      "industry": "financial",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no dual-control enforcement on privileged-access transaction modifications; no real-time anomaly detection on wire transfers; no segregation of initiation and approval roles for privileged users",
       "loss_anchor": "sanity-bounded against Financial IRIS (IRIS 2025 Figure A3, p.35, Financial sector p50=$1M, p95=$194M). Analyst PERT primary reflects direct-funds-diversion-dominant loss: mode $500K plausible for an operations-level insider with branch/department transaction authority; high $10M reflects a privileged-system-level insider (settlements desk, correspondent banking); high well below IRIS p95. Secondary = audit + regulatory + remediation ~30% of primary. No per-org loss distribution for insider financial transaction tampering found (C-iii-b T2b negative outcome catalogued)."
@@ -4510,7 +4505,7 @@
     ],
     "canonical_fair_gap": "FAIR's DATA_TAMPERING archetype models unauthorized modification of data. Healthcare EHR record alteration by an insider has a primary-loss profile that combines financial fraud (billing manipulation), malpractice liability (patient-harm claims), and regulatory penalties (HIPAA OCR) — structurally distinct from the breach-notification cost model. The vulnerability is in EHR access controls and audit-log monitoring, not in perimeter network defenses. Loss magnitude is bounded by the scale of the billing fraud or the severity of patient harm, neither of which is captured in cyber-insurance claims studies that focus on breach-notification incidents.",
     "applicable_industries": [
-      "health_care_and_social_assistance"
+      "healthcare"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4544,7 +4539,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "health_care_and_social_assistance",
+      "industry": "healthcare",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no EHR audit-log monitoring or alerting on anomalous record modification patterns; minimum-necessary access policy not enforced; no separation between record-read and record-modify privileges for clinical staff",
       "loss_anchor": "sanity-bounded against Healthcare IRIS (IRIS 2025 Figure A3, p.35, Healthcare sector p50=$557K, p95=$14M). Analyst PERT primary reflects billing-fraud + malpractice-liability-dominant loss: mode $250K plausible for a mid-scale insider billing fraud scheme; high $5M reflects a sustained scheme with patient-harm malpractice claims; high well below IRIS p95. Secondary = HIPAA OCR + remediation + reputation ~40% of primary (regulatory tail elevated for data-integrity violations vs. breach). No per-org loss distribution for insider EHR record alteration found (C-iii-b T2b negative outcome catalogued)."
@@ -4662,7 +4657,7 @@
     "secondary_loss": null,
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "retail_trade",
+      "industry": "retail",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no DDoS scrubbing or CDN-layer absorption; payment API routes directly to origin servers; no traffic-shaping or rate-limiting at the network perimeter",
       "loss_anchor": "sanity-bounded against Retail IRIS (IRIS 2025 Figure A3, p.35, Retail sector p50=$746K, p95=$45M). Analyst PERT primary reflects revenue-disruption-dominant loss: mode $400K reflects 1–4 hours of checkout outage for a mid-market retailer (estimate: $100K/hour during peak season at 10K orders/hr × $100 AOV); high $10M reflects a sustained peak-day attack well below IRIS p95. Secondary = brand damage + customer compensation + expedited CDN deployment ~25% of primary. No per-org DDoS loss distribution for retail e-commerce found (C-iii-b T2b negative outcome catalogued)."
@@ -4826,7 +4821,7 @@
     ],
     "canonical_fair_gap": "FAIR's PHYSICAL_TAMPERING archetype addresses physical-access threats. Office physical theft has a primary loss profile that combines hardware replacement costs and data-breach notification costs (if unencrypted data was on the device) — a hybrid profile distinct from either a pure cyber breach or a pure property loss. The cyber-risk component activates only if the stolen device contained unencrypted regulated data, making the data-classification and encryption posture the key vulnerability factor. At inherent posture (no full-disk encryption), every device theft triggers potential breach-notification obligations. Unbounded analyst PERT — physical office theft outside the IRIS cyber-loss corpus.",
     "applicable_industries": [
-      "professional_and_business_services"
+      "professional"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4860,7 +4855,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "professional_and_business_services",
+      "industry": "professional",
       "revenue_tier": "10m_to_100m",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no full-disk encryption on laptops; no remote-wipe capability; physical office perimeter relies on standard locks with no intrusion monitoring; no data-classification policy distinguishing regulated-PII from general business data on portable devices",
       "loss_anchor": "unbounded analyst PERT — physical office theft outside the IRIS cyber-loss corpus. Primary PERT reasoned from hardware replacement + breach-notification: device replacement $1K–$5K per unit; breach-notification legal + mailing costs $50K–$500K for mid-size firm with client PII exposure; mode $80K reflects 1–2 device theft with limited PII scope. Professional IRIS (p50=$736K, p95=$17M) noted for reference but not applied — IRIS captures cyber incidents, not physical theft. Secondary = client notification + reputation + litigation ~38% of primary."
@@ -4930,7 +4925,7 @@
     ],
     "canonical_fair_gap": "FAIR's INSIDER_MISUSE archetype addresses intentional misuse of authorized access. Retail employee fraud has a primary loss profile dominated by direct cash/inventory value diverted (not by data-breach notification costs). The control failure is in POS authorization controls and transaction audit monitoring, not in network perimeter defenses. TEF is campaign-level: one insider fraud scheme (a sustained pattern of POS manipulation or inventory diversion) is one TEF event; per-transaction-void or per-refund frequency is NOT the TEF unit.",
     "applicable_industries": [
-      "retail_trade"
+      "retail"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -4964,7 +4959,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "retail_trade",
+      "industry": "retail",
       "revenue_tier": "10m_to_100m",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no POS transaction anomaly detection; transaction-void authority not segregated from cash-handling; inventory counts not reconciled against POS records; no CCTV monitoring of POS stations",
       "loss_anchor": "sanity-bounded against Retail IRIS (IRIS 2025 Figure A3, p.35, Retail sector p50=$746K, p95=$45M). Analyst PERT primary reflects direct-cash/inventory-loss-dominant profile: mode $80K consistent with ACFE median occupational fraud of $145K across all industries (ACFE 2024 p.7 — used as order-of-magnitude reference, not a per-org distribution anchor); high $1.5M reflects a sustained multi-location scheme; well below IRIS p95. Secondary = investigation + POS remediation + process redesign ~25% of primary. NRF aggregate shrinkage statistics used for plausibility only (aggregate totals prohibited as per-org anchors per C-iii research protocol §1)."
@@ -5125,7 +5120,7 @@
     ],
     "canonical_fair_gap": "FAIR's SOCIAL_ENGINEERING archetype addresses deception to gain access or trigger action. Financial call-center social engineering has a primary loss profile dominated by authorized transfer fraud (the agent is deceived into authorizing a legitimate-looking transfer) and customer remediation costs — not by data-breach notification costs. The vulnerability is in the call center's identity-verification process (out-of-band voice authentication, knowledge-based authentication weakness), not in technical access controls. TEF is campaign-level: one vishing campaign targeting the financial institution's call center is one TEF event; per-call-attempt frequency is NOT the TEF unit.",
     "applicable_industries": [
-      "finance_and_insurance"
+      "financial"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -5159,7 +5154,7 @@
     },
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "finance_and_insurance",
+      "industry": "financial",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no voice biometrics or knowledge-based authentication for high-risk transactions; agents trained on basic verification scripts only; no real-time transaction-velocity anomaly detection at the call center authorization layer; single-factor voice verification bypassable via pretexting",
       "loss_anchor": "sanity-bounded against Financial IRIS (IRIS 2025 Figure A3, p.35, Financial sector p50=$1M, p95=$194M). Analyst PERT primary reflects authorized-transfer fraud + customer remediation: mode $200K plausible for a targeted vishing campaign resulting in one to several successful fraudulent transfers (per-complaint avg IC3 2024 fraud categories $10K–$50K; institutional loss per event higher due to aggregation across call center scale); high $5M well below IRIS p95. Secondary = regulatory + CS remediation + customer compensation ~25% of primary. No per-org call-center vishing loss distribution found (C-iii-b T2b negative outcome catalogued)."
@@ -5220,7 +5215,7 @@
     ],
     "canonical_fair_gap": "FAIR's PHYSICAL_TAMPERING archetype addresses physical-access threats to IT/OT assets. Campus facility tampering by hacktivists has a loss profile driven by physical repair and operational disruption (class cancellations, research downtime, emergency response), not by breach-notification costs. The threat_actor_type is hacktivists (analyst-judged for this archetype's primary threat scenario — campus physical disruption with ideological motivation); attribution is prospective, not incident-derived for a specific university: documented incidents range from disgruntled students to organized activist groups to vandals, but the ideological-disruption pattern aligns with the hacktivist threat actor profile. Unbounded analyst PERT — campus physical facility tampering outside the IRIS cyber-loss corpus.",
     "applicable_industries": [
-      "education_services"
+      "education"
     ],
     "applicable_sub_sectors": null,
     "applicable_org_sizes": [
@@ -5248,7 +5243,7 @@
     "secondary_loss": null,
     "loss_tier": "paginated",
     "calibration_anchor": {
-      "industry": "education_services",
+      "industry": "education",
       "revenue_tier": "100m_to_1b",
       "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor' — no tamper alerting on network-infrastructure cabinets; campus buildings rely on standard mechanical locks; no physical intrusion detection in server rooms or comms closets; no camera monitoring of IT infrastructure locations",
       "loss_anchor": "unbounded analyst PERT — campus physical facility tampering outside the IRIS cyber-loss corpus. Primary PERT reasoned from repair and downtime economics: network-cable repair/replacement $5K–$50K per incident; access-control or server-room disruption with research downtime $50K–$500K; multi-building campaign up to $2M. Education IRIS (p50=$249K, p95=$6M) noted for reference but not applied — IRIS captures cyber incidents, not physical facility tampering. Secondary = emergency response + student/faculty notification + security upgrade planning ~30% of primary."
