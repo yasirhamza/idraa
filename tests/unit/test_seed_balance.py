@@ -18,13 +18,13 @@ Predicate notes (MB-I1 — exact):
   These are OT by asset_class with generic threat types and would be missed.
 
 Sector predicate (SECTOR_PREDICATES dict):
-  ``applicable_industries`` is the primary signal.  The telecom sector uses
-  ``'telecom' in tags`` as a supplementary signal because 4 of 5 telecom
-  entries carry ``applicable_industries=['information']`` (the NAICS
-  Information sector) alongside a ``'telecom'`` tag rather than a separate
-  ``telecom`` industry value.  The technology_saas predicate excludes entries
-  that have ``'telecom'`` in tags so those 4 entries are not double-counted in
-  the technology_saas cell.
+  ``applicable_industries`` is the primary signal, and every item is an
+  ``IndustryType`` value (guarded by ``test_seed_industries_enum.py``).  The
+  telecom sector is keyed on ``'telecom' in tags`` because telecom entries carry
+  ``applicable_industries`` containing ``'information'`` (the NAICS Information
+  sector) alongside a ``'telecom'`` tag; ``telecom`` is not an industry value.
+  The technology_saas predicate excludes entries that have ``'telecom'`` in tags
+  so they are not double-counted in the technology_saas cell.
 """
 
 from __future__ import annotations
@@ -108,11 +108,10 @@ def _is_ot(entry: dict) -> bool:
 # belongs to the named sector.  Sector membership is derived from
 # ``applicable_industries`` (primary) and ``tags`` (supplementary for telecom).
 #
-# TELECOM NOTE: 4 of the 5 telecom entries carry applicable_industries=['information']
-# with 'telecom' in tags rather than a dedicated 'telecom' industry value.
-# Only telecom-subscriber-data-breach carries 'telecom' in applicable_industries.
-# The 'information' ↔ technology_saas predicate EXCLUDES 'telecom'-tagged entries
-# so those 4 do not double-count in the technology_saas cell.
+# TELECOM NOTE: every telecom entry carries applicable_industries containing 'information'
+# with 'telecom' in tags; 'telecom' is not an IndustryType value, so the telecom predicate is
+# tag-keyed. The 'information' ↔ technology_saas predicate EXCLUDES 'telecom'-tagged entries
+# so they do not double-count in the technology_saas cell.
 
 SECTOR_PREDICATES: dict[str, Callable[[dict], bool]] = {
     # 13 core sectors from spec §3 (plan T6 Step 2):
@@ -121,40 +120,26 @@ SECTOR_PREDICATES: dict[str, Callable[[dict], bool]] = {
     # professional services, transportation/logistics, telecom, hospitality,
     # food/agriculture
     "manufacturing": lambda e: "manufacturing" in e["applicable_industries"],
-    "energy_utilities": lambda e: bool(
-        {"energy", "utilities", "mining"} & set(e["applicable_industries"])
-    ),
-    "healthcare": lambda e: bool(
-        {"healthcare", "health_care_and_social_assistance"} & set(e["applicable_industries"])
-    ),
-    "financial_services": lambda e: bool(
-        {"finance_and_insurance", "financial"} & set(e["applicable_industries"])
-    ),
-    "retail_ecommerce": lambda e: bool(
-        {"retail", "retail_trade"} & set(e["applicable_industries"])
-    ),
+    "energy_utilities": lambda e: bool({"utilities", "mining"} & set(e["applicable_industries"])),
+    "healthcare": lambda e: "healthcare" in e["applicable_industries"],
+    "financial_services": lambda e: "financial" in e["applicable_industries"],
+    "retail_ecommerce": lambda e: "retail" in e["applicable_industries"],
     # 'information' is the NAICS sector containing SaaS/tech companies.
     # Entries with 'telecom' in tags are excluded (they are counted in the
     # telecom sector — see note above).
     "technology_saas": lambda e: (
-        bool({"technology", "information"} & set(e["applicable_industries"]))
-        and "telecom" not in e.get("tags", [])
+        "information" in e["applicable_industries"] and "telecom" not in e.get("tags", [])
     ),
-    "government_public": lambda e: bool({"government", "public"} & set(e["applicable_industries"])),
-    "education": lambda e: bool(
-        {"education", "education_services"} & set(e["applicable_industries"])
-    ),
+    "government_public": lambda e: "public" in e["applicable_industries"],
+    "education": lambda e: "education" in e["applicable_industries"],
     "professional_services": lambda e: bool(
-        {"professional", "professional_and_business_services", "real_estate"}
-        & set(e["applicable_industries"])
+        {"professional", "real_estate"} & set(e["applicable_industries"])
     ),
-    "transportation_logistics": lambda e: bool(
-        {"transportation", "transportation_and_warehousing"} & set(e["applicable_industries"])
-    ),
-    # Telecom: primary check is 'telecom' in applicable_industries; supplementary
-    # check is 'telecom' in tags (covers the 4 entries that use the 'information'
-    # NAICS value instead of a standalone 'telecom' industry value).
-    "telecom": lambda e: "telecom" in e["applicable_industries"] or "telecom" in e.get("tags", []),
+    "transportation_logistics": lambda e: "transportation" in e["applicable_industries"],
+    # Telecom: 'telecom' is not an IndustryType value (idraa#203), so telecom entries are
+    # identified by the 'telecom' tag; their applicable_industries carries the NAICS
+    # 'information' sector.
+    "telecom": lambda e: "telecom" in e.get("tags", []),
     "hospitality": lambda e: "hospitality" in e["applicable_industries"],
     "food_agriculture": lambda e: "agriculture" in e["applicable_industries"],
 }

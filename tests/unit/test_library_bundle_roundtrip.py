@@ -86,7 +86,7 @@ _SOURCES: list[dict[str, Any]] = [
         "secondary_loss": None,
         "suggested_control_ids": ["ctrl-x"],
         "standards_references": {"nist_csf": ["PR.AC-1"]},
-        "calibration_anchor": {"industry": "energy", "revenue_tier": "1b_to_10b"},
+        "calibration_anchor": {"industry": "utilities", "revenue_tier": "1b_to_10b"},
         "loss_tier": "vendor",
         "loss_shape": "capped",
     },

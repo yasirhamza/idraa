@@ -61,7 +61,7 @@ def test_short_description_is_error() -> None:
 
 def test_bad_revenue_tier_is_error() -> None:
     preview, errors, seeds = _validate_entries(
-        [(0, _e(calibration_anchor={"industry": "x", "revenue_tier": "bogus"}))],
+        [(0, _e(calibration_anchor={"industry": "other", "revenue_tier": "bogus"}))],
         existing_slugs=set(),
         published_slugs=_PUB,
     )
