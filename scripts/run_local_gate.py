@@ -59,7 +59,7 @@ Escape hatches:
 
 Clerk stage (adoption design 2026-10-03, §4; plugin-install design 2026-10-09):
 the gate runs the superpowers-clerk that the Claude Code plugin system installed
-(``superpowers-clerk@superpowers-clerk``, read from
+(``superpowers-clerk@superpowers-clerk``, user scope, read from
 ``<CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json``), or the
 checkout ``IDRAA_CLERK_ROOT`` names when that is set (a development override
 that wins over the plugin). It runs the clerk's deterministic gates as the
@@ -183,6 +183,7 @@ CLERK_SOURCE_OVERRIDE = f"{CLERK_ROOT_ENV} override"
 CLERK_SOURCE_INSTALLED = "installed plugin"
 # Fully qualified: a bare `origin/main` is ambiguous with a local tag or branch of that name.
 CLERK_ORIGIN_REF = "refs/remotes/origin/main"
+CLERK_PROJECT_FILES = ("pyproject.toml", "uv.lock")
 CLERK_CONFIG = "clerk.toml"
 CLERK_MANIFEST = ".clerk/manifests/citations.json"
 CLERK_SURFACES_MANIFEST = ".clerk/manifests/surfaces.json"
@@ -193,12 +194,14 @@ CLERK_NOT_INSTALLED_REASON = (
 
 
 def _installed_clerk_record(env: Mapping[str, str]) -> dict[str, Any] | None:
-    """The first record of the clerk plugin in Claude Code's registry, or None; never raises.
+    """The first user-scope record of the clerk plugin in Claude Code's registry, or None; never raises.
 
     Reads `<CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json` and nothing else
     under the config directory. A missing or unreadable file, malformed JSON, a missing key,
-    an empty list, a non-dict record, or a record without a string `installPath` all mean
-    "not installed". User scope is the only scope Idraa uses, so the first record is taken.
+    an empty list, no record of `scope == "user"`, or a first user-scope record without a string
+    `installPath` all mean "not installed". The registry holds every scope's installs, and a
+    project- or local-scope record made while working in another repository must not become the
+    clerk this repository's gate runs, so only user scope counts (the first such record decides).
     """
     try:
         config_dir = Path(env.get(CLAUDE_CONFIG_DIR_ENV) or Path.home() / ".claude")
@@ -211,8 +214,8 @@ def _installed_clerk_record(env: Mapping[str, str]) -> dict[str, Any] | None:
     records = plugins.get(CLERK_PLUGIN_KEY) if isinstance(plugins, dict) else None
     if not isinstance(records, list) or not records:
         return None
-    record = records[0]
-    if not isinstance(record, dict):
+    record = next((r for r in records if isinstance(r, dict) and r.get("scope") == "user"), None)
+    if record is None:
         return None
     install_path = record.get("installPath")
     if not isinstance(install_path, str) or not install_path:
@@ -224,7 +227,8 @@ def clerk_root(env: Mapping[str, str]) -> tuple[str, str] | None:
     """`(root, source)` of the clerk to run, or None when there is none.
 
     `IDRAA_CLERK_ROOT` (a development checkout) wins; otherwise the installed plugin's
-    `installPath`. Whether that path is a directory is `run_clerk_gate`'s check (exit 2).
+    `installPath`. Whether that path is absolute, a directory and a clerk is `run_clerk_gate`'s
+    check (exit 2).
     """
     override = env.get(CLERK_ROOT_ENV)
     if override:
@@ -343,15 +347,26 @@ def clerk_version(root: str) -> str:
 
 
 def run_clerk_gate(root: str, source: str = CLERK_SOURCE_OVERRIDE, sha: str | None = None) -> int:
+    installed = source == CLERK_SOURCE_INSTALLED
+    repair = f" — repair it with `claude plugin update {CLERK_PLUGIN_KEY}`" if installed else ""
+    subject = (
+        f"the installed {CLERK_PLUGIN_KEY} record points at {root!r}, which"
+        if installed
+        else f"{CLERK_ROOT_ENV}={root!r}"
+    )
+    # A relative record would resolve under the repository being reviewed; refuse before is_dir().
+    if installed and not Path(root).is_absolute():
+        print(f"local gate: {subject} is not an absolute path{repair}")
+        return 2
     if not Path(root).is_dir():
-        if source == CLERK_SOURCE_INSTALLED:
-            print(
-                f"local gate: the installed {CLERK_PLUGIN_KEY} record points at {root!r},"
-                " which is not a directory"
-                f" — repair it with `claude plugin update {CLERK_PLUGIN_KEY}`"
-            )
-        else:
-            print(f"local gate: {CLERK_ROOT_ENV}={root!r} is not a directory")
+        print(f"local gate: {subject} is not a directory{repair}")
+        return 2
+    # `uv run --frozen --project <root>` needs both; check before any git or clerk invocation.
+    if not all((Path(root) / name).is_file() for name in CLERK_PROJECT_FILES):
+        print(
+            f"local gate: {root!r} has no {'/'.join(CLERK_PROJECT_FILES)}"
+            f" — not a superpowers-clerk checkout{repair}"
+        )
         return 2
     version = clerk_version(root)
     if sha:

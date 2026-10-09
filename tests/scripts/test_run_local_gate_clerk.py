@@ -49,6 +49,17 @@ def _install(config_dir: Path, install_path: Path | str, **extra: Any) -> None:
     _write_registry(config_dir, {"version": 2, "plugins": {KEY: [record]}})
 
 
+def _fake_clerk_root(root: Path) -> Path:
+    """Make `root` look like a superpowers-clerk checkout to `run_clerk_gate`: it must hold the two
+    files `uv run --frozen --project <root>` needs. Nothing in them is read."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "pyproject.toml").write_text(
+        "[project]\nname = 'superpowers-clerk'\n", encoding="utf-8"
+    )
+    (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    return root
+
+
 def _write_plugin_json(root: Path, payload: object) -> None:
     manifest = root / ".claude-plugin" / "plugin.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -127,13 +138,33 @@ def test_clerk_root_defaults_to_dot_claude_under_home(
     assert g.clerk_root({g.CLAUDE_CONFIG_DIR_ENV: ""}) == ("/installed/clerk", "installed plugin")
 
 
-def test_clerk_root_takes_the_first_record(tmp_path: Path) -> None:
+def test_clerk_root_takes_the_first_user_scope_record(tmp_path: Path) -> None:
+    env = {g.CLAUDE_CONFIG_DIR_ENV: str(tmp_path)}
+    # Claude Code files every scope's installs in the one user registry: a project- or local-scope
+    # record made while working in another repository must never become the clerk Idraa runs.
     records = [
-        {"scope": "user", "installPath": "/first"},
-        {"scope": "project", "installPath": "/second"},
+        {"scope": "project", "installPath": "/project-scope", "gitCommitSha": "b" * 40},
+        {"scope": "local", "installPath": "/local-scope"},
+        {"installPath": "/no-scope"},
+        "not-a-record",
+        {"scope": "user", "installPath": "/user-scope", "gitCommitSha": PLUGIN_SHA},
+        {"scope": "user", "installPath": "/second-user-scope"},
     ]
     _write_registry(tmp_path, {"plugins": {KEY: records}})
-    assert g.clerk_root({g.CLAUDE_CONFIG_DIR_ENV: str(tmp_path)}) == ("/first", "installed plugin")
+    assert g.clerk_root(env) == ("/user-scope", "installed plugin")
+    assert g.clerk_installed_sha(env) == PLUGIN_SHA, "the sha is the user-scope record's"
+    # User scope first, other scopes after: still the user-scope record.
+    _write_registry(tmp_path, {"plugins": {KEY: [records[4], records[0]]}})
+    assert g.clerk_root(env) == ("/user-scope", "installed plugin")
+
+
+def test_clerk_root_first_user_scope_record_decides_even_when_unusable(tmp_path: Path) -> None:
+    # "The first user-scope record", not "the first usable one": a broken user-scope record means
+    # not installed, never a silent fall-through to a later record.
+    records = [{"scope": "user"}, {"scope": "user", "installPath": "/later"}]
+    _write_registry(tmp_path, {"plugins": {KEY: records}})
+    env = {g.CLAUDE_CONFIG_DIR_ENV: str(tmp_path)}
+    assert g.clerk_root(env) is None and g.clerk_installed_sha(env) is None
 
 
 _NOT_INSTALLED: list[tuple[str, object]] = [
@@ -146,8 +177,23 @@ _NOT_INSTALLED: list[tuple[str, object]] = [
     ("records-not-a-list", {"plugins": {KEY: {"installPath": "/x"}}}),
     ("record-not-a-dict", {"plugins": {KEY: ["/x"]}}),
     ("record-without-install-path", {"plugins": {KEY: [{"scope": "user"}]}}),
-    ("install-path-not-a-string", {"plugins": {KEY: [{"installPath": 7}]}}),
-    ("install-path-empty", {"plugins": {KEY: [{"installPath": ""}]}}),
+    ("install-path-not-a-string", {"plugins": {KEY: [{"scope": "user", "installPath": 7}]}}),
+    ("install-path-empty", {"plugins": {KEY: [{"scope": "user", "installPath": ""}]}}),
+    ("project-scope-only", {"plugins": {KEY: [{"scope": "project", "installPath": "/p"}]}}),
+    (
+        "non-user-scopes-only",
+        {
+            "plugins": {
+                KEY: [
+                    {"scope": "project", "installPath": "/p"},
+                    {"scope": "local", "installPath": "/l"},
+                    {"scope": "managed", "installPath": "/m"},
+                ]
+            }
+        },
+    ),
+    ("record-without-scope", {"plugins": {KEY: [{"installPath": "/x"}]}}),
+    ("scope-not-a-string", {"plugins": {KEY: [{"scope": ["user"], "installPath": "/x"}]}}),
     ("malformed-json", "{not json"),
     ("empty-file", ""),
     ("deeply-nested-json", "[" * 100_000),
@@ -440,9 +486,97 @@ def test_clerk_stage_stale_installed_record_exits_2_with_the_record_path(
     assert "FAILED at clerk gate (exit 2" in out
 
 
+@pytest.mark.parametrize("relative", ["clerk", "./clerk", "plugins/cache/clerk", "../clerk"])
+def test_run_clerk_gate_relative_installed_record_exits_2(
+    relative: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def forbidden(*args: object, **kwargs: object) -> object:
+        pytest.fail("a relative record must be refused before git or the clerk is touched")
+
+    # A real clerk-shaped directory sits where the relative path resolves from the working
+    # directory (the repository under review): it must still be refused, before is_dir().
+    cwd = tmp_path / "repo"
+    cwd.mkdir()
+    _fake_clerk_root((cwd / relative).resolve())
+    monkeypatch.chdir(cwd)
+    assert (Path(relative) / "uv.lock").is_file(), "the relative path really resolves to a clerk"
+    monkeypatch.setattr(g, "_git", forbidden)
+    monkeypatch.setattr(g, "_run", forbidden)
+    assert g.run_clerk_gate(relative, "installed plugin", PLUGIN_SHA) == 2
+    out = capsys.readouterr().out
+    assert f"points at {relative!r}, which is not an absolute path" in out
+    assert "claude plugin update superpowers-clerk@superpowers-clerk" in out
+    assert "is not a directory" not in out and "clerk at" not in out
+
+
+def test_clerk_stage_relative_installed_record_exits_2_with_the_record_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(g, "_git", lambda *a, **k: pytest.fail("git touched"))
+    monkeypatch.setattr(g, "_run", lambda argv: pytest.fail("clerk run"))
+    _install(tmp_path, "plugins/cache/superpowers-clerk/0.1.1", gitCommitSha=PLUGIN_SHA)
+    assert g.clerk_stage({g.CLAUDE_CONFIG_DIR_ENV: str(tmp_path)}) == 2
+    out = capsys.readouterr().out
+    assert "'plugins/cache/superpowers-clerk/0.1.1', which is not an absolute path" in out
+    assert "claude plugin update superpowers-clerk@superpowers-clerk" in out
+    assert "FAILED at clerk gate (exit 2" in out
+
+
+def test_run_clerk_gate_relative_override_is_the_developers_own_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The absolute-path rule is for the installed record only; a developer's override may be relative.
+    _fake_clerk_root(tmp_path / "clerk")
+    monkeypatch.chdir(tmp_path)
+    _patch(monkeypatch, _FakeGit(), [0, 0])
+    assert g.run_clerk_gate("clerk") == 0
+
+
+@pytest.mark.parametrize("source", ["IDRAA_CLERK_ROOT override", "installed plugin"])
+@pytest.mark.parametrize(
+    "present",
+    [
+        (),
+        ("pyproject.toml",),
+        ("uv.lock",),
+        ("pyproject.toml", "uv.lock/"),
+        ("pyproject.toml/", "uv.lock"),
+    ],
+    ids=["neither", "no-lock", "no-pyproject", "lock-is-a-directory", "pyproject-is-a-directory"],
+)
+def test_run_clerk_gate_directory_that_is_not_a_clerk_exits_2(
+    source: str,
+    present: tuple[str, ...],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def forbidden(*args: object, **kwargs: object) -> object:
+        pytest.fail("a directory that is not a clerk must be refused before git or the clerk runs")
+
+    for name in present:
+        if name.endswith("/"):
+            (tmp_path / name).mkdir()
+        else:
+            (tmp_path / name).write_text("", encoding="utf-8")
+    monkeypatch.setattr(g, "_git", forbidden)  # no `git describe` in the directory either
+    monkeypatch.setattr(g, "_run", forbidden)
+    installed = source == "installed plugin"
+    assert g.run_clerk_gate(str(tmp_path), source, PLUGIN_SHA if installed else None) == 2
+    out = capsys.readouterr().out
+    assert f"local gate: {str(tmp_path)!r} has no pyproject.toml/uv.lock" in out
+    assert "not a superpowers-clerk checkout" in out
+    assert ("claude plugin update superpowers-clerk@superpowers-clerk" in out) is installed
+    assert "clerk at" not in out, "no version line for a directory that is not a clerk"
+
+
 def test_run_clerk_gate_no_merge_base_skips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     runs = _patch(monkeypatch, _FakeGit(merge_base=128, merge_base_stderr="fatal: no such ref"), [])
     assert g.run_clerk_gate(str(tmp_path)) == 0
     out = capsys.readouterr().out
@@ -467,6 +601,7 @@ def test_run_clerk_gate_git_error_on_config_probe_exits_2(
     at_origin: bool | None,
     where: str,
 ) -> None:
+    _fake_clerk_root(tmp_path)
     runs = _patch(monkeypatch, _FakeGit(at_base=at_base, at_origin=at_origin), [])
     assert g.run_clerk_gate(str(tmp_path)) == 2
     assert runs == [], "a git error is an input error, never 'absent' (which would bootstrap)"
@@ -476,6 +611,7 @@ def test_run_clerk_gate_git_error_on_config_probe_exits_2(
 def test_run_clerk_gate_refuses_stale_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     fake = _FakeGit(at_base=False, at_origin=True)
     runs = _patch(monkeypatch, fake, [])
     assert g.run_clerk_gate(str(tmp_path)) == 2
@@ -488,6 +624,7 @@ def test_run_clerk_gate_refuses_stale_base(
 def test_run_clerk_gate_bootstrap_runs_hygiene_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     fake = _FakeGit(at_base=False, at_origin=False)
     runs = _patch(monkeypatch, fake, [0])
     assert g.run_clerk_gate(str(tmp_path)) == 0
@@ -505,6 +642,7 @@ def test_run_clerk_gate_bootstrap_runs_hygiene_only(
 def test_run_clerk_gate_normal_runs_two_blocking_gates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     fake = _FakeGit()
     runs = _patch(monkeypatch, fake, [0, 0])
     assert g.run_clerk_gate(str(tmp_path)) == 0
@@ -532,6 +670,7 @@ def test_run_clerk_gate_normal_runs_two_blocking_gates(
 def test_version_line_installed_plugin_reads_plugin_json_and_appends_the_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     _write_plugin_json(tmp_path, {"name": "superpowers-clerk", "version": "0.1.1"})
     fake = _FakeGit()
     _patch(monkeypatch, fake, [0, 0])
@@ -546,6 +685,7 @@ def test_version_line_installed_plugin_reads_plugin_json_and_appends_the_sha(
 def test_version_line_override_without_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     _write_plugin_json(tmp_path, {"version": "0.1.1"})
     _patch(monkeypatch, _FakeGit(), [0, 0])
     assert g.run_clerk_gate(str(tmp_path), "IDRAA_CLERK_ROOT override") == 0
@@ -572,6 +712,7 @@ def test_version_line_falls_back_to_git_describe(
     capsys: pytest.CaptureFixture[str],
     manifest: object,
 ) -> None:
+    _fake_clerk_root(tmp_path)
     if manifest is not None:
         _write_plugin_json(tmp_path, manifest)
     fake = _FakeGit(described="v0.1.0-3-gabc1234-dirty")
@@ -587,6 +728,7 @@ def test_version_line_falls_back_to_git_describe(
 def test_version_line_unknown_when_neither_manifest_nor_git_answers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _fake_clerk_root(tmp_path)
     _patch(monkeypatch, _FakeGit(described=""), [0, 0])
     assert g.run_clerk_gate(str(tmp_path), "installed plugin", PLUGIN_SHA) == 0
     assert (
