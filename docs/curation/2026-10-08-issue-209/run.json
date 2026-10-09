@@ -1,0 +1,114 @@
+{
+  "campaign": "issue-209",
+  "date": "2026-10-08",
+  "judge": "jev",
+  "git_commit": "b8e6edad8282dc55bc48e2d32523fa65aef66451",
+  "model": "jev-1.13.0",
+  "pinned_model": "jev-1.13.0",
+  "top": 15,
+  "seed_sha256": {
+    "data/seed_library_entries.json": "4164637dcb0ea7459c4acaece311cb6f25ed0e43d66939949dd3137e7b6a3958",
+    "data/seed_library_entries_extension.json": "4d35b256ee6f34517c686f61f2204c73a373751439e8c457fb7d9d1008f68016",
+    "data/seed_control_library_entries.json": "0b0d66ce7a7662288c0a09a3fb74438c47809b8c0b530eb46e3b312f2aec9c9b"
+  },
+  "criteria_sha256": "65af6a5ecb3e74f9999ed9bd51e6da0ff93cc58c0cefa81ecd5bc99d3c2097fa",
+  "checks": {
+    "scenario-labels": {
+      "items": 99,
+      "scored_rows": 297,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 4160,
+      "input_tokens_median": 3988.0
+    },
+    "control-functions": {
+      "items": 63,
+      "scored_rows": 1556,
+      "suppressed": 19,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 8072,
+      "input_tokens_median": 7744.0
+    },
+    "overlap": {
+      "items": 99,
+      "scored_rows": 73,
+      "suppressed": 0,
+      "errored": 0,
+      "errored_items": [],
+      "input_tokens_max": 13930,
+      "input_tokens_median": 13930.0
+    }
+  },
+  "failed_checks": [],
+  "warnings": [
+    "gaps skipped: no --intake"
+  ],
+  "queues": {
+    "scenario-labels": [
+      "scenario-labels:cloud-account-takeover:threat_event_type",
+      "scenario-labels:food-recall-data-tampering:asset_class",
+      "scenario-labels:hmi-credential-compromise:threat_event_type",
+      "scenario-labels:hospitality-pos-card-skimming:asset_class",
+      "scenario-labels:manufacturing-billing-fraud:asset_class",
+      "scenario-labels:unauthorized-plc-modification:threat_event_type",
+      "scenario-labels:food-recall-data-tampering:threat_event_type",
+      "scenario-labels:grid-protective-relay-manipulation:threat_event_type",
+      "scenario-labels:it-ot-bridge-compromise:threat_event_type",
+      "scenario-labels:physician-practice-clearinghouse-revenue-disruption:asset_class",
+      "scenario-labels:professional-office-physical-theft:asset_class",
+      "scenario-labels:hospitality-pos-card-skimming:threat_event_type",
+      "scenario-labels:law-enforcement-records-extortion-breach:threat_event_type",
+      "scenario-labels:ot-network-scanning-reconnaissance:threat_event_type",
+      "scenario-labels:ransomware-on-historian:threat_event_type"
+    ],
+    "control-functions": [
+      "control-functions:cloud-security-posture-management:lec_det_monitoring",
+      "control-functions:patch-management:vmc_prev_reduce_variance_prob",
+      "control-functions:security-configuration-assessment:dsc_prev_sa_reporting",
+      "control-functions:external-attack-surface-management:lec_det_visibility",
+      "control-functions:email-security-protection:lec_det_recognition",
+      "control-functions:email-security-protection:lec_prev_resistance",
+      "control-functions:secure-web-gateway:lec_det_recognition",
+      "control-functions:cloud-security-posture-management:dsc_prev_sa_reporting",
+      "control-functions:host-intrusion-detection-prevention:lec_resp_resilience",
+      "control-functions:third-party-risk-management:dsc_prev_sa_data_threat",
+      "control-functions:network-detection-response:lec_resp_resilience",
+      "control-functions:endpoint-detection-response:lec_resp_resilience",
+      "control-functions:third-party-risk-management:dsc_prev_incentives",
+      "control-functions:user-access-control:vmc_corr_implementation",
+      "control-functions:secure-remote-access:lec_prev_avoidance"
+    ],
+    "overlap": [
+      "overlap:agri-coop-bec-fraud:bec-fraud-financial",
+      "overlap:bec-fraud-financial:professional-payroll-bec",
+      "overlap:competitor-trade-secret-recruit:ip-theft-by-competitor",
+      "overlap:credential-stuffing-consumer-portal:hospitality-loyalty-account-takeover",
+      "overlap:crop-science-ip-exfiltration:education-research-ip-exfiltration",
+      "overlap:ddos-financial-seasonal-peak:retail-ecommerce-checkout-ddos",
+      "overlap:education-student-records-insider:insider-data-theft-financial",
+      "overlap:financial-transaction-tampering:manufacturing-billing-fraud",
+      "overlap:hmi-credential-compromise:oem-remote-maintenance-abuse",
+      "overlap:hospitality-booking-ddos-peak-season:retail-ecommerce-checkout-ddos",
+      "overlap:hospitality-guest-data-insider:insider-data-theft-financial",
+      "overlap:hospitality-pos-card-skimming:retail-pos-card-skimming",
+      "overlap:insider-ip-theft-manufacturing:ip-theft-by-competitor",
+      "overlap:it-ot-bridge-compromise:ransomware-on-historian",
+      "overlap:judiciary-court-system-ransomware:law-firm-privileged-data-ransomware-extortion"
+    ]
+  },
+  "changed_since": {
+    "ref_sha": "7fd06be2b854fda8106292348a98633c5dd698cc",
+    "merge_base": "7fd06be2b854fda8106292348a98633c5dd698cc",
+    "subjects": [
+      "accidental-insider-exposure",
+      "credential-stuffing-consumer-portal",
+      "crop-science-ip-exfiltration",
+      "higher-ed-insider-ddos",
+      "hospitality-guest-data-insider",
+      "insider-ip-theft-manufacturing",
+      "ot-network-scanning-reconnaissance"
+    ]
+  }
+}

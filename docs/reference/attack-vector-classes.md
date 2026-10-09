@@ -35,11 +35,11 @@ change that adds the entry — the soft-check test will otherwise fail your PR.
 | [phishing](#phishing) | T1566 Phishing | 5 | 14 |
 | [social-engineering](#social-engineering) | T1566 (voice/BEC variants) | 2 | 5 |
 | [credential-abuse](#credential-abuse) | T1078.004, T1621, T1552, T1539 | 6 | 7 |
-| [insider-misuse](#insider-misuse) | T1078 (insider abuse of granted access) | 3 | 15 |
+| [insider-misuse](#insider-misuse) | T1078 (insider abuse of granted access) | 3 | 14 |
 | [supply-chain](#supply-chain) | T1195 Supply Chain Compromise | 5 | 5 |
 | [edge-appliance-exploitation](#edge-appliance-exploitation) | T1190 Exploit Public-Facing Application | 2 | 3 |
 | [remote-access-exploitation](#remote-access-exploitation) | T1133 External Remote Services | 1 | 3 |
-| [network-exploitation](#network-exploitation) | T1190 / T1210 / general recon | 6 | 23 |
+| [network-exploitation](#network-exploitation) | T1190 / T1210 / general recon | 5 | 23 |
 | [client-exploitation](#client-exploitation) | T1203 Exploitation for Client Execution | 1 | 1 |
 | [drive-by](#drive-by) | T1189 Drive-by Compromise | 2 | 2 |
 | [removable-media](#removable-media) | T0847 Replication Through Removable Media (ICS) | 1 | 1 |
@@ -49,7 +49,7 @@ change that adds the entry — the soft-check test will otherwise fail your PR.
 | [ot-engineering-access](#ot-engineering-access) | ICS engineering-workstation / IT-OT bridge | 2 | 7 |
 | [denial-of-service](#denial-of-service) | T1498 Network Denial of Service | 2 | 4 |
 | [destructive-malware](#destructive-malware) | T1485 Data Destruction / T1486 Data Encrypted for Impact | 1 | 1 |
-| [cloud-misconfiguration](#cloud-misconfiguration) | Miscellaneous Errors (not adversarial IA) | 1 | 1 |
+| [cloud-misconfiguration](#cloud-misconfiguration) | Miscellaneous Errors (not adversarial IA) | 2 | 2 |
 | [ai-manipulation](#ai-manipulation) | ATLAS (out of ATT&CK scope; #482 exempt) | 1 | 1 |
 
 44 distinct values across 102 entries as of #529 (machine-verified — see
@@ -151,7 +151,6 @@ interfaces, OT protocol stacks, general network intrusion, reconnaissance).
 - `external_network_exploitation`
 - `network_intrusion`
 - `protocol_exploitation`
-- `passive_network_scanning_and_active_probing`
 - `zero_day_exploitation` — zero-day in an internet-exposed application
   server (e.g. MOVEit-class MFT), not a perimeter security appliance.
 - `vmware_esxi_exploitation` — exposed hypervisor management interface
@@ -228,10 +227,19 @@ epic's impact-axis addition (W1).
 
 ## cloud-misconfiguration
 
-Unintentionally exposed cloud resource — the FAIR-CAM Miscellaneous Errors
-pattern (design doc §6.3), not an adversarial initial-access technique.
+Unintentionally exposed resource — the Miscellaneous Errors pattern (DBIR;
+design doc §6.3), not an adversarial initial-access technique: a publicly
+readable cloud store, a mis-set share permission, an exposed database or
+mailbox, a misdelivered file or a mis-published document. The vector names the
+exposure; which event an entry counts depends on its community. Under the
+accidental insider the error is the threat event (counted even when a control
+catches it). Under opportunistic hackers — `misconfigured_cloud_storage_public_access`,
+the cloud-storage entry — the threat event is the outsider's read attempt
+against the storage location, counted whether or not a weakness is present, a
+separate event with its own frequency.
 
 - `misconfigured_cloud_storage_public_access`
+- `misdelivery_or_misconfiguration`
 
 ## ai-manipulation
 
