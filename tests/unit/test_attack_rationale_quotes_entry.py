@@ -84,9 +84,11 @@ _ISSUE_234_ROWS: tuple[RowKey, ...] = (
     ("ot-network-scanning-reconnaissance", "enterprise", "T1078"),
 )
 
-# Quotes from the row's own external sources (a press release, an advisory, the ATT&CK
-# definition): they are not entry text and the row's citations carry only the source label.
-# Keyed by row -> normalised 40-character prefixes of the excused parts. May grow under review.
+# Verbatim quotes from the row's own cited external source (a press release, an advisory):
+# they are not entry text and the row's citations carry only the source label. A quote that
+# is not verbatim from its source is a defect, not an external quote -- file it under
+# KNOWN_QUOTE_DEFECTS. Keyed by row -> normalised 40-character prefixes of the excused parts.
+# May grow under review.
 EXTERNAL_QUOTES: dict[RowKey, tuple[str, ...]] = {
     ("gov-employee-insider-leak", "enterprise", "T1078"): (
         # DOJ OPA, 'Maryland Man Charged With Removal of Classified Materials and Theft of
@@ -95,11 +97,6 @@ EXTERNAL_QUOTES: dict[RowKey, tuple[str, ...]] = {
         # DOJ OPA, 'Federal Government Contractor in Georgia Charged With Removing and Mailing
         # Classified Materials to a News Outlet' (2017-06-05) -- Winner.
         "admitted intentionally identifying and p",
-    ),
-    ("gov-records-tampering", "enterprise", "T1565"): (
-        # MITRE ATT&CK T1565 Data Manipulation definition wording; the catalog description in
-        # seed_attack_catalog.json does not reproduce this phrase.
-        "to influence external outcomes or decisi",
     ),
     ("insider-ip-theft-manufacturing", "enterprise", "T1005"): (
         # DOJ OPA, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage
@@ -133,6 +130,13 @@ EXTERNAL_QUOTES: dict[RowKey, tuple[str, ...]] = {
 # Exact keys; may only SHRINK -- the test below asserts the key set is a subset of the pinned
 # tuple, so a new entry here fails unless the pin is edited in the same reviewed change.
 KNOWN_QUOTE_DEFECTS: dict[RowKey, tuple[str, ...]] = {
+    ("gov-records-tampering", "enterprise", "T1565"): (
+        # Spliced quote of ATT&CK T1565: the definition reads 'in order to influence external
+        # outcomes or hide activity'; 'decision making' ends its next sentence (both sentences
+        # are in seed_attack_catalog.json's T1565 description). No ATT&CK version contains the
+        # quoted phrase 'to influence external outcomes or decision making'.
+        "to influence external outcomes or decisi",
+    ),
     ("manufacturing-billing-fraud", "enterprise", "T1565"): (
         # Misattributed: 'without specific loss figures per case' is
         # logistics-tms-data-tampering's phrase, never this entry's, and contradicts this
@@ -146,6 +150,7 @@ KNOWN_QUOTE_DEFECTS: dict[RowKey, tuple[str, ...]] = {
     ),
 }
 _PINNED_KNOWN_QUOTE_DEFECT_KEYS: tuple[RowKey, ...] = (
+    ("gov-records-tampering", "enterprise", "T1565"),
     ("manufacturing-billing-fraud", "enterprise", "T1565"),
     ("pipeline-nomination-scada-curtailment-shipper-penalty", "enterprise", "T1486"),
 )
@@ -243,7 +248,8 @@ def test_every_quoted_span_in_a_covered_rationale_is_still_in_its_source() -> No
         "crosswalk rationale(s) quote text that is in neither the entry, the technique's "
         "catalog description nor the row's citations (an entry re-worded without its "
         "crosswalk rows, or a quote from an external source that needs an EXTERNAL_QUOTES "
-        "entry):\n" + "\n".join(stale)
+        "entry; EXTERNAL_QUOTES takes only verbatim quotes of the row's own cited "
+        "source):\n" + "\n".join(stale)
     )
 
 
@@ -265,7 +271,14 @@ def test_allowlists_only_shrink_and_every_prefix_is_live() -> None:
     assert set(KNOWN_QUOTE_DEFECTS) <= set(_PINNED_KNOWN_QUOTE_DEFECT_KEYS), (
         "KNOWN_QUOTE_DEFECTS may only shrink: fix the quote, do not add the defect here"
     )
-    assert not set(EXTERNAL_QUOTES) & set(KNOWN_QUOTE_DEFECTS)
+    # A row may appear in both tables (one verbatim external part, one defect part); no single
+    # prefix may.
+    for key in set(EXTERNAL_QUOTES) & set(KNOWN_QUOTE_DEFECTS):
+        shared = set(EXTERNAL_QUOTES[key]) & set(KNOWN_QUOTE_DEFECTS[key])
+        assert not shared, (
+            f"{key}: prefix(es) {sorted(shared)} appear in both EXTERNAL_QUOTES and "
+            "KNOWN_QUOTE_DEFECTS; a quote is either verbatim from its source or a defect"
+        )
     covered = _covered(_mapping_rows())
     dead: list[str] = []
     for table in (EXTERNAL_QUOTES, KNOWN_QUOTE_DEFECTS):
