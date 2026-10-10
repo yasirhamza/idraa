@@ -201,7 +201,7 @@ def test_security_lane_files_are_escalation_paths() -> None:
 
 
 def test_methodology_lane_files_are_escalation_paths() -> None:
-    """Every methodology-lane file escalates; the lane's completeness is the methodology-lane completeness audit (the methodology-lane completeness-audit issue, filed after the adoption merges), which blocks graduation."""
+    """Every methodology-lane file escalates; the lane's completeness is enforced by the membership rules M-A, M-B, M-B-JS and M-C below (spec 2026-10-10, #217)."""
     globs = _escalation_globs()
     lane = _lanes()["methodology"]["globs"]
     uncovered = sorted(
@@ -700,7 +700,11 @@ def _is_type_checking(test: ast.expr) -> bool:
 
 
 def _runtime_nodes(tree: ast.AST) -> Iterator[ast.AST]:
-    """Every node that runs: not an `if TYPE_CHECKING:` body (its `else:` is scanned), not an annotation."""
+    """Every node that runs: not an `if TYPE_CHECKING:` body (its `else:` is scanned), not an annotation.
+
+    Only S-A's org-scoped-model clause reads this view (spec section 3); every other S-A signal is
+    read over the whole tree.
+    """
     stack: list[ast.AST] = [tree]
     while stack:
         node = stack.pop()
@@ -724,9 +728,9 @@ def _from_module(node: ast.ImportFrom, package: str) -> str | None:
     if node.level == 0:
         return node.module
     parts = package.split(".")
-    base = parts[: len(parts) - (node.level - 1)]
-    if not base:
+    if node.level - 1 >= len(parts):  # leaves the package, however far
         return None
+    base = parts[: len(parts) - (node.level - 1)]
     return ".".join([*base, *([node.module] if node.module else [])])
 
 
@@ -744,21 +748,24 @@ def security_signals(source: str, package: str, org_scoped: Collection[str]) -> 
     """The security signals (spec section 3, S-A) a module's syntax tree shows.
 
     `package` is the dotted package containing the module, against which relative imports resolve.
+    Only the org-scoped-model clause skips `if TYPE_CHECKING:` bodies and annotations (spec
+    section 3); every other signal, `idraa.repositories` imports included, is read over the whole
+    tree, so a repository typed only under `TYPE_CHECKING` still puts the file in the lane.
     """
-    nodes = list(_runtime_nodes(ast.parse(source)))
+    tree = ast.parse(source)
+    signals: set[str] = set()
+
+    # Org-scoped model clause: runtime nodes only.
     model_names: set[str] = set()  # local names bound to an org-scoped model
     module_aliases: dict[str, str] = {}  # local name -> the dotted module it stands for
-    markup_names = {"Markup"}
-    signals: set[str] = set()
-    for node in nodes:
+    runtime = list(_runtime_nodes(tree))
+    for node in runtime:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.asname:
                     module_aliases[alias.asname] = alias.name
                 else:
                     module_aliases[alias.name.split(".")[0]] = alias.name.split(".")[0]
-                if alias.name == _REPOSITORIES or alias.name.startswith(_REPOSITORIES + "."):
-                    signals.add("repositories")
         elif isinstance(node, ast.ImportFrom):
             module = _from_module(node, package)
             if module is None:
@@ -772,15 +779,7 @@ def security_signals(source: str, package: str, org_scoped: Collection[str]) -> 
                         module_aliases[bound] = f"{_MODELS}.{alias.name}"  # a submodule
                 elif module == "idraa" and alias.name == "models":
                     module_aliases[bound] = _MODELS
-                if alias.name == "Markup":
-                    markup_names.add(bound)
-            if (
-                module == _REPOSITORIES
-                or module.startswith(_REPOSITORIES + ".")
-                or (module == "idraa" and any(a.name == "repositories" for a in node.names))
-            ):
-                signals.add("repositories")
-    for node in nodes:
+    for node in runtime:
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             if node.id in model_names:
                 signals.add("org-scoped model")
@@ -793,6 +792,35 @@ def security_signals(source: str, package: str, org_scoped: Collection[str]) -> 
                     c in org_scoped for c in full[len(models) :]
                 ):
                     signals.add("org-scoped model")
+
+    # Every other signal: the whole tree.
+    everything = list(ast.walk(tree))
+    markup_names = {"Markup"}
+    audit_names = {"AuditWriter"}
+    for node in everything:
+        if isinstance(node, ast.Import):
+            if any(
+                a.name == _REPOSITORIES or a.name.startswith(_REPOSITORIES + ".")
+                for a in node.names
+            ):
+                signals.add("repositories")
+        elif isinstance(node, ast.ImportFrom):
+            module = _from_module(node, package)
+            if module is None:
+                continue
+            for alias in node.names:
+                if alias.name == "Markup":
+                    markup_names.add(alias.asname or alias.name)
+                elif alias.name == "AuditWriter":
+                    audit_names.add(alias.asname or alias.name)
+            if (
+                module == _REPOSITORIES
+                or module.startswith(_REPOSITORIES + ".")
+                or (module == "idraa" and any(a.name == "repositories" for a in node.names))
+            ):
+                signals.add("repositories")
+    for node in everything:
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
             if node.attr == "cookies":
                 signals.add("cookies")
             if node.attr == "session":
@@ -812,7 +840,7 @@ def security_signals(source: str, package: str, org_scoped: Collection[str]) -> 
                 signals.add("text()")
             elif name in _COOKIE_CALLS:
                 signals.add(name)
-            elif name == "AuditWriter":
+            elif (isinstance(func, ast.Name) and name in audit_names) or name == "AuditWriter":
                 signals.add("AuditWriter")
             elif (isinstance(func, ast.Name) and name in markup_names) or name == "Markup":
                 signals.add("Markup")
@@ -843,6 +871,19 @@ def _report(gaps: list[str]) -> str:
     return f"{len(gaps)} file(s) outside the lane:\n" + "\n".join(gaps)
 
 
+def _too_few(rule: str, found: int, minimum: int, const: str, note: str = "") -> str:
+    return (
+        f"{rule} found {found} files, minimum {minimum}{note}: detector broken, or, if files were "
+        f"legitimately removed, lower `{const}` with a stated reason"
+    )
+
+
+def register_gaps(named: Iterable[str]) -> list[str]:
+    """M-A's lane check. It honours no exemption: a file the register names is the site of a
+    departure, or the test that pins what the departure secures (spec section 3)."""
+    return _lane_gaps("methodology", named, exemptable=False)
+
+
 def test_register_where_files_are_methodology_lane() -> None:
     """M-A: every file the departures register's Where / Evaluate text names is a methodology file."""
     named, errors = register_files((ROOT / REGISTER).read_text(encoding="utf-8"), _tracked_files())
@@ -850,19 +891,15 @@ def test_register_where_files_are_methodology_lane() -> None:
         "register Where / Evaluate spans that resolve to no single tracked file (fix the register "
         f"text, or the resolver if the form is new): {errors}"
     )
-    assert len(named) >= MIN_M_A, (
-        f"M-A found {len(named)} files, minimum {MIN_M_A}: detector broken"
-    )
-    gaps = _lane_gaps("methodology", named, exemptable=False)
+    assert len(named) >= MIN_M_A, _too_few("M-A", len(named), MIN_M_A, "MIN_M_A")
+    gaps = register_gaps(named)
     assert gaps == [], _report(gaps)
 
 
 def test_numeric_python_is_methodology_lane_or_exempt() -> None:
     """M-B: every numeric module (numpy, scipy, math, fair_cam, statistics, random, pandas)."""
     found = numeric_python_files(_tracked_files())
-    assert len(found) >= MIN_M_B, (
-        f"M-B found {len(found)} files, minimum {MIN_M_B}: detector broken"
-    )
+    assert len(found) >= MIN_M_B, _too_few("M-B", len(found), MIN_M_B, "MIN_M_B")
     gaps = _lane_gaps("methodology", found)
     assert gaps == [], _report(gaps)
 
@@ -870,7 +907,13 @@ def test_numeric_python_is_methodology_lane_or_exempt() -> None:
 def test_numeric_js_is_methodology_lane_or_exempt() -> None:
     """M-B-JS: shipped JavaScript calling Math.exp / log / pow / sqrt and kin."""
     found = numeric_js_files(_tracked_files())
-    assert len(found) >= MIN_M_B_JS, f"M-B-JS found {len(found)} files, minimum {MIN_M_B_JS}"
+    assert len(found) >= MIN_M_B_JS, _too_few(
+        "M-B-JS",
+        len(found),
+        MIN_M_B_JS,
+        "MIN_M_B_JS",
+        f" ({MIN_M_B_JS} is the count measured when the rule landed, so there is no headroom)",
+    )
     gaps = _lane_gaps("methodology", found)
     assert gaps == [], _report(gaps)
 
@@ -878,9 +921,7 @@ def test_numeric_js_is_methodology_lane_or_exempt() -> None:
 def test_recorded_methodology_findings_are_methodology_lane_or_exempt() -> None:
     """M-C: a file whose own text records a methodology-review finding is a methodology file."""
     found = recorded_finding_files(_tracked_files())
-    assert len(found) >= MIN_M_C, (
-        f"M-C found {len(found)} files, minimum {MIN_M_C}: detector broken"
-    )
+    assert len(found) >= MIN_M_C, _too_few("M-C", len(found), MIN_M_C, "MIN_M_C")
     gaps = _lane_gaps("methodology", found)
     assert gaps == [], _report(gaps)
 
@@ -888,9 +929,7 @@ def test_recorded_methodology_findings_are_methodology_lane_or_exempt() -> None:
 def test_security_signal_code_is_security_lane_or_exempt() -> None:
     """S-A: org-scoped model loads, repositories, *_for_org, text(), cookies, Markup, AuditWriter."""
     found = security_signal_files(_tracked_files())
-    assert len(found) >= MIN_S_A, (
-        f"S-A found {len(found)} files, minimum {MIN_S_A}: detector broken"
-    )
+    assert len(found) >= MIN_S_A, _too_few("S-A", len(found), MIN_S_A, "MIN_S_A")
     gaps = _lane_gaps("security", found)
     assert gaps == [], _report(gaps)
 
@@ -923,6 +962,21 @@ def test_lane_exemptions_are_live_and_pinned() -> None:
     assert stale == [], f"methodology exemptions that no rule triggers any more: {stale}"
     stale = sorted(set(exemptions["security"]) - set(security_signal_files(files)))
     assert stale == [], f"security exemptions that no rule triggers any more: {stale}"
+
+
+def test_register_rule_honours_no_exemptions() -> None:
+    """M-A is the one rule without "or is exempt": an exempt file the register names still fails it."""
+    lane = _lanes()["methodology"]["globs"]
+    escalation = _escalation_globs()
+    outside = sorted(
+        f
+        for f in _exemptions()["methodology"]
+        if not (any(glob_match(g, f) for g in lane) and any(glob_match(g, f) for g in escalation))
+    )
+    assert outside, "no exempt file is outside the lane, so this test would pin nothing"
+    assert _lane_gaps("methodology", outside) == []  # the other rules honour the exemption ...
+    assert [g.split(":")[0] for g in register_gaps(outside)] == outside  # ... M-A does not
+    assert all("cannot be exempted" in g for g in register_gaps(outside))
 
 
 def test_lane_additions_stay() -> None:
@@ -959,6 +1013,7 @@ def test_existing_tags_not_retagged() -> None:
 _SNIPPET_FILES = [
     "src/idraa/services/loss_capacity.py",
     "src/idraa/services/reports.py",
+    "src/idraa/services/table_only.py",
     "src/idraa/templates/a/dup.html",
     "src/idraa/templates/b/dup.html",
     "fair_cam/composition.py",
@@ -967,6 +1022,7 @@ _SNIPPET_FILES = [
     "fair_cam/quantile_pooling/b.py",
     "docs/reference/loss-representation.md",
     "tests/integration/test_x.py",
+    "tests/unit/test_only_node.py",
     "data/seed.json",
     "data/other.json",
     "notebooks/n.ipynb",
@@ -991,7 +1047,7 @@ Another paragraph: `src/idraa/templates/b/dup.html` is not read.
 
 | Item | What | Where |
 |---|---|---|
-| D1 | `notebooks/n.ipynb` is not read | `services/loss_capacity.py` (no math) |
+| D1 | `notebooks/n.ipynb` is not read | `services/table_only.py` (no math) |
 | D2 | same | same |
 """
 
@@ -1003,6 +1059,7 @@ def test_detectors_on_snippets() -> None:
     assert named == {
         "src/idraa/services/loss_capacity.py",
         "src/idraa/services/reports.py",
+        "src/idraa/services/table_only.py",  # only the table's Where column names it
         "fair_cam/composition.py",
         "fair_cam/risk_engine/fair_core.py",
         "fair_cam/quantile_pooling/a.py",
@@ -1025,6 +1082,9 @@ def test_detectors_on_snippets() -> None:
     assert register_files(quote, _SNIPPET_FILES)[0] == {"data/other.json"}
     nodes = "- **Where.** `tests/integration/test_x.py::test_a`, `docs/reference/loss-representation.md`"
     assert len(register_files(nodes, _SNIPPET_FILES)[0]) == 2
+    # a `::node` span without a slash is a path only once the suffix is stripped
+    slashless = "- **Evaluate.** `test_only_node.py::test_case`"
+    assert register_files(slashless, _SNIPPET_FILES) == ({"tests/unit/test_only_node.py"}, [])
     bad = "- **Where.** `dup.html`, `missing.py`, `nowhere/`, `data/none*.json`"
     assert register_files(bad, _SNIPPET_FILES) == (
         set(),
@@ -1058,16 +1118,15 @@ def test_detectors_on_snippets() -> None:
     ):
         assert not imports_numeric(miss), miss
 
-    # M-B-JS: calls only, over the whole Math.* family named by the spec.
-    for hit in (
-        "const y = Math.exp(x);",
-        "a = Math.log10 (v)",
-        "Math.expm1(\n x)",
-        "Math.log1p(x) + Math.log2(y) + Math.cbrt(z) + Math.sqrt(w) + Math.pow(a, b) + Math.log(c)",
-    ):
+    # M-B-JS: calls only; each of the nine functions the spec names in its own snippet, so
+    # dropping any one from the rule fails, and a function the spec does not name does not match.
+    for fn in ("exp", "expm1", "log", "log1p", "log2", "log10", "pow", "sqrt", "cbrt"):
+        assert calls_math(f"const y = Math.{fn}(x);"), fn
+    for fn in ("floor", "ceil", "round", "abs", "max", "min", "sin", "tanh", "hypot", "random"):
+        assert not calls_math(f"const y = Math.{fn}(x);"), fn
+    for hit in ("a = Math.log10 (v)", "Math.expm1(\n x)"):
         assert calls_math(hit), hit
     for miss in (
-        "Math.max(a, b) + Math.floor(c) + Math.round(d) + Math.abs(e)",
         "const f = Math.exp;",
         "xMath.exp(1)",
         "Math.logx(1)",
@@ -1148,6 +1207,8 @@ def test_detectors_on_snippets() -> None:
             "idraa.routes",
         ),
         ("from ...models import Scenario\nx = Scenario\n", "idraa.routes"),  # leaves the package
+        ("from ....models import Scenario\nx = Scenario\n", "idraa.routes"),  # ... however far
+        ("from .....models import Scenario\nx = Scenario\n", "idraa.routes"),
         ("import idraa.models\nx = idraa.models.RunStatus\n", "idraa.routes"),
         ("from idraa.models import RunStatus\nx = RunStatus.A\n", "idraa.routes"),
         ("from other.models import Scenario\nx = Scenario\n", "idraa.routes"),
@@ -1163,6 +1224,19 @@ def test_detectors_on_snippets() -> None:
     assert sig("from idraa import repositories\n") == {"repositories"}
     assert sig("from .. import repositories\n") == {"repositories"}
     assert sig("from ..repositories.x import Y\n") == {"repositories"}
+    assert sig("from ...repositories import Y\n", "idraa.routes") == set()  # leaves the package
+    assert sig("from ....repositories import Y\n", "idraa.routes") == set()  # ... however far
+    assert sig("from .... import repositories\n", "idraa.services") == set()
+    # the TYPE_CHECKING / annotation exclusion belongs to the model clause alone (spec section 3):
+    # a repository imported only for typing still puts the file in the security lane
+    tc = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n"
+    assert sig(tc + "    from idraa.repositories.x import R\n") == {"repositories"}
+    assert sig(tc + "    from idraa.repositories import R\n") == {"repositories"}
+    assert sig(tc + "    import idraa.repositories.x\n") == {"repositories"}
+    assert sig(tc + "    from idraa import repositories\n") == {"repositories"}
+    assert sig(tc + "    from ..repositories.x import R\n") == {"repositories"}
+    assert sig(tc + "    pass\nelse:\n    from idraa.repositories import R\n") == {"repositories"}
+    assert sig(tc + "    x = text('a')\n") == {"text()"}  # the other signals are scanned there too
     assert sig("x = get_scenario_for_org(1)\n") == {"*_for_org call"}
     assert sig("repo.list_for_org(\n    1,\n)\n") == {"*_for_org call"}
     assert sig("x = f'{get_x_for_org(1)}'\n") == {"*_for_org call"}
@@ -1183,5 +1257,10 @@ def test_detectors_on_snippets() -> None:
     assert sig("import markupsafe\nx = markupsafe.Markup('<b>')\n") == {"Markup"}
     assert sig("from markupsafe import Markup\nx = Markup\n") == set()
     assert sig("w = AuditWriter(db)\n") == {"AuditWriter"}
+    assert sig("from idraa.services.audit import AuditWriter as AW\nw = AW(db)\n") == {
+        "AuditWriter"
+    }
+    assert sig("from idraa.services.audit import AuditWriter as AW\nw = AW\n") == set()
+    assert sig("w = AW(db)\n") == set()
     assert sig("w = audit.AuditWriter(db)\n") == {"AuditWriter"}
     assert sig("w = AuditWriterFactory(db)\n") == set()
