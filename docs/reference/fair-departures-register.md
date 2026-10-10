@@ -204,7 +204,7 @@ the rationale; where it lives; how to evaluate it.
 > (mode solved from it, spread by a stated curator factor); it is biased LOW by
 > at least five mechanisms: the p→λ = −ln(1−p) step assumes Poisson-distributed
 > counts and under-states the mean under clustering
-> (`industry_calibration.py:46-48` is the identity in fair_cam); λ from a
+> (`industry_calibration.py:46,48` is the identity in fair_cam); λ from a
 > population-mean p under-states the mean λ across heterogeneous organisations
 > (−ln(1−·) is convex, Jensen); a conversion value that omits TEF-side
 > prevention (C4) over-states the conversion; and dividing by a single point

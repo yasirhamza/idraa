@@ -1,0 +1,41 @@
+{
+  "methodology": {
+    "src/idraa/formatting.py": [
+      "presentation",
+      "money/number formatting; isfinite before formatting (:127, :163)"
+    ],
+    "src/idraa/services/chart_svg.py": [
+      "presentation",
+      "SVG axis scales, ticks, marker positions (:47-75, :264)"
+    ],
+    "scripts/bench_mc_iterations.py": [
+      "dev-tool",
+      "engine timing benchmark"
+    ],
+    "scripts/curation_check/report.py": [
+      "dev-tool",
+      "Wilson interval on the curation checker tally (:337)"
+    ],
+    "scripts/curation_check/__main__.py": [
+      "dev-tool",
+      "statistics.median of token counts (:248)"
+    ],
+    "scripts/sweep_run_samples_finite.py": [
+      "dev-tool",
+      "read-only finiteness sweep of run_samples"
+    ],
+    "scripts/curation_check/README.md": [
+      "dev-tool",
+      "curation checker README; documents a dev tool, no runtime methodology"
+    ],
+    "scripts/curation_check/flags.py": [
+      "dev-tool",
+      "curation checker Flag / CheckResult records and queue ranking whose scores order the queue only (:11-52); a dev tool, never run by the app"
+    ],
+    "scripts/curation_check/library.py": [
+      "dev-tool",
+      "curation checker library reader; a dev tool, never run by the app"
+    ]
+  },
+  "security": {}
+}
