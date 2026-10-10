@@ -722,7 +722,7 @@
    "entry_slug": "hospitality-guest-data-insider",
    "domain": "enterprise",
    "technique_id": "T1078",
-   "rationale": "Entry description states the insider 'abuses privileged access to the property-management system (PMS) or central reservation system' -- the insider's own legitimate PMS/CRS account, not a compromised credential, is the load-bearing access vector; attack_vector=insider_access_abuse.",
+   "rationale": "Entry description states that a malicious insider with ordinary role access 'abuses that access to the property-management system (PMS) or central reservation system' -- an account the front-desk or reservation staff member legitimately holds, not a compromised credential, is the load-bearing access vector; attack_vector=insider_access_abuse.",
    "provenance": "expert-estimate",
    "citations": []
   },
@@ -806,7 +806,7 @@
    "entry_slug": "insider-ip-theft-manufacturing",
    "domain": "enterprise",
    "technique_id": "T1005",
-   "rationale": "DOJ's press release documents Zheng 'stealing multiple electronic files, including proprietary files involving design models, engineering drawings, configuration files, and material specifications' from GE's internal systems -- collection of sensitive files resident on the corporate file store prior to exfiltration, matching this entry's 'exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets' framing.",
+   "rationale": "Entry description states that the abused access is 'ordinary and role-based' and that 'when a foreign service tasked it (the cited GE case was charged as economic espionage) the sponsor decides the community'; collecting files the insider can read is the same step in the self-initiated case this entry covers. DOJ's press release documents Zheng 'stealing multiple electronic files, including proprietary files involving design models, engineering drawings, configuration files, and material specifications' from GE's internal systems -- collection of sensitive files from systems the insider could read prior to exfiltration, matching this entry's 'exfiltrates proprietary manufacturing processes, CAD designs, semiconductor mask sets, chemical formulations, or other trade secrets' framing.",
    "provenance": "cited",
    "citations": [
     "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the specific file types stolen"
@@ -816,17 +816,17 @@
    "entry_slug": "insider-ip-theft-manufacturing",
    "domain": "enterprise",
    "technique_id": "T1027",
-   "rationale": "DOJ's press release documents Zheng using steganography -- hiding 'data files belonging to GE into an innocuous looking digital picture of a sunset' -- to obfuscate the stolen trade-secret files before transmission, the specific concealment technique behind this entry's IP-exfiltration archetype.",
-   "provenance": "cited",
+   "rationale": "Entry description states that the abused access is 'ordinary and role-based' and places the GE case, 'charged as economic espionage', with the sponsor's community; concealing stolen files before moving them is a step carried over from that case to the self-initiated insider, an estimate rather than a documented behaviour of this entry. DOJ's press release documents Zheng using steganography -- hiding 'data files belonging to GE into an innocuous looking digital picture of a sunset' -- to obfuscate the stolen trade-secret files before transmission.",
+   "provenance": "expert-estimate",
    "citations": [
-    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the steganographic sunset photo"
+    "U.S. Department of Justice, Office of Public Affairs, 'New York Man Charged With Theft of Trade Secrets' (2018-08-01), https://www.justice.gov/archives/opa/pr/new-york-man-charged-theft-trade-secrets (verified 2026-10-10 against the full-text reprint at https://www.ip-watch.org/2018/08/02/trade-secret-thief-hid-files-digital-photo-sunset/; justice.gov refuses automated fetches), paragraph describing the steganographic sunset photo"
    ]
   },
   {
    "entry_slug": "insider-ip-theft-manufacturing",
    "domain": "enterprise",
    "technique_id": "T1078",
-   "rationale": "Entry's example_incidents names the 'General Electric IP theft case 2023 (former GE engineer convicted of stealing turbine technology for China)'. DOJ's press release documents that Zheng, 'while employed at GE Power & Water in Schenectady, New York as an engineer specializing in sealing technology,' 'exploited his access to GE's files' -- abuse of his own legitimate employee account, not a compromised credential, is the load-bearing insider vector this entry generalizes to CAD/mask-set/formulation theft.",
+   "rationale": "Entry's example_incidents names the 'General Electric IP theft case 2023 (former GE engineer convicted of stealing turbine technology for China)', a case the description says was 'charged as economic espionage' and places with the sponsor's community. DOJ's press release documents that Zheng, 'while employed at GE Power & Water in Schenectady, New York as an engineer specializing in sealing technology,' 'exploited his access to GE's files' -- use of his own legitimate employee account, not a compromised credential, the same access the self-initiated insider this entry covers abuses ('The access abused is ordinary and role-based').",
    "provenance": "cited",
    "citations": [
     "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing Zheng's employment and access to GE's files"
@@ -836,10 +836,10 @@
    "entry_slug": "insider-ip-theft-manufacturing",
    "domain": "enterprise",
    "technique_id": "T1567",
-   "rationale": "DOJ's press release documents Zheng '[e-]mail[ing] the digital picture, which contained the stolen GE data files, to Zheng's e-mail account' -- using a personal webmail service, rather than GE's own infrastructure, as the channel to move the stolen trade secrets out of the corporate environment.",
-   "provenance": "cited",
+   "rationale": "Entry description states that the abused access is 'ordinary and role-based' and places the GE case, 'charged as economic espionage', with the sponsor's community. DOJ's press release documents Zheng '[e-]mail[ing] the digital picture, which contained the stolen GE data files, to Zheng's e-mail account' -- moving the files to his own account outside GE. Exfiltration Over Web Service fits when files leave through an external web service such as personal webmail or cloud storage; this row estimates that the self-initiated insider this entry covers uses such a service, a step the release does not document.",
+   "provenance": "expert-estimate",
    "citations": [
-    "U.S. Department of Justice, Office of Public Affairs, 'Former GE Engineer and Chinese Businessman Charged with Economic Espionage and Theft of GE's Trade Secrets' (2019-04-23), https://www.justice.gov/archives/opa/pr/former-ge-engineer-and-chinese-businessman-charged-economic-espionage-and-theft-ge-s-trade (accessed 2026-07-05), paragraph describing the photo being e-mailed to Zheng's personal account"
+    "U.S. Department of Justice, Office of Public Affairs, 'New York Man Charged With Theft of Trade Secrets' (2018-08-01), https://www.justice.gov/archives/opa/pr/new-york-man-charged-theft-trade-secrets (verified 2026-10-10 against the full-text reprint at https://www.ip-watch.org/2018/08/02/trade-secret-thief-hid-files-digital-photo-sunset/; justice.gov refuses automated fetches), paragraph describing the photo being e-mailed to Zheng's e-mail account"
    ]
   },
   {
@@ -1116,7 +1116,7 @@
    "entry_slug": "ot-network-scanning-reconnaissance",
    "domain": "enterprise",
    "technique_id": "T1078",
-   "rationale": "CISA/NSA/FBI advisory AA24-038A states Volt Typhoon 'relies on valid accounts... repeatedly exfiltrates domain credentials, ensuring access to current and valid accounts' for long-term undetected persistence -- the 'persistent pre-positioning reconnaissance... for future disruption capability' this entry's example_incidents attributes to Volt Typhoon.",
+   "rationale": "Entry's example_incidents states 'CISA AA24-038A documented pre-positioning in US water, power, and communications OT networks; attributed to PRC state-sponsored actors for future disruption capability'; the advisory states that Volt Typhoon 'relies on valid accounts' and that the actors 'repeatedly exfiltrate domain credentials, ensuring access to current and valid accounts', for long-term undetected persistence -- valid-account access is how the counted intrusion campaigns extend and keep that pre-positioning once inside.",
    "provenance": "cited",
    "citations": [
     "CISA/NSA/FBI Joint Cybersecurity Advisory AA24-038A, 'PRC State-Sponsored Actors Compromise and Maintain Persistent Access to U.S. Critical Infrastructure' (2024-02-07), https://www.cisa.gov/news-events/cybersecurity-advisories/aa24-038a (accessed 2026-07-05), 'Overview' / living-off-the-land TTP section"
@@ -1126,7 +1126,7 @@
    "entry_slug": "ot-network-scanning-reconnaissance",
    "domain": "enterprise",
    "technique_id": "T1595",
-   "rationale": "Entry description states actors conduct 'active probing of exposed ICS protocols (Modbus, DNP3, BACnet, EtherNet/IP)' -- direct-interaction network probing of victim infrastructure, matching Active Scanning as distinct from the passive Shodan/Censys step.",
+   "rationale": "Entry description states 'Scanning \u2014 passive (Shodan, Censys) or active protocol enumeration \u2014 is not a threat event under the nation-state counting rule and is not counted', and its canonical gap places these steps before any attempt ('Scanning and protocol enumeration come before any attempt and are not counted here'): the actor performs active enumeration of exposed ICS services though the entry does not count it, and the crosswalk records behaviour rather than counted events -- direct-interaction probing of victim infrastructure, matching Active Scanning as distinct from the passive Shodan/Censys step.",
    "provenance": "expert-estimate",
    "citations": []
   },
@@ -1134,7 +1134,7 @@
    "entry_slug": "ot-network-scanning-reconnaissance",
    "domain": "enterprise",
    "technique_id": "T1596",
-   "rationale": "Entry description states actors use 'passive scanning (Shodan, Censys)' of OT networks -- T1596 Search Open Technical Databases explicitly covers searching 'public collections of network data/artifacts gathered from traffic and/or scans,' the Shodan/Censys pattern this entry names.",
+   "rationale": "Entry description states 'Scanning \u2014 passive (Shodan, Censys) or active protocol enumeration \u2014 is not a threat event under the nation-state counting rule and is not counted', and its canonical gap places these steps before any attempt ('Scanning and protocol enumeration come before any attempt and are not counted here'): the passive half is still performed though not counted -- T1596 Search Open Technical Databases covers searching 'public collections of network data/artifacts gathered from traffic and/or scans,' the Shodan/Censys pattern this entry names.",
    "provenance": "expert-estimate",
    "citations": []
   },
@@ -1142,7 +1142,7 @@
    "entry_slug": "ot-network-scanning-reconnaissance",
    "domain": "ics",
    "technique_id": "T0888",
-   "rationale": "Entry describes probing of ICS-specific protocols to footprint exposed devices ahead of a follow-on attack -- once probing reaches the OT network itself this is Remote System Information Discovery ('detailed information about remote systems... make/model, role, and configuration... to aid in targeting'), the ICS-domain counterpart to the entry's IT-side scanning steps.",
+   "rationale": "Entry description states 'A loss event is a successful access or theft of documentation' -- T0888 is the discovery step that follows such an access, distinct from the uncounted enumeration that precedes the attempt: once an access attempt against exposed ICS services or engineering workstations succeeds, the pre-positioning the entry attributes to Volt Typhoon footprints the OT network's devices, which is Remote System Information Discovery ('detailed information about remote systems... make/model, role, and configuration... to aid in targeting').",
    "provenance": "expert-estimate",
    "citations": []
   },
