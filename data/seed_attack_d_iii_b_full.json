@@ -135,7 +135,7 @@
       "entry_slug": "higher-ed-insider-ddos",
       "domain": "enterprise",
       "technique_id": "T1498",
-      "rationale": "Entry describes an enrolled affiliate directing 'an external botnet to launch volumetric distributed denial-of-service attacks against a university's own network.' Paras Jha's Mirai-precursor botnet DDoS campaign against Rutgers University's central authentication and registration systems (Nov 2014-Sep 2016) is the documented exemplar, per the DOJ USAO-NJ guilty plea and $8.6M restitution order.",
+      "rationale": "Entry description states that an enrolled affiliate 'directs volumetric distributed denial-of-service attacks against a university's own network' and that 'the capacity is a botnet the student runs, as in the Rutgers case, or a rented DDoS-for-hire (booter) service.' Paras Jha's botnet DDoS campaign against Rutgers University's central authentication and registration systems (Nov 2014-Sep 2016) is the documented exemplar, per the DOJ USAO-NJ guilty plea and $8.6M restitution order.",
       "provenance": "cited",
       "citations": [
         "Paras Jha botnet DDoS campaign against Rutgers University central authentication/registration, Nov 2014-Sep 2016; DOJ USAO-NJ guilty plea, $8.6M restitution (CyberScoop 2018-10-26 reporting the DOJ announcement)"
