@@ -1,6 +1,7 @@
 {
  "entries": [
   {"doc": "docs/reference/fair-departures-register.md", "file": "fair_cam/parameters/industry_calibration.py", "line": 46, "pattern": "def _annual_prob_to_lef(p_annual: float) -> float:", "regex": false},
+  {"doc": "docs/reference/fair-departures-register.md", "file": "fair_cam/parameters/industry_calibration.py", "line": 48, "pattern": "return -math.log(1.0 - p_annual)", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "scripts/lint_org_scoped_lookups.py", "line": 85, "pattern": "# one of the two lists. P2's org-authored threat-community table MUST go in ORG_SCOPED_MODELS.", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "scripts/lint_org_scoped_lookups.py", "line": 98, "pattern": "\"ThreatCommunity\",", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/app.py", "line": 97, "pattern": "templates = Jinja2Templates(", "regex": false},

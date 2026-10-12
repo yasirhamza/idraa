@@ -22,7 +22,12 @@ min_actionable = 19
 # Review ceremony), ten threat-model boundary subjects, and gate-integrity for the merge
 # authority itself. Three coverage rules (tests/scripts/test_clerk_config.py): every line-cited
 # tracked file in docs/security/threat-model.md, every security-lane file and every
-# methodology-lane file must match a path below.
+# methodology-lane file must match a path below. Five lane-membership rules in the same file
+# (lane completeness audits, #217/#218/#243) keep the lanes complete: files named by the departures
+# register (M-A), importing numeric packages (M-B), calling Math.exp/log/pow/sqrt in shipped
+# JavaScript (M-B-JS) or recording a methodology finding in their text (M-C) must be in the
+# methodology lane; files whose syntax tree shows a security signal (S-A) must be in the security
+# lane; each such file is tagged below or listed in .clerk/manifests/lane_exemptions.json.
 subjects = [
   "fair-math", "calibration", "derivation",
   "auth", "csrf", "org-scoping", "migration", "import-export", "templating", "rbac",
@@ -48,6 +53,14 @@ subjects = [
 "src/idraa/services/wizard_questions.py" = "fair-math"
 "src/idraa/services/scenario_currency.py" = "fair-math"
 "src/idraa/schemas/_unit_bounds.py" = "fair-math"
+"tests/services/test_wizard_questions.py" = "fair-math"  # lane audit 2026-10-10 (#217)
+"src/idraa/static/js/loss_preview.js" = "fair-math"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_loss_preview_parity.py" = "fair-math"  # lane audit 2026-10-10 (#217)
+"src/idraa/schemas/run_snapshot.py" = "fair-math"  # lane audit 2026-10-10 (#217)
+"scripts/regen_r_oracle.R" = "fair-math"  # lane audit 2026-10-10 (#217)
+"notebooks/fair_cam_example.ipynb" = "fair-math"  # lane audit 2026-10-10 (#217)
+"tests/services/test_shapley_453_regression.py" = "fair-math"  # lane audit 2026-10-10 (#217)
+"tests/integration/test_fair_cam_v3_unit_type_parity.py" = "fair-math"  # lane audit 2026-10-10 (#217)
 "src/idraa/services/sample_codec.py" = "derivation"
 "src/idraa/services/run_view_model.py" = "derivation"
 "src/idraa/services/aggregate_run_view_model.py" = "derivation"
@@ -58,6 +71,9 @@ subjects = [
 "src/idraa/services/run_caveats.py" = "derivation"
 "src/idraa/services/attack_coverage.py" = "derivation"
 "src/idraa/threat_community_provenance.py" = "derivation"
+"src/idraa/services/reporting_currency.py" = "derivation"  # lane audit 2026-10-10 (#217)
+"src/idraa/static/js/charts.js" = "derivation"  # lane audit 2026-10-10 (#217)
+"src/idraa/services/dashboard.py" = "derivation"  # lane audit 2026-10-10 (#217)
 "src/idraa/services/industry_mapping.py" = "calibration"
 "src/idraa/services/_starter_overlays_seed_data.py" = "calibration"
 "src/idraa/services/overlays.py" = "calibration"
@@ -66,6 +82,37 @@ subjects = [
 "scripts/netdiligence_sigma_check.py" = "calibration"
 "scripts/recurate_seed_entries.py" = "calibration"
 "docs/reference/**" = "calibration"
+"src/idraa/schemas/threat_community.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/schemas/overlay.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/capacity_bound_figures.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/sigma_recal_figures.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_threat_community_seed.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/integration/test_library_loss_differentiation.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/integration/test_loss_form_stakeholder_test.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/services/capacity_bound_copy.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/audit_library_vulnerability.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/issue_131_audit_log_migration.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/contracts/test_weight_robustness_covariation.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/migrations/test_threat_communities_migration.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/issue_129_audit_log_migration.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/schemas/attack_catalog.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/services/test_weight_robustness_ensemble.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"scripts/sweep_library_secondary_response.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/schemas/control_library.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/schemas/crosswalk.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/services/scenario_library.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"src/idraa/services/crosswalk_reconciliation.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/integration/test_seed_library_lognormal.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_loss_anchor_tables.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_loss_form_targets.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_seed_balance.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_attack_vector_coverage.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_library_taxonomy_coverage.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_netdiligence_sigma_check.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_sigma_calibration_constant.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/migrations/test_attack_full_mappings_seed.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/test_anti_regression.py" = "calibration"  # lane audit 2026-10-10 (#217)
+"tests/unit/test_attack_rationale_quotes_entry.py" = "calibration"  # lane audit 2026-10-10 (#217)
 "src/idraa/services/auth.py" = "auth"
 "src/idraa/services/second_factor.py" = "auth"
 "src/idraa/services/mfa_*.py" = "auth"
@@ -78,6 +125,7 @@ subjects = [
 "src/idraa/routes/step_up.py" = "auth"
 "src/idraa/routes/deps.py" = "auth"
 "src/idraa/middleware/**" = "auth"
+"src/idraa/__main__.py" = "auth"  # lane audit 2026-10-10 (#218)
 "src/idraa/middleware/csrf.py" = "csrf"
 "src/idraa/static/js/csrf.js" = "csrf"
 "src/idraa/repositories/**" = "org-scoping"
@@ -87,6 +135,15 @@ subjects = [
 "src/idraa/services/retention.py" = "org-scoping"
 "src/idraa/services/org.py" = "org-scoping"
 "scripts/lint_org_scoped_lookups.py" = "org-scoping"
+"src/idraa/services/wizard_state.py" = "org-scoping"  # lane audit 2026-10-10 (#217, #218)
+"src/idraa/services/attack_mappings.py" = "org-scoping"  # lane audit 2026-10-10 (#217, #218)
+"src/idraa/services/control_library.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/control_resync.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/controls_maintenance.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/fx_rates.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/scenario_control_recommendations.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/sme_directory.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/schemas/sme.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
 "alembic/**" = "migration"
 "src/idraa/services/*import*.py" = "import-export"
 "src/idraa/services/*export*.py" = "import-export"
@@ -99,6 +156,11 @@ subjects = [
 "src/idraa/utils/download.py" = "import-export"
 "src/idraa/routes/*import*.py" = "import-export"
 "src/idraa/routes/scenario_export_routes.py" = "import-export"
+"src/idraa/services/seed_library_loader.py" = "import-export"  # lane audit 2026-10-10 (#243)
+"src/idraa/schemas/control.py" = "import-export"  # lane audit 2026-10-10 (#217, #218)
+"src/idraa/schemas/_csv.py" = "import-export"  # lane audit 2026-10-10 (#218)
+"src/idraa/schemas/scenario.py" = "import-export"  # lane audit 2026-10-10 (#218)
+"src/idraa/schemas/organization.py" = "import-export"  # lane audit 2026-10-10 (#218)
 "src/idraa/templates/**" = "templating"
 "src/idraa/app.py" = "templating"
 "src/idraa/formatting.py" = "templating"
@@ -110,6 +172,7 @@ subjects = [
 "src/idraa/db.py" = "run-limits"
 "src/idraa/services/runs.py" = "run-limits"
 "src/idraa/services/run_reaper.py" = "run-limits"
+"src/idraa/schemas/wizard_step3.py" = "run-limits"  # lane audit 2026-10-10 (#218)
 "src/idraa/services/audit.py" = "audit"
 "src/idraa/services/security_settings.py" = "secrets"
 ".github/**" = "gate-integrity"
