@@ -129,7 +129,7 @@ async def _adopted_entry_ids(db: AsyncSession) -> set[str]:
     surface the non-blocking "Already adopted" re-adopt marker (§6.5) on browse cards.
     """
     org = await require_sole_org(db)
-    rows = (
+    rows: list[dict[str, object] | None] = list(
         (
             await db.execute(
                 select(Control.library_pin).where(
@@ -141,7 +141,7 @@ async def _adopted_entry_ids(db: AsyncSession) -> set[str]:
         .scalars()
         .all()
     )
-    return {p["entry_id"] for p in rows if p and p.get("entry_id")}
+    return {str(p["entry_id"]) for p in rows if p and p.get("entry_id")}
 
 
 @router.get(

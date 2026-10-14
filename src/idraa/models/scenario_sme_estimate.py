@@ -44,8 +44,8 @@ class ScenarioSMEEstimate(Base, IdMixin, OrgMixin):
         index=True,
     )
     sme_name: Mapped[str | None] = mapped_column(sa.String(200))
-    low: Mapped[float]
-    high: Mapped[float]
+    low: Mapped[float] = mapped_column(sa.Float)
+    high: Mapped[float] = mapped_column(sa.Float)
     recorded_at: Mapped[datetime]
     recorded_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
 
