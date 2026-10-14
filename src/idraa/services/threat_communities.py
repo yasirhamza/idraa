@@ -56,7 +56,7 @@ class ThreatCommunityService:
         self._organization_id = organization_id
 
     # strict mypy: typed Select (`from sqlalchemy import Select`)
-    def _latest_seed(self) -> Select[tuple[ThreatCommunity]]:
+    def _latest_seed(self) -> Select[ThreatCommunity]:
         latest = (
             select(ThreatCommunity.slug, func.max(ThreatCommunity.version).label("v"))
             .where(ThreatCommunity.source == "seed")

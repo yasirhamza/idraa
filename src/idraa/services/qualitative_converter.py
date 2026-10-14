@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -275,7 +276,7 @@ async def _existing_conversion_sources(
         Scenario.organization_id == organization_id,
         Scenario.conversion_metadata.isnot(None),
     )
-    rows = (await db.execute(stmt)).scalars().all()
+    rows: Sequence[dict[str, Any] | None] = (await db.execute(stmt)).scalars().all()
     sources: set[tuple[str, int]] = set()
     for cm in rows:
         if not isinstance(cm, dict):

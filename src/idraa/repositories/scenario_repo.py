@@ -77,7 +77,7 @@ class ScenarioRepo:
         in both environments — FOR UPDATE is a Postgres-only contention
         optimization for the read-then-write window.
         """
-        stmt: Select[tuple[Scenario]] = select(Scenario).where(
+        stmt: Select[Scenario] = select(Scenario).where(
             Scenario.id == scenario_id,
             Scenario.organization_id == organization_id,
         )
@@ -150,7 +150,7 @@ class ScenarioRepo:
             .where(func.nullif(Scenario.library_pin, "null").isnot(None))
             .distinct()
         )
-        rows = (await self._db.execute(stmt)).scalars().all()
+        rows: list[str | None] = list((await self._db.execute(stmt)).scalars().all())
         return [r for r in rows if r is not None]
 
     async def set_mitigating_controls(
