@@ -745,10 +745,11 @@ def test_provenance_or_fusion_and_vmc_identification_labeled_v3_arithmetic() -> 
     assert "v3 arithmetic choice" in vmc_id["rule_provenance"]
     assert "§4.2 p.25" in vmc_id["rule_provenance"]
     assert "no intra-pair operator prescribed" in vmc_id["rule_provenance"]
-    # No OTHER per-group entry carries rule_provenance (the override is
-    # deliberately vmc_identification-only; the coupling entry is separate).
+    # No OTHER per-group entry carries rule_provenance: the override is
+    # vmc_identification + vmc_correction (#199 slice 1) only; the coupling
+    # entry is separate.
     for g, e in by_group.items():
-        if g not in ("vmc_identification", "reliability_coupling"):
+        if g not in ("vmc_identification", "vmc_correction", "reliability_coupling"):
             assert "rule_provenance" not in e, g
 
     sp = by_group["reliability_coupling"]["structure_provenance"]
@@ -757,3 +758,29 @@ def test_provenance_or_fusion_and_vmc_identification_labeled_v3_arithmetic() -> 
     assert "E_meta = OR(E_vmc, E_dsc)" in sp
     assert "v3 arithmetic" in sp
     assert "no Standard-prescribed cross-family operator" in sp
+
+
+def test_provenance_vmc_correction_is_implementation_anchored_label_only() -> None:
+    """#199 slice 1 (R-C8-8/9/10): the vmc_correction entry keeps rule="and"
+    (the retained topology label) and carries a dedicated rule_provenance
+    saying the AND is not realised numerically and Treatment Selection is
+    label-only; structure_provenance names the implementation-anchored gate.
+    Shared constants are not mutated."""
+    from fair_cam.models.composition_topology import GROUP_TYPE, BooleanGroup, GroupType
+
+    entries = build_composition_provenance()
+    by_group = {e["group"]: e for e in entries}
+    vc = by_group["vmc_correction"]
+    assert vc["rule"] == "and"
+    assert "label-only" in vc["rule_provenance"]
+    assert "Implementation" in vc["rule_provenance"]
+    assert "not realised numerically" in vc["rule_provenance"]
+    assert "#199" in vc["rule_provenance"]
+    sp = by_group["reliability_coupling"]["structure_provenance"]
+    assert "implementation-anchored" in sp
+    assert "label-only" in sp
+    assert "VMC_CORRECTION implementation-gate" not in sp
+    # R-C8-10: shared constants untouched by the per-entry disclosure.
+    assert GROUP_TYPE[BooleanGroup.VMC_CORRECTION] == GroupType.AND
+    assert "rule_provenance" not in WEAK_AND_OPERATOR_PROVENANCE
+    assert all(isinstance(v, str) for v in vc.values())
