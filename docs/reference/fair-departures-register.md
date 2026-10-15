@@ -591,6 +591,10 @@ Everything numeric in this section is therefore Idraa's.
   present member effectivenesses**: one strong decision-support function
   scores the whole group at its own level. The code says so; the register
   says so here.
+  Several controls on the same DSC sub-function OR first (C11) and `max` then takes
+  the OR, so `E_dsc` can exceed the strongest single control's claim: two 0.448
+  carriers of `dsc_prev_ensure_capability` give 0.695296, not 0.448 (rubric §2.7
+  tables the LEC effect through κ).
 - **Class.** DEPARTURE (changed relationship), labelled at the site.
 - **Rationale.** Decision-support quality is read as the strongest coherent
   subset of present functions; a weaker extra function neither helps nor
@@ -624,22 +628,65 @@ Everything numeric in this section is therefore Idraa's.
   (riskflow#455) and the open attribution investigation (riskflow#434) are the live
   evaluation record.
 
-### C8. VMC Correction is gated on Implementation; VMC Identification pair uses OR
+### C8. VMC Correction is implementation-anchored; Treatment Selection is label-only; VMC Identification pair uses OR
 
 - **Standard.** §4.3.1–4.3.2 (p. 28) prescribes AND(Treatment Selection,
-  Implementation); §4.2 (p. 25) names Threat Intelligence and Controls
-  Monitoring but prescribes no operator between them.
-- **Idraa.** Absent Implementation → no correction regardless of selection;
-  present → AND over present members (replaces zero-padding of an absent
-  selection). Identification pair → OR, since the two members cover
-  different variance sources.
-- **Class.** DEPARTURE (the gate, labelled "Spec D3 deviation") and
-  IMPLEMENTATION-DEFINED (the OR).
-- **Where.** `group_composition.py`, `composition.py` docstrings.
-- **Evaluate.** `fair_cam/tests/risk_engine/test_meta_reliability_coupling.py`
-  covers the gated Correction and the Identification-pair OR through the
-  composed meta effect; `fair_cam/tests/test_composition_topology.py` pins
-  the group operator table.
+  Implementation) and says Treatment Selection "is primarily served by Decision
+  Support Controls", its "Example Controls: Decision Support Controls (e.g.,
+  expectations, data, risk analysis, etc.)"; §4.3.2 calls Implementation "the
+  final step". §4.2 (p. 25) names Threat Intelligence and Controls Monitoring but
+  prescribes no operator between them.
+- **Idraa.** The AND is retained in the topology (`GROUP_TYPE`, membership,
+  provenance) and **not realised numerically**: `E_corr` = the Implementation
+  member's effectiveness when Implementation is present, 0 when it is absent.
+  Treatment Selection is composed and recorded (it appears in the sub-function
+  effectiveness map and in `contributing`) but is **score-neutral — label-only**,
+  like `dsc_id_misaligned`. Idraa credits decision-support quality only
+  additively, through `E_dsc` (C6, C7), when decision-support functions are
+  authored; nothing here penalises poor selection. Identification pair → OR, since
+  the two members cover different variance sources.
+- **Class.** DEPARTURE (AND retained in topology, not realised; riskflow#199 slice 1)
+  and IMPLEMENTATION-DEFINED (the OR).
+- **Rationale.** Realising the product made the group non-monotone in membership:
+  a truthful Treatment Selection claim beside Implementation lowered `E_corr`
+  (Patch Management + monitoring: `E_corr` 0.32 → 0.14336, `E_meta` 0.14336 →
+  0.06422528), the riskflow#453 defect class. `E_corr = Implementation` is the least
+  monotone majorant of the former gate: it agrees with it on every set without
+  both members, is monotone, and introduces no constant. The rejected alternative,
+  a strict AND with an absent selection padded to 0, is Standard-faithful and
+  monotone but zeroes Correction for every Implementation-only set (all five
+  library Implementation carriers) and makes authoring
+  `vmc_corr_treatment_selection` a score lever (rubric §3, §6.4). The Standard
+  locates selection quality in a deployment's Decision Support Controls — §4.3.1
+  p. 28's example controls are DSCs ("expectations, data, risk analysis") and poor
+  selection is the consequence of DSCs "missing or performing poorly" — which is
+  where Idraa credits it, additively, when authored.
+- **Bound.** Against the prescribed product, `E_corr` is overstated by
+  `i · (1 − t) ≤ i` whenever a selection claim with `t < 1` is present (by `i`
+  against a strict AND when selection is absent). Through the pair
+  (`× E_id`), the two OR fusions (each 1-Lipschitz) and the κ coupling (C7), every
+  LEC assignment's effective reliability is overstated by at most
+  `κ · (1 − r0) · E_id · i · (1 − t) ≤ κ · (1 − r0)` — 0.1 absolute at the library's
+  r0 = 0.8. Attained with `E_vp = E_dsc = 0`: Patch Management 0.32, monitoring
+  0.448, selection at 0.1 gives `ΔE_meta = 0.448 · 0.32 · 0.9 = 0.129024`
+  (`E_meta` 0.014336 → 0.14336). With selection absent the result equals the
+  former gate.
+- **Where.** `fair_cam/risk_engine/group_composition.py` (`precompose_parts`,
+  VMC_CORRECTION override); `fair_cam/composition.py` (`and_compose` docstring);
+  emitted provenance (`vmc_correction.rule_provenance`,
+  `reliability_coupling.structure_provenance`); the label-only reason in
+  `src/idraa/services/_view_model_helpers.py` and the controls-form helper text in
+  `src/idraa/models/enums.py`.
+- **Evaluate.** `fair_cam/tests/risk_engine/test_meta_reliability_coupling.py`:
+  implementation-anchored pin, Treatment-Selection-value invariance on `E_corr`
+  and on `E_meta` / co-present LEC scores (score-neutrality), and the
+  membership-monotonicity property test; `fair_cam/tests/test_composition_topology.py`
+  pins the retained AND label. Data legacy: runs whose snapshot carried Treatment
+  Selection were flagged stale at deploy (scores can only rise) — a deliberate
+  superset: a snapshot carrying Treatment Selection without Implementation or
+  without an Identification member is flagged although its numbers cannot change;
+  staleness is advisory; a V1 snapshot whose selection row was deleted after the
+  run is the known, unrecoverable under-count.
 
 ### C9. Detection has no standalone node; Response acts on magnitude only
 
@@ -691,6 +738,13 @@ Everything numeric in this section is therefore Idraa's.
   (two controls sharing a dependency) would make the OR optimistic. The
   Standard's own dependency statement (§2.3) is what the κ coupling (C7)
   models instead.
+  Known instance: a SIEM re-ingests the telemetry of co-deployed Visibility carriers
+  (EDR, NDR, HIDS, NIDS, firewall, WAF, APM), the same signal, so the independent OR
+  is optimistic for that pair; the library's interim is a residual-scoped SIEM
+  Visibility coverage of 0.3 (riskflow#199 slice 1), which leaves EDR + SIEM + IR
+  Detection +20.7 % over no SIEM Visibility (was +55.2 %) and costs a SIEM-only
+  deployment 62.5 % of its Detection (sole-carrier guidance: rubric §2.2) — pending
+  the evidence-class operator (#199).
 - **Where.** `fair_cam/composition.py` (`or_compose`, "within-sub-function
   across controls" and "per-control Layer-2 squash").
 - **Evaluate.** `fair_cam/tests/test_composition_operators.py`.
