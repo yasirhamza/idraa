@@ -2655,6 +2655,29 @@ def test_workbook_controls_sheet_dsc_prevention_emits_and_group_note_not_formula
     assert "whole group of controls" not in lower_all
 
 
+def test_workbook_controls_sheet_treatment_selection_emits_label_only_note():
+    """#199 slice 1 (R-C8-15): a vmc_corr_treatment_selection assignment is label-only
+    (register C8), so its skip row must say so instead of the generic
+    "(AND-pair child — effect via vmc_correction)" note, which is false for it (no effect)."""
+    snap = _v3_snap_dict()
+    snap["assignments"] = [
+        _v3_assignment("vmc_corr_treatment_selection", "probability", cap=0.8, cov=0.8, rel=0.8)
+    ]
+    run = _let_run(controls_snapshot=[snap])
+    run.weight_robustness = None
+    wb = _open(build_single_run_let_workbook(run, _make_org()))
+    strings = [
+        cell.value
+        for r in wb["Controls"].iter_rows()
+        for cell in r
+        if cell.data_type == "s" and isinstance(cell.value, str)
+    ]
+    ts_rows = [s for s in strings if "vmc_corr_treatment_selection" in s]
+    assert ts_rows, strings
+    assert any("label-only" in s and "register C8" in s for s in ts_rows), ts_rows
+    assert not any("effect via vmc_correction" in s for s in ts_rows), ts_rows
+
+
 def _controls_sheet_formulas(run):
     """All formula-cell strings on the Controls sheet (block 2 + block 3 LET cells)."""
     wb = _open(build_single_run_let_workbook(run, _make_org()))

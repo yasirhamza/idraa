@@ -17,6 +17,7 @@ Tests cover:
 from __future__ import annotations
 
 from idraa.services._view_model_helpers import (
+    _META_LABEL_ONLY_REASON,
     _META_NO_PARTNER_REASON,
     _META_SUBTHRESHOLD_REASON,
     control_zero_value_reason,
@@ -97,10 +98,41 @@ def test_reason_vmc_id_only_meta_with_partner() -> None:
     assert reason == _META_SUBTHRESHOLD_REASON
 
 
-def test_reason_vmc_corr_only_meta() -> None:
-    """All vmc_corr_* → meta reliability-coupling copy (sub-threshold with default partner)."""
-    reason = control_zero_value_reason(["vmc_corr_treatment_selection"])
-    assert reason == _META_SUBTHRESHOLD_REASON
+def test_reason_treatment_selection_only_is_label_only() -> None:
+    """#199 slice 1 (R-C8-14): a Treatment-Selection-only control is label-only — its
+    uplift is structurally zero, not 'below the display threshold'. Partner presence is
+    irrelevant: both has_co_present_lec values give the label-only copy."""
+    assert control_zero_value_reason(["vmc_corr_treatment_selection"]) == _META_LABEL_ONLY_REASON
+    assert (
+        control_zero_value_reason(["vmc_corr_treatment_selection"], has_co_present_lec=False)
+        == _META_LABEL_ONLY_REASON
+    )
+
+
+def test_reason_dsc_id_misaligned_only_is_label_only() -> None:
+    """dsc_id_misaligned is the other label-only member (rubric §2.8 carries the
+    derivation; §2.7 and §2.9 name it): its partner dsc_corr_misaligned is virtual and no
+    org-authored row can carry it today (schemas/control.py:105-120 validator, the
+    ck_cfa_virtual_requires_derived CHECK, routes/controls.py:72, services/controls.py:138),
+    so the pair is AND(x, 0) = 0 whatever else is present. The engine fact is pinned in
+    fair_cam/tests/risk_engine/test_meta_reliability_coupling.py
+    (test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner, R-T-25).
+    Same copy for both partner values — this replaces the former
+    `test_reason_dsc_id_only_meta_no_partner` pin (:131-134), which asserted the
+    no-partner copy for a structurally-zero member (audited obsolete, #199 slice 1)."""
+    assert control_zero_value_reason(["dsc_id_misaligned"]) == _META_LABEL_ONLY_REASON
+    assert (
+        control_zero_value_reason(["dsc_id_misaligned"], has_co_present_lec=False)
+        == _META_LABEL_ONLY_REASON
+    )
+
+
+def test_reason_treatment_selection_with_implementation_keeps_meta_copy() -> None:
+    """Implementation IS scored (κ path), so TS + Implementation is an ordinary pure-meta
+    control: sub-threshold with a partner, nothing-to-strengthen without one."""
+    sfs = ["vmc_corr_treatment_selection", "vmc_corr_implementation"]
+    assert control_zero_value_reason(sfs) == _META_SUBTHRESHOLD_REASON
+    assert control_zero_value_reason(sfs, has_co_present_lec=False) == _META_NO_PARTNER_REASON
 
 
 def test_reason_vmc_id_and_corr_mixed_meta() -> None:
@@ -126,12 +158,6 @@ def test_reason_dsc_prev_only_meta() -> None:
     """All dsc_prev_* → meta copy (DSC is meta post-D1). Default partner → sub-threshold."""
     reason = control_zero_value_reason(["dsc_prev_defined_expectations"])
     assert reason == _META_SUBTHRESHOLD_REASON
-
-
-def test_reason_dsc_id_only_meta_no_partner() -> None:
-    """dsc_id_* alone, no partner → 'nothing to strengthen' copy."""
-    reason = control_zero_value_reason(["dsc_id_misaligned"], has_co_present_lec=False)
-    assert reason == _META_NO_PARTNER_REASON
 
 
 def test_reason_multiple_dsc_sfs_meta() -> None:
@@ -355,6 +381,17 @@ def test_zero_reason_meta_with_co_present_lec_control_is_subthreshold() -> None:
     assert result is not None
     cell = result["per_control"][cid]
     assert cell["zero_reason"] == _META_SUBTHRESHOLD_REASON
+
+
+def test_zero_reason_wiring_label_only_control_with_lec_partner() -> None:
+    """R-T-20: through process_weight_robustness_for_display, a $0 TS-only cell beside an
+    LEC control gets the label-only copy, not the sub-threshold copy."""
+    cid, lec_cid = "ts1", "lec1"
+    wr = _make_wr(cid, 0.0)
+    sfs = {cid: ["vmc_corr_treatment_selection"], lec_cid: ["lec_prev_avoidance"]}
+    result = process_weight_robustness_for_display(wr, _IDENTITY, "USD", sub_functions_by_id=sfs)
+    assert result is not None
+    assert result["per_control"][cid]["zero_reason"] == _META_LABEL_ONLY_REASON
 
 
 def test_zero_reason_none_when_p50_nonzero() -> None:

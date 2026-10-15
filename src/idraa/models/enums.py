@@ -551,9 +551,10 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
         "Treatment selection — choose the right corrective action for an "
         "identified variance. Examples: severity-based playbooks, risk-based "
         "patch prioritisation, fix / mitigate / accept decision per identified "
-        "variance, exception process with sign-off. Measured as probability "
-        "[0, 1] the selected treatment actually addresses the variance. "
-        "FAIR-CAM §4.3.1."
+        "variance, exception process with sign-off. Recorded for classification "
+        "and provenance; it does not change the score (the Correction score is "
+        "carried by Implementation — register C8). Any value in [0, 1] is "
+        "accepted and kept. FAIR-CAM §4.3.1."
     ),
     FairCamSubFunction.VMC_CORR_IMPLEMENTATION: (
         "Implementation — execute the chosen correction. Examples: patch "
