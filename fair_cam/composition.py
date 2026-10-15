@@ -133,10 +133,12 @@ def and_compose(values: Sequence[float]) -> float:
     investment-decision tool - see spec Q4). Used for:
     - LEC Detection AND-trio
     - LEC Detection-Response AND-pair (composes group outputs)
-    - VMC Correction AND-group (Treatment Selection ∧ Implementation, §4.3.1/
-      §4.3.2 p.28 — PRESCRIBED; the ABSENT-selection implementation-gate
-      handling is a documented deviation, see `group_composition.py`
-      `precompose_parts`)
+    - VMC Correction AND-group — the AND (Treatment Selection ∧ Implementation,
+      §4.3.1/§4.3.2 p.28) is the RETAINED TOPOLOGY LABEL only: the generic leaf
+      pass still computes the padded AND here, and `precompose_parts`
+      (`group_composition.py`) OVERRIDES it with the implementation-anchored
+      value (E_corr = Implementation when present, else 0; Treatment Selection
+      label-only — register C8, #199 slice 1)
     - VMC Identification-Correction AND-pair — PRESCRIBED (§4 p.21)
     - DSC Identification-Correction AND-pair — PRESCRIBED (§5 p.30)
 

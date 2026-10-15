@@ -270,9 +270,10 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
       - LEC opeff: the reliability-free ``part`` is recorded in ``lec_items``
         for finalize to apply ``r_eff``.
 
-    Then composes the meta side once, applies the VMC_CORRECTION implementation
-    gate (spec D3), recomputes the VMC id∧corr pair over the gated value, and
-    derives E_meta = OR(E_vmc, E_dsc).
+    Then composes the meta side once, applies the VMC_CORRECTION
+    implementation-anchored override (register C8, #199 slice 1: E_corr =
+    Implementation when present, Treatment Selection label-only), recomputes the
+    VMC id∧corr pair over that value, and derives E_meta = OR(E_vmc, E_dsc).
     """
     meta_by_group: dict[BooleanGroup, dict[FairCamSubFunction, list[float]]] = defaultdict(
         lambda: defaultdict(list)
@@ -314,19 +315,32 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     # Compose the meta side ONCE (κ-invariant).
     meta_group_eff, meta_sub_eff = _compose_leaf_and_pair_groups(meta_by_group, _META_GROUPS)
 
-    # Spec D3 deviation (plan-gate Meth-B2): implementation is the load-bearing
-    # correction operand (§4.3.2 "the final step"). Absent implementation ->
-    # no correction, regardless of treatment-selection presence; present ->
-    # AND over the PRESENT members (impl alone = its opeff; impl+selection =
-    # the §4.3 prescribed product). Replaces only the 0.0-PADDING of the
-    # absent-selection case; GROUP_TYPE stays the prescribed AND. The else 0.0
-    # also covers the no-members-at-all case — matching the legacy padded-AND
-    # value for LEC-only sets, keeping the LEC-only bit-identity pin exact.
+    # #199 slice 1 (register C8): the VMC_CORRECTION group value is
+    # IMPLEMENTATION-ANCHORED. The Standard prescribes AND(Treatment
+    # Selection, Implementation) (§4.3.1/§4.3.2 p.28) and GROUP_TYPE keeps
+    # that AND as the topology LABEL; it is NOT realised numerically here.
+    # Absent implementation -> no correction regardless of selection (§4.3.2
+    # "the final step"); present -> E_corr = the Implementation member's
+    # composed effectiveness (OR across controls, from the generic leaf pass).
+    # Treatment Selection is composed and recorded (meta_sub_eff, contributing)
+    # but SCORE-NEUTRAL (label-only). Why: realising the product made the group
+    # non-monotone in membership (a truthful selection claim beside
+    # Implementation LOWERED E_corr, the #453 defect class). The Standard
+    # locates selection quality in a deployment's Decision Support Controls
+    # (§4.3.1 p.28: "primarily served by Decision Support Controls"; its
+    # example controls are DSCs); Idraa credits that quality only ADDITIVELY,
+    # through E_dsc -> E_meta (register C6/C7), when DSC functions are
+    # authored — nothing here penalises poor selection. E_corr = Implementation
+    # is the least monotone majorant of the former gate: it agrees with it on
+    # every set without both members, is monotone, and introduces no constant.
+    # Bound (register C8): against the prescribed product E_corr is overstated
+    # by i*(1-t); through the pair, the two 1-Lipschitz OR fusions and the kappa
+    # coupling, any LEC reliability by at most kappa*(1-r0)*E_id*i*(1-t)
+    # <= kappa*(1-r0) (0.1 at r0 = 0.8). The .get(..., 0.0) also covers the
+    # no-members case, keeping the LEC-only bit-identity pin exact.
     corr_effs = meta_sub_eff.get(BooleanGroup.VMC_CORRECTION, {})
-    meta_group_eff[BooleanGroup.VMC_CORRECTION] = (
-        and_compose(list(corr_effs.values()))
-        if FairCamSubFunction.VMC_CORR_IMPLEMENTATION in corr_effs
-        else 0.0
+    meta_group_eff[BooleanGroup.VMC_CORRECTION] = corr_effs.get(
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION, 0.0
     )
     # Recompute the id∧corr pair AFTER the gate so the AND consumes the gated
     # correction value (spec D3).

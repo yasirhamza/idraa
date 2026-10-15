@@ -1529,8 +1529,10 @@ def _write_controls_sheet(
 
         Only OR groups qualify: ``or_compose`` applies a single member directly.
         AND groups compose multiplicatively (``and_compose``) and
-        ``group_composition`` pads ABSENT members to 0.0 — a single/partial
-        assignment collapses the product to 0 → the engine applies the identity
+        ``group_composition`` pads ABSENT members to 0.0 (VMC_CORRECTION is
+        implementation-anchored instead, see ``precompose_parts``) — a
+        single/partial assignment collapses the product to 0 → the engine
+        applies the identity
         ``1 - 0*w = 1.0`` (no benefit), so an emitted ``1-E*w < 1`` would
         overstate the effect.  LEC_RESPONSE (the only weak-AND group) is excluded
         explicitly: ``weak_and_compose`` is a mean of PRESENT members (it does NOT

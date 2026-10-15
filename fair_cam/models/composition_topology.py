@@ -47,11 +47,12 @@ GROUP_TYPE: dict[BooleanGroup, GroupType] = {
     # (condensed; §4.2.1 p.26, §4.2.2 p.27) is preserved by the id∧corr pair
     # AND below.
     BooleanGroup.VMC_IDENTIFICATION: GroupType.OR,
-    # PRESCRIBED: §4.3.1/§4.3.2 p.28 (Treatment Selection AND
-    # Implementation). Slice 2 keeps the AND; the implementation-gated
-    # handling of an ABSENT selection member (a documented deviation from
-    # 0.0-padding, justified in the spec D3) lives in the meta composition
-    # (group_composition.py), not in this table.
+    # PRESCRIBED: §4.3.1/§4.3.2 p.28 (Treatment Selection AND Implementation).
+    # The AND is RETAINED HERE AS THE LABEL and is NOT realised numerically:
+    # the meta composition (group_composition.py precompose_parts) is
+    # implementation-anchored — E_corr = the Implementation member's
+    # effectiveness when present, 0 when absent; Treatment Selection is
+    # composed and recorded but label-only (DEPARTURE, register C8, #199).
     BooleanGroup.VMC_CORRECTION: GroupType.AND,
     # PRESCRIBED: §4 p.21 ("Variance Identification and Variance Correction
     # have a Boolean AND relationship to one another").
