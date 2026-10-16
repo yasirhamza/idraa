@@ -6,7 +6,7 @@ Create Date: 2026-10-15
 
 The VMC Correction group became implementation-anchored (register C8): a run whose
 control set carried ``vmc_corr_treatment_selection`` beside an Implementation carrier
-AND an Identification member now scores HIGHER (E_corr(after) = i >= i*t =
+AND an Identification member can only score higher (E_corr(after) = i >= i*t =
 E_corr(before); the pair is AND(E_id, E_corr), so without an Identification member
 E_meta does not move either). The criterion here is DELIBERATELY A SUPERSET of those
 runs: membership is tested on the sub-function alone — the deterministic,

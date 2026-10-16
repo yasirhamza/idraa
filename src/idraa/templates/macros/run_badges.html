@@ -6,10 +6,11 @@
 
 {% macro run_status_badge(status, is_stale=false) -%}
   {{ status_pill(status.value, "run") }}
-  {#- #438: a COMPLETED run whose control was re-synced after a library
-      re-curation is stale — results reflect the OLD curation. Shown beside
+  {#- A COMPLETED run is stale when something it depended on changed afterwards.
+      is_stale is set by a control re-sync (#438) or by an engine-change
+      migration (#199), so the tooltip must stay cause-agnostic. Shown beside
       (not instead of) the status pill: the run genuinely completed. -#}
   {%- if is_stale %} <span class="badge badge-warning badge-outline badge-sm"
-        title="A control this run used was re-synced to a newer library curation after this run completed — re-run to reflect the new values.">stale</span>
+        title="Results may be out of date — a control this run used, or the risk engine, changed after the run completed. Re-run to refresh.">stale</span>
   {%- endif %}
 {%- endmacro %}

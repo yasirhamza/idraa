@@ -1,6 +1,6 @@
 """#199 slice 1 — c4d2e8f1a6b9 flags stale every COMPLETED, not-yet-stale run whose OWN
 controls_snapshot shows a control carrying vmc_corr_treatment_selection (the C8 engine change
-raises its score), falling back to control_ids_used ∩ current carriers (org-keyed) for runs whose
+can only raise its score), falling back to control_ids_used ∩ current carriers (org-keyed) for runs whose
 snapshot carries no assignment detail (V1 / empty); one audit_log row per run (user_id NULL, ids
 no-hyphen hex, a reason). Rows are seeded through the REAL ORM in a separate asyncio.run() (the
 test_epic_f_control_recuration.py probe pattern), so the fixture shape cannot drift from
@@ -44,6 +44,7 @@ COUNTER = "issue-199 c8 stale runs: controls={c} flagged={f}"
 NAME_SENTINEL = "ZZ-CONTROL-NAME-SENTINEL"
 TS = "vmc_corr_treatment_selection"
 IMPL = "vmc_corr_implementation"
+ID_MON = "vmc_id_control_monitoring"
 
 
 def _v3_snapshot(control_id: uuid.UUID, sub_functions: list[str]) -> dict[str, Any]:
@@ -73,8 +74,10 @@ def _v3_snapshot(control_id: uuid.UUID, sub_functions: list[str]) -> dict[str, A
 async def _seed(async_url: str) -> dict[str, str]:
     """Returns hex ids. Controls: ts_control (TS + Impl rows), impl_control (Impl only),
     ts_only_control (TS row only, no Impl), removed_control (TS row, deleted after the run),
-    and in a SECOND org foreign_ts (TS row). Runs (all in org 1 unless named otherwise):
-      r_ts        COMPLETED, V3 snapshot shows TS (+ Impl)                 -> flagged
+    id_control (an Identification member, vmc_id_control_monitoring), and in a SECOND org
+    foreign_ts (TS row). Runs (all in org 1 unless named otherwise):
+      r_ts        COMPLETED, V3 snapshot shows TS + Impl + an Identification member
+                  (a genuine numbers-change case: E_meta rises)             -> flagged
       r_impl      COMPLETED, V3 snapshot shows Impl only                    -> not flagged
       r_already   COMPLETED, already stale, snapshot shows TS               -> untouched, not counted
       r_queued / r_running / r_failed  wrong status, snapshot shows TS      -> not flagged
@@ -127,6 +130,7 @@ async def _seed(async_url: str) -> dict[str, str]:
             ts_only = _control(org)
             removed = _control(org)
             foreign = _control(org2)
+            id_ctl = _control(org)
             await db.flush()
             rows = [
                 (ts, FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION),
@@ -135,6 +139,7 @@ async def _seed(async_url: str) -> dict[str, str]:
                 (ts_only, FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION),
                 (removed, FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION),
                 (foreign, FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION),
+                (id_ctl, FairCamSubFunction.VMC_ID_CONTROL_MONITORING),
             ]
             for c, sf in rows:
                 db.add(
@@ -175,7 +180,11 @@ async def _seed(async_url: str) -> dict[str, str]:
                 db.add(r)
                 out[key] = r.id.hex
 
-            snap_ts = [_v3_snapshot(ts.id, [TS, IMPL]), _v3_snapshot(impl.id, [IMPL])]
+            snap_ts = [
+                _v3_snapshot(ts.id, [TS, IMPL]),
+                _v3_snapshot(impl.id, [IMPL]),
+                _v3_snapshot(id_ctl.id, [ID_MON]),
+            ]
             snap_impl = [_v3_snapshot(impl.id, [IMPL])]
             v1 = [
                 {
@@ -190,7 +199,7 @@ async def _seed(async_url: str) -> dict[str, str]:
                     "type": "technical",
                 }
             ]
-            _run("r_ts", [ts, impl], RunStatus.COMPLETED, snapshot=snap_ts)
+            _run("r_ts", [ts, impl, id_ctl], RunStatus.COMPLETED, snapshot=snap_ts)
             _run("r_impl", [impl], RunStatus.COMPLETED, snapshot=snap_impl)
             _run("r_already", [ts], RunStatus.COMPLETED, snapshot=snap_ts, stale=True)
             _run("r_queued", [ts], RunStatus.QUEUED, snapshot=snap_ts)
