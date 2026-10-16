@@ -140,6 +140,7 @@ subjects = [
 "src/idraa/services/control_library.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
 "src/idraa/services/control_resync.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
 "src/idraa/services/controls_maintenance.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
+"src/idraa/services/siem_visibility_resync.py" = "org-scoping"  # issue-199 slice 1: operator resync (S-A: org-scoped loads + AuditWriter)
 "src/idraa/services/fx_rates.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
 "src/idraa/services/scenario_control_recommendations.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
 "src/idraa/services/sme_directory.py" = "org-scoping"  # lane audit 2026-10-10 (#218)
