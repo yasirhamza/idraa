@@ -187,6 +187,20 @@ def test_edr_plus_siem_plus_ir_detection_rises_21_percent(
     assert pytest.approx(1.207, abs=5e-4) == after_det / before_det
 
 
+def test_edr_siem_ir_detection_at_uniform_default_coverage_0_8_sensitivity_row(
+    seed: dict[str, dict[str, Any]],
+) -> None:
+    # Rubric §2.2 sensitivity table, 0.8 row (the pre-#199 uniform Visibility default): the
+    # committed SIEM with only its lec_det_visibility coverage overridden to 0.8.
+    # Vis = 1 − 0.552·0.552 = 0.695296; 0.695296 · 0.5376 · 0.695296 = 0.2598954772.
+    siem_at_08 = copy.deepcopy(seed[SIEM])
+    rows = [a for a in siem_at_08["assignments"] if a["sub_function"] == "lec_det_visibility"]
+    assert len(rows) == 1
+    assert rows[0]["coverage_default"] == 0.3  # the committed value this row overrides
+    rows[0]["coverage_default"] = 0.8
+    _pin([seed[EDR], siem_at_08, seed[IR]], DET, 0.2598954772463616)
+
+
 def test_sra_resistance_at_coverage_0_2(seed: dict[str, dict[str, Any]]) -> None:
     # Alone: Avoidance 0.448 -> OR(0.448, Resistance 0.7·0.2·0.8 = 0.112) = 0.509824 (+13.8%).
     # With DTE (Resistance 0.448): 1 − 0.552² = 0.695296 -> Resistance OR(0.448, 0.112)
