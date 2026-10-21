@@ -1,6 +1,7 @@
-"""#199 slice 1 (R-T-9): SIEM's lec_det_visibility coverage is the derived residual
-share 0.3, expert-estimate, with exactly one coverage citation that carries the
-derivation. Guards the interim until the C11 correlated-Visibility operator lands."""
+"""#199: SIEM's lec_det_visibility coverage is the library's uniform Visibility default 0.8
+(coverage = reach: the share of the estate whose log sources the SIEM ingests), expert-estimate,
+with exactly one coverage citation. Overlap with re-ingested carriers is the analyst's call
+(rubric 2.2; register C11), not an engine rule."""
 
 from __future__ import annotations
 
@@ -10,51 +11,55 @@ from typing import Any, cast
 
 SEED_PATH = Path(__file__).parents[2] / "data" / "seed_control_library_entries.json"
 SIEM = "security-information-event-management"
+VIS = "lec_det_visibility"
+
+
+def _entries() -> list[dict[str, Any]]:
+    doc = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    return cast(list[dict[str, Any]], doc["entries"])
 
 
 def _siem_visibility() -> dict[str, Any]:
-    doc = json.loads(SEED_PATH.read_text(encoding="utf-8"))
-    entry = next(e for e in doc["entries"] if e["slug"] == SIEM)
-    rows = [a for a in entry["assignments"] if a["sub_function"] == "lec_det_visibility"]
+    entry = next(e for e in _entries() if e["slug"] == SIEM)
+    rows = [a for a in entry["assignments"] if a["sub_function"] == VIS]
     assert len(rows) == 1
     return cast(dict[str, Any], rows[0])
 
 
-def test_siem_visibility_coverage_is_the_residual_share() -> None:
+def test_siem_visibility_coverage_is_the_uniform_default() -> None:
     a = _siem_visibility()
-    assert a["coverage_default"] == 0.3
+    assert a["coverage_default"] == 0.8
     assert a["coverage_provenance"] == "expert-estimate"
     assert (a["capability_default"], a["reliability_default"]) == (0.7, 0.8)
 
 
-def test_siem_visibility_has_exactly_one_derivation_citation() -> None:
-    a = _siem_visibility()
-    assert len(a["coverage_citations"]) == 1
-    text = a["coverage_citations"][0]
-    assert "residual" in text
-    assert "3 residual classes / (3 + 7 carrier classes) = 0.3" in text  # verbatim in the citation
-    assert "interim" in text.lower()
-    assert "#199" in text
+def test_siem_coverage_equals_every_peer_visibility_carrier() -> None:
+    peers = {
+        e["slug"]: a["coverage_default"]
+        for e in _entries()
+        for a in e["assignments"]
+        if a["sub_function"] == VIS
+    }
+    assert SIEM in peers and len(peers) > 1
+    assert {v for slug, v in peers.items() if slug != SIEM} == {peers[SIEM]}  # uniform default
 
 
-def test_siem_capability_citation_states_the_corrected_coverage() -> None:
-    a = _siem_visibility()
+def test_siem_coverage_citation_states_reach_and_analyst_overlap_guidance() -> None:
+    cites = _siem_visibility()["coverage_citations"]
+    assert len(cites) == 1
+    text = cites[0]
+    assert "reach" in text
+    assert "uniform 0.8 Visibility default" in text
+    assert "the analyst lowers this coverage" in text
+    assert "interim" not in text.lower()
+
+
+def test_siem_capability_citation_states_the_uniform_default_magnitude() -> None:
+    entry = next(e for e in _entries() if e["slug"] == SIEM)
+    a = next(x for x in entry["assignments"] if x["sub_function"] == VIS)
     assert len(a["capability_citations"]) == 1
     text = a["capability_citations"][0]
-    assert "(coverage 0.3, reliability 0.8)" in text
-    assert "(coverage 0.8, reliability 0.8)" not in text
-    assert "tracked as an engine follow-up (#199), not a curation rule" in text  # kept (R-SIEM-5)
-    assert "can both count toward Detection" not in text  # the pre-interim C11 clause is gone
-    # R-SIEM-5 / plan-gate M2-N4: "removes the seven named carriers' share", not "stops
-    # double-claiming" — partial overlap with SSPM, EDR/HIDS and WAF/APM remains at 0.3.
-    assert "removes the seven named carriers' share from the claim" in text
-
-
-def test_siem_coverage_citation_states_scope_and_guidance() -> None:
-    """M-I3: the record supports itself — upper end, 3/17 corner, contact share, sole-carrier
-    guidance (spec §4.2.1)."""
-    text = _siem_visibility()["coverage_citations"][0]
-    assert "share of threat contact" in text
-    assert "3 / 17" in text
-    assert "sole Visibility carrier" in text
-    assert "0.18" in text and "0.4" in text
+    assert "(coverage 0.8, reliability 0.8)" in text
+    assert "(coverage 0.3, reliability 0.8)" not in text
+    assert "independent OR" in text and "register C11" in text
+    assert "engine follow-up" not in text
