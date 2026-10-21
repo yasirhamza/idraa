@@ -7,7 +7,7 @@ Create Date: 2026-10-21
 Owner ruling (2026-10-21): coverage means reach, the share of the estate the control
 actually reaches; for SIEM, the log sources onboarded. A well-implemented SIEM onboards
 most sources, so 0.3 read as a failed implementation. SIEM returns to the library's
-uniform Visibility default (coverage 0.8, the value of the other 15 Visibility carriers).
+uniform Visibility default (coverage 0.8, the value of the 14 other Visibility carriers).
 Overlap with carriers whose telemetry SIEM re-ingests is the analyst's coverage judgment
 (rubric 2.2; register C11), not an engine rule.
 

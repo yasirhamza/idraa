@@ -219,9 +219,9 @@ def test_fresh_path_applies_a_no_value_change_bump_and_converges(
 def test_stored_new_coverage_is_already_whatever_the_seed_holds(
     alembic_runner: MigrationContext, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Seed-independent twin of test_fresh_path_is_already_and_converges: the stored cell is
+    """Seed-independent twin of test_fresh_path_applies_a_no_value_change_bump_and_converges: the stored cell is
     set to the frozen NEW literal (0.3) directly, so the classification is `already` however
-    the seed JSON moves under the C11 milestone — no bump, no write at all."""
+    the seed JSON moves — no bump, no write at all."""
     alembic_runner.migrate_up_to(PRE)
     _set_stored_coverage(alembic_engine, NEW)
     entry_id, version = _latest(alembic_engine)
@@ -288,7 +288,7 @@ def test_downgrade_is_a_documented_noop(
 def test_lagging_db_takes_whatever_the_json_holds(
     alembic_runner: MigrationContext, alembic_engine: Engine
 ) -> None:
-    """R-SIEM-8a / R-T-12a (A-I1): when the C11 milestone moves the seed cell past 0.3, a
+    """R-SIEM-8a / R-T-12a (A-I1): when the seed moves, a
     lagging database on `apply` must converge to the JSON, not RuntimeError at boot. Drive
     the migration's own `_apply(bind, payload)` with a payload whose SIEM coverage is 0.25."""
     alembic_runner.migrate_up_to(PRE)

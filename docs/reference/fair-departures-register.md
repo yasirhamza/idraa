@@ -740,8 +740,13 @@ Everything numeric in this section is therefore Idraa's.
   models instead.
   Known instances: a SIEM re-ingests the telemetry of co-deployed Visibility carriers
   (EDR, NDR, HIDS, NIDS, firewall, WAF, APM), and secure remote access plus
-  data-in-transit encryption can defeat one interception; the signal is the same, so the
-  independent OR is optimistic for those pairs. The overlap is environment-dependent, so
+  data-in-transit encryption (Resistance controls) can defeat one interception; each pair
+  acts on the same evidence or defeats the same interception, so their failures are
+  correlated and the independent OR is optimistic. At library defaults the size of the
+  optimism for SIEM is bounded by EDR + SIEM + IR Detection being +55.2 % over no SIEM
+  Visibility (0.1674584261 → 0.2598954772, pinned in
+  `tests/unit/test_epic_f_control_scores.py`), the double credit when SIEM's Visibility
+  fully duplicates EDR's. The overlap is environment-dependent, so
   it is handled by the analyst's coverage (rubric §2.2: lower the overlapping control's
   coverage to the share unique in the environment), not by the engine. Library SIEM
   coverage is the uniform 0.8.

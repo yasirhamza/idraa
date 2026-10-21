@@ -230,7 +230,10 @@
   (threat intelligence, control monitoring) combine with OR, since the
   standard names both but prescribes no operator between them; so do
   several controls serving the same sub-function, assuming they fail
-  independently. Detection on its own applies nothing; it enables response,
+  independently. Where two controls see the same evidence or defeat the same
+  attempt, lower the overlapping control&rsquo;s coverage to the share unique
+  in your environment, and re-check that edit after a library resync (a resync
+  replaces assignments with library defaults). Detection on its own applies nothing; it enables response,
   which acts on loss size only. A loss-reduction control valued in currency
   subtracts a fixed amount per event from Secondary Loss only. Each of these
   is tested against the meaning the standard gives.

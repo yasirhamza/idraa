@@ -83,6 +83,8 @@ Avoidance removes contact (→ TEF). Resistance reduces the probability that
 contact results in a loss event (→ Vulnerability). Deterrence reduces the
 probability that a threat agent acts harmfully after contact (→ TEF branch).
 
+Controls that defeat the same attempt overlap: see "Overlapping controls" at the end of §2.2.
+
 ### 2.2 LEC Detection — gates Response
 
 Group: `lec_detection` | Type: **AND** (internal composition AND: all 3 members required for the group to activate; distinct from the cross-group AND-pair scoring mechanism where detection and response groups must both be staffed) | Targets: *(none — detection gates response via pair)*
@@ -102,11 +104,12 @@ reliability coupling (`E_meta = OR(E_vmc, E_dsc)` — see
 `E_meta`. A detection-only entry has no VMC/DSC assignment to couple through,
 so it stays genuinely non-scoring by design.
 
-**Overlapping Visibility carriers.** Coverage means reach: the share of the estate the
-control actually reaches (for SIEM, the log sources onboarded). The library default is the
-uniform 0.8 for every Visibility carrier, SIEM included. When two controls see the same
-evidence (SIEM re-ingesting EDR, NDR, HIDS, NIDS, firewall, WAF or APM telemetry; secure
-remote access plus data-in-transit encryption defeating one interception), how much to
+**Overlapping controls.** For a Visibility carrier, coverage is its reach: the share of
+the estate it actually reaches (for SIEM, the log sources onboarded). The library default
+is the uniform 0.8 for every Visibility carrier, SIEM included. When two controls see the
+same evidence or defeat the same attempt (SIEM re-ingesting EDR, NDR, HIDS, NIDS,
+firewall, WAF or APM telemetry; secure remote access plus data-in-transit encryption
+defeating one interception), how much to
 discount is environment-dependent, so the analyst lowers the overlapping control's coverage
 to the share genuinely unique in their environment. The engine composes the channels as an
 independent OR (register C11) and does not discount overlap itself.

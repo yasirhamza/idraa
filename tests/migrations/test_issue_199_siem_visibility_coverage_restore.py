@@ -129,7 +129,7 @@ def _expected_from_seed() -> dict[str, tuple[Any, ...]]:
 
 def _set_stored_coverage(engine: Engine, value: float) -> None:
     """Dirty the stored SIEM lec_det_visibility coverage at the latest version (the
-    pre-#199 production state is _OLD_COVERAGE; the fresh seed path already holds the
+    slice-1 interim state is _OLD_COVERAGE; the fresh seed path already holds the
     seed's value)."""
     entry_id, version = _latest(engine)
     with engine.begin() as conn:
