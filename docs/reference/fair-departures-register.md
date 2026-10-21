@@ -738,13 +738,13 @@ Everything numeric in this section is therefore Idraa's.
   (two controls sharing a dependency) would make the OR optimistic. The
   Standard's own dependency statement (§2.3) is what the κ coupling (C7)
   models instead.
-  Known instance: a SIEM re-ingests the telemetry of co-deployed Visibility carriers
-  (EDR, NDR, HIDS, NIDS, firewall, WAF, APM), the same signal, so the independent OR
-  is optimistic for that pair; the library's interim is a residual-scoped SIEM
-  Visibility coverage of 0.3 (riskflow#199 slice 1), which leaves EDR + SIEM + IR
-  Detection +20.7 % over no SIEM Visibility (was +55.2 %) and costs a SIEM-only
-  deployment 62.5 % of its Detection (sole-carrier guidance: rubric §2.2) — pending
-  the evidence-class operator (#199).
+  Known instances: a SIEM re-ingests the telemetry of co-deployed Visibility carriers
+  (EDR, NDR, HIDS, NIDS, firewall, WAF, APM), and secure remote access plus
+  data-in-transit encryption can defeat one interception; the signal is the same, so the
+  independent OR is optimistic for those pairs. The overlap is environment-dependent, so
+  it is handled by the analyst's coverage (rubric §2.2: lower the overlapping control's
+  coverage to the share unique in the environment), not by the engine. Library SIEM
+  coverage is the uniform 0.8.
 - **Where.** `fair_cam/composition.py` (`or_compose`, "within-sub-function
   across controls" and "per-control Layer-2 squash").
 - **Evaluate.** `fair_cam/tests/test_composition_operators.py`.

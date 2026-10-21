@@ -102,36 +102,14 @@ reliability coupling (`E_meta = OR(E_vmc, E_dsc)` — see
 `E_meta`. A detection-only entry has no VMC/DSC assignment to couple through,
 so it stays genuinely non-scoring by design.
 
-**SIEM Visibility coverage — sensitivity of the residual-share interim (#199 slice
-1).** `security-information-event-management`'s `lec_det_visibility` coverage is the
-residual share 3 / (3 + 7) = 0.3 of threat contact whose evidence lands only in logs
-SIEM itself collects (identity, application and server audit logs), not in telemetry
-a co-deployed Visibility carrier already emits (EDR, NDR, HIDS, NIDS, firewall, WAF,
-APM); register C11 still ORs SIEM's channel with the carriers' as independent. The
-count is the upper end for carrier-dense deployments (counting every library carrier
-SIEM re-ingests gives 3 / 17 ≈ 0.18) and a lower end by threat contact
-(authentication events are touched by most intrusions). The table below spans those
-two opposing corrections — denominator-widening down to 0.18, contact-weighting up
-toward 0.4 — for EDR + SIEM + Incident Response at κ = 0.5 (engine values at
-`rel=1e-9`; no-SIEM-Visibility baseline Detection 0.1674584261). It is a
-**sensitivity table, not derived bounds**; only the 0.3 and 0.8 rows are pinned
-(`tests/unit/test_epic_f_control_scores.py`).
-
-| SIEM Visibility coverage | EDR + SIEM + IR Detection | Δ vs no SIEM Visibility |
-|---|---|---|
-| 0.18 (3 / 17 corner) | 0.1882567626 | +12.4 % |
-| 0.2 | 0.1905676889 | +13.8 % |
-| **0.3 (committed interim)** | 0.2021223203 | +20.7 % |
-| 0.4 | 0.2136769517 | +27.6 % |
-| 0.8 (former uniform default) | 0.2598954772 | +55.2 % |
-
-Sole-carrier cost: the residual scoping assumes co-present carriers, so a deployment
-whose SIEM is its only Visibility carrier loses Detection it never double-claimed
-(SIEM + IR: 0.06422528 → 0.02408448, −62.5 %). Guidance: where SIEM is the sole
-Visibility carrier the analyst may raise that control's own coverage toward the full
-claim — the cell is editable, and a confirmed or tuned value is never overwritten by
-a library resync. Interim pending the C11 evidence-class operator (#199), which
-restores the full claim for everyone while removing the double credit.
+**Overlapping Visibility carriers.** Coverage means reach: the share of the estate the
+control actually reaches (for SIEM, the log sources onboarded). The library default is the
+uniform 0.8 for every Visibility carrier, SIEM included. When two controls see the same
+evidence (SIEM re-ingesting EDR, NDR, HIDS, NIDS, firewall, WAF or APM telemetry; secure
+remote access plus data-in-transit encryption defeating one interception), how much to
+discount is environment-dependent, so the analyst lowers the overlapping control's coverage
+to the share genuinely unique in their environment. The engine composes the channels as an
+independent OR (register C11) and does not discount overlap itself.
 
 ### 2.3 LEC Response — gates on Detection
 
