@@ -236,6 +236,9 @@ class RiskAnalysisRun(IdMixin, TimestampMixin, OrgMixin, Base):
     # marked is_stale=True when a library entry it used is re-curated (version
     # bumped) and the deployed control later re-syncs (#438). The run stays
     # COMPLETED + visible; #438 adds a badge so the UI can prompt a re-run.
+    # The #199 C8 migration (c4d2e8f1a6b9) also sets it, for runs whose controls
+    # carried Treatment Selection (an advisory superset of the runs whose result
+    # the implementation-anchored Correction rule moves).
     is_stale: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="0", default=False
     )

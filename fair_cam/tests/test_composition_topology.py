@@ -113,8 +113,9 @@ def test_meta_group_operators_slice2() -> None:
       operator prescribed; TI and monitoring cover DIFFERENT variance
       sources, coverage-union approximation, section 4.2 p.25).
     - VMC_CORRECTION stays AND: the PRESCRIBED pin (section 4.3.1/4.3.2
-      p.28). The implementation-gated absent-member handling is a documented
-      DEVIATION implemented in the meta composition (Task 2), not here.
+      p.28) is the retained LABEL; the value is implementation-anchored and
+      Treatment Selection label-only — a documented DEPARTURE implemented in
+      the meta composition (register C8, #199 slice 1), not here.
     - DSC_PREVENTION AND->WEAK_AND: documented DEVIATION from the nine
       section 5.1.x Boolean-AND prescriptions (see spec D3 justification).
     - Both id-corr pairings stay AND: Standard-PRESCRIBED (section 4 p.21;

@@ -898,6 +898,29 @@ _META_NO_PARTNER_REASON: str = (
 _META_SUBTHRESHOLD_REASON: str = (
     "Reliability uplift to co-present controls below the display threshold"
 )
+# #199 slice 1 (register C8): label-only members are composed and recorded but
+# never scored, so a control carrying ONLY label-only members has a structurally
+# zero uplift — not a sub-threshold one. vmc_corr_treatment_selection is label-only
+# in the implementation-anchored Correction group. dsc_id_misaligned is the DSC
+# pair's label-only member (rubric §2.8: the pair is a padded AND and its partner
+# dsc_corr_misaligned is virtual — no org-authored row can carry it: the DTO
+# validator schemas/control.py:105-120, the ck_cfa_virtual_requires_derived CHECK,
+# the form exclusion routes/controls.py:72 and the services/controls.py:138 guard).
+# That derived-row path is RESERVED, not absent (control_function_assignment.py:43):
+# remove dsc_id_misaligned from this set if derived dsc_corr_misaligned rows are ever
+# written. The fair_cam engine pin
+# test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner pins the
+# padded-AND fact and cannot see a v3 write path; the guards that go red that day are
+# tests/unit/test_controls_service.py
+# (test_create_control_iota_rejects_derived_from_not_null — the services/controls.py:138
+# guard) and tests/unit/test_cfa_dto.py (test_dto_rejects_virtual_without_derived),
+# which carry a cross-reference back to this set.
+_LABEL_ONLY_SUB_FUNCTIONS: frozenset[str] = frozenset(
+    {"vmc_corr_treatment_selection", "dsc_id_misaligned"}
+)
+_META_LABEL_ONLY_REASON: str = (
+    "Label-only sub-function — recorded for classification, never scored (register C8)"
+)
 
 
 def control_zero_value_reason(
@@ -948,7 +971,10 @@ def control_zero_value_reason(
            True  → "Reliability uplift to co-present controls below the display
            threshold". A HYBRID control (its own LEC channel present) is NOT pure
            meta and falls through to the LEC rules below — its own LEC channel is
-           itself strengthenable.
+           itself strengthenable. A control whose slugs are ALL label-only
+           (``_LABEL_ONLY_SUB_FUNCTIONS``: ``vmc_corr_treatment_selection``,
+           ``dsc_id_misaligned``) → ``_META_LABEL_ONLY_REASON`` first (#199 slice 1,
+           register C8).
         4. Has non-currency LEC Response but no LEC Detection **and not availability_effect**
            → "No detection partner…" (availability effects self-detect, FAIR-CAM §3.3.2
            p.19, so the response benefit IS creditable → None).
@@ -1000,6 +1026,10 @@ def control_zero_value_reason(
     # here and drops to the LEC rules below.
     meta_all = vmc_meta | dsc_sfs
     if meta_all and sfs.issubset(meta_all):
+        # #199 slice 1 (register C8): every member label-only -> structurally zero,
+        # whatever the partner situation. Checked BEFORE the partner split.
+        if sfs.issubset(_LABEL_ONLY_SUB_FUNCTIONS):
+            return _META_LABEL_ONLY_REASON
         if has_co_present_lec:
             return _META_SUBTHRESHOLD_REASON
         return _META_NO_PARTNER_REASON

@@ -623,3 +623,32 @@ async def test_sub_function_slug_humanized_with_raw_tooltip(
     assert 'title="dsc_prev_sa_reporting"' in body, "raw sub-function slug not kept in tooltip"
     # Humanized FAIR-CAM domain chip.
     assert "Decision Support" in body, "domain chip not humanized"
+
+
+# ---------------------------------------------------------------------------
+# #199 Task 6.5 — stale callout copy is cause-agnostic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _DETAIL_TEMPLATE.exists(), reason="detail.html template not present")
+@pytest.mark.asyncio
+async def test_stale_completed_run_shows_cause_agnostic_copy(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    analyst_org_v3_snapshot_run: RiskAnalysisRun,
+    db_session: AsyncSession,
+) -> None:
+    """is_stale is set by a control re-sync (#438) AND by the #199 engine-change migration,
+    so the run-detail callout must not name a re-sync / library curation as the cause."""
+    run = analyst_org_v3_snapshot_run
+    run.is_stale = True
+    await db_session.commit()
+    client, _ = authed_analyst
+    response = await client.get(f"/runs/{run.id}")
+    assert response.status_code == 200
+    body = " ".join(response.text.split())  # the template wraps the sentence across lines
+    assert (
+        "These results may be out of date: a control this run used, or the risk engine, "
+        "changed after the run completed. Re-run the analysis to refresh them." in body
+    )
+    assert "re-synced" not in body
+    assert "library curation" not in body

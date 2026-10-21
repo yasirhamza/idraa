@@ -209,7 +209,9 @@ def _compose_leaf_and_pair_groups(
 
     Pass 2 — pair groups (``PAIR_RECIPES``): AND of two child leaf outputs;
     ``None`` if either child is ``None`` (the D8 gate). NB the VMC id∧corr pair
-    is recomputed by the meta caller AFTER its correction-gate override.
+    is recomputed by the meta caller AFTER it sets the implementation-anchored
+    Correction value (E_corr = the Implementation member's effectiveness when
+    present, else 0; register C8).
 
     Returns ``(group_effectiveness, sub_function_effectiveness)`` covering every
     group in ``groups`` (full key coverage; ``sub_function_effectiveness`` holds
@@ -270,9 +272,10 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
       - LEC opeff: the reliability-free ``part`` is recorded in ``lec_items``
         for finalize to apply ``r_eff``.
 
-    Then composes the meta side once, applies the VMC_CORRECTION implementation
-    gate (spec D3), recomputes the VMC id∧corr pair over the gated value, and
-    derives E_meta = OR(E_vmc, E_dsc).
+    Then composes the meta side once, applies the VMC_CORRECTION
+    implementation-anchored override (register C8, #199 slice 1: E_corr =
+    Implementation when present, Treatment Selection label-only), recomputes the
+    VMC id∧corr pair over that value, and derives E_meta = OR(E_vmc, E_dsc).
     """
     meta_by_group: dict[BooleanGroup, dict[FairCamSubFunction, list[float]]] = defaultdict(
         lambda: defaultdict(list)
@@ -314,22 +317,37 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     # Compose the meta side ONCE (κ-invariant).
     meta_group_eff, meta_sub_eff = _compose_leaf_and_pair_groups(meta_by_group, _META_GROUPS)
 
-    # Spec D3 deviation (plan-gate Meth-B2): implementation is the load-bearing
-    # correction operand (§4.3.2 "the final step"). Absent implementation ->
-    # no correction, regardless of treatment-selection presence; present ->
-    # AND over the PRESENT members (impl alone = its opeff; impl+selection =
-    # the §4.3 prescribed product). Replaces only the 0.0-PADDING of the
-    # absent-selection case; GROUP_TYPE stays the prescribed AND. The else 0.0
-    # also covers the no-members-at-all case — matching the legacy padded-AND
-    # value for LEC-only sets, keeping the LEC-only bit-identity pin exact.
+    # #199 slice 1 (register C8): the VMC_CORRECTION group value is
+    # IMPLEMENTATION-ANCHORED, a documented DEPARTURE (register C8). The
+    # Standard prescribes AND(Treatment Selection, Implementation)
+    # (§4.3.1/§4.3.2 p.28) and GROUP_TYPE keeps that AND as the topology
+    # LABEL; it is NOT realised numerically here.
+    # Absent implementation -> no correction regardless of selection (§4.3.2
+    # "the final step"); present -> E_corr = the Implementation member's
+    # composed effectiveness (OR across controls, from the generic leaf pass).
+    # Treatment Selection is composed and recorded (meta_sub_eff, contributing)
+    # but SCORE-NEUTRAL (label-only). Why: realising the product made the group
+    # non-monotone in membership (a truthful selection claim beside
+    # Implementation LOWERED E_corr, the #453 defect class). The Standard
+    # locates selection quality in a deployment's Decision Support Controls
+    # (§4.3.1 p.28: "primarily served by Decision Support Controls"; its
+    # example controls are DSCs); Idraa credits that quality only ADDITIVELY,
+    # through E_dsc -> E_meta (register C6/C7), when DSC functions are
+    # authored — nothing here penalises poor selection. E_corr = Implementation
+    # is the least monotone majorant of the former gate: it agrees with it on
+    # every set without both members, is monotone, and introduces no constant.
+    # Bound (register C8): against the prescribed product E_corr is overstated
+    # by i*(1-t); through the pair, the two 1-Lipschitz OR fusions and the kappa
+    # coupling, any LEC reliability by at most kappa*(1-r0)*E_id*i*(1-t)
+    # <= kappa*(1-r0) (0.1 at r0 = 0.8). The .get(..., 0.0) also covers the
+    # no-members case, keeping the LEC-only bit-identity pin exact.
     corr_effs = meta_sub_eff.get(BooleanGroup.VMC_CORRECTION, {})
-    meta_group_eff[BooleanGroup.VMC_CORRECTION] = (
-        and_compose(list(corr_effs.values()))
-        if FairCamSubFunction.VMC_CORR_IMPLEMENTATION in corr_effs
-        else 0.0
+    meta_group_eff[BooleanGroup.VMC_CORRECTION] = corr_effs.get(
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION, 0.0
     )
-    # Recompute the id∧corr pair AFTER the gate so the AND consumes the gated
-    # correction value (spec D3).
+    # Recompute the id∧corr pair AFTER the implementation-anchored Correction
+    # value is set (E_corr = the Implementation member's effectiveness when
+    # present, else 0; register C8), so the AND consumes that value (register C8).
     id_eff = meta_group_eff.get(BooleanGroup.VMC_IDENTIFICATION)
     corr_eff = meta_group_eff.get(BooleanGroup.VMC_CORRECTION)
     meta_group_eff[BooleanGroup.VMC_IDENTIFICATION_CORRECTION_PAIR] = (
@@ -355,12 +373,12 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     #
     # GROUP_TYPE[DSC_PREVENTION] stays WEAK_AND (the operator family label);
     # THIS override IS the D3-revised aggregation. Mirrors the VMC_CORRECTION
-    # implementation-gate override pattern above — an explicit override written
-    # into meta_group_eff after the generic leaf composition (engine ≡
-    # diagnostic parity). LEC_RESPONSE's weak-AND is deliberately NOT touched:
-    # its diminution is Standard-prescribed (§3.3.1) and a deficient response
-    # member SHOULD diminish — that non-monotonicity is FAIR-CAM-faithful and
-    # out of scope. The empty case (no present DSC members) stays None (the
+    # implementation-anchored override pattern above (register C8) — an explicit
+    # override written into meta_group_eff after the generic leaf composition
+    # (engine ≡ diagnostic parity). LEC_RESPONSE's weak-AND is deliberately NOT
+    # touched: its diminution is Standard-prescribed (§3.3.1) and a deficient
+    # response member SHOULD diminish — that non-monotonicity is FAIR-CAM-faithful
+    # and out of scope. The empty case (no present DSC members) stays None (the
     # helper returns None on empty), preserving the generic WEAK_AND empty case.
     dsc_prev_effs = meta_sub_eff.get(BooleanGroup.DSC_PREVENTION, {})
     meta_group_eff[BooleanGroup.DSC_PREVENTION] = _best_coherent_subset_mean(
@@ -517,10 +535,10 @@ def compose_groups(
 # I-sec-4, spec §9; extended Slice 2 Task 5, #439): every field below is
 # sourced ONLY from `GROUP_TYPE`, `GROUP_NODE_MAPPING`,
 # `WEAK_AND_OPERATOR_PROVENANCE`, `KAPPA_META_RELIABILITY`,
-# `_DSC_WEAK_AND_DEVIATION_NOTE`, `_RELIABILITY_COUPLING_PROVENANCE`, and
-# `_VMC_IDENTIFICATION_RULE_PROVENANCE` (all module-level code constants
-# below) — NEVER from control/scenario/org free-text. These are stable
-# identifiers, not user display labels. If a
+# `_DSC_WEAK_AND_DEVIATION_NOTE`, `_RELIABILITY_COUPLING_PROVENANCE`,
+# `_VMC_IDENTIFICATION_RULE_PROVENANCE`, and `_VMC_CORRECTION_RULE_PROVENANCE`
+# (all module-level code constants below) — NEVER from control/scenario/org
+# free-text. These are stable identifiers, not user display labels. If a
 # future field is ever sourced from user data it MUST be XML-escaped before
 # reaching reportlab `Paragraph` (the reportlab path is not autoescaped,
 # unlike the Jinja web path — a documented repo XSS channel).
@@ -580,9 +598,10 @@ _DSC_WEAK_AND_DEVIATION_NOTE = (
 # Slice 2 (#439) meta -> reliability coupling provenance entry. Structure-vs-
 # routing distinction (plan-gate Meth-I3): the pair ANDs (VMC id/corr, DSC
 # id/corr) are Standard-prescribed Boolean structures; DSC_PREVENTION's
-# WEAK_AND and VMC_CORRECTION's implementation-gate handling are documented
-# v3 deviations from the prescribed structure; E_meta's OR-fusion across
-# families is v3 arithmetic with no Standard-prescribed cross-family operator.
+# WEAK_AND and VMC_CORRECTION's implementation-anchored value (Treatment
+# Selection label-only, register C8) are documented v3 deviations from the
+# prescribed structure; E_meta's OR-fusion across families is v3 arithmetic
+# with no Standard-prescribed cross-family operator.
 # Separately, DSC's ROUTING into r_eff (as opposed to its group STRUCTURE) is
 # a v3 PROXY — the Standard frames DSC as affecting decisions (§2.2 p.5, §5
 # p.30), not control reliability directly. `dsc_note` documents that split so
@@ -599,12 +618,16 @@ _RELIABILITY_COUPLING_PROVENANCE: dict[str, str] = {
     ),
     "structure_provenance": (
         "pair ANDs Standard-prescribed (§4 p.21; §5 p.30); DSC_PREVENTION "
-        "WEAK_AND and VMC_CORRECTION implementation-gate are documented "
-        "deviations; the per-family fusions E_vmc = OR(VMC_VARIANCE_PREVENTION, "
-        "VMC_IDENTIFICATION_CORRECTION_PAIR) and E_dsc = OR(DSC_PREVENTION, "
-        "DSC_IDENTIFICATION_CORRECTION_PAIR), and the top-level E_meta = "
-        "OR(E_vmc, E_dsc) fusion, are ALL v3 arithmetic with no "
-        "Standard-prescribed cross-family operator"
+        "WEAK_AND and the VMC_CORRECTION implementation-anchored gate (E_corr = "
+        "Implementation when present, else 0; Treatment Selection composed and "
+        "recorded but label-only — score-neutral; §4.3.1 p.28 locates selection "
+        "quality in Decision Support, which Idraa credits only additively via "
+        "E_dsc when authored; error bounded by kappa*(1-r0) on any LEC "
+        "reliability; #199) are documented deviations; the per-family fusions "
+        "E_vmc = OR(VMC_VARIANCE_PREVENTION, VMC_IDENTIFICATION_CORRECTION_PAIR) "
+        "and E_dsc = OR(DSC_PREVENTION, DSC_IDENTIFICATION_CORRECTION_PAIR), and "
+        "the top-level E_meta = OR(E_vmc, E_dsc) fusion, are ALL v3 arithmetic "
+        "with no Standard-prescribed cross-family operator"
     ),
     "dsc_note": (
         "DSC ROUTING into r_eff is a v3 PROXY (Standard: DSC affects "
@@ -631,6 +654,25 @@ _VMC_IDENTIFICATION_RULE_PROVENANCE = (
     "(§4.2 p.25); no intra-pair operator prescribed"
 )
 
+# #199 slice 1 (register C8): VMC_CORRECTION's emitted entry pairs rule="and"
+# (GROUP_TYPE, the retained topology label) with its node-target citation
+# "FAIR-CAM §4 p.21 (Correction is an AND-pair operand; no standalone node)"
+# (composition_topology.py GROUP_NODE_MAPPING); without this override the
+# rule="and" label implies the §4.3.1/§4.3.2 product is realised. It is not —
+# the group value is implementation-anchored. Dedicated field, mirroring the
+# `_VMC_IDENTIFICATION_RULE_PROVENANCE` pattern above (no shared constant is
+# mutated; R-C8-10).
+_VMC_CORRECTION_RULE_PROVENANCE = (
+    "AND retained as the topology label (§4.3.1/§4.3.2 p.28 prescribed) and not "
+    "realised numerically: E_corr = the Implementation member's effectiveness when "
+    "present, 0 otherwise — a documented DEPARTURE (#199 slice 1, register C8). "
+    "Treatment Selection is composed and recorded but label-only (score-neutral): "
+    "the Standard locates selection quality in Decision Support (§4.3.1 p.28), which "
+    "Idraa credits only additively via E_dsc when authored; nothing penalises poor "
+    "selection; the overstatement of any LEC reliability is bounded by kappa*(1-r0). "
+    "Least monotone majorant of the former implementation gate; no constant introduced."
+)
+
 
 def build_composition_provenance() -> list[dict[str, str]]:
     """Return the code-constant composition provenance for LEC + VMC + DSC.
@@ -642,8 +684,10 @@ def build_composition_provenance() -> list[dict[str, str]]:
     ``DSC_PREVENTION``, + a
     ``rule_provenance`` override for ``VMC_IDENTIFICATION`` clarifying its OR
     is a v3 arithmetic choice rather than Standard-traced — Final-Meth-1,
-    #439). The result also appends one ``reliability_coupling`` entry
-    describing the kappa meta->reliability interpolation (Slice 2, #439). The
+    #439, and a ``rule_provenance`` override for ``VMC_CORRECTION`` disclosing
+    the implementation-anchored gate (#199 slice 1)). The result also appends
+    one ``reliability_coupling`` entry describing the kappa meta->reliability
+    interpolation (Slice 2, #439). The
     whole result is invariant — it depends only on the static topology tables
     and `KAPPA_META_RELIABILITY`, never on any control/scenario/org input
     (spec §9 safe-render). DSC groups were previously excluded (N-M8); see
@@ -705,6 +749,10 @@ def build_composition_provenance() -> list[dict[str, str]]:
             # TI∨monitoring OR is Standard-traced. It is a v3 arithmetic
             # choice (see `_VMC_IDENTIFICATION_RULE_PROVENANCE` above).
             entry["rule_provenance"] = _VMC_IDENTIFICATION_RULE_PROVENANCE
+        if group == BooleanGroup.VMC_CORRECTION:
+            # #199 slice 1: rule="and" is the retained label; disclose that the
+            # value is implementation-anchored and Treatment Selection label-only.
+            entry["rule_provenance"] = _VMC_CORRECTION_RULE_PROVENANCE
         entries.append(entry)
     entries.append(dict(_RELIABILITY_COUPLING_PROVENANCE))
     return entries

@@ -156,7 +156,7 @@ The Standard's verbatim definition of Event Termination (§3.3.1, page 18): "The
 
 The VMC domain's structure mirrors the LEC domain's Prevention/Detection/Response triad but operates on control variance rather than loss events. Variance Prevention (§4.1) is an OR-pair: reducing change frequency and reducing variance probability are independent mechanisms, either of which contributes. Variance Identification (§4.2) and Variance Correction (§4.3) are in a strict AND relationship with each other — identification without correction leaves variance unaddressed, and correction without identification is impossible.
 
-Within Variance Correction, Treatment Selection and Implementation are themselves in a strict AND relationship: selecting the right treatment without implementing it achieves nothing, and implementing without selection produces random corrective actions.
+Within Variance Correction, Treatment Selection and Implementation are themselves in a strict AND relationship: selecting the right treatment without implementing it achieves nothing, and implementing without selection produces random corrective actions (Idraa retains this AND as a topology label only; register C8).
 
 All six VMC sub-functions have elapsed-time units (except the two Prevention sub-functions, which are % reduction). This makes VMC the domain most resistant to probability-based composition algebra — time-to-awareness and time-to-correction cannot be multiplied with probabilities to produce a meaningful scalar.
 

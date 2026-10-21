@@ -40,13 +40,14 @@
     meta="Started " ~ (run.created_at | format_datetime) ~ (" by " ~ creator_label if creator_label else "")
 ) }}
 
-{# #438: staleness callout — the run completed, but a control it used was
-   re-synced to a newer library curation afterwards. #}
+{# Staleness callout — the run completed, but something it depended on changed
+   afterwards. is_stale is set by a control re-sync (#438) or by an engine-change
+   migration (#199), so the copy must stay cause-agnostic. #}
 {% if run.is_stale %}
 <div class="alert alert-warning mt-4" role="status">
-  <p class="text-body">A control used by this run was re-synced to a newer
-    library curation after it completed — these results reflect the old
-    values. Re-run the analysis to update them.</p>
+  <p class="text-body">These results may be out of date: a control this run used,
+    or the risk engine, changed after the run completed. Re-run the analysis to
+    refresh them.</p>
 </div>
 {% endif %}
 

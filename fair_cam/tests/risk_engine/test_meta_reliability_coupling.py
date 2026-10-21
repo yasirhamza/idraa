@@ -261,13 +261,224 @@ def test_correction_gate_selection_alone_is_zero() -> None:
     assert comp.meta_strength == pytest.approx(0.0)
 
 
-def test_correction_gate_both_members_use_prescribed_product() -> None:
-    """Implementation + selection both present -> the Standard's AND product
-    (§4.3.1/§4.3.2 p.28): E_corr = 0.32 * 0.32."""
+def test_correction_is_implementation_anchored_when_selection_present() -> None:
+    """#199 slice 1 (register C8): Implementation + Treatment Selection both
+    present -> E_corr = the Implementation member's effectiveness, NOT the
+    §4.3.1/§4.3.2 p.28 product. The AND is retained as the topology label
+    only. The Standard locates selection quality in a deployment's Decision
+    Support Controls (§4.3.1 p.28: "primarily served by Decision Support
+    Controls"; example controls are DSCs); Idraa credits that quality only
+    additively through E_dsc when DSC functions are authored, and nothing
+    penalises poor selection — the overstatement is bounded by
+    kappa*(1-r0) on any LEC reliability (register C8 Bound).
+    Spec §5.1 row 1: hand 0.32 (was 0.32 * 0.32 = 0.1024)."""
     impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])
     sel = _ctrl("crqm", [("vmc_corr_treatment_selection", None, 0.8, 0.8)])
     comp = compose_groups([impl, sel])
-    assert comp.group_effectiveness[BooleanGroup.VMC_CORRECTION] == pytest.approx(0.32 * 0.32)
+    assert comp.group_effectiveness[BooleanGroup.VMC_CORRECTION] == pytest.approx(0.32)
+    assert comp.group_effectiveness[BooleanGroup.VMC_CORRECTION] != pytest.approx(0.32 * 0.32)
+
+
+def test_correction_value_is_invariant_to_treatment_selection_value() -> None:
+    """R-T-2 mutation pin: with Implementation fixed (0.32), E_corr is identical
+    for TS opeff 0.1 and 0.9 and equals E_corr with TS absent. A reintroduced
+    product (0.032 / 0.288) or any averaging (0.21 / 0.61) fails this."""
+    impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])
+    ts_low = _ctrl("crqm", [("vmc_corr_treatment_selection", 0.1, 1.0, 1.0)])
+    ts_high = _ctrl("crqm", [("vmc_corr_treatment_selection", 0.9, 1.0, 1.0)])
+    e_alone = compose_groups([impl]).group_effectiveness[BooleanGroup.VMC_CORRECTION]
+    e_low = compose_groups([impl, ts_low]).group_effectiveness[BooleanGroup.VMC_CORRECTION]
+    e_high = compose_groups([impl, ts_high]).group_effectiveness[BooleanGroup.VMC_CORRECTION]
+    assert e_alone == pytest.approx(0.32)
+    assert e_low == e_alone
+    assert e_high == e_alone
+    assert e_low != pytest.approx(0.32 * 0.1)
+    assert e_high != pytest.approx(0.32 * 0.9)
+
+
+def test_same_control_carrying_both_correction_members() -> None:
+    """Review Focus 1: a single control authored with BOTH Correction members
+    (the spec fixtures always split them across two controls). E_corr is the
+    Implementation opeff 0.32; the co-authored selection (0.512) is label-only."""
+    both = _ctrl(
+        "cspm",
+        [
+            ("vmc_corr_implementation", None, 0.8, 0.8),  # 0.32
+            ("vmc_corr_treatment_selection", 0.8, 0.8, 0.8),  # 0.512, label-only
+        ],
+    )
+    comp = compose_groups([both])
+    assert comp.group_effectiveness[BooleanGroup.VMC_CORRECTION] == pytest.approx(0.32)
+
+
+def test_multiple_implementation_carriers_still_or_first() -> None:
+    """R-T-4: two Implementation carriers at 0.32 OR to 1 - 0.68^2 = 0.5376,
+    with or without a Treatment Selection carrier present."""
+    impl_a = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])
+    impl_b = _ctrl("cspm", [("vmc_corr_implementation", None, 0.8, 0.8)])
+    sel = _ctrl("crqm", [("vmc_corr_treatment_selection", None, 0.8, 0.8)])
+    without = compose_groups([impl_a, impl_b]).group_effectiveness[BooleanGroup.VMC_CORRECTION]
+    with_ts = compose_groups([impl_a, impl_b, sel]).group_effectiveness[BooleanGroup.VMC_CORRECTION]
+    assert without == pytest.approx(0.5376)
+    assert with_ts == pytest.approx(0.5376)
+
+
+def test_treatment_selection_is_recorded_but_score_neutral() -> None:
+    """R-T-5 / R-C8-2: label-only is RECORDED, not dropped — TS still appears in
+    the per-sub-function map and in the contributing ids of VMC_CORRECTION."""
+    impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])
+    sel = _ctrl("crqm", [("vmc_corr_treatment_selection", None, 0.8, 0.8)])
+    parts = precompose_parts([impl, sel])
+    sub = parts.meta_sub_function_effectiveness[BooleanGroup.VMC_CORRECTION]
+    assert sub[FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION] == pytest.approx(0.32)
+    assert sub[FairCamSubFunction.VMC_CORR_IMPLEMENTATION] == pytest.approx(0.32)
+    assert set(parts.contributing[BooleanGroup.VMC_CORRECTION]) == {"pmgt", "crqm"}
+    assert parts.meta_group_effectiveness[BooleanGroup.VMC_CORRECTION] == pytest.approx(0.32)
+    comp = compose_groups([impl, sel])
+    assert "crqm" in comp.contributing_control_ids[BooleanGroup.VMC_CORRECTION]
+
+
+def test_treatment_selection_never_moves_e_meta_or_co_present_lec_scores() -> None:
+    """R-T-19 (score-level invariance, the claim the register, rubric §2.9 and
+    both provenance strings make): with an Identification member, Implementation
+    and a co-present LEC control at kappa = 0.5, meta_strength AND the LEC group
+    value are bit-identical for TS absent / 0.1 / 0.9. A mutant that routes TS
+    into the pair or E_vmc (pair = AND(id, OR(E_corr, t))) is caught here and
+    by the selection-alone gate test. Spec §5.1 score-neutrality row: E_meta
+    0.14336 (0.448 * 0.32); Prevention 0.5 * (0.5 + 0.5*0.5*0.14336)."""
+    mon = _ctrl("siem", [("vmc_id_control_monitoring", 0.7, 0.8, 0.8)])  # 0.448
+    impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])  # 0.32
+    res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.5)])
+    ts_low = _ctrl("crqm", [("vmc_corr_treatment_selection", 0.1, 1.0, 1.0)])
+    ts_high = _ctrl("crqm", [("vmc_corr_treatment_selection", 0.9, 1.0, 1.0)])
+    base = compose_groups([mon, impl, res], kappa=0.5)
+    low = compose_groups([mon, impl, res, ts_low], kappa=0.5)
+    high = compose_groups([mon, impl, res, ts_high], kappa=0.5)
+    assert base.meta_strength == pytest.approx(0.14336)
+    assert low.meta_strength == base.meta_strength
+    assert high.meta_strength == base.meta_strength
+    prev = BooleanGroup.LEC_PREVENTION
+    assert base.group_effectiveness[prev] == pytest.approx(0.5 * (0.5 + 0.5 * 0.5 * 0.14336))
+    assert low.group_effectiveness[prev] == base.group_effectiveness[prev]
+    assert high.group_effectiveness[prev] == base.group_effectiveness[prev]
+
+
+def test_rubric_2_6_rows_two_identification_plus_implementation_with_and_without_selection() -> (
+    None
+):
+    """Rubric §2.6 rows pinned (spec §5.1): 2 Identification (0.512 each) +
+    Implementation (0.32) give E_meta (1 - 0.488^2) * 0.32 = 0.24379392 with
+    or without a 0.512 Treatment Selection; the co-present Resistance (0.5,
+    1.0, r0 0.5) scores 0.5 * (0.5 + 0.5*0.5*0.24379392) = 0.28047424 in both.
+    Before #199 slice 1 the with-TS row composed to 0.1248224870 / 0.26560281088."""
+    id1 = _ctrl("id1", [("vmc_id_control_monitoring", 0.8, 0.8, 0.8)])
+    id2 = _ctrl("id2", [("vmc_id_threat_intelligence", 0.8, 0.8, 0.8)])
+    impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])
+    ts512 = _ctrl("ts8", [("vmc_corr_treatment_selection", 0.8, 0.8, 0.8)])
+    res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.5)])
+    without = compose_groups([id1, id2, impl, res], kappa=0.5)
+    with_ts = compose_groups([id1, id2, impl, ts512, res], kappa=0.5)
+    assert without.meta_strength == pytest.approx(0.24379392)
+    assert with_ts.meta_strength == without.meta_strength
+    assert without.group_effectiveness[BooleanGroup.LEC_PREVENTION] == pytest.approx(0.28047424)
+    assert (
+        with_ts.group_effectiveness[BooleanGroup.LEC_PREVENTION]
+        == (without.group_effectiveness[BooleanGroup.LEC_PREVENTION])
+    )
+    assert with_ts.meta_strength != pytest.approx(0.1248224870)
+
+
+def test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner() -> None:
+    """R-T-25 (#199 slice 1, plan-gate M3-I1): the engine fact behind
+    `_LABEL_ONLY_SUB_FUNCTIONS` containing `dsc_id_misaligned`
+    (src/idraa/services/_view_model_helpers.py). Its pair partner
+    `dsc_corr_misaligned` is virtual and no org-authored row can carry it
+    today (DTO validator `schemas/control.py:105-120`, DB CHECK
+    `ck_cfa_virtual_requires_derived`, form exclusion `routes/controls.py:72`,
+    service guard `services/controls.py:138-140`), so the leaf AND pads the
+    absent member to 0.0 (`group_composition.py:241-243`; rubric §2.8):
+    a lone `dsc_id_misaligned` (0.512) gives E_pair = AND(0.512, 0) = 0,
+    E_meta = 0.0, and the co-present Resistance (0.5, 1.0, r0 0.5) scores
+    0.5 * 0.5 = 0.25 — bit-identical to Resistance alone. SCOPE: this pin
+    guards the engine's padded-AND fact and the recorded-not-dropped property
+    only; it cannot see a v3 write path (fair_cam has no derivation concept
+    and this fixture never carries the derived member, so it stays green if
+    derived rows are ever written). The derived-row path is RESERVED, not
+    absent (`control_function_assignment.py:43`, `enums.py:645-647`); its
+    write-path guards are pinned by tests/unit/test_controls_service.py
+    (test_create_control_iota_rejects_derived_from_not_null) and
+    tests/unit/test_cfa_dto.py (test_dto_rejects_virtual_without_derived) —
+    the PR that retires those guards must remove `dsc_id_misaligned` from the
+    label-only set."""
+    dsc = _ctrl("dsc", [("dsc_id_misaligned", 0.8, 0.8, 0.8)])  # 0.512
+    res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.5)])
+    both = compose_groups([dsc, res], kappa=0.5)
+    alone = compose_groups([res], kappa=0.5)
+    pair = BooleanGroup.DSC_IDENTIFICATION_CORRECTION_PAIR
+    prev = BooleanGroup.LEC_PREVENTION
+    recorded = both.sub_function_effectiveness[pair][FairCamSubFunction.DSC_ID_MISALIGNED]
+    assert recorded == pytest.approx(0.512)  # recorded, not dropped
+    assert both.group_effectiveness[pair] == 0.0
+    assert both.meta_strength == 0.0
+    assert both.group_effectiveness[prev] == pytest.approx(0.25)
+    assert both.group_effectiveness[prev] == alone.group_effectiveness[prev]
+
+
+# Implementation is ELAPSED_TIME: a NULL capability scores 0.5*cov*rel, a 0.0-day
+# capability scores exp(0)*cov*rel = cov*rel, so the grid {0, 0.1, 0.32, 0.5, 0.8, 1.0}
+# is reached through (capability, coverage, reliability) tuples, not a bare value.
+_IMPL_GRID: dict[float, tuple[float | None, float, float]] = {
+    0.0: (None, 0.0, 1.0),
+    0.1: (None, 0.2, 1.0),
+    0.32: (None, 0.8, 0.8),
+    0.5: (None, 1.0, 1.0),
+    0.8: (0.0, 0.8, 1.0),
+    1.0: (0.0, 1.0, 1.0),
+}
+_TS_GRID = (0.0, 0.1, 0.32, 0.5, 0.8, 1.0)  # PROBABILITY: capability t, cov 1, rel 1
+
+
+def test_correction_membership_is_monotone_exhaustive() -> None:
+    """R-T-1: for every (i, t) on the grid and every subset S of {Impl, TS} and
+    member x not in S: E_corr, E_pair (one Identification member present) and
+    E_meta never decrease when x is added. Style of
+    test_best_coherent_subset_mean_is_monotone_exhaustive above."""
+    mon = _ctrl("siem", [("vmc_id_control_monitoring", 0.7, 0.8, 0.8)])  # 0.448
+
+    def _e(members: list[Control]) -> tuple[float, float, float]:
+        parts = precompose_parts([mon, *members])
+        corr = parts.meta_group_effectiveness[BooleanGroup.VMC_CORRECTION]
+        pair = parts.meta_group_effectiveness[BooleanGroup.VMC_IDENTIFICATION_CORRECTION_PAIR]
+        assert corr is not None and pair is not None
+        assert 0.0 <= corr <= 1.0 and 0.0 <= pair <= 1.0 and 0.0 <= parts.e_meta <= 1.0
+        return corr, pair, parts.e_meta
+
+    for i, (cap, cov, rel) in _IMPL_GRID.items():
+        impl = _ctrl("pmgt", [("vmc_corr_implementation", cap, cov, rel)])
+        for t in _TS_GRID:
+            sel = _ctrl("crqm", [("vmc_corr_treatment_selection", t, 1.0, 1.0)])
+            subsets: dict[frozenset[str], list[Control]] = {
+                frozenset(): [],
+                frozenset({"impl"}): [impl],
+                frozenset({"ts"}): [sel],
+                frozenset({"impl", "ts"}): [impl, sel],
+            }
+            for s, members in subsets.items():
+                e_s = _e(members)
+                for x in ("impl", "ts"):
+                    if x in s:
+                        continue
+                    e_sx = _e(subsets[s | {x}])
+                    for before, after, name in zip(
+                        e_s, e_sx, ("E_corr", "E_pair", "E_meta"), strict=True
+                    ):
+                        assert after + 1e-12 >= before, (
+                            f"{name} not monotone: i={i} t={t} S={sorted(s)} x={x}"
+                        )
+            # The implementation-anchored value itself (spec §4.1.2): E({impl, ts}) == E({impl}) == i.
+            assert _e([impl, sel])[0] == pytest.approx(i)
+            assert _e([impl])[0] == pytest.approx(i)
+            assert _e([sel])[0] == 0.0
 
 
 def test_elapsed_time_lec_assignment_gets_uplift() -> None:
@@ -534,10 +745,11 @@ def test_provenance_or_fusion_and_vmc_identification_labeled_v3_arithmetic() -> 
     assert "v3 arithmetic choice" in vmc_id["rule_provenance"]
     assert "§4.2 p.25" in vmc_id["rule_provenance"]
     assert "no intra-pair operator prescribed" in vmc_id["rule_provenance"]
-    # No OTHER per-group entry carries rule_provenance (the override is
-    # deliberately vmc_identification-only; the coupling entry is separate).
+    # No OTHER per-group entry carries rule_provenance: the override is
+    # vmc_identification + vmc_correction (#199 slice 1) only; the coupling
+    # entry is separate.
     for g, e in by_group.items():
-        if g not in ("vmc_identification", "reliability_coupling"):
+        if g not in ("vmc_identification", "vmc_correction", "reliability_coupling"):
             assert "rule_provenance" not in e, g
 
     sp = by_group["reliability_coupling"]["structure_provenance"]
@@ -546,3 +758,29 @@ def test_provenance_or_fusion_and_vmc_identification_labeled_v3_arithmetic() -> 
     assert "E_meta = OR(E_vmc, E_dsc)" in sp
     assert "v3 arithmetic" in sp
     assert "no Standard-prescribed cross-family operator" in sp
+
+
+def test_provenance_vmc_correction_is_implementation_anchored_label_only() -> None:
+    """#199 slice 1 (R-C8-8/9/10): the vmc_correction entry keeps rule="and"
+    (the retained topology label) and carries a dedicated rule_provenance
+    saying the AND is not realised numerically and Treatment Selection is
+    label-only; structure_provenance names the implementation-anchored gate.
+    Shared constants are not mutated."""
+    from fair_cam.models.composition_topology import GROUP_TYPE, BooleanGroup, GroupType
+
+    entries = build_composition_provenance()
+    by_group = {e["group"]: e for e in entries}
+    vc = by_group["vmc_correction"]
+    assert vc["rule"] == "and"
+    assert "label-only" in vc["rule_provenance"]
+    assert "Implementation" in vc["rule_provenance"]
+    assert "not realised numerically" in vc["rule_provenance"]
+    assert "#199" in vc["rule_provenance"]
+    sp = by_group["reliability_coupling"]["structure_provenance"]
+    assert "implementation-anchored" in sp
+    assert "label-only" in sp
+    assert "VMC_CORRECTION implementation-gate" not in sp
+    # R-C8-10: shared constants untouched by the per-entry disclosure.
+    assert GROUP_TYPE[BooleanGroup.VMC_CORRECTION] == GroupType.AND
+    assert "rule_provenance" not in WEAK_AND_OPERATOR_PROVENANCE
+    assert all(isinstance(v, str) for v in vc.values())

@@ -69,6 +69,13 @@ def _neutralize(value: str) -> str:
     return value
 
 
+# #199 slice 1 (register C8): sub-functions composed and recorded but never scored.
+# Their Controls-sheet skip row must not claim an "effect via" their group.
+_LABEL_ONLY_SKIP_SUB_FUNCTIONS: frozenset[FairCamSubFunction] = frozenset(
+    {FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION}
+)
+
+
 class LegacySnapshotError(Exception):
     """Raised when a control snapshot is not V3-recompose-ready (V1/V2/malformed).
     The caller degrades to the fail-loud 'composition not reconstructible' cell."""
@@ -1529,8 +1536,10 @@ def _write_controls_sheet(
 
         Only OR groups qualify: ``or_compose`` applies a single member directly.
         AND groups compose multiplicatively (``and_compose``) and
-        ``group_composition`` pads ABSENT members to 0.0 — a single/partial
-        assignment collapses the product to 0 → the engine applies the identity
+        ``group_composition`` pads ABSENT members to 0.0 (VMC_CORRECTION is
+        implementation-anchored instead, see ``precompose_parts``) — a
+        single/partial assignment collapses the product to 0 → the engine
+        applies the identity
         ``1 - 0*w = 1.0`` (no benefit), so an emitted ``1-E*w < 1`` would
         overstate the effect.  LEC_RESPONSE (the only weak-AND group) is excluded
         explicitly: ``weak_and_compose`` is a mean of PRESENT members (it does NOT
@@ -1781,15 +1790,17 @@ def _write_controls_sheet(
             group = sub_function_to_group(sf_enum)
             mapping = GROUP_NODE_MAPPING[group]
             if not mapping.targets:
-                rows.row(
-                    [
-                        (
-                            f"  {sf_str}: no standalone node target "
-                            f"(AND-pair child — effect via {group.value})",
-                            styles.note_muted,
-                        )
-                    ]
-                )
+                if sf_enum in _LABEL_ONLY_SKIP_SUB_FUNCTIONS:
+                    note = (
+                        f"  {sf_str}: no standalone node target "
+                        "(label-only — recorded, not scored; register C8)"
+                    )
+                else:
+                    note = (
+                        f"  {sf_str}: no standalone node target "
+                        f"(AND-pair child — effect via {group.value})"
+                    )
+                rows.row([(note, styles.note_muted)])
                 continue
 
             if not _emits_standalone_formula(group):

@@ -270,7 +270,8 @@
     "src/idraa/schemas/wizard_step3.py",
     "src/idraa/schemas/sme.py",
     ".clerk/manifests/lane_exemptions.json",
-    "tests/routes/test_threat_community_pages.py"
+    "tests/routes/test_threat_community_pages.py",
+    "src/idraa/services/siem_visibility_resync.py"
    ],
    "subjects": ["auth", "csrf", "org-scoping", "migration", "import-export", "templating", "rbac", "run-limits", "audit", "secrets", "gate-integrity"]
   }

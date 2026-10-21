@@ -303,3 +303,21 @@ def test_vmc_identification_or_and_family_fusions_labeled_v3_arithmetic() -> Non
     assert "E_vmc = OR(VMC_VARIANCE_PREVENTION" in sp
     assert "E_dsc = OR(DSC_PREVENTION" in sp
     assert "E_meta = OR(E_vmc, E_dsc)" in sp
+
+
+def test_vmc_correction_rule_provenance_and_anchored_structure_emitted() -> None:
+    """#199 slice 1 (R-T-10): through the real payload wiring, vmc_correction
+    carries rule_provenance naming Treatment Selection label-only and
+    Implementation as the anchor; reliability_coupling.structure_provenance
+    names the implementation-anchored gate while the :302-305 substrings hold."""
+    payload = _build_results_payload(_enhanced())
+    by_group = {p["group"]: p for p in payload["composition_provenance"]}
+    vc = by_group["vmc_correction"]
+    assert vc["rule"] == "and"
+    assert "label-only" in vc["rule_provenance"]
+    assert "Implementation" in vc["rule_provenance"]
+    sp = by_group["reliability_coupling"]["structure_provenance"]
+    assert "implementation-anchored" in sp
+    assert "E_vmc = OR(VMC_VARIANCE_PREVENTION" in sp
+    assert "E_dsc = OR(DSC_PREVENTION" in sp
+    assert "E_meta = OR(E_vmc, E_dsc)" in sp

@@ -24,6 +24,8 @@ from idraa.schemas.control import ControlFunctionAssignmentDTO
 
 def test_dto_rejects_virtual_without_derived() -> None:
     """DSC_CORR_MISALIGNED without derived_from_assignment_id → ValidationError."""
+    # #199 slice 1: a derived-row feature keeps this refusal but retires the service guard
+    # (services/controls.py "reserved-but-unused") — see `_LABEL_ONLY_SUB_FUNCTIONS`.
     with pytest.raises(ValidationError, match="virtual"):
         ControlFunctionAssignmentDTO(
             sub_function=FairCamSubFunction.DSC_CORR_MISALIGNED,

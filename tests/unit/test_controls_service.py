@@ -163,6 +163,9 @@ async def test_create_control_iota_confirmed_by_user_at_set(db_session: AsyncSes
 @pytest.mark.asyncio
 async def test_create_control_iota_rejects_derived_from_not_null(db_session: AsyncSession) -> None:
     """Service rejects non-NULL derived_from_assignment_id (Decision 9, B-NEW3)."""
+    # #199 slice 1: `_LABEL_ONLY_SUB_FUNCTIONS` (services/_view_model_helpers.py) lists
+    # dsc_id_misaligned BECAUSE this guard keeps derived dsc_corr_misaligned rows out —
+    # the PR that retires the guard must remove dsc_id_misaligned from that set.
     import uuid
 
     org = await _seed_org(db_session)
