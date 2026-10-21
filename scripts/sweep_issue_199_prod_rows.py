@@ -21,9 +21,12 @@ Sections:
       org sizes) differs between the snapshot and the latest entry — the consent page's
       ``_entry_field_values`` oracle. This sweep reads raw sqlite3 rows and would have to
       re-implement the ORM-shaped field set (Decimal / JSON normalisation) to mirror it, so
-      it does NOT: ``siem_A`` here is an upper bound on the CLI's ``A`` (the CLI's ``X`` may
-      exceed ``siem_X`` by the field-delta demotions). The authoritative pre-apply count is
-      the CLI's own dry run on the machine (runbook A.3 step 2).
+      it does NOT: ``siem_A`` and ``siem_B`` here are upper bounds on the CLI's ``A`` and
+      ``B`` (the CLI's ``X`` may exceed ``siem_X`` by the field-delta demotions of either).
+      The authoritative pre-apply count is the CLI's own dry run on the machine (runbook
+      A.3 step 2). ``siem_A_runs_net_of_c8`` is compared with the CLI's ``runs_flagged`` in
+      BOTH directions: the CLI's count is higher by runs class-A controls complete after
+      the backup, and lower by runs of controls that are no longer class A at apply.
 
 Bump state (plan-gate S-B2): the sweep runs BEFORE the migration, when every pinned
 control is still at the entry's version. It reads the stored entry's latest Visibility
@@ -32,8 +35,12 @@ BUMP WILL LEAVE IT, i.e. the Visibility cell moved to NEW_COVERAGE; ``current`` 
 empty); NEW_COVERAGE -> ``post-bump`` (exactly the CLI's dry run); anything else ->
 ``drift`` (classify nothing); no entry -> ``absent``.
 
-Run against a backup copy opened read-only (the copy must still carry its -shm sidecar
-for ``mode=ro`` on a WAL file; otherwise take a working copy first)::
+Run BEFORE the deploy only: after it, migration c4d2e8f1a6b9 has already flagged the C8
+runs, so section (a) and the net count no longer describe what the CLI will do. The
+pre-bump simulation is exact while the stored SIEM entry equals the seed JSON outside
+the Visibility cell (true at the time of writing). Run against a backup copy opened
+read-only; SQLite may create or rewrite the copy's -shm (and an empty -wal) sidecar even
+under ``mode=ro`` — the main .db bytes stay unchanged::
 
     uv run --frozen python scripts/sweep_issue_199_prod_rows.py --db <work copy>.db
 """

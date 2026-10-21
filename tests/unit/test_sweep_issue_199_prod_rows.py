@@ -283,3 +283,9 @@ def test_internal_error_prints_type_only(
 def test_usage_error(tmp_path: Path) -> None:
     assert mod.main([]) == 2
     assert mod.main(["--db", str(tmp_path / "absent.db")]) == 2
+
+
+def test_c8_predicate_is_the_migrations_own_function() -> None:
+    """T8M-N3: the sweep must use migration c4d2e8f1a6b9's run_is_affected, never a copy."""
+    assert mod.run_is_affected.__module__ == mod._c8.__name__
+    assert mod.run_is_affected is mod._c8.run_is_affected
