@@ -347,7 +347,7 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     )
     # Recompute the id∧corr pair AFTER the implementation-anchored Correction
     # value is set (E_corr = the Implementation member's effectiveness when
-    # present, else 0; register C8), so the AND consumes that value (spec D3).
+    # present, else 0; register C8), so the AND consumes that value (register C8).
     id_eff = meta_group_eff.get(BooleanGroup.VMC_IDENTIFICATION)
     corr_eff = meta_group_eff.get(BooleanGroup.VMC_CORRECTION)
     meta_group_eff[BooleanGroup.VMC_IDENTIFICATION_CORRECTION_PAIR] = (

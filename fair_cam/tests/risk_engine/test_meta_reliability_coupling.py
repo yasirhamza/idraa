@@ -343,8 +343,8 @@ def test_treatment_selection_never_moves_e_meta_or_co_present_lec_scores() -> No
     both provenance strings make): with an Identification member, Implementation
     and a co-present LEC control at kappa = 0.5, meta_strength AND the LEC group
     value are bit-identical for TS absent / 0.1 / 0.9. A mutant that routes TS
-    into the pair or E_vmc (pair = AND(id, OR(E_corr, t))) passes every other
-    test in this file and fails here. Spec §5.1 score-neutrality row: E_meta
+    into the pair or E_vmc (pair = AND(id, OR(E_corr, t))) is caught here and
+    by the selection-alone gate test. Spec §5.1 score-neutrality row: E_meta
     0.14336 (0.448 * 0.32); Prevention 0.5 * (0.5 + 0.5*0.5*0.14336)."""
     mon = _ctrl("siem", [("vmc_id_control_monitoring", 0.7, 0.8, 0.8)])  # 0.448
     impl = _ctrl("pmgt", [("vmc_corr_implementation", None, 0.8, 0.8)])  # 0.32
