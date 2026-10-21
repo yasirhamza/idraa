@@ -174,10 +174,11 @@ def test_dirty_then_upgrade_bumps_and_reinserts_from_json(
     assert {k: v[:9] for k, v in got.items()} == _expected_from_seed()
     # Derived from the seed and the module constants, never a retyped literal (A-I1).
     assert abs(float(got[SUB_FUNCTION][1]) - _seed_vis_coverage()) <= 1e-9
-    # Seed-coupled by design (A2-N4): when the C11 milestone moves the seed cell past
-    # 0.3 this line and test_fresh_path_is_already_and_converges go red — fix THIS
-    # test (the fresh path then classifies drift=1 because the stored cell is neither
-    # 0.8 nor 0.3), never the migration's frozen literals.
+    # Seed-coupled by design (A2-N4): this line and test_fresh_path_is_already_and_converges
+    # go red when the C11 milestone changes the seed cell. If C11 moves the seed off 0.3 to a
+    # new value, a fresh DB logs drift=1 (the stored cell is neither 0.8 nor 0.3); if it
+    # restores 0.8, a fresh DB logs applied=1 with a bump that changes no values. In either
+    # case fix THIS test, never the migration's frozen literals.
     assert abs(_seed_vis_coverage() - NEW) <= 1e-9  # true while the seed holds this slice's value
     assert COUNTER.format(a=1, b=0, c=0) in err
     with alembic_engine.connect() as conn:
@@ -200,8 +201,10 @@ def test_fresh_path_is_already_and_converges(
     alembic_runner: MigrationContext, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """R-SIEM-14. Seed-coupled (A2-N4): expects `already=1` only while the seed holds 0.3.
-    The C11 milestone moving the seed cell flips a fresh DB to `drift=1` — benign and
-    expected; the C11 author updates this expectation, not the migration."""
+    If the C11 milestone moves the seed off 0.3 to a new value, a fresh DB logs `drift=1`;
+    if it restores 0.8, a fresh DB logs `applied=1` with a bump that changes no values.
+    Both are benign and expected; in either case the C11 author updates this expectation,
+    not the migration."""
     alembic_runner.migrate_up_to(PRE)
     entry_id, version = _latest(alembic_engine)
     capsys.readouterr()
@@ -212,6 +215,24 @@ def test_fresh_path_is_already_and_converges(
     assert {k: v[:9] for k, v in _assignments(alembic_engine, entry_id, version).items()} == (
         _expected_from_seed()
     )
+
+
+def test_stored_new_coverage_is_already_whatever_the_seed_holds(
+    alembic_runner: MigrationContext, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Seed-independent twin of test_fresh_path_is_already_and_converges: the stored cell is
+    set to the frozen NEW literal (0.3) directly, so the classification is `already` however
+    the seed JSON moves under the C11 milestone — no bump, no write at all."""
+    alembic_runner.migrate_up_to(PRE)
+    _set_stored_coverage(alembic_engine, NEW)
+    entry_id, version = _latest(alembic_engine)
+    before = _dump_library(alembic_engine)
+    capsys.readouterr()
+    alembic_runner.migrate_up_to(REV)
+    err = capsys.readouterr().err
+    assert COUNTER.format(a=0, b=1, c=0) in err
+    assert _latest(alembic_engine) == (entry_id, version)  # no version change
+    assert _dump_library(alembic_engine) == before
 
 
 def test_drift_value_is_skipped_without_disclosing_it(

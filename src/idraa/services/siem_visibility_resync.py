@@ -93,7 +93,8 @@ reason — this CLI IS the cross-org sweep (threat-model section 7, B7; recorded
 there) — and the linter scripts/lint_org_scoped_lookups.py is never edited. The
 pre-deploy sweep (scripts/sweep_issue_199_prod_rows.py) imports the pure helpers
 below; it cannot apply the entry-field check (raw sqlite3 rows), so its class-A
-count is an upper bound.
+and class-B counts are upper bounds (the CLI also demotes either class to X on an
+entry-level field delta).
 """
 
 from __future__ import annotations

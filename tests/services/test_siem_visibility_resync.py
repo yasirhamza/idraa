@@ -672,6 +672,81 @@ async def test_concurrent_analyst_edit_between_read_and_write_is_not_clobbered(
 
 
 @pytest.mark.asyncio
+async def test_concurrent_repin_between_read_and_write_rolls_back_the_whole_control(
+    db_url: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-SIEM-18 (CONTROL-row guard): the Visibility-row UPDATE succeeds, then the guarded
+    ``controls`` UPDATE (``json_extract(library_pin, '$.version') = :pinned``) matches 0 rows
+    because a concurrent resync re-pinned the control between read and write. The control's
+    transaction must roll back as a whole — including the assignment UPDATE that already
+    succeeded in that transaction — so the control lands in class C and is counted as a
+    conflict, its Visibility coverage is back at the value it was read at, no audit row is
+    written for it and its run is not flagged; and the run continues: the other org's class-A
+    control (processed after the rollback, whichever sorts first) is still applied. Mirrors
+    the concurrent-edit test above, whose conflict is caught by the ASSIGNMENT-row guard."""
+    ids = await _build(db_url, second_org_class_a=True)
+    first_a, other_a = sorted([ids["A"], ids["A2"]])  # the service iterates sorted by hex
+    run_of = {ids["A"]: ids["run_A"], ids["A2"]: ids["run_A2"]}
+    sync_url = db_url.replace("sqlite+aiosqlite://", "sqlite://")
+
+    async def _repin_between_read_and_write(control_id: uuid.UUID) -> None:
+        if control_id.hex != first_a:
+            return
+        eng = sa.create_engine(sync_url)  # a second connection: a concurrent re-pin
+        with eng.begin() as conn:
+            conn.execute(
+                sa.text(
+                    "UPDATE controls SET library_pin = json_set(library_pin, '$.version', 3) "
+                    "WHERE id = :c"
+                ),
+                {"c": first_a},
+            )
+        eng.dispose()
+
+    monkeypatch.setattr(svc, "_before_write", _repin_between_read_and_write)
+    rc = await svc.run(apply=True, database_url=db_url)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert f"{first_a} C" in out
+    assert f"{other_a} A" in out  # processed AFTER the rollback
+    assert "classes A=1 B=1 C=2 D=1 X=3 current=0 applied=1 runs_flagged=1 conflicts=1" in out
+    engine, db = await _open(db_url)
+    try:
+        a = await db.get(Control, uuid.UUID(hex=first_a))
+        assert a is not None
+        # The concurrent re-pin survived; the service wrote nothing of its own to the control.
+        assert a.library_pin == {"entry_id": str(uuid.UUID(hex=ids["entry"])), "version": 3}
+        assert a.adopted_snapshot is not None and a.adopted_snapshot["version"] == 1
+        snap_vis = next(x for x in a.adopted_snapshot["assignments"] if x["sub_function"] == VIS)
+        assert snap_vis["coverage"] == pytest.approx(0.8)
+        # The earlier, already-successful assignment UPDATE rolled back with the control.
+        vis = await _vis_row(db, a.id)
+        assert vis.coverage == pytest.approx(0.8)
+        assert vis.confirmed_by_user_at is None
+        run_first = await db.get(RiskAnalysisRun, uuid.UUID(hex=run_of[first_a]))
+        assert run_first is not None and run_first.is_stale is False
+        other = await db.get(Control, uuid.UUID(hex=other_a))
+        assert (
+            other is not None
+            and other.library_pin is not None
+            and other.library_pin["version"] == 2
+        )
+        other_vis = await _vis_row(db, other.id)
+        assert other_vis.coverage == pytest.approx(0.3)
+        run_other = await db.get(RiskAnalysisRun, uuid.UUID(hex=run_of[other_a]))
+        assert run_other is not None and run_other.is_stale is True
+        audits = (
+            (await db.execute(select(AuditLog).where(AuditLog.action == svc.ACTION)))
+            .scalars()
+            .all()
+        )
+        assert [x.entity_id.hex for x in audits] == [other_a]  # none for the conflicted control
+    finally:
+        await db.close()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_second_apply_is_a_noop(db_url: str, capsys: pytest.CaptureFixture[str]) -> None:
     await _build(db_url)
     assert await svc.run(apply=True, database_url=db_url) == 0

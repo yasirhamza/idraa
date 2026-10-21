@@ -209,7 +209,9 @@ def _compose_leaf_and_pair_groups(
 
     Pass 2 — pair groups (``PAIR_RECIPES``): AND of two child leaf outputs;
     ``None`` if either child is ``None`` (the D8 gate). NB the VMC id∧corr pair
-    is recomputed by the meta caller AFTER its correction-gate override.
+    is recomputed by the meta caller AFTER it sets the implementation-anchored
+    Correction value (E_corr = the Implementation member's effectiveness when
+    present, else 0; register C8).
 
     Returns ``(group_effectiveness, sub_function_effectiveness)`` covering every
     group in ``groups`` (full key coverage; ``sub_function_effectiveness`` holds
@@ -316,9 +318,10 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     meta_group_eff, meta_sub_eff = _compose_leaf_and_pair_groups(meta_by_group, _META_GROUPS)
 
     # #199 slice 1 (register C8): the VMC_CORRECTION group value is
-    # IMPLEMENTATION-ANCHORED. The Standard prescribes AND(Treatment
-    # Selection, Implementation) (§4.3.1/§4.3.2 p.28) and GROUP_TYPE keeps
-    # that AND as the topology LABEL; it is NOT realised numerically here.
+    # IMPLEMENTATION-ANCHORED, a documented DEPARTURE (register C8). The
+    # Standard prescribes AND(Treatment Selection, Implementation)
+    # (§4.3.1/§4.3.2 p.28) and GROUP_TYPE keeps that AND as the topology
+    # LABEL; it is NOT realised numerically here.
     # Absent implementation -> no correction regardless of selection (§4.3.2
     # "the final step"); present -> E_corr = the Implementation member's
     # composed effectiveness (OR across controls, from the generic leaf pass).
@@ -342,8 +345,9 @@ def precompose_parts(active_controls: list[Control]) -> ComposedParts:
     meta_group_eff[BooleanGroup.VMC_CORRECTION] = corr_effs.get(
         FairCamSubFunction.VMC_CORR_IMPLEMENTATION, 0.0
     )
-    # Recompute the id∧corr pair AFTER the gate so the AND consumes the gated
-    # correction value (spec D3).
+    # Recompute the id∧corr pair AFTER the implementation-anchored Correction
+    # value is set (E_corr = the Implementation member's effectiveness when
+    # present, else 0; register C8), so the AND consumes that value (spec D3).
     id_eff = meta_group_eff.get(BooleanGroup.VMC_IDENTIFICATION)
     corr_eff = meta_group_eff.get(BooleanGroup.VMC_CORRECTION)
     meta_group_eff[BooleanGroup.VMC_IDENTIFICATION_CORRECTION_PAIR] = (

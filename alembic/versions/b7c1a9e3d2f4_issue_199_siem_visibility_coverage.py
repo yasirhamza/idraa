@@ -33,7 +33,9 @@ module src/idraa/services/siem_visibility_resync.py). Parent framework-tag colum
 are not rewritten (they are unchanged by this slice).
 
 Downgrade: documented no-op (f6a2b0d4e8c3 precedent — the JSON seed is the single
-source of truth; a downgrade + re-upgrade bumps the entry a second time, harmless).
+source of truth). Because the downgrade writes nothing, a downgrade + re-upgrade
+classifies ``already`` and does NOT bump the entry again, unless the stored cell is
+back at exactly the old value (0.8), which classifies ``apply`` and bumps once more.
 """
 
 from __future__ import annotations

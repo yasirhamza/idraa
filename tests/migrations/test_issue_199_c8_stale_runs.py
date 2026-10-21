@@ -333,8 +333,15 @@ def test_one_audit_row_per_flagged_run_with_system_actor_hex_ids_and_reason(
     alembic_runner.migrate_up_to(REV)
     rows = _audit_rows(alembic_engine)
     assert {str(r["entity_id"]) for r in rows} == {seeded[k] for k in FLAGGED_KEYS}
+    with alembic_engine.connect() as conn:
+        run_org = {
+            str(r[0]): str(r[1])
+            for r in conn.execute(sa.text("SELECT id, organization_id FROM risk_analysis_runs"))
+        }
     for row in rows:
         assert row["entity_type"] == "risk_analysis_run"
+        # each audit row carries ITS flagged run's own organization (system actor, but org-scoped)
+        assert str(row["organization_id"]) == run_org[str(row["entity_id"])]
         assert row["user_id"] is None
         assert str(row["id"]) == uuid.UUID(hex=str(row["id"])).hex
         assert json.loads(str(row["changes"])) == {

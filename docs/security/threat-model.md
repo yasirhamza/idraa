@@ -826,7 +826,7 @@ row from `services/control_resync.py::apply_resync` carries the user). The comma
 host-only — reached through `scripts/fly ssh console` behind Fly org auth and the
 scoped Keychain token, with no HTTP entry point — and grants nothing beyond existing
 `fly ssh` access (the ssh session is a root process with the app's environment, not
-the `idraa` app process; the runbook invokes the command as `idraa`). It is the
+the `idraa` app process; run as `idraa` by an operator, dry unless `--apply`). It is the
 sibling of `auth reset-mfa`, whose B2 entry is tracked in idraa#256. It crosses §7
 (B7) deliberately, in one process over all orgs — the one bare PK fetch in
 `services/siem_visibility_resync.py::resync` carries a recorded `# org-scope: ok`
