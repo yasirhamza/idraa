@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+from fair_cam.composition import resolve_derived_assignments
 from fair_cam.models.composition_topology import GROUP_NODE_MAPPING, KAPPA_META_RELIABILITY
 from fair_cam.models.control import Control as FairCamControl
 from fair_cam.models.control import ControlDomain as FairCamControlDomain
@@ -270,39 +271,24 @@ def _scenario_availability_self_detects(scenario: Scenario) -> bool:
 def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
     """Map a v3 Control + its assignments to a fair_cam.FairCamControl.
 
-    Iterates ALL assignments (not just assignments[0]) — fixes the κ latent
-    silent-data-loss bug. Per project-wide policy
-    (feedback_data_contract_enforcement.md).
-
-    Raises ValueError on empty assignments (defense in depth — ControlForm
-    enforces min_length=1).
-
-    ELAPSED_TIME / CURRENCY unit assignments pass through unchanged. fair_cam's
-    compose_group_effectiveness (κ T9) excludes them from operand lists at
-    composition time, so unit-type filtering happens downstream.
-
-    Defense-in-depth bounds checks on coverage/reliability are inherited from
-    the prior branch-(d) builder (DTO guard bypass safety per spec §8.3).
+    Iterates ALL assignments (not just assignments[0] — the κ silent-data-loss fix,
+    feedback_data_contract_enforcement.md). A derived dsc_corr_misaligned row (#268) is
+    resolved by fair_cam to the derivation of its same-control source. Raises ValueError
+    on empty assignments, a dangling link or out-of-[0, 1] coverage/reliability (defense
+    in depth, spec §8.3). ELAPSED_TIME / CURRENCY assignments pass through unchanged:
+    fair_cam filters by unit type at composition time (κ T9).
     """
     if not v3_ctrl.assignments:
         raise ValueError(
             f"Control {v3_ctrl.id} has no assignments; ControlForm enforces "
             f"min_length=1 — defense in depth"
         )
-    fc_assignments: list[FairCamControlFunctionAssignment] = []
+    # Issue #268: a derived row stores only a link id to one of THIS control's rows.
+    sf_by_id = {a.id: a.sub_function for a in v3_ctrl.assignments}
+    rows: list[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]] = []
     for a in v3_ctrl.assignments:
-        # Issue #209: a cleared (NULL) capability_value is NOT rejected here.
-        # fair_cam handles NULL via its documented opeff(median)=0.5 midpoint
-        # anchor — composition.compute_assignment_part returns 0.5 * coverage
-        # for a NULL capability_value (issue #131 Arch3-N1; the reliability
-        # factor is applied by the caller since Slice 2 #439 folded the
-        # standalone _null_safe_default helper into compute_assignment_part) —
-        # and the clear-capability UI modal promises that graceful fallback. We pass capability_value (possibly None) straight
-        # through to fair_cam; the snapshot breakdown records capability_was_null
-        # for the affected assignment (effectiveness.py). The prior hard-reject
-        # gate (T11 PR κ / paranoid-review fix S3) was stale — it blocked the
-        # path #131 fixed at the fair_cam layer.
-        #
+        # Issue #209: a NULL capability_value passes through; fair_cam anchors it at
+        # opeff(median)=0.5 (#131 Arch3-N1), as the clear-capability modal promises.
         # Defense-in-depth bounds — match existing branch-(d)
         if not (0.0 <= a.coverage <= 1.0):
             raise ValueError(
@@ -316,27 +302,36 @@ def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
             )
         # v3 enum and fair_cam enum have parallel values — explicit conversion
         fc_sub_function = FairCamSubFunction(a.sub_function.value)
-        fc_assignments.append(
-            FairCamControlFunctionAssignment(
-                sub_function=fc_sub_function,
-                capability_value=a.capability_value,
-                coverage=a.coverage,
-                reliability=a.reliability,
-                degradation_rate=0.0,  # PR μ supplies normative defaults
+        source_sf: FairCamSubFunction | None = None
+        if a.derived_from_assignment_id is not None:
+            src_sf = sf_by_id.get(a.derived_from_assignment_id)
+            if src_sf is None:
+                raise ValueError(f"Control {v3_ctrl.id} derived link targets a row not on it")
+            source_sf = FairCamSubFunction(src_sf.value)
+        rows.append(
+            (
+                FairCamControlFunctionAssignment(
+                    sub_function=fc_sub_function,
+                    capability_value=a.capability_value,
+                    coverage=a.coverage,
+                    reliability=a.reliability,
+                    degradation_rate=0.0,  # PR μ supplies normative defaults
+                ),
+                source_sf,
             )
         )
-    # Bridge v3's ``annual_cost: Decimal`` (NOT NULL, default 0) to
-    # fair_cam's float-based CostModel. fair_cam's API is unchanged
-    # (CLAUDE.md: fair_cam is source of truth for FAIR math); we coerce
-    # at the v3 boundary.
+    fc_assignments = resolve_derived_assignments(rows, control_ref=str(v3_ctrl.id))
+    # Bridge v3's ``annual_cost: Decimal`` (NOT NULL, default 0) to fair_cam's float
+    # CostModel; fair_cam's API is unchanged — we coerce at the v3 boundary.
     annual_cost = float(v3_ctrl.annual_cost)
-    # Issue #90: pick a representative domain from assignments[0] instead of
-    # reading the deprecated v3 Control.domain column. fair_cam's
-    # FairCamControl.domain remains a single-domain field (its math now
-    # iterates assignments internally post-issue-90 in Task 4). The
-    # empty-assignments guard above ensures assignments[0] is safe to
-    # dereference — DO NOT remove that guard (plan-gate fix CR-I1).
-    asn0 = v3_ctrl.assignments[0]  # adapter-iter: ok — issue #90 rep-domain scalar
+    # Issue #90: representative domain from the first NON-derived assignment (a derived
+    # row can tie on created_at and sort first; its DSC domain is not the control's),
+    # not the deprecated Control.domain column. FairCamControl.domain stays single-valued
+    # (its math iterates assignments). The empty guard above keeps this safe — DO NOT
+    # remove it (plan-gate fix CR-I1); every derived row has a non-derived source (#268).
+    asn0 = next(  # adapter-iter: ok — issue #90 rep-domain scalar, derived rows skipped
+        a for a in v3_ctrl.assignments if a.derived_from_assignment_id is None
+    )
     representative_domain = subfunction_to_domain(asn0.sub_function)
     fair_cam_domain = _DOMAIN_MAP[representative_domain]
     return FairCamControl(
@@ -421,6 +416,7 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
 
     Issue #131 T6.5; Arch-B3 / Sec-B3 plan-gate.
     """
+    sf_by_id = {a.id: a.sub_function for a in c.assignments}  # #268: derived link -> source
     return ControlSnapshotV3(
         snapshot_version=3,
         control_id=str(c.id),
@@ -442,6 +438,10 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
                 measured_at=a.measured_at,
                 measured_by=a.measured_by,
                 derived_from_assignment_id=a.derived_from_assignment_id,
+                # #268: the SOURCE row's sub-function (None if dangling: a writer never raises)
+                derived_from_sub_function=sf_by_id.get(a.derived_from_assignment_id)
+                if a.derived_from_assignment_id is not None
+                else None,
             )
             for a in c.assignments
         ],

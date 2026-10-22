@@ -26,6 +26,7 @@ import pytest
 from fair_cam.models.control import ControlDomain as FairCamControlDomain
 
 from idraa.models.control import Control
+from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.enums import (
     ControlType,
     EntityStatus,
@@ -90,10 +91,12 @@ def _attach_assignment(
     from types import SimpleNamespace
 
     asgn = SimpleNamespace(
+        id=uuid.uuid4(),
         sub_function=sub_function,
         capability_value=capability_value,
         coverage=coverage,
         reliability=reliability,
+        derived_from_assignment_id=None,
     )
     # Write directly into __dict__ to bypass the SQLAlchemy instrumented-list
     # descriptor.  SimpleNamespace has no _sa_instance_state so the normal
@@ -269,3 +272,173 @@ def test_adapter_falls_back_to_zero_when_annual_cost_default() -> None:
 
     fc_ctrl = _v3_to_fair_cam_control(v3)
     assert fc_ctrl.cost_model.annual_cost == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Issue #268: a derived dsc_corr_misaligned row is scored as the derivation of
+# its same-control source (fair_cam.resolve_derived_assignments)
+# ---------------------------------------------------------------------------
+
+_SRC_ID = uuid.UUID(int=2)
+_DERIVED_ID = uuid.UUID(int=1)  # sorts BEFORE the source under (created_at, id)
+
+
+def _orm_row(
+    ctrl: Control,
+    sub_function: FairCamSubFunction,
+    *,
+    row_id: uuid.UUID,
+    capability_value: float | None = 0.7,
+    coverage: float = 0.8,
+    reliability: float = 0.9,
+    derived_from: uuid.UUID | None = None,
+) -> ControlFunctionAssignment:
+    return ControlFunctionAssignment(
+        id=row_id,
+        organization_id=ctrl.organization_id,
+        control_id=ctrl.id,
+        sub_function=sub_function,
+        capability_value=capability_value,
+        coverage=coverage,
+        reliability=reliability,
+        derived_from_assignment_id=derived_from,
+    )
+
+
+def _linked_control(
+    source_sf: FairCamSubFunction,
+    *,
+    source_cap: float | None,
+    derived_first: bool = False,
+) -> tuple[Control, ControlFunctionAssignment, ControlFunctionAssignment]:
+    """A control with a source row and a derived dsc_corr_misaligned row linked to it,
+    stored the way the write path stores it (NULL capability, 0.0 coverage/reliability)."""
+    ctrl = _make_control_with_orm_assignments([])
+    src = _orm_row(
+        ctrl, source_sf, row_id=_SRC_ID, capability_value=source_cap, coverage=0.8, reliability=0.9
+    )
+    derived = _orm_row(
+        ctrl,
+        FairCamSubFunction.DSC_CORR_MISALIGNED,
+        row_id=_DERIVED_ID,
+        capability_value=None,
+        coverage=0.0,
+        reliability=0.0,
+        derived_from=_SRC_ID,
+    )
+    ctrl.assignments = [derived, src] if derived_first else [src, derived]
+    return ctrl, src, derived
+
+
+def _make_control_with_orm_assignments(rows: list[ControlFunctionAssignment]) -> Control:
+    """A control whose ``assignments`` is the real ORM relationship (rows set through it),
+    unlike ``_make_v3_control`` which bypasses it for SimpleNamespace rows."""
+    ctrl = _make_v3_control()
+    ctrl.__dict__.pop("assignments")
+    ctrl.assignments = rows
+    return ctrl
+
+
+_SOURCES_AND_CAPS = [
+    (FairCamSubFunction.VMC_CORR_IMPLEMENTATION, 30.0),  # ELAPSED_TIME
+    (FairCamSubFunction.LEC_RESP_EVENT_TERMINATION, 44.4),  # ELAPSED_TIME
+    (FairCamSubFunction.LEC_RESP_RESILIENCE, 0.6),  # PROBABILITY
+    (FairCamSubFunction.VMC_CORR_IMPLEMENTATION, None),  # NULL -> 0.5 anchor
+]
+
+
+@pytest.mark.parametrize(("source_sf", "source_cap"), _SOURCES_AND_CAPS)
+def test_adapter_scores_a_linked_row_as_the_derivation_of_its_source(
+    source_sf: FairCamSubFunction, source_cap: float | None
+) -> None:
+    """The fc assignments carry a PROBABILITY dsc_corr_misaligned row whose opeff equals
+    the source's (exact ``==``: it IS the source's opeff, register C12)."""
+    from fair_cam.composition import compute_assignment_opeff_two_branch
+    from fair_cam.models.sub_function import SUB_FUNCTION_UNITS as FC_UNITS
+    from fair_cam.models.sub_function import FairCamSubFunction as FcSub
+    from fair_cam.models.sub_function import UnitType as FcUnit
+
+    ctrl, _src, _derived = _linked_control(source_sf, source_cap=source_cap)
+    fc = _v3_to_fair_cam_control(ctrl)
+
+    assert [a.sub_function.value for a in fc.assignments] == [
+        source_sf.value,
+        "dsc_corr_misaligned",
+    ]
+    fc_src, fc_derived = fc.assignments
+    assert fc_derived.sub_function is FcSub.DSC_CORR_MISALIGNED
+    assert FC_UNITS[fc_derived.sub_function] is FcUnit.PROBABILITY
+    assert compute_assignment_opeff_two_branch(fc_derived) == compute_assignment_opeff_two_branch(
+        fc_src
+    )
+    assert fc_derived.coverage == 0.8  # the source's, not the stored 0.0 sentinel
+    assert fc_derived.reliability == 0.9  # the AUTHORED r0 of the source
+
+
+def test_adapter_derived_row_hand_math_event_termination() -> None:
+    """Hand math: tau(lec_resp_event_termination) = 64.0 d; t = 44.4 d, coverage 0.8,
+    reliability 0.9 -> exp(-44.4/64) * 0.8 * 0.9 = 0.3598..."""
+    import math
+
+    from fair_cam.composition import compute_assignment_opeff_two_branch
+
+    ctrl, _s, _d = _linked_control(FairCamSubFunction.LEC_RESP_EVENT_TERMINATION, source_cap=44.4)
+    fc = _v3_to_fair_cam_control(ctrl)
+    expected = math.exp(-44.4 / 64.0) * 0.8 * 0.9
+    assert compute_assignment_opeff_two_branch(fc.assignments[1]) == pytest.approx(
+        expected, rel=1e-12
+    )
+
+
+def test_adapter_dangling_derived_link_raises_naming_the_control() -> None:
+    ctrl, _src, derived = _linked_control(
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION, source_cap=30.0
+    )
+    derived.derived_from_assignment_id = uuid.UUID(int=99)  # no such row anywhere
+    with pytest.raises(ValueError, match=str(ctrl.id)):
+        _v3_to_fair_cam_control(ctrl)
+
+
+def test_adapter_link_to_another_controls_row_raises() -> None:
+    """The source is resolved among THIS control's rows only: an id that belongs to a
+    row of a different control is dangling here."""
+    ctrl, _src, derived = _linked_control(
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION, source_cap=30.0
+    )
+    other = _make_control_with_orm_assignments([])
+    foreign = _orm_row(
+        other,
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        row_id=uuid.UUID(int=77),
+        capability_value=30.0,
+    )
+    other.assignments = [foreign]
+    derived.derived_from_assignment_id = foreign.id
+    with pytest.raises(ValueError, match=str(ctrl.id)):
+        _v3_to_fair_cam_control(ctrl)
+
+
+@pytest.mark.parametrize("derived_first", [False, True])
+def test_adapter_representative_domain_skips_the_derived_row(derived_first: bool) -> None:
+    """The derived row can sort first (created together, equal created_at, smaller id).
+    The representative domain/response time must still come from a non-derived row."""
+    ctrl, _src, _derived = _linked_control(
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION, source_cap=30.0, derived_first=derived_first
+    )
+    fc = _v3_to_fair_cam_control(ctrl)
+    assert fc.domain == FairCamControlDomain.VARIANCE_MANAGEMENT
+    assert fc.response_time_seconds == 60.0  # VARIANCE_MANAGEMENT, not DECISION_SUPPORT's 3600.0
+    assert len(fc.assignments) == 2
+
+
+def test_adapter_without_a_derived_row_is_unchanged() -> None:
+    """No link anywhere: assignments map one-to-one, in order, as before."""
+    ctrl = _make_control_with_orm_assignments([])
+    rows = [
+        _orm_row(ctrl, FairCamSubFunction.LEC_PREV_RESISTANCE, row_id=uuid.UUID(int=11)),
+        _orm_row(ctrl, FairCamSubFunction.LEC_DET_VISIBILITY, row_id=uuid.UUID(int=12)),
+        _orm_row(ctrl, FairCamSubFunction.VMC_CORR_IMPLEMENTATION, row_id=uuid.UUID(int=13)),
+    ]
+    ctrl.assignments = rows
+    fc = _v3_to_fair_cam_control(ctrl)
+    assert [a.sub_function.value for a in fc.assignments] == [r.sub_function.value for r in rows]

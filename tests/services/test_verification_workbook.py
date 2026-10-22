@@ -201,6 +201,7 @@ def test_drift_gate_passes_on_real_persisted_shape_snapshot():
 
 
 # --- Task 6: composed node multipliers (recomposition-equivalence) ------------
+from fair_cam.composition import derive_virtual_assignment  # noqa: E402
 from fair_cam.models.control import Control as FairCamControl  # noqa: E402
 from fair_cam.models.control import FairCamControlFunctionAssignment  # noqa: E402
 from fair_cam.models.sub_function import FairCamSubFunction  # noqa: E402
@@ -228,6 +229,10 @@ _CANON_KEYS = {"threat_event_frequency", "vulnerability", "primary_loss", "secon
 #       dsc_corr_misaligned, both PROBABILITY) present, so the AND group composes to
 #       a non-zero effectiveness and GROUP_NODE_MAPPING routes it to the magnitude
 #       targets (secondary_loss w=0.5, primary_loss w=0.2) -> both land off 1.0.
+#       dsc_corr_misaligned is DERIVED (#268, FAIR-CAM §5.3 p.50): a 5th tuple element
+#       names the same-control source sub-function it is linked to; its stored scalars
+#       are inert sentinels, and the engine side builds it with fair_cam's
+#       derive_virtual_assignment.
 #       c3 also carries lec_resp_loss_reduction (the only CURRENCY sub-function) with
 #       a realistic per-event dollar capability_value, so currency_subtractor_total
 #       accumulates cap*coverage*reliability != 0.0 (group_composition.py:101).
@@ -239,7 +244,8 @@ _TWO_CONTROL_INPUTS = [
         [
             # Complete DSC ID+Correction AND-pair -> primary_loss + secondary_loss.
             ("dsc_id_misaligned", 0.7, 1.0, 0.9),
-            ("dsc_corr_misaligned", 0.6, 1.0, 0.95),
+            ("vmc_corr_implementation", 30.0, 1.0, 0.95),
+            ("dsc_corr_misaligned", None, 0.0, 0.0, "vmc_corr_implementation"),
             # CURRENCY Loss-Reduction -> currency_subtractor_total (per-event $).
             ("lec_resp_loss_reduction", 25000.0, 1.0, 0.9),
         ],
@@ -265,12 +271,35 @@ def two_control_v3_snapshot():
                     coverage=cov,
                     reliability=rel,
                     unit_type=v3_enums.SUB_FUNCTION_UNITS[v3_enums.FairCamSubFunction(sub)],
+                    derived_from_sub_function=(
+                        v3_enums.FairCamSubFunction(link[0]) if link else None
+                    ),
                 )
-                for sub, cap, cov, rel in asns
+                for sub, cap, cov, rel, *link in asns
             ],
         )
         snaps.append(model.model_dump(mode="json"))
     return snaps
+
+
+def _engine_assignments(asns):
+    """fair_cam assignments for one _TWO_CONTROL_INPUTS control, built the way the
+    engine path builds them: a linked row is derive_virtual_assignment(<its source>)."""
+    plain = {
+        sub: FairCamControlFunctionAssignment(
+            sub_function=FairCamSubFunction(sub),
+            capability_value=cap,
+            coverage=cov,
+            reliability=rel,
+            degradation_rate=0.0,
+        )
+        for sub, cap, cov, rel, *link in asns
+        if not link
+    }
+    return [
+        derive_virtual_assignment(plain[link[0]]) if link else plain[sub]
+        for sub, _cap, _cov, _rel, *link in asns
+    ]
 
 
 @pytest.fixture
@@ -282,19 +311,7 @@ def engine_applied_mults():
     Controls are built directly as fair_cam dataclasses (NOT via
     composed_node_multipliers) so this is a genuine engine-path equivalence."""
     controls = [
-        FairCamControl(
-            control_id=control_id,
-            assignments=[
-                FairCamControlFunctionAssignment(
-                    sub_function=FairCamSubFunction(sub),
-                    capability_value=cap,
-                    coverage=cov,
-                    reliability=rel,
-                    degradation_rate=0.0,
-                )
-                for sub, cap, cov, rel in asns
-            ],
-        )
+        FairCamControl(control_id=control_id, assignments=_engine_assignments(asns))
         for control_id, asns in _TWO_CONTROL_INPUTS
     ]
     group_comp = compose_groups(controls)  # native_control_aware.py:124
@@ -413,6 +430,133 @@ def test_workbook_coupling_reconciliation_meta_plus_lec_availability():
     assert set(result) == _CANON_KEYS | {"currency_subtractor_total"}
     for key in _CANON_KEYS | {"currency_subtractor_total"}:
         assert result[key] == pytest.approx(expected[key])
+
+
+# --- Issue #268: derived Correcting Misaligned Decisions row ------------------
+#
+# A V3 snapshot cannot carry the ORM link id (assignments have no id of their own), so
+# the writer records the SOURCE sub-function in ``derived_from_sub_function`` and the
+# workbook resolves it with fair_cam's resolve_derived_assignments, the same resolver
+# the run mapper uses. A snapshot ``dsc_corr_misaligned`` row without it cannot be
+# resolved (no such row was ever writable) -> LegacySnapshotError.
+
+
+def _derived_snapshot_assignments(source_sf="vmc_corr_implementation", source_cap=30.0):
+    return [
+        _v3_assignment(source_sf, "elapsed_time", cap=source_cap, cov=0.9, rel=0.9),
+        {
+            **_v3_assignment("dsc_corr_misaligned", "probability", cap=None, cov=0.0, rel=0.0),
+            "derived_from_sub_function": source_sf,
+        },
+        _v3_assignment("lec_prev_avoidance", "probability", cap=0.5),
+    ]
+
+
+def test_adapter_resolves_a_derived_row_and_preserves_order():
+    """N=3 in, N=3 out, in order; the derived row carries the source's opeff."""
+    from fair_cam.composition import compute_assignment_opeff_two_branch
+
+    ctl = snapshot_to_fair_cam_controls([_v3_control("c1", _derived_snapshot_assignments())])[0]
+    assert [a.sub_function.value for a in ctl.assignments] == [
+        "vmc_corr_implementation",
+        "dsc_corr_misaligned",
+        "lec_prev_avoidance",
+    ]
+    src, derived, _lec = ctl.assignments
+    assert compute_assignment_opeff_two_branch(derived) == compute_assignment_opeff_two_branch(src)
+    assert (derived.coverage, derived.reliability) == (0.9, 0.9)  # the source's, not 0.0
+
+
+def test_adapter_rejects_dsc_corr_row_without_derived_field_as_legacy():
+    bad = _v3_assignment("dsc_corr_misaligned", "probability", cap=0.6)
+    snap = _v3_control("c1", [_v3_assignment("vmc_corr_implementation", "elapsed_time"), bad])
+    with pytest.raises(LegacySnapshotError):
+        snapshot_to_fair_cam_controls([snap])
+
+
+@pytest.mark.parametrize("bad_source", ["lec_prev_avoidance", "vmc_corr_treatment_selection"])
+def test_adapter_rejects_a_derived_link_to_an_absent_or_ineligible_source_as_legacy(bad_source):
+    asns = [
+        _v3_assignment("vmc_corr_implementation", "elapsed_time", cap=30.0),
+        {
+            **_v3_assignment("dsc_corr_misaligned", "probability", cap=None, cov=0.0, rel=0.0),
+            "derived_from_sub_function": bad_source,
+        },
+    ]
+    with pytest.raises(LegacySnapshotError):
+        snapshot_to_fair_cam_controls([_v3_control("c1", asns)])
+
+
+def test_workbook_e_meta_for_a_derived_row_matches_the_run_mapper_on_the_orm_control():
+    """Parity (hand-math | mapper on ORM control | workbook on its V3 snapshot).
+
+    c_id carries dsc_id_misaligned; c_corr carries vmc_corr_implementation plus a
+    derived dsc_corr_misaligned linked to it. No other meta member exists, so
+    E_meta = E_dsc = OR(E_pair) = id * corr:
+        id   = 0.7 * 1.0 * 0.9                                 = 0.63
+        corr = exp(-30 / 79.3) * 0.9 * 0.9      (tau 79.3 d)  = 0.5543...
+        E_pair = id * corr
+    The workbook uses the CURRENT tau table, not the table in force when the run
+    executed: a pre-existing limit of the workbook for every ELAPSED_TIME row (the
+    snapshot freezes unit_type, not tau).
+    """
+    import math
+    import uuid
+    from decimal import Decimal
+
+    from fair_cam.risk_engine.group_composition import precompose_parts
+
+    from idraa.models.control import Control as OrmControl
+    from idraa.models.control_function_assignment import ControlFunctionAssignment as OrmCfa
+    from idraa.models.enums import ControlType, EntityStatus
+    from idraa.services.run_executor import _snapshot_control_v3, _v3_to_fair_cam_control
+
+    org = uuid.uuid4()
+
+    def _control(name, rows):
+        ctrl = OrmControl(
+            id=uuid.uuid4(),
+            organization_id=org,
+            name=name,
+            type=ControlType.TECHNICAL,
+            annual_cost=Decimal("0"),
+            status=EntityStatus.ACTIVE,
+            version="1.0",
+        )
+        ctrl.assignments = [
+            OrmCfa(
+                id=rid,
+                organization_id=org,
+                control_id=ctrl.id,
+                sub_function=v3_enums.FairCamSubFunction(sf),
+                capability_value=cap,
+                coverage=cov,
+                reliability=rel,
+                derived_from_assignment_id=link,
+            )
+            for rid, sf, cap, cov, rel, link in rows
+        ]
+        return ctrl
+
+    src_id = uuid.UUID(int=2)
+    c_id = _control("c_id", [(uuid.UUID(int=10), "dsc_id_misaligned", 0.7, 1.0, 0.9, None)])
+    c_corr = _control(
+        "c_corr",
+        [
+            (uuid.UUID(int=1), "dsc_corr_misaligned", None, 0.0, 0.0, src_id),  # sorts first
+            (src_id, "vmc_corr_implementation", 30.0, 0.9, 0.9, None),
+        ],
+    )
+    ctrls = [c_id, c_corr]
+
+    hand = 0.63 * (math.exp(-30.0 / 79.3) * 0.9 * 0.9)
+    mapper = precompose_parts([_v3_to_fair_cam_control(c) for c in ctrls]).e_meta
+    snaps = [_snapshot_control_v3(c).model_dump(mode="json") for c in ctrls]
+    workbook = precompose_parts(snapshot_to_fair_cam_controls(snaps)).e_meta
+
+    assert mapper == pytest.approx(hand, rel=1e-12)
+    assert workbook == pytest.approx(mapper, rel=1e-12)
+    assert hand > 0.0  # the pair scores: without the link E_meta would be 0.0
 
 
 # --- Task 9: single-run workbook assembly ------------------------------------

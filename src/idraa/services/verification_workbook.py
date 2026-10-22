@@ -88,7 +88,18 @@ def snapshot_to_fair_cam_controls(
     frozen V3 control snapshots. compose_groups reads nothing else (domain/cost/
     timing deliberately omitted — they default on FairCamControl and are unread by
     composition; verified group_composition.py:94-96). Raises LegacySnapshotError
-    for any non-V3 or malformed snapshot (Pydantic-validated)."""
+    for any non-V3 or malformed snapshot (Pydantic-validated).
+
+    A derived ``dsc_corr_misaligned`` row (#268) is resolved by fair_cam's
+    ``resolve_derived_assignments`` from the row's ``derived_from_sub_function`` (the
+    engine's own resolver, so workbook and run cannot disagree); an unresolvable
+    derived row — including one written without that field — is a LegacySnapshotError.
+    ELAPSED_TIME rows (a derived row's source may be one) recompose under the CURRENT
+    tau table, not the one in force at run time: a pre-existing workbook limit."""
+    # Imported here (as composed_node_multipliers does) to leave the module header's
+    # cited line anchors (51-66) where they are.
+    from fair_cam.composition import resolve_derived_assignments
+
     controls: list[FairCamControl] = []
     for raw in controls_snapshot:
         try:
@@ -101,24 +112,36 @@ def snapshot_to_fair_cam_controls(
             )
         if not model.assignments:
             raise LegacySnapshotError("V3 control snapshot has no assignments")
-        fc_assignments: list[FairCamControlFunctionAssignment] = []
+        rows: list[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]] = []
         for a in model.assignments:  # iterate ALL — adapter iteration contract
             try:
-                fc_assignments.append(
-                    FairCamControlFunctionAssignment(
-                        # v3 enum -> fair_cam enum via parallel .value (matches
-                        # _v3_to_fair_cam_control's FairCamSubFunction(a.sub_function.value))
-                        sub_function=FairCamSubFunction(a.sub_function.value),
-                        capability_value=a.capability_value,  # None ok
-                        coverage=a.coverage,
-                        reliability=a.reliability,
-                        degradation_rate=0.0,  # unread by compose_groups
+                source_sf = (
+                    FairCamSubFunction(a.derived_from_sub_function.value)
+                    if a.derived_from_sub_function is not None
+                    else None
+                )
+                rows.append(
+                    (
+                        FairCamControlFunctionAssignment(
+                            # v3 enum -> fair_cam enum via parallel .value (matches
+                            # _v3_to_fair_cam_control's FairCamSubFunction(a.sub_function.value))
+                            sub_function=FairCamSubFunction(a.sub_function.value),
+                            capability_value=a.capability_value,  # None ok
+                            coverage=a.coverage,
+                            reliability=a.reliability,
+                            degradation_rate=0.0,  # unread by compose_groups
+                        ),
+                        source_sf,
                     )
                 )
             except (ValueError, TypeError) as exc:
                 # e.g. coverage/reliability out of [0,1] -> FairCam __post_init__
                 # ValueError; funnel to fail-loud rather than 500.
                 raise LegacySnapshotError(f"malformed V3 assignment: {exc}") from exc
+        try:
+            fc_assignments = resolve_derived_assignments(rows, control_ref=str(model.control_id))
+        except ValueError as exc:  # dangling/ineligible link, or a derived row w/o its field
+            raise LegacySnapshotError(f"unresolvable derived assignment: {exc}") from exc
         # FairCamControl: control_id + assignments only; name/domain/cost_model/
         # control_type all DEFAULT (verified control.py) and are unread by
         # compose_groups. __post_init__ raises on empty assignments — guarded above.

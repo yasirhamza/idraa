@@ -158,6 +158,58 @@ def derive_virtual_assignment(
     )
 
 
+def resolve_derived_assignments(
+    rows: Sequence[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]],
+    *,
+    control_ref: str,
+) -> list[FairCamControlFunctionAssignment]:
+    """Resolve the Correcting-Misaligned-Decisions links of ONE control (issue #268).
+
+    Each item is ``(mapped assignment, derived_from sub-function or None)``. A
+    non-derived row passes through untouched (same object); a derived row — the
+    link names the sub-function of this control's own correction/response row —
+    is replaced by ``derive_virtual_assignment(<that non-derived row>)``. Order is
+    preserved. The single resolver shared by the v3 run mapper (ORM rows) and the
+    verification workbook (V3 snapshots), so the two cannot disagree.
+
+    Raises ``ValueError`` naming ``control_ref`` and sub-function slugs only (no
+    stored value, no user text) when: a link sits on a row other than
+    ``dsc_corr_misaligned``; ``dsc_corr_misaligned`` has no link; the link names a
+    sub-function that is itself a derived row, absent from this control's
+    non-derived rows, or not in ``DERIVABLE_SOURCES``.
+    """
+    virtual = FairCamSubFunction.DSC_CORR_MISALIGNED
+    derived_sfs = {a.sub_function for a, link in rows if link is not None}
+    plain = {a.sub_function: a for a, link in rows if link is None}  # uq: one per sub-function
+    resolved: list[FairCamControlFunctionAssignment] = []
+    for assignment, link in rows:
+        if link is None:
+            if assignment.sub_function is virtual:
+                raise ValueError(f"control {control_ref}: {virtual.value} has no source link")
+            resolved.append(assignment)
+            continue
+        if assignment.sub_function is not virtual:
+            raise ValueError(
+                f"control {control_ref}: {assignment.sub_function.value} cannot carry a "
+                f"derived link (only {virtual.value} is derived)"
+            )
+        if link in derived_sfs:
+            raise ValueError(
+                f"control {control_ref}: {virtual.value} link names {link.value}, "
+                f"which is itself a derived row"
+            )
+        source = plain.get(link)
+        if source is None:
+            raise ValueError(
+                f"control {control_ref}: {virtual.value} link names {link.value}, "
+                f"which this control does not carry"
+            )
+        if link not in DERIVABLE_SOURCES:
+            raise ValueError(f"control {control_ref}: {link.value} cannot fulfil {virtual.value}")
+        resolved.append(derive_virtual_assignment(source, virtual))
+    return resolved
+
+
 def or_compose(values: Sequence[float]) -> float:
     """OR-style composition: 1 - product(1 - x_i).
 

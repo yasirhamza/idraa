@@ -386,10 +386,12 @@ def test_v3_to_fair_cam_control_coerces_decimal_to_float() -> None:
         annual_cost=Decimal("12000.50"),
         assignments=[
             SimpleNamespace(
+                id=uuid4(),
                 sub_function=FairCamSubFunction.LEC_PREV_RESISTANCE,
                 capability_value=0.8,
                 coverage=1.0,
                 reliability=1.0,
+                derived_from_assignment_id=None,
             )
         ],
     )
