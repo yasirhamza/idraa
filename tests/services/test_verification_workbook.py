@@ -561,6 +561,7 @@ def test_workbook_e_meta_for_a_derived_row_matches_the_run_mapper_on_the_orm_con
 
 # --- Task 9: single-run workbook assembly ------------------------------------
 import io  # noqa: E402
+import re  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
 import openpyxl  # noqa: E402
@@ -3112,8 +3113,10 @@ def test_controls_sheet_derived_row_shows_the_sources_values_not_the_sentinels()
 
 
 def test_controls_sheet_derived_row_without_a_source_shows_no_numbers():
-    """The full builder refuses a snapshot whose derived row cannot be resolved
-    (LegacySnapshotError); the sheet writer still never prints the sentinels."""
+    """Sheet-writer level: a derived row whose source is absent prints "derived (source
+    unavailable)" and no numbers, never the stored sentinels. (The full builder does not
+    raise on such a snapshot either: ``_residual_reconstructible`` catches the
+    LegacySnapshotError and degrades; see the test below.)"""
     import xlsxwriter
 
     from idraa.services.verification_workbook import _Styles, _write_controls_sheet
@@ -3133,3 +3136,161 @@ def test_controls_sheet_derived_row_without_a_source_shows_no_numbers():
         "dsc_corr_misaligned — Correcting Misaligned Decisions — derived (source unavailable)"
     )
     assert not any(isinstance(v, (int, float)) for v in row[1:5]), row
+
+
+def test_full_builder_degrades_instead_of_raising_on_an_unresolvable_derived_row():
+    """``_residual_reconstructible`` catches the adapter's LegacySnapshotError: the workbook
+    is still built, the MC sheet carries the fail-loud "composition not reconstructible"
+    text, and the Controls row reads "derived (source unavailable)" with no numbers."""
+    snap = _derived_controls_sheet_snapshot()
+    snap["assignments"] = [
+        a for a in snap["assignments"] if a["sub_function"] != "lec_resp_event_termination"
+    ]
+    run = _let_run(controls_snapshot=[snap])
+    out = build_single_run_let_workbook(run, _make_org())
+    row = _sheet_row_with(_open(out)["Controls"], "derived (source unavailable)")
+    assert not any(isinstance(v, (int, float)) for v in row[1:5]), row
+    assert "composition not reconstructible" in " ".join(_all_cell_strings(out))
+
+
+# --- Issue #268 Task 5 fix: only a MISSING coverage / reliability defaults to 1.0 ---------
+#
+# The Input-cells block used ``float(coverage or 1.0)``: a stored 0.0 (reachable through the
+# DTO, the form's min=0 and the DB CHECK) was displayed as 1 and fed to the Block 2/3
+# standalone formulas, which then overstated the control (cap 0.75, cov 0.0, r0 0.85 gave a
+# 0.49x TEF multiplier where the engine applies none). Engine and MC residual were right.
+
+_LET_FORMULA = re.compile(
+    r"LET\(_xlpm\.opeff,([A-Z]+\d+)\*([A-Z]+\d+)\*([A-Z]+\d+),1-_xlpm\.opeff\*([0-9.]+)\)"
+)
+
+
+def _plain_snapshot(cap: float, cov: float, rel: float) -> dict:
+    model = ControlSnapshotV3(
+        control_id="c-plain",
+        name="Plain prevention control",
+        domains=["loss_event"],
+        type="preventive",
+        assignments=[
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_prev_resistance"),
+                capability_value=cap,
+                coverage=cov,
+                reliability=rel,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+            )
+        ],
+    )
+    return model.model_dump(mode="json")
+
+
+def _standalone_multipliers(ws) -> dict:
+    """Evaluate each Block 2 standalone LET (``1 - cap*cov*rel*w``) from the sheet's own
+    cell values: {node: multiplier}. The node name is read from the formula row's label."""
+    out = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            text = cell.value if isinstance(cell.value, str) else getattr(cell.value, "text", "")
+            m = _LET_FORMULA.search((text or "").replace(" ", ""))
+            if not m or cell.column != 3:
+                continue
+            label = ws.cell(row=cell.row, column=1).value
+            node_match = re.search(r"→ (\w+) ", label) if isinstance(label, str) else None
+            if node_match is None:  # a Block 3 band-endpoint row, not a Block 2 row
+                continue
+            cap, cov, rel = (ws[ref].value for ref in m.group(1, 2, 3))
+            node = node_match.group(1)
+            out[node] = 1 - cap * cov * rel * float(m.group(4))
+    return out
+
+
+@pytest.mark.parametrize(
+    ("cap", "cov", "rel"),
+    [
+        pytest.param(0.75, 0.0, 0.85, id="coverage-zero"),
+        pytest.param(0.75, 0.5, 0.0, id="reliability-zero"),
+        pytest.param(0.75, 0.0, 0.0, id="both-zero"),
+        pytest.param(0.75, 0.5, 0.85, id="positive-control"),
+    ],
+)
+def test_controls_sheet_shows_a_stored_zero_and_its_formula_matches_the_engine(cap, cov, rel):
+    snap = _plain_snapshot(cap, cov, rel)
+    run = _let_run(controls_snapshot=[snap])
+    ws = openpyxl.load_workbook(
+        io.BytesIO(build_single_run_let_workbook(run, _make_org())), data_only=False
+    )["Controls"]
+    row = _sheet_row_with(ws, "lec_prev_resistance — ")
+    # the stored values are displayed as stored: 0.0 stays 0, it is not defaulted to 1
+    assert row[1:5] == ("probability", cap, cov, rel)
+    # expected (hand): 1 - cap*cov*rel*w ; actual: engine's composed multipliers
+    engine = composed_node_multipliers([snap])
+    sheet = _standalone_multipliers(ws)
+    assert set(sheet) == {"threat_event_frequency", "vulnerability"}
+    for node, value in sheet.items():
+        assert value == pytest.approx(engine[node], rel=1e-12), node
+    if cov == 0.0 or rel == 0.0:
+        assert sheet == {"threat_event_frequency": 1.0, "vulnerability": 1.0}  # no-effect
+
+
+def test_controls_sheet_defaults_a_missing_coverage_or_reliability_to_one():
+    """The legacy default survives for a value that is genuinely absent (None / no key)."""
+    import xlsxwriter
+
+    from idraa.services.verification_workbook import _Styles, _write_controls_sheet
+
+    snap = _plain_snapshot(0.75, 0.5, 0.85)
+    snap["assignments"][0]["coverage"] = None
+    del snap["assignments"][0]["reliability"]
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    ws = wb.add_worksheet("Controls")
+    _write_controls_sheet(ws, controls_snapshot=[snap], styles=_Styles(wb))
+    wb.close()
+    sheet = openpyxl.load_workbook(io.BytesIO(buf.getvalue()))["Controls"]
+    assert _sheet_row_with(sheet, "lec_prev_resistance — ")[1:5] == ("probability", 0.75, 1, 1)
+
+
+def test_a_zero_coverage_source_and_its_derived_row_agree_on_the_sheet():
+    """Before the fix the source row showed coverage 1 and the derived row 0 for the same
+    stored 0.0; the engine scores both at 0.0."""
+    snap = _derived_controls_sheet_snapshot()
+    for a in snap["assignments"]:
+        if a["sub_function"] == "lec_resp_event_termination":
+            a["coverage"] = 0.0
+    ws = _open(build_single_run_let_workbook(_let_run(controls_snapshot=[snap]), _make_org()))[
+        "Controls"
+    ]
+    source = _sheet_row_with(ws, "lec_resp_event_termination — ")
+    derived = _sheet_row_with(ws, "derived from")
+    assert source[1:5] == derived[1:5] == ("elapsed_time", 30.0, 0.0, 0.61)
+
+
+def test_no_sheet_formula_references_a_derived_rows_input_cells():
+    """Hardening (M5-N2): a derived row's C/D/E hold the SOURCE's values (a day-count for an
+    ELAPSED_TIME source) under a PROBABILITY slug, so no Controls-sheet formula may read them.
+    Today the DSC Identification-Correction pair has no node target; if that ever changes
+    this test fails instead of the sheet silently multiplying days as a probability."""
+    out = build_single_run_let_workbook(
+        _let_run(controls_snapshot=[_derived_controls_sheet_snapshot()]), _make_org()
+    )
+    wb = openpyxl.load_workbook(io.BytesIO(out), data_only=False)
+    controls = wb["Controls"]
+    derived_row = next(
+        r[0].row
+        for r in controls.iter_rows()
+        if isinstance(r[0].value, str) and "derived from" in r[0].value
+    )
+    ref = re.compile(rf"(?<![A-Z$!])\$?[CDE]\$?{derived_row}(?!\d)")
+    controls_ref = re.compile(rf"Controls!\$?[CDE]\$?{derived_row}(?!\d)")
+    referencing = []
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                v = cell.value
+                text = v if isinstance(v, str) else getattr(v, "text", None)
+                if not isinstance(text, str) or not (cell.data_type == "f" or text.startswith("=")):
+                    continue
+                pattern = ref if sheet.title == "Controls" else controls_ref
+                if pattern.search(text):
+                    referencing.append((sheet.title, cell.coordinate, text))
+    assert referencing == []

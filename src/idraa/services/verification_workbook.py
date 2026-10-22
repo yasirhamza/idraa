@@ -1723,8 +1723,12 @@ def _write_controls_sheet(
             sf_str = str(asn.get("sub_function") or "")
             unit_str = str(asn.get("unit_type") or "probability")
             cap_val = asn.get("capability_value")
-            cov_val: float | str = float(asn.get("coverage") or 1.0)
-            rel_val: float | str = float(asn.get("reliability") or 1.0)
+            # Only a MISSING value defaults to 1.0: a stored 0.0 is a real input the engine
+            # scores as 0 (coverage/reliability may be 0 through the DTO, the form and the
+            # DB CHECK), and ``or 1.0`` would show 1 and feed it to the Block 2/3 formulas.
+            cov_raw, rel_raw = asn.get("coverage"), asn.get("reliability")
+            cov_val: float | str = 1.0 if cov_raw is None else float(cov_raw)
+            rel_val: float | str = 1.0 if rel_raw is None else float(rel_raw)
             asn_row1 = rows.next_row_1based  # 1-based row of this write
             # C5: show the humanized sub-function name next to the raw slug (raw slug
             # kept first so the value stays auditable). humanize_slug is the SAME
@@ -1733,9 +1737,11 @@ def _write_controls_sheet(
             sf_label = f"{sf_str} — {human}" if human and human != sf_str else sf_str
             if disp.derived:
                 # #268: a derived Correcting Misaligned Decisions row stores inert 0.0
-                # sentinels. They must bypass the ``or 1.0`` fallback above (which would
-                # launder them into 1.0): show the linked source's unit, capability,
-                # coverage and reliability, or no numbers when the source is unavailable.
+                # sentinels, which are not inputs: show the linked source's unit,
+                # capability, coverage and reliability instead, or no numbers when the
+                # source is unavailable. No Block 2/3 formula reads these cells (the DSC
+                # Identification-Correction pair has no node target; pinned by
+                # test_no_sheet_formula_references_a_derived_rows_input_cells).
                 sf_label = f"{sf_str} — {disp.label}"
                 unit_str = disp.unit_type or "—"
                 cap_val = disp.capability_value
