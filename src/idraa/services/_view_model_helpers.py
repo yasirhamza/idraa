@@ -28,8 +28,11 @@ boundary (same convert-once pattern as the monetary values).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
+
+from idraa.utils.text import humanize_slug
 
 # ---- Task 1 (#353): DIST_STATS_DEFINITIONAL_NOTE — single source of truth ----
 #
@@ -1103,3 +1106,137 @@ def snapshot_sub_functions_by_id(
                 sfs.append(str(sf))
         result[str(cid)] = sfs
     return result
+
+
+# ---- Issue #268: display of derived Correcting Misaligned Decisions rows ----------------
+#
+# A derived ``dsc_corr_misaligned`` row stores only a link to another row of the same
+# control plus inert sentinels (capability NULL, coverage 0.0, reliability 0.0). Every
+# display surface (control detail, run controls snapshot, PDF controls table, workbook
+# Controls sheet) renders through ``assignment_display_rows`` so the sentinels are never
+# shown. Pure: stdlib + the slug humanizer only, so the PDF renderer can use it without
+# importing the ORM (tests/unit/test_pdf_report.py purity test).
+
+DSC_CORR_DISPLAY_LABEL = "Correcting Misaligned Decisions"
+_DSC_CORR_SLUG = "dsc_corr_misaligned"
+
+
+@dataclass(frozen=True)
+class AssignmentDisplayRow:
+    """One assignment row as displayed (never the derived row's stored sentinels).
+
+    ``capability_sub_function`` is the slug whose unit ``capability_value`` is expressed
+    in: the row's own for a plain row, the SOURCE's for a derived row (so a 30-day
+    ELAPSED_TIME source is not rendered as a bare probability). ``unit_type`` is the
+    snapshot's frozen unit when the input carried one (V3 snapshot rows), else None.
+    A derived row whose source cannot be found has ``source_unavailable`` set and no
+    capability / coverage / reliability / unit.
+    """
+
+    sub_function: str
+    label: str
+    capability_value: float | None
+    capability_sub_function: str
+    unit_type: str | None
+    coverage: float | None
+    reliability: float | None
+    confirmed: bool
+    derived: bool
+    source_unavailable: bool
+
+
+def _field(row: Any, name: str) -> Any:
+    """Read ``name`` from an ORM row / DTO (attribute) or a snapshot dict (key)."""
+    if isinstance(row, Mapping):
+        return row.get(name)
+    return getattr(row, name, None)
+
+
+def _slug(value: Any) -> str | None:
+    """A sub-function / unit slug from an enum member or a plain string."""
+    if value is None:
+        return None
+    return str(getattr(value, "value", value))
+
+
+def assignment_display_rows(rows: Iterable[Any]) -> list[AssignmentDisplayRow]:
+    """Display values for the assignment rows of ONE control, in input order.
+
+    ``rows`` are ORM ``ControlFunctionAssignment`` rows (the link is the source row's
+    ``id``), V3 snapshot DTOs or their JSON dicts (the link is the source's sub-function
+    slug, ``derived_from_sub_function``: a snapshot row carries no id of its own). A
+    ``dsc_corr_misaligned`` row displays its SOURCE's capability / coverage /
+    reliability under the label "Correcting Misaligned Decisions — derived from
+    <source>"; when no non-derived source row can be found (dangling or cleared link,
+    source absent, link to another derived row) it displays "derived (source
+    unavailable)" and no numbers. Every other row displays its own values.
+    """
+    items = list(rows)
+    plain_by_sf: dict[str, Any] = {}
+    plain_by_id: dict[Any, Any] = {}
+    for row in items:
+        slug = _slug(_field(row, "sub_function"))
+        if slug is None or slug == _DSC_CORR_SLUG:
+            continue
+        plain_by_sf[slug] = row
+        row_id = _field(row, "id")
+        if row_id is not None:
+            plain_by_id[row_id] = row
+
+    out: list[AssignmentDisplayRow] = []
+    for row in items:
+        own = _slug(_field(row, "sub_function")) or ""
+        confirmed = bool(_field(row, "confirmed_by_user_at"))
+        if own != _DSC_CORR_SLUG:
+            out.append(
+                AssignmentDisplayRow(
+                    sub_function=own,
+                    label=humanize_slug(own),
+                    capability_value=_field(row, "capability_value"),
+                    capability_sub_function=own,
+                    unit_type=_slug(_field(row, "unit_type")),
+                    coverage=_field(row, "coverage"),
+                    reliability=_field(row, "reliability"),
+                    confirmed=confirmed,
+                    derived=False,
+                    source_unavailable=False,
+                )
+            )
+            continue
+        link_sf = _slug(_field(row, "derived_from_sub_function"))
+        link_id = _field(row, "derived_from_assignment_id")
+        source = plain_by_sf.get(link_sf) if link_sf is not None else None
+        if source is None and link_sf is None and link_id is not None:
+            source = plain_by_id.get(link_id)
+        if source is None:
+            out.append(
+                AssignmentDisplayRow(
+                    sub_function=own,
+                    label=f"{DSC_CORR_DISPLAY_LABEL} — derived (source unavailable)",
+                    capability_value=None,
+                    capability_sub_function=own,
+                    unit_type=None,
+                    coverage=None,
+                    reliability=None,
+                    confirmed=confirmed,
+                    derived=True,
+                    source_unavailable=True,
+                )
+            )
+            continue
+        source_slug = _slug(_field(source, "sub_function")) or ""
+        out.append(
+            AssignmentDisplayRow(
+                sub_function=own,
+                label=f"{DSC_CORR_DISPLAY_LABEL} — derived from {humanize_slug(source_slug)}",
+                capability_value=_field(source, "capability_value"),
+                capability_sub_function=source_slug,
+                unit_type=_slug(_field(source, "unit_type")),
+                coverage=_field(source, "coverage"),
+                reliability=_field(source, "reliability"),
+                confirmed=confirmed,
+                derived=True,
+                source_unavailable=False,
+            )
+        )
+    return out

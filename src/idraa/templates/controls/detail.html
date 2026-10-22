@@ -95,14 +95,16 @@
       <p class="text-body text-ink-2">No function assignments yet. Edit this control to add one.</p>
     {% else %}
       {% set asgn_rows = [] %}
-      {% for asgn in c.assignments %}
+      {#- #268: a derived Correcting Misaligned Decisions row shows its SOURCE's values
+          (never the stored 0.0 sentinels); one with no resolvable source shows no numbers. -#}
+      {% for d in assignment_display_rows(c.assignments) %}
         {% set _ = asgn_rows.append({
-          "sub_function":     asgn.sub_function.value | humanize_slug,
-          "sub_function_raw": asgn.sub_function.value,
-          "capability":   unit_display(asgn),
-          "coverage":     "%.3f" | format(asgn.coverage),
-          "reliability":  "%.3f" | format(asgn.reliability),
-          "confirmed":    "✓" if asgn.confirmed_by_user_at else "—",
+          "sub_function":     d.label,
+          "sub_function_raw": d.sub_function,
+          "capability":   "—" if d.source_unavailable else unit_display({"sub_function": d.capability_sub_function, "capability_value": d.capability_value}),
+          "coverage":     "—" if d.coverage is none else "%.3f" | format(d.coverage),
+          "reliability":  "—" if d.reliability is none else "%.3f" | format(d.reliability),
+          "confirmed":    "✓" if d.confirmed else "—",
         }) %}
       {% endfor %}
       {{ data_table(

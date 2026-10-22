@@ -1158,3 +1158,14 @@ async def control_delete(
     # Transaction commit owned by get_db dependency.
     # Issue #154: query-string flash so the list page can confirm the delete.
     return RedirectResponse("/controls?deleted=1", status_code=303)
+
+
+# Jinja access to the shared assignment display helper (#268): the control detail page and
+# the run controls snapshot component (runs/components/controls_snapshot.html) both render
+# assignment rows through it, so a derived Correcting Misaligned Decisions row shows its
+# source's values and never the stored sentinels. Registered here, below the pinned route
+# lines, rather than beside the other template globals in app.py, whose citation anchors
+# must not move.
+from idraa.services._view_model_helpers import assignment_display_rows  # noqa: E402
+
+templates.env.globals["assignment_display_rows"] = assignment_display_rows

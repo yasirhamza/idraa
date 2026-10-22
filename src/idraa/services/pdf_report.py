@@ -2717,6 +2717,10 @@ def _draw_controls_assignment_snapshot_table(
             )
         ]
 
+    # Local import: a top-level one would shift this file's cited line anchors. The helper
+    # is pure (stdlib + the slug humanizer), so the renderer's purity boundary holds.
+    from idraa.services._view_model_helpers import assignment_display_rows
+
     # FONTSIZE 7 for this table's grid is not needed — the SnapCell Paragraph
     # style below (fontSize=7) carries the tighter text size; table_style's
     # grid font (8) governs plain-string cells only ("—" placeholders).
@@ -2742,8 +2746,27 @@ def _draw_controls_assignment_snapshot_table(
         if not assignments:
             rows.append([ctrl_name, "—", "—", "—", "—", "—", "—"])
         else:
-            for i, asn in enumerate(assignments):
+            for i, (asn, disp) in enumerate(
+                zip(assignments, assignment_display_rows(assignments), strict=True)
+            ):
                 name_cell: Any = ctrl_name if i == 0 else ""
+                if disp.derived:
+                    # #268: a derived Correcting Misaligned Decisions row stores only inert
+                    # sentinels; show its source's values and unit, or no numbers at all
+                    # when the source cannot be found.
+                    cap_v, cov_v, rel_v = disp.capability_value, disp.coverage, disp.reliability
+                    rows.append(
+                        [
+                            name_cell,
+                            Paragraph(rl_escape(disp.label), ps_cell),
+                            f"{cap_v:.3f}" if cap_v is not None else "—",
+                            rl_escape(disp.unit_type or "—"),
+                            f"{cov_v:.0%}" if cov_v is not None else "—",
+                            f"{rel_v:.0%}" if rel_v is not None else "—",
+                            "Yes" if disp.confirmed else "No",
+                        ]
+                    )
+                    continue
                 sub_fn = Paragraph(rl_escape(str(asn.get("sub_function", "—"))), ps_cell)
                 cap = asn.get("capability_value")
                 cap_str = f"{cap:.3f}" if cap is not None else "—"

@@ -712,3 +712,52 @@ async def test_add_assignment_button_uses_dynamic_index(client: AsyncClient) -> 
         "regression: + Add button is no longer wired to a DOM-derived index "
         "via hx-vals='js:...' over data-row-index (issue #123)"
     )
+
+
+# ---------------------------------------------------------------------------
+# #268 Task 5 -- a derived Correcting Misaligned Decisions row displays its SOURCE's values
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_control_detail_shows_a_derived_row_with_its_sources_values(
+    client: AsyncClient,
+) -> None:
+    """The detail page lists the derived row as "Correcting Misaligned Decisions —
+    derived from <source>" with the SOURCE's capability / coverage / reliability, never the
+    stored sentinels (capability NULL, coverage 0.000, reliability 0.000)."""
+    import re
+
+    from bs4 import BeautifulSoup
+
+    email, pwd = await _bootstrap_app(client, uuid.uuid4().hex[:6])
+    await _login(client, email, pwd)
+    payload = {
+        "name": "Linked Detail Control",
+        "description": "#268 display",
+        "type": "technical",
+        "annual_cost": "0",
+        "assignments[0][sub_function]": "lec_prev_resistance",
+        "assignments[0][capability_value]": "0.75",
+        "assignments[0][coverage]": "0.9",
+        "assignments[0][reliability]": "0.85",
+        "assignments[1][sub_function]": "lec_resp_event_termination",
+        "assignments[1][capability_value]": "30",
+        "assignments[1][coverage]": "0.83",
+        "assignments[1][reliability]": "0.61",
+        "corrects_misaligned_decisions_from": "lec_resp_event_termination",
+    }
+    r = await csrf_post(client, "/controls/new", payload, follow_redirects=False)
+    assert r.status_code == 303, r.text[:400]
+    m = re.match(r"/controls/([0-9a-f-]{36})", r.headers["location"])
+    assert m, r.headers["location"]
+
+    detail = await client.get(f"/controls/{m.group(1)}")
+    assert detail.status_code == 200
+    soup = BeautifulSoup(detail.text, "html.parser")
+    derived_rows = [tr for tr in soup.find_all("tr") if "derived from" in tr.get_text()]
+    assert len(derived_rows) == 1
+    cells = [" ".join(td.get_text().split()) for td in derived_rows[0].find_all("td")]
+    assert cells[0] == "Correcting Misaligned Decisions — derived from LEC Resp Event Termination"
+    assert cells[1:4] == ["30.0 days", "0.830", "0.610"]
+    assert "0.000" not in derived_rows[0].get_text()

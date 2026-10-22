@@ -1549,6 +1549,7 @@ def _write_controls_sheet(
         UnitType,
     )
 
+    from idraa.services._view_model_helpers import assignment_display_rows
     from idraa.services.weight_robustness import band_endpoint_mappings
     from idraa.utils.text import humanize_slug
 
@@ -1718,18 +1719,28 @@ def _write_controls_sheet(
         # Track per-assignment cell addresses so the composition and band-endpoint
         # LET formulas can reference them by coordinate (never by user-data content).
         asn_cells: list[dict[str, Any]] = []
-        for asn in assignments:
+        for asn, disp in zip(assignments, assignment_display_rows(assignments), strict=True):
             sf_str = str(asn.get("sub_function") or "")
             unit_str = str(asn.get("unit_type") or "probability")
             cap_val = asn.get("capability_value")
-            cov_val = float(asn.get("coverage") or 1.0)
-            rel_val = float(asn.get("reliability") or 1.0)
+            cov_val: float | str = float(asn.get("coverage") or 1.0)
+            rel_val: float | str = float(asn.get("reliability") or 1.0)
             asn_row1 = rows.next_row_1based  # 1-based row of this write
             # C5: show the humanized sub-function name next to the raw slug (raw slug
             # kept first so the value stays auditable). humanize_slug is the SAME
             # canonical humanizer the web/PDF surfaces use (idraa.utils.text).
             human = humanize_slug(sf_str)
             sf_label = f"{sf_str} — {human}" if human and human != sf_str else sf_str
+            if disp.derived:
+                # #268: a derived Correcting Misaligned Decisions row stores inert 0.0
+                # sentinels. They must bypass the ``or 1.0`` fallback above (which would
+                # launder them into 1.0): show the linked source's unit, capability,
+                # coverage and reliability, or no numbers when the source is unavailable.
+                sf_label = f"{sf_str} — {disp.label}"
+                unit_str = disp.unit_type or "—"
+                cap_val = disp.capability_value
+                cov_val = "—" if disp.coverage is None else float(disp.coverage)
+                rel_val = "—" if disp.reliability is None else float(disp.reliability)
             rows.row(
                 [
                     sf_label,
@@ -1741,7 +1752,9 @@ def _write_controls_sheet(
                     # before touching cap_cell today, and a number format is
                     # display-only either way (bundled-review NTH-2).
                     (
-                        float(cap_val) if cap_val is not None else "null",
+                        "—"
+                        if disp.source_unavailable
+                        else (float(cap_val) if cap_val is not None else "null"),
                         styles.days
                         if unit_str == UnitType.ELAPSED_TIME.value
                         else styles.multiplier,

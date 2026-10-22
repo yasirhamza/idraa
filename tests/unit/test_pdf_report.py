@@ -4845,3 +4845,101 @@ def test_no_unwrapped_oblique_headings() -> None:
         src = f.read()
     assert 'styles["Heading3"]' not in src, "unwrapped oblique Heading3 remains"
     assert 'styles["Heading4"]' not in src, "unwrapped oblique Heading4 remains"
+
+
+# ---- #268 Task 5: derived Correcting Misaligned Decisions row in the controls table ----
+
+
+def _derived_snapshot_assignments(*, source_sf: str | None = "lec_resp_event_termination") -> list:
+    """A V3 snapshot control: plain row, ELAPSED_TIME source, derived row (sentinels)."""
+    plain = {
+        "sub_function": "lec_prev_resistance",
+        "capability_value": 0.75,
+        "unit_type": "probability",
+        "coverage": 0.9,
+        "reliability": 0.85,
+        "confirmed_by_user_at": "2026-05-01T10:00:00",
+    }
+    source = {
+        "sub_function": "lec_resp_event_termination",
+        "capability_value": 30.0,
+        "unit_type": "elapsed_time",
+        "coverage": 0.83,
+        "reliability": 0.61,
+        "confirmed_by_user_at": None,
+    }
+    derived = {
+        "sub_function": "dsc_corr_misaligned",
+        "capability_value": None,
+        "unit_type": "probability",
+        "coverage": 0.0,
+        "reliability": 0.0,
+        "confirmed_by_user_at": "2026-05-02T10:00:00",
+        "derived_from_sub_function": source_sf,
+    }
+    return [plain, source, derived]
+
+
+def _controls_table_cells(assignments: list) -> list[list[str]]:
+    """Plain text of every cell of the PDF controls-assignment table, header first."""
+    from reportlab.platypus import Paragraph
+
+    from idraa.services.pdf_report import _draw_controls_assignment_snapshot_table
+
+    snapshot = [
+        {
+            "snapshot_version": 3,
+            "control_id": "ctrl-derived",
+            "name": "Linked response control",
+            "domains": ["loss_event"],
+            "type": "preventive",
+            "assignments": assignments,
+        }
+    ]
+    (table,) = _draw_controls_assignment_snapshot_table(snapshot, {"Normal": None})
+    return [
+        [c.getPlainText() if isinstance(c, Paragraph) else str(c) for c in row]
+        for row in table._cellvalues
+    ]
+
+
+def test_pdf_controls_table_shows_a_derived_row_with_its_sources_values() -> None:
+    rows = _controls_table_cells(_derived_snapshot_assignments())
+    assert rows[0][:3] == ["Control", "Sub-function", "Capability"]
+    derived = rows[3]  # header, plain, source, derived
+    # name, sub-function label, capability, unit, coverage, reliability, confirmed
+    assert derived[1] == "Correcting Misaligned Decisions — derived from LEC Resp Event Termination"
+    assert derived[2:] == ["30.000", "elapsed_time", "83%", "61%", "Yes"]
+    # the plain rows still render exactly as before (raw slug, own values)
+    assert rows[1][1:] == ["lec_prev_resistance", "0.750", "probability", "90%", "85%", "Yes"]
+    assert rows[2][1:] == [
+        "lec_resp_event_termination",
+        "30.000",
+        "elapsed_time",
+        "83%",
+        "61%",
+        "No",
+    ]
+
+
+def test_pdf_controls_table_derived_row_without_a_source_shows_no_numbers() -> None:
+    derived = _controls_table_cells(_derived_snapshot_assignments(source_sf=None))[3]
+    assert derived[1] == "Correcting Misaligned Decisions — derived (source unavailable)"
+    assert derived[2:6] == ["—", "—", "—", "—"]
+    assert "0%" not in " ".join(derived[2:6])
+
+
+def test_pdf_report_renders_a_derived_control_row_end_to_end() -> None:
+    controls_snapshot = [
+        {
+            "snapshot_version": 3,
+            "control_id": "ctrl-derived",
+            "name": "Linked response control",
+            "domains": ["loss_event"],
+            "type": "preventive",
+            "assignments": _derived_snapshot_assignments(),
+        }
+    ]
+    pdf = render_executive_pdf(_single_run_data(controls_snapshot=controls_snapshot))
+    text = re.sub(r"\s+", " ", " ".join(_extract_pages(pdf)))
+    assert "derived from LEC Resp Event Termination" in text

@@ -3046,3 +3046,90 @@ def test_controls_basis_note_absent_on_insufficient_budget_blob():
     strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
     assert "different basis" not in strings
     assert "typical-case point" not in strings
+
+
+# --- Issue #268 Task 5: Controls sheet shows a derived row's SOURCE values -----------------
+#
+# The sheet's Input-cells block reads ``coverage or 1.0`` / ``reliability or 1.0`` from the
+# snapshot assignments: a derived row's stored 0.0 sentinels would be laundered into 1.0.
+# Derived rows bypass that fallback and show the linked source's values.
+
+
+def _derived_controls_sheet_snapshot() -> dict:
+    model = ControlSnapshotV3(
+        control_id="c-derived",
+        name="Linked response control",
+        domains=["loss_event"],
+        type="preventive",
+        assignments=[
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_prev_avoidance"),
+                capability_value=0.8,
+                coverage=1.0,
+                reliability=1.0,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+            ),
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_resp_event_termination"),
+                capability_value=30.0,
+                coverage=0.83,
+                reliability=0.61,
+                unit_type=v3_enums.UnitType.ELAPSED_TIME,
+            ),
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("dsc_corr_misaligned"),
+                capability_value=None,
+                coverage=0.0,
+                reliability=0.0,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+                derived_from_sub_function=v3_enums.FairCamSubFunction("lec_resp_event_termination"),
+            ),
+        ],
+    )
+    return model.model_dump(mode="json")
+
+
+def _sheet_row_with(ws, needle: str) -> tuple:
+    rows = [r for r in ws.iter_rows(values_only=True) if isinstance(r[0], str) and needle in r[0]]
+    assert len(rows) == 1, f"expected one Controls row containing {needle!r}, got {len(rows)}"
+    return rows[0]
+
+
+def test_controls_sheet_derived_row_shows_the_sources_values_not_the_sentinels():
+    run = _let_run(controls_snapshot=[_derived_controls_sheet_snapshot()])
+    ws = _open(build_single_run_let_workbook(run, _make_org()))["Controls"]
+    row = _sheet_row_with(ws, "derived from")
+    assert row[0] == (
+        "dsc_corr_misaligned — Correcting Misaligned Decisions — derived from "
+        "LEC Resp Event Termination"
+    )
+    # unit (the source's), capability, coverage, reliability: the SOURCE's, never the stored
+    # 0.0 sentinels and never the ``or 1.0`` fallback's 1.0.
+    assert row[1:5] == ("elapsed_time", 30.0, 0.83, 0.61)
+    # the plain source row is unchanged
+    src = _sheet_row_with(ws, "lec_resp_event_termination — ")
+    assert src[1:5] == ("elapsed_time", 30.0, 0.83, 0.61)
+
+
+def test_controls_sheet_derived_row_without_a_source_shows_no_numbers():
+    """The full builder refuses a snapshot whose derived row cannot be resolved
+    (LegacySnapshotError); the sheet writer still never prints the sentinels."""
+    import xlsxwriter
+
+    from idraa.services.verification_workbook import _Styles, _write_controls_sheet
+
+    snap = _derived_controls_sheet_snapshot()
+    snap["assignments"] = [
+        a for a in snap["assignments"] if a["sub_function"] != "lec_resp_event_termination"
+    ]
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    ws = wb.add_worksheet("Controls")
+    _write_controls_sheet(ws, controls_snapshot=[snap], styles=_Styles(wb))
+    wb.close()
+    sheet = openpyxl.load_workbook(io.BytesIO(buf.getvalue()))["Controls"]
+    row = _sheet_row_with(sheet, "derived (source unavailable)")
+    assert row[0] == (
+        "dsc_corr_misaligned — Correcting Misaligned Decisions — derived (source unavailable)"
+    )
+    assert not any(isinstance(v, (int, float)) for v in row[1:5]), row
