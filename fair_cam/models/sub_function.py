@@ -122,3 +122,23 @@ SUB_FUNCTION_UNITS: dict[FairCamSubFunction, UnitType] = {
 TIME_UNIT_EXCLUDED: frozenset[FairCamSubFunction] = frozenset(
     sf for sf, ut in SUB_FUNCTION_UNITS.items() if ut in (UnitType.ELAPSED_TIME, UnitType.CURRENCY)
 )
+
+# Issue #268 (register C12): sub-functions whose assignment may be LINKED to
+# fulfil the VIRTUAL `DSC_CORR_MISALIGNED` (FAIR-CAM §5.3 p.50: Correcting
+# Misaligned Decisions "is fulfilled by controls within other functions").
+# The set is the opeff-bearing members of Variance Correction ∪ LEC Response:
+#   - VMC_CORR_IMPLEMENTATION  (ELAPSED_TIME, tau 79.3 d)
+#   - LEC_RESP_EVENT_TERMINATION (ELAPSED_TIME, tau 64.0 d)
+#   - LEC_RESP_RESILIENCE (PROBABILITY; a labelled PROXY source)
+# Excluded on purpose: VMC_CORR_TREATMENT_SELECTION (register C8 commits it to be
+# score-neutral in every composition; a TS-sourced derived row would move
+# E_meta), LEC_RESP_LOSS_REDUCTION (CURRENCY, no opeff), and everything that is
+# not a correction/response process. Mirrored for v3 write paths by
+# `idraa.models.enums.DSC_CORR_LINK_SOURCES` (parity-tested).
+DERIVABLE_SOURCES: frozenset[FairCamSubFunction] = frozenset(
+    {
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+        FairCamSubFunction.LEC_RESP_RESILIENCE,
+    }
+)
