@@ -831,8 +831,11 @@ Everything numeric in this section is therefore Idraa's.
   `1 − (1−E_vp)(1−E_dp)(1−a·i)(1−b·i)` where the fully dependent value is
   `1 − (1−E_vp)(1−E_dp)(1 − i·(a + b − a·b))`; the overstatement is
   `(1−E_vp)(1−E_dp)·a·b·i·(1−i) ≤ a·b·i·(1−i) ≤ 1/4`, attained at `E_vp = E_dp =
-  0`, `a = b = 1`, `i = 1/2`. Additional unlinked Implementation carriers only
-  raise `i` through the within-sub-function OR, so the bound still holds. Through
+  0`, `a = b = 1`, `i = 1/2`. Additional unlinked Implementation carriers (pooled
+  value `u`) raise only the VMC-side value: with linked implementation value
+  `i_d` and VMC-side value `i_v = OR(i_d, u) ≥ i_d`, the overstatement is
+  `(1−E_vp)(1−E_dp)·a·b·i_d·(1−i_v) ≤ a·b·i_d·(1−i_d) ≤ 1/4`, so the bound still
+  holds. All of these are absolute differences in `E_meta`, not relative. Through
   the κ coupling any LEC reliability moves by at most `κ·(1 − r0)` times that:
   0.025 absolute at κ = 0.5, r0 = 0.8. For a Response-sourced link the shared
   process is the control's own LEC row, which is on the other side of the

@@ -109,9 +109,11 @@ class ControlFunctionAssignmentDTO(BaseModel):
     def reject_virtual_unless_derived(self) -> ControlFunctionAssignmentDTO:
         """Enforce Standard §5.3 (page 50): DSC_CORR_MISALIGNED is a virtual
         sub-function — 'there are no distinct controls that serve this function.'
-        Assignment is only permitted when derived_from_assignment_id references
-        the governing LEC Response or VMC Variance Correction assignment of the
-        same control (the derived row of #268; register C12).
+        This validator checks ONE thing: a dsc_corr_misaligned row must carry a
+        derived_from_assignment_id (it is the derived row of #268; register C12).
+        It does not check what the link points at — same-control resolution and
+        the closed source set (DSC_CORR_LINK_SOURCES) are enforced in the service
+        (validate_dsc_corr_link) and, at scoring time, by the run mapper.
 
         Decision 3 (spec §4.3): enforce at Pydantic layer AND DB CHECK constraint.
         """

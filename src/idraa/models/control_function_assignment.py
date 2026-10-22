@@ -7,7 +7,8 @@ ControlForm model_validator catches duplicate sub_functions before they reach th
 
 # Phase 2: VF/VD columns (variance_freq_per_year, variance_duration_days) deferred
 #           -- see audit §10.3 and spec §4.7.
-# Phase 2: derived_from_assignment_id index -- add when column is populated.
+# derived_from_assignment_id is populated by the Correcting Misaligned Decisions
+# derived link (#268); an index on it is tracked as a follow-up issue.
 """
 
 from __future__ import annotations
