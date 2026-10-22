@@ -198,8 +198,11 @@ def test_reason_dsc_corr_with_implementation_and_no_identifier_in_run() -> None:
 
 
 def test_reason_dsc_corr_with_an_identifier_in_run_keeps_partner_copy() -> None:
-    """Either identifier in the run (a dsc_id_misaligned control OR a vmc_id_* control)
-    means the correction is scored: the ordinary partner split applies."""
+    """Either signal in the run keeps the ordinary partner split, for different reasons:
+    a dsc_id_misaligned control scores the DSC pair (the pair is an AND over
+    dsc_id_misaligned and dsc_corr_misaligned only); a vmc_id_* control does NOT identify
+    for dsc_corr_misaligned, but it scores the control's OTHER pair (VMC identification
+    AND vmc_corr_implementation), so the control's value is not structurally zero."""
     sfs = ["vmc_corr_implementation", "dsc_corr_misaligned"]
     assert (
         control_zero_value_reason(sfs, run_has_dsc_id=True, run_has_vmc_id=False)
@@ -533,8 +536,11 @@ def test_zero_reason_wiring_ts_plus_dsc_id_scoped_to_correcting_link_in_run() ->
 
 
 def test_zero_reason_wiring_dsc_corr_scoped_to_identifiers_in_run() -> None:
-    """The correcting control's $0 is explained by the absence of ANY identifier in the
-    run: a dsc_id_misaligned control or a vmc_id_* control rescues it."""
+    """The correcting control's $0 is structurally zero only when BOTH of its pairs are
+    zero: no dsc_id_misaligned in the run (DSC pair; vmc_id_* is not an operand of it) AND
+    no vmc_id_* in the run (VMC pair with the control's vmc_corr_implementation). Either a
+    dsc_id_misaligned control or a vmc_id_* control therefore rescues it, via a different
+    pair each."""
     cid, lec_cid = "corr1", "lec1"
     base = {
         cid: ["vmc_corr_implementation", "dsc_corr_misaligned"],

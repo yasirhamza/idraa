@@ -928,9 +928,16 @@ _META_LABEL_ONLY_REASON: str = (
     "Label-only sub-function — recorded for classification, never scored (register C8)"
 )
 # #268 (spec §3.3): run-scoped copies for the DSC identification / correction pair.
+# The pair is a leaf AND over {dsc_id_misaligned, dsc_corr_misaligned} ONLY, so
 # dsc_id_misaligned scores only when some control in the run carries a correcting
-# dsc_corr_misaligned row; dsc_corr_misaligned scores only when some control in the run
-# identifies (dsc_id_misaligned, or a scored vmc_id_* identification).
+# dsc_corr_misaligned row, and dsc_corr_misaligned scores only when some control in the
+# run carries dsc_id_misaligned. A vmc_id_* row is NOT an identification operand of this
+# pair (it feeds the VMC pair). run_has_vmc_id is consulted because a pure-meta
+# correcting control carries vmc_corr_implementation, whose OTHER pair (VMC identification
+# AND implementation) would otherwise score: a vmc_id_* row anywhere in the run rescues
+# the control through that VMC pair, not through the dsc_corr_misaligned member. So the
+# "no identifying control" copy fires only when BOTH of the control's pairs are
+# structurally zero.
 _DSC_ID_NO_LINK_REASON: str = "Decision Support identification with no correcting link in this run"
 _DSC_CORR_NO_ID_REASON: str = (
     "Correction with no identifying control in this run "
@@ -986,7 +993,12 @@ def control_zero_value_reason(
             spec §3.3) — whether ANY control in the run carries ``dsc_id_misaligned``,
             ``dsc_corr_misaligned`` (a derived correcting row) or a ``vmc_id_*``
             identification sub-function. The DSC identification / correction pair is an
-            AND, so each member's zero is explained by the run, not by the control alone.
+            AND over ``dsc_id_misaligned`` and ``dsc_corr_misaligned`` only, so each
+            member's zero is explained by the run, not by the control alone;
+            ``run_has_vmc_id`` is consulted for a different reason: a ``vmc_id_*`` row
+            does not make ``dsc_corr_misaligned`` score, but it makes the correcting
+            control's OTHER pair (VMC identification AND ``vmc_corr_implementation``)
+            score, so without one in the run both pairs are structurally zero.
             All default True, the fail-safe "partner exists" direction (the ordinary
             partner-split copy rather than the stronger "structurally zero in this run"
             claim). Only consulted for a pure-meta control (Rule 3).
@@ -1072,6 +1084,8 @@ def control_zero_value_reason(
         if sfs.issubset(_LABEL_ONLY_SUB_FUNCTIONS):
             return _META_LABEL_ONLY_REASON
         # #268 (spec §3.3): the DSC identification / correction pair is run-scoped.
+        # The correcting copy needs BOTH pairs of the control to be zero: no
+        # dsc_id_misaligned (DSC pair) AND no vmc_id_* (VMC pair via its implementation).
         if "dsc_id_misaligned" in sfs and sfs <= _DSC_ID_PURE_SET and not run_has_dsc_corr:
             return _DSC_ID_NO_LINK_REASON
         if (
