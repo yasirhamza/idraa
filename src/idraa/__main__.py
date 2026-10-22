@@ -10,10 +10,6 @@ are app-level operations run on the host against the live DB
 sole-admin-locked-out backstop from the strong-auth design (§Recovery):
 
     python -m idraa auth reset-mfa <email>
-    python -m idraa library siem-resync [--apply] [--database-url URL]
-
-#199 slice 1: gated resync of deployed SIEM controls after the Visibility-coverage
-bump; see services/siem_visibility_resync.py.
 """
 
 from __future__ import annotations
@@ -65,13 +61,6 @@ async def _reset_mfa(email: str) -> int:
         await get_engine().dispose()
 
 
-async def _siem_resync(*, apply: bool, database_url: str | None) -> int:
-    # Imports deferred so ``--help`` never touches DB/config (same rule as _reset_mfa).
-    from idraa.services.siem_visibility_resync import run
-
-    return await run(apply=apply, database_url=database_url)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m idraa")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -82,20 +71,11 @@ def main(argv: list[str] | None = None) -> int:
         help="clear a user's MFA factors and sessions (forces re-enrollment)",
     )
     reset.add_argument("email")
-    library = sub.add_parser("library", help="control-library operations")
-    library_sub = library.add_subparsers(dest="library_command", required=True)
-    siem = library_sub.add_parser(
-        "siem-resync",
-        help="#199 slice 1: resync untouched SIEM Visibility-coverage defaults (dry by default)",
-    )
-    siem.add_argument("--apply", action="store_true", help="write class A; default is a dry run")
-    siem.add_argument("--database-url", default=None, help="override DATABASE_URL (sqlite only)")
     args = parser.parse_args(argv)
-    # Every subparser level is required=True, so parse_args returns only for a leaf
-    # command; the two leaves are dispatched on `command` (no fallthrough branch —
-    # a parser.error() tail would be mypy-unreachable under warn_unreachable=true).
-    if args.command == "library":
-        return asyncio.run(_siem_resync(apply=args.apply, database_url=args.database_url))
+    # Both subparser levels are required=True, so parse_args only returns for
+    # the sole leaf command (auth reset-mfa) — no fallthrough branch exists.
+    # (A parser.error() tail here would be mypy-unreachable under
+    # warn_unreachable=true — plan-gate CQ-I1/Arch-N1.)
     return asyncio.run(_reset_mfa(args.email))
 
 

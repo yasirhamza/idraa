@@ -96,7 +96,7 @@ def test_epic_f_assignments_are_committed_at_the_pinned_values(
     seed: dict[str, dict[str, Any]],
 ) -> None:
     expected = {
-        SIEM: (0.7, 0.3, 0.8),  # coverage 0.3: residual-share derivation (#199 slice 1)
+        SIEM: (0.7, 0.8, 0.8),
         FIM: (0.7, 0.8, 0.8),
         SSPM: (0.7, 0.8, 0.8),
         SRA: (0.7, 0.2, 0.8),  # coverage 0.2: gate-2 ruling M2-1
@@ -115,24 +115,16 @@ def test_epic_f_assignments_are_committed_at_the_pinned_values(
         assert len(a["capability_citations"]) == 1
 
 
-def test_fim_visibility_completes_detection_with_ir(seed: dict[str, dict[str, Any]]) -> None:
-    # Detection = Vis 0.448 · Mon (null ET: 0.5·0.8·0.8 = 0.32) · Rec 0.448 = 0.06422528;
-    # pair = 0.06422528 · IR Event termination 0.32 = 0.0205520896.
-    _pin([_before(seed[FIM]), seed[IR]], DET, 0.0)
-    _pin([_before(seed[FIM]), seed[IR]], PAIR, 0.0)
-    _pin([seed[FIM], seed[IR]], DET, 0.06422528)
-    _pin([seed[FIM], seed[IR]], PAIR, 0.0205520896)
-
-
-def test_siem_visibility_at_residual_coverage_completes_detection_with_ir(
+def test_siem_and_fim_visibility_completes_detection_with_ir(
     seed: dict[str, dict[str, Any]],
 ) -> None:
-    # #199 slice 1 (spec §5.2): Vis 0.7·0.3·0.8 = 0.168 · Mon 0.32 · Rec 0.448 = 0.02408448;
-    # pair = 0.02408448 · 0.32 = 0.0077070336 (was 0.06422528 / 0.0205520896 at coverage 0.8).
-    _pin([_before(seed[SIEM]), seed[IR]], DET, 0.0)
-    _pin([_before(seed[SIEM]), seed[IR]], PAIR, 0.0)
-    _pin([seed[SIEM], seed[IR]], DET, 0.02408448)
-    _pin([seed[SIEM], seed[IR]], PAIR, 0.0077070336)
+    # Detection = Vis 0.448 · Mon (null ET: 0.5·0.8·0.8 = 0.32) · Rec 0.448 = 0.06422528;
+    # pair = 0.06422528 · IR Event termination 0.32 = 0.0205520896.
+    for slug in (SIEM, FIM):
+        _pin([_before(seed[slug]), seed[IR]], DET, 0.0)
+        _pin([_before(seed[slug]), seed[IR]], PAIR, 0.0)
+        _pin([seed[slug], seed[IR]], DET, 0.06422528)
+        _pin([seed[slug], seed[IR]], PAIR, 0.0205520896)
 
 
 def test_sspm_visibility_is_score_neutral_without_a_recognition_carrier(
@@ -153,29 +145,27 @@ def test_siem_after_plus_sspm_plus_ir(seed: dict[str, dict[str, Any]]) -> None:
     after = [seed[SIEM], seed[SSPM], seed[IR]]
     result = compose_groups([_seed_entry_to_control(e) for e in after], kappa=KAPPA)
     assert result.meta_strength == pytest.approx(0.22249472, rel=REL)
-    # #199 slice 1 (spec §5.2, SIEM coverage 0.3): r_eff 0.822249472; Vis 0.7·0.3·r =
-    # 0.17267238912; Mon 1 − (1 − 0.3288997888)² = 0.5496245065; Rec 0.46045970432
-    # -> Detection 0.0436999175; × Resp 0.3288997888 = 0.0143728936. Adding SSPM's
-    # Visibility ORs it with SIEM's -> 0.1401109797 / 0.0460824716.
-    _pin(before, DET, 0.04369991749180795)
-    _pin(before, PAIR, 0.014372893633633064)
-    _pin(after, DET, 0.14011097971620956)
-    _pin(after, PAIR, 0.046082471637222414)
+    # Table values are shown to 10 decimals; the literals below are the exact hand-math to
+    # 12 significant digits so the rel=1e-9 pin is not eaten by display rounding.
+    _pin(before, DET, 0.116533113311)
+    _pin(before, PAIR, 0.0383277163564)
+    _pin(after, DET, 0.179407423724)
+    _pin(after, PAIR, 0.0590070637720)
 
 
-def test_edr_plus_siem_plus_ir_detection_rises_21_percent(
+def test_edr_plus_siem_plus_ir_detection_rises_55_percent(
     seed: dict[str, dict[str, Any]],
 ) -> None:
     # Before: Vis 0.448 · OR(0.32, 0.32) = 0.5376 · OR(0.448, 0.448) = 0.695296 -> 0.1674584261.
-    # After (#199 slice 1, coverage 0.3; C11 still ORs as if independent):
-    # Vis = 1 − 0.552·0.832 = 0.540736; 0.540736 · 0.5376 · 0.695296 = 0.2021223203 (+20.7 %).
-    # Response = mean(EDR Resilience 0.252, IR ET 0.32) = 0.286 (weak-AND) -> 0.0578069836.
+    # After (C11 ORs SIEM's Visibility with EDR's as if independent; M2-2):
+    # 0.695296 · 0.5376 · 0.695296 = 0.2598954772 (+55.2%).
+    # Response = mean(EDR Resilience 0.252, IR ET 0.32) = 0.286 (weak-AND).
     before = [seed[EDR], _before(seed[SIEM]), seed[IR]]
     after = [seed[EDR], seed[SIEM], seed[IR]]
     _pin(before, DET, 0.167458426061)
     _pin(before, PAIR, 0.0478931098534)
-    _pin(after, DET, 0.2021223202553856)
-    _pin(after, PAIR, 0.05780698359304029)
+    _pin(after, DET, 0.259895477246)
+    _pin(after, PAIR, 0.0743301064925)
     # N6-4/task-6-spec.md NICE: the ratio comes from the two engine compositions just
     # pinned above, not from re-typing their literals -- a regression that moved BOTH
     # absolute pins by the same factor (so the two `_pin` calls above still passed) would
@@ -184,21 +174,7 @@ def test_edr_plus_siem_plus_ir_detection_rises_21_percent(
     after_det = _group(after, DET)
     assert before_det is not None
     assert after_det is not None
-    assert pytest.approx(1.207, abs=5e-4) == after_det / before_det
-
-
-def test_edr_siem_ir_detection_at_uniform_default_coverage_0_8_sensitivity_row(
-    seed: dict[str, dict[str, Any]],
-) -> None:
-    # Rubric §2.2 sensitivity table, 0.8 row (the pre-#199 uniform Visibility default): the
-    # committed SIEM with only its lec_det_visibility coverage overridden to 0.8.
-    # Vis = 1 − 0.552·0.552 = 0.695296; 0.695296 · 0.5376 · 0.695296 = 0.2598954772.
-    siem_at_08 = copy.deepcopy(seed[SIEM])
-    rows = [a for a in siem_at_08["assignments"] if a["sub_function"] == "lec_det_visibility"]
-    assert len(rows) == 1
-    assert rows[0]["coverage_default"] == 0.3  # the committed value this row overrides
-    rows[0]["coverage_default"] = 0.8
-    _pin([seed[EDR], siem_at_08, seed[IR]], DET, 0.2598954772463616)
+    assert pytest.approx(1.552, abs=5e-4) == after_det / before_det
 
 
 def test_sra_resistance_at_coverage_0_2(seed: dict[str, dict[str, Any]]) -> None:

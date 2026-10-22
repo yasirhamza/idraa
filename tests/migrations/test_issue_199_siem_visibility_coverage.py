@@ -174,12 +174,10 @@ def test_dirty_then_upgrade_bumps_and_reinserts_from_json(
     assert {k: v[:9] for k, v in got.items()} == _expected_from_seed()
     # Derived from the seed and the module constants, never a retyped literal (A-I1).
     assert abs(float(got[SUB_FUNCTION][1]) - _seed_vis_coverage()) <= 1e-9
-    # Seed-coupled by design (A2-N4): this line and test_fresh_path_is_already_and_converges
-    # go red when the C11 milestone changes the seed cell. If C11 moves the seed off 0.3 to a
-    # new value, a fresh DB logs drift=1 (the stored cell is neither 0.8 nor 0.3); if it
-    # restores 0.8, a fresh DB logs applied=1 with a bump that changes no values. In either
-    # case fix THIS test, never the migration's frozen literals.
-    assert abs(_seed_vis_coverage() - NEW) <= 1e-9  # true while the seed holds this slice's value
+    # Seed-coupled by design (A2-N4): the seed was restored to 0.8 (owner ruling 2026-10-21,
+    # migration e3a7c5b1d9f2), so a dirty stored OLD (0.8) and the JSON agree and the bump
+    # changes no values. Fix THIS test when the seed moves, never the migration.
+    assert abs(_seed_vis_coverage() - OLD) <= 1e-9  # true while the seed holds the restored 0.8
     assert COUNTER.format(a=1, b=0, c=0) in err
     with alembic_engine.connect() as conn:
         ids: Sequence[Any] = (
@@ -197,32 +195,33 @@ def test_dirty_then_upgrade_bumps_and_reinserts_from_json(
         assert str(rid) == uuid.UUID(hex=str(rid)).hex  # 32 lowercase hex (R-SIEM-10)
 
 
-def test_fresh_path_is_already_and_converges(
+def test_fresh_path_applies_a_no_value_change_bump_and_converges(
     alembic_runner: MigrationContext, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """R-SIEM-14. Seed-coupled (A2-N4): expects `already=1` only while the seed holds 0.3.
-    If the C11 milestone moves the seed off 0.3 to a new value, a fresh DB logs `drift=1`;
-    if it restores 0.8, a fresh DB logs `applied=1` with a bump that changes no values.
-    Both are benign and expected; in either case the C11 author updates this expectation,
-    not the migration."""
+    """R-SIEM-14. Seed-coupled (A2-N4): with the seed restored to 0.8 (== _OLD_COVERAGE), a
+    fresh DB stores 0.8 at this revision, classifies `apply`, and logs `applied=1` with a bump
+    that changes no values (the restore migration e3a7c5b1d9f2 then classifies `already`).
+    Fix THIS test, never the migration, when the seed moves."""
     alembic_runner.migrate_up_to(PRE)
     entry_id, version = _latest(alembic_engine)
+    before = _assignments(alembic_engine, entry_id, version)
     capsys.readouterr()
     alembic_runner.migrate_up_to(REV)
     err = capsys.readouterr().err
-    assert _latest(alembic_engine) == (entry_id, version)  # no bump (R-SIEM-14)
-    assert COUNTER.format(a=0, b=1, c=0) in err
-    assert {k: v[:9] for k, v in _assignments(alembic_engine, entry_id, version).items()} == (
-        _expected_from_seed()
-    )
+    assert _latest(alembic_engine) == (entry_id, version + 1)
+    assert COUNTER.format(a=1, b=0, c=0) in err
+    after = _assignments(alembic_engine, entry_id, version + 1)
+    assert {k: v[:9] for k, v in after.items()} == _expected_from_seed()
+    # the bump changes no values: same cells, new row ids
+    assert {k: v[:9] for k, v in after.items()} == {k: v[:9] for k, v in before.items()}
 
 
 def test_stored_new_coverage_is_already_whatever_the_seed_holds(
     alembic_runner: MigrationContext, alembic_engine: Engine, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Seed-independent twin of test_fresh_path_is_already_and_converges: the stored cell is
+    """Seed-independent twin of test_fresh_path_applies_a_no_value_change_bump_and_converges: the stored cell is
     set to the frozen NEW literal (0.3) directly, so the classification is `already` however
-    the seed JSON moves under the C11 milestone — no bump, no write at all."""
+    the seed JSON moves — no bump, no write at all."""
     alembic_runner.migrate_up_to(PRE)
     _set_stored_coverage(alembic_engine, NEW)
     entry_id, version = _latest(alembic_engine)
@@ -289,7 +288,7 @@ def test_downgrade_is_a_documented_noop(
 def test_lagging_db_takes_whatever_the_json_holds(
     alembic_runner: MigrationContext, alembic_engine: Engine
 ) -> None:
-    """R-SIEM-8a / R-T-12a (A-I1): when the C11 milestone moves the seed cell past 0.3, a
+    """R-SIEM-8a / R-T-12a (A-I1): when the seed moves, a
     lagging database on `apply` must converge to the JSON, not RuntimeError at boot. Drive
     the migration's own `_apply(bind, payload)` with a payload whose SIEM coverage is 0.25."""
     alembic_runner.migrate_up_to(PRE)

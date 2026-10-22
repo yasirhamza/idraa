@@ -409,12 +409,7 @@ docstring).
     lookup); 2 sites in
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
-    per-request handler with an attacker-suppliable id); 1 site in
-    `services/siem_visibility_resync.py::resync` (#199 slice 1) — the
-    host-only operator CLI `python -m idraa library siem-resync` IS the
-    cross-org sweep by design (§11 "New actions"), never request-reachable,
-    and every write it makes is keyed by the fetched control row's own
-    `organization_id`.
+    per-request handler with an attacker-suppliable id).
 - **Residual risk, narrowed but real (fact-checked 2026-08-05):** the
   checker's org-verification search is **function-wide, not bound to the
   flagged call** — it accepts *any* `organization_id` Compare or
@@ -813,30 +808,10 @@ concurrent race (SQLite; accepted, see the service docstring at
 review check, so the later one overwrites or fails `BUSY`, and both writes
 are audited).
 
-**New actions (#199 slice 1, 2026-10): `run.flagged_stale` and a system-actor
-`control.resync_from_library`.** Two deploy- or operator-gated writers, neither
-request-reachable. (1) Migration `c4d2e8f1a6b9` writes one `run.flagged_stale` row
-per COMPLETED run it marks stale (`user_id` NULL; `changes.reason` names the engine
+**New action (#199 slice 1, 2026-10): `run.flagged_stale`.** One deploy-gated
+writer, not request-reachable: migration `c4d2e8f1a6b9` writes one `run.flagged_stale`
+row per COMPLETED run it marks stale (`user_id` NULL; `changes.reason` names the engine
 change), bounded by the run count and idempotent (already-stale rows are skipped).
-(2) The operator CLI `python -m idraa library siem-resync` (`src/idraa/__main__.py`,
-logic in `services/siem_visibility_resync.py`) writes one `control.resync_from_library`
-row per untouched-default SIEM control it re-pins, with `user_id` NULL and a
-`changes.reason` key, so the trail shows that no analyst consented (the analyst-driven
-row from `services/control_resync.py::apply_resync` carries the user). The command is
-host-only — reached through `scripts/fly ssh console` behind Fly org auth and the
-scoped Keychain token, with no HTTP entry point — and grants nothing beyond existing
-`fly ssh` access (the ssh session is a root process with the app's environment, not
-the `idraa` app process; run as `idraa` by an operator, dry unless `--apply`). It is the
-sibling of `auth reset-mfa`, whose B2 entry is tracked in idraa#256. It crosses §7
-(B7) deliberately, in one process over all orgs — the one bare PK fetch in
-`services/siem_visibility_resync.py::resync` carries a recorded `# org-scope: ok`
-reason and is listed in §7 — writing each control under its own `organization_id`
-and calling `flag_runs_stale_for_control` with that org; its writes are conditional
-UPDATEs guarded on the values it read (a concurrent analyst save rolls the control
-back to the consent path; the reverse window — an edit form opened before the apply
-and saved after it — is the app's general no-optimistic-locking property, and the
-analyst's later save wins, as for any concurrent edit); dry runs install
-`PRAGMA query_only=ON` per connection and it refuses non-SQLite URLs.
 
 ## 12. Known gaps / follow-ups
 
