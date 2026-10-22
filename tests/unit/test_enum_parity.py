@@ -131,3 +131,30 @@ def test_fair_cam_sub_function_slugs_match_audit_s3_verbatim() -> None:
         f"Slug mismatch. Extra: {actual_slugs - expected_slugs}. "
         f"Missing: {expected_slugs - actual_slugs}."
     )
+
+
+def test_dsc_corr_link_sources_mirror_fair_cam_derivable_sources() -> None:
+    """#268: v3's write-path set of eligible Correcting Misaligned Decisions link
+    sources is a MIRROR of fair_cam's ``DERIVABLE_SOURCES`` (v3 files outside the
+    methodology lane may not import fair_cam, so the set is duplicated in
+    ``idraa.models.enums``). The two must never drift: a source the write path
+    accepts but the engine refuses would fail runs loudly; the reverse would
+    silently make a scorable source unauthorable.
+
+    This test file is allowed to import fair_cam (it is the parity guard).
+    """
+    from fair_cam.models.sub_function import DERIVABLE_SOURCES
+
+    from idraa.models.enums import DSC_CORR_LINK_SOURCES, FairCamSubFunction
+
+    assert {s.value for s in DSC_CORR_LINK_SOURCES} == {s.value for s in DERIVABLE_SOURCES}
+    # Pinned content (spec §3.1): the three opeff-bearing correction/response members.
+    assert {s.value for s in DSC_CORR_LINK_SOURCES} == {
+        "vmc_corr_implementation",
+        "lec_resp_event_termination",
+        "lec_resp_resilience",
+    }
+    # Every member is a real v3 sub-function slug, and the virtual row itself is not
+    # a source (a derived row can never be the source of another).
+    assert all(s in set(FairCamSubFunction) for s in DSC_CORR_LINK_SOURCES)
+    assert FairCamSubFunction.DSC_CORR_MISALIGNED not in DSC_CORR_LINK_SOURCES

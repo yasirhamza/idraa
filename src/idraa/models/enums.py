@@ -364,6 +364,19 @@ class FairCamSubFunction(StrEnum):
     DSC_CORR_MISALIGNED = "dsc_corr_misaligned"  # §5.3 p49-50 VIRTUAL
 
 
+# Eligible sources of a derived DSC_CORR_MISALIGNED link (#268, spec §3.1): the
+# opeff-bearing members of Variance Correction + LEC Response. v3 mirror of
+# ``fair_cam.models.sub_function.DERIVABLE_SOURCES`` (services outside the
+# methodology lane may not import fair_cam; tests/unit/test_enum_parity.py pins parity).
+DSC_CORR_LINK_SOURCES: frozenset[FairCamSubFunction] = frozenset(
+    {
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+        FairCamSubFunction.LEC_RESP_RESILIENCE,
+    }
+)
+
+
 class ScenarioFieldset(StrEnum):
     """Per spec §6.2 + Arch-17 R2 (lives in models/enums.py per convention)."""
 

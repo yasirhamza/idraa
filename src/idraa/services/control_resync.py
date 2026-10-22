@@ -19,6 +19,17 @@ control is STALE: its values reflect the old curation. This module provides
 Assignments are REPLACED on re-sync (cloned UNCONFIRMED, same as adoption):
 the re-curated entry's function set is the new baseline; per-assignment user
 tuning belongs to the pre-sync state shown in the diff.
+
+A derived Correcting Misaligned Decisions row (#268) is not an entry assignment (a
+library entry cannot claim ``dsc_corr_misaligned``) and holds only a LINK to another
+row of the control, which the replacement invalidates. It is therefore excluded from
+the assignment diff and handled separately: ``apply_resync`` deletes it and flushes
+it FIRST (before any other delete — SQLAlchemy sorts one flush's DELETEs by primary
+key, and a surviving derived row's FK ``SET NULL`` violates
+``ck_cfa_virtual_requires_derived``), replaces the entry rows, then re-links a NEW
+derived row (unconfirmed) against the new source row if the entry still carries the
+source sub-function, else drops it — both audited. ``ResyncInfo.derived_fate``
+reports which, so the consent page can say so.
 """
 
 from __future__ import annotations
@@ -26,7 +37,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from idraa.models.control import Control
 from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.control_library import ControlLibraryEntry, ControlLibraryEntryAssignment
+from idraa.models.enums import FairCamSubFunction
 from idraa.services.audit import AuditWriter
 from idraa.services.control_library import ControlLibraryService, flag_runs_stale_for_control
 
@@ -56,8 +68,14 @@ class ResyncInfo:
     has_snapshot: bool
     entry: ControlLibraryEntry | None
     fields: list[ResyncFieldDiff] = field(default_factory=list)
-    # per-sub-function assignment diff rows, same three-way semantics
+    # per-sub-function assignment diff rows, same three-way semantics (derived
+    # Correcting Misaligned Decisions rows are excluded — see derived_fate)
     assignments: list[ResyncFieldDiff] = field(default_factory=list)
+    # #268: what applying the re-sync does to the control's derived row —
+    # "relinked" (the entry still carries its source sub-function: a new derived row
+    # is created against the new source row), "dropped" (it does not), or None (the
+    # control has no derived row, or the control is not stale).
+    derived_fate: Literal["relinked", "dropped"] | None = None
 
 
 def _entry_field_values(entry: ControlLibraryEntry) -> dict[str, Any]:
@@ -199,6 +217,16 @@ async def resync_info(db: AsyncSession, control: Control) -> ResyncInfo | None:
         .scalars()
         .all()
     )
+    # The derived row carries only a link + sentinels (no inputs to diff): it is
+    # reported through ``derived_fate`` instead of as a phantom assignment row.
+    derived_row = next(
+        (
+            a
+            for a in control_assignment_rows
+            if a.sub_function is FairCamSubFunction.DSC_CORR_MISALIGNED
+        ),
+        None,
+    )
     control_assign = {
         a.sub_function.value: {
             "capability": float(a.capability_value) if a.capability_value is not None else None,
@@ -206,7 +234,18 @@ async def resync_info(db: AsyncSession, control: Control) -> ResyncInfo | None:
             "reliability": float(a.reliability) if a.reliability is not None else None,
         }
         for a in control_assignment_rows
+        if a is not derived_row
     }
+    if derived_row is not None:
+        source_row = next(
+            (a for a in control_assignment_rows if a.id == derived_row.derived_from_assignment_id),
+            None,
+        )
+        info.derived_fate = (
+            "relinked"
+            if source_row is not None and source_row.sub_function.value in entry_assign
+            else "dropped"
+        )
     snap_assign = (
         {
             a["sub_function"]: {k: a.get(k) for k in ("capability", "coverage", "reliability")}
@@ -252,7 +291,11 @@ async def apply_resync(
     Returns the number of runs flagged. Raises ValueError when the control is
     not adopted or not stale (routes translate to 4xx).
     """
-    from idraa.services.controls import _build_adopted_snapshot
+    from idraa.services.controls import (
+        _build_adopted_snapshot,
+        _delete_derived_rows_first,
+        _sync_derived_row,
+    )
 
     info = await resync_info(db, control)
     if info is None or info.entry is None:
@@ -275,6 +318,18 @@ async def apply_resync(
 
     # Replace assignments with the re-curated set (UNCONFIRMED, same as adopt).
     entry_assignments = await _entry_assignments(db, entry)
+    # #268: the derived row first, flushed, BEFORE any other row is deleted (it links
+    # to a row the loop below deletes; see the module docstring). The returned source
+    # sub-function decides re-link vs drop once the entry rows are in.
+    audit = AuditWriter(db)
+    derived_source_sf = await _delete_derived_rows_first(
+        db,
+        control.id,
+        organization_id=control.organization_id,
+        audit=audit,
+        user_id=user_id,
+        ip_address=ip_address,
+    )
     existing_rows = (
         (
             await db.execute(
@@ -304,11 +359,28 @@ async def apply_resync(
     control.library_pin = {"entry_id": str(entry.id), "version": entry.version}
     control.adopted_snapshot = _build_adopted_snapshot(entry, entry_assignments)
     await db.flush()
+    if derived_source_sf is not None and any(
+        a.sub_function == derived_source_sf for a in entry_assignments
+    ):
+        # Re-link: a NEW derived row against the new source row, unconfirmed like
+        # every row a re-sync writes (the .delete above + this .create are the audit).
+        await _sync_derived_row(
+            db,
+            control.id,
+            control.organization_id,
+            derived_source_sf,
+            confirm=False,
+            audit=audit,
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+    # else: the entry no longer carries the source — the derived row stays dropped
+    # (its .delete audit row was written by _delete_derived_rows_first).
 
     flagged = await flag_runs_stale_for_control(
         db, organization_id=control.organization_id, control_id=control.id
     )
-    await AuditWriter(db).log(
+    await audit.log(
         organization_id=control.organization_id,
         entity_type="control",
         entity_id=control.id,
