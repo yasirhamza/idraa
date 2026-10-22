@@ -910,8 +910,8 @@ async def control_resync_apply(
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
 ) -> Response:
     """#438 — apply the re-sync (the review page is the consent step)."""
-    org = await require_sole_org(db)
-    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    org_id = (await require_sole_org(db)).id  # captured now: `org` is expired after a rollback
+    c = await svc.get_control_for_org(db, organization_id=org_id, control_id=control_id)
     if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     try:
@@ -923,7 +923,13 @@ async def control_resync_apply(
         # Defense in depth (#268): nothing was saved. e.orig stays server-side only (CWE-209);
         # the detail page renders a fixed alert for ?resync_error=1.
         await db.rollback()
-        logger.warning("Control resync IntegrityError control=%s: %s", control_id, exc.orig)
+        logger.warning(
+            "Control resync IntegrityError org=%s control=%s user=%s: %s",
+            org_id,
+            control_id,
+            user.id,
+            exc.orig,
+        )
         return RedirectResponse(f"/controls/{control_id}?resync_error=1", status_code=303)
     return RedirectResponse(
         f"/controls/{control_id}?resynced=1&stale_runs={flagged}", status_code=303
@@ -986,8 +992,17 @@ def _refused_save_response(
 ) -> Response:
     """422 re-render of the form after the service refused a save (a ``ValueError``).
 
-    ``form_dict`` carries the submitted link selection, which the template echoes.
+    ``form_dict`` carries the submitted link selection, which the template echoes. The
+    refusal is logged server-side (ids and the service-authored message only; never the
+    submitted values).
     """
+    logger.info(
+        "Control save refused org=%s control=%s user=%s: %s",
+        user.organization_id,
+        control.id if control is not None else None,
+        user.id,
+        message,
+    )
     return _render_form_with_errors(
         request,
         user=user,
@@ -1085,8 +1100,9 @@ async def control_edit_post(
         )
         await db.commit()
     except ValueError as e:
-        # The service refuses BEFORE mutating, but the rollback is still required (get_db
-        # commits on a normal return) and expires the session: reload before rendering.
+        # validate_dsc_corr_link refuses before any mutation, but other service ValueErrors
+        # (e.g. in _sync_derived_row) can be raised after a flush. Either way the rollback is
+        # required (get_db commits on a normal return) and expires the session: reload first.
         await db.rollback()
         control = await _reload_after_rollback(db, org_id=org_id, control_id=control_id)
         return _refused_save_response(request, user, control, form_dict, str(e))

@@ -600,6 +600,87 @@ async def test_a_post_without_a_csrf_token_is_rejected(
 
 
 @pytest.mark.asyncio
+async def test_a_viewer_cannot_post_an_edit_or_a_resync(
+    authed_viewer: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """The role gate (403) runs before any lookup, so an arbitrary id still answers 403."""
+    client, _ = authed_viewer
+    cid = uuid.uuid4()
+    edit = await csrf_post(client, f"/controls/{cid}/edit", _payload("Viewer", [PREV, ET], ET))
+    assert edit.status_code == 403
+    assert (await client.get(f"/controls/{cid}/resync")).status_code == 403
+    assert (await csrf_post(client, f"/controls/{cid}/resync", {})).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_an_edit_post_without_a_csrf_token_is_rejected_and_changes_nothing(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, _ = authed_analyst
+    cid = await _create_linked(client, "Edit no csrf", [PREV, ET], link=ET)
+    before = (await _rows(db_session, cid))[DSC].id
+
+    r = await client.post(
+        f"/controls/{cid}/edit", data=_payload("Renamed without csrf", [PREV, ET], link="")
+    )
+    assert r.status_code == 403
+    assert (await _control(db_session, cid)).name == "Edit no csrf"
+    assert (await _rows(db_session, cid))[DSC].id == before  # the link was not cleared
+
+
+@pytest.mark.asyncio
+async def test_a_resync_post_without_a_csrf_token_is_rejected_and_changes_nothing(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    client, org_id = authed_analyst
+    cid = await _stale_linked_control(
+        db_session,
+        org_id,
+        v2_funcs=[
+            FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+            FairCamSubFunction.LEC_RESP_RESILIENCE,
+        ],
+    )
+    audits_before = await _audit_count(db_session, org_id)
+    await client.get("/controls")  # a session, but deliberately no _csrf field below
+    r = await client.post(f"/controls/{cid}/resync", data={})
+    assert r.status_code == 403
+    rows = await _rows(db_session, cid)
+    assert rows[DSC].id == _DERIVED_ID
+    assert set(rows) == {IMPL, PREV, DSC}  # still the v1 rows: nothing re-synced
+    assert await _audit_count(db_session, org_id) == audits_before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("on_edit", [False, True], ids=["create", "edit"])
+async def test_a_refused_save_is_logged_server_side_without_the_submitted_value(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    caplog: pytest.LogCaptureFixture,
+    on_edit: bool,
+) -> None:
+    client, org_id = authed_analyst
+    payload = "'};alert(1)//"
+    if on_edit:
+        cid = await _create_linked(client, "Logged refusal", [PREV, ET], link=ET)
+        url = f"/controls/{cid}/edit"
+    else:
+        cid = None
+        url = "/controls/new"
+    with caplog.at_level("INFO", logger="idraa.routes.controls"):
+        r = await csrf_post(
+            client, url, _payload("Logged refusal", [PREV, ET], payload), follow_redirects=False
+        )
+    assert r.status_code == 422
+    records = [rec for rec in caplog.records if "Control save refused" in rec.getMessage()]
+    assert len(records) == 1
+    line = records[0].getMessage()
+    assert f"org={org_id}" in line and "user=" in line
+    assert f"control={cid}" in line  # "None" on create
+    assert _UNKNOWN_SOURCE_MESSAGE in line  # the fixed, service-authored message
+    assert payload not in line  # never the submitted value
+
+
+@pytest.mark.asyncio
 async def test_the_controls_csv_export_lists_the_derived_sub_function(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
 ) -> None:
@@ -643,18 +724,35 @@ async def _stale_linked_control(
     return control.id
 
 
+_ALL_REPLACED = (
+    "Applying replaces this control's library-derived fields and ALL of its function "
+    "assignments \u2014 including any you added \u2014 with the entry v2 assignments"
+)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("v2_funcs", "expected", "unexpected"),
     [
         (
             [FairCamSubFunction.VMC_CORR_IMPLEMENTATION, FairCamSubFunction.LEC_RESP_RESILIENCE],
-            "Correcting Misaligned Decisions link is kept",
+            [
+                "Correcting Misaligned Decisions link is kept",
+                "the entry v2 assignments include the sub-function it is linked to",
+                "re-created against the re-synced row of that sub-function",
+                "(unconfirmed until you next save the control or confirm that row on the "
+                "maintenance page)",
+            ],
             "Correcting Misaligned Decisions link will be removed",
         ),
         (
             [FairCamSubFunction.LEC_PREV_RESISTANCE, FairCamSubFunction.LEC_RESP_RESILIENCE],
-            "Correcting Misaligned Decisions link will be removed",
+            [
+                "Correcting Misaligned Decisions link will be removed",
+                "the entry v2 assignments do not include the sub-function it is linked to "
+                "(the old row is replaced either way)",
+                "You can re-link it on the control form after the re-sync.",
+            ],
             "Correcting Misaligned Decisions link is kept",
         ),
     ],
@@ -664,7 +762,7 @@ async def test_the_resync_page_reports_the_derived_rows_fate(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,
     v2_funcs: list[FairCamSubFunction],
-    expected: str,
+    expected: list[str],
     unexpected: str,
 ) -> None:
     client, org_id = authed_analyst
@@ -672,11 +770,56 @@ async def test_the_resync_page_reports_the_derived_rows_fate(
     r = await client.get(f"/controls/{cid}/resync")
     assert r.status_code == 200
     text = " ".join(_soup(r.text).get_text().split())  # collapse template line breaks
-    assert expected in text
+    for sentence in expected:
+        assert sentence in text
     assert unexpected not in text
-    # The sentinel row is not a diff row, and the copy no longer claims ALL assignments go.
+    # The consent copy states what apply_resync does: EVERY assignment row is replaced,
+    # including rows the analyst added (not only "the ones that come from the entry").
+    assert _ALL_REPLACED in text
+    assert "that come from the library entry" not in text
+    # The sentinel row is not a diff row.
     assert DSC not in text
-    assert "ALL function assignments" not in text
+
+
+@pytest.mark.asyncio
+async def test_resync_replaces_an_analyst_added_row_exactly_as_the_consent_page_says(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Copy and behaviour agree: a row the analyst added (here the link's source) is replaced."""
+    client, org_id = authed_analyst
+    cid = await _stale_linked_control(
+        db_session,
+        org_id,
+        v2_funcs=[
+            FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+            FairCamSubFunction.LEC_RESP_RESILIENCE,
+        ],
+    )
+    # The analyst adds an event-termination process (not in any entry version) and re-links to it.
+    added = ControlFunctionAssignment(
+        control_id=cid,
+        organization_id=org_id,
+        sub_function=FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+        capability_value=30.0,
+        coverage=0.8,
+        reliability=0.8,
+    )
+    db_session.add(added)
+    await db_session.flush()
+    derived = (await _rows(db_session, cid))[DSC]
+    derived.derived_from_assignment_id = added.id
+    await db_session.commit()
+
+    page = await client.get(f"/controls/{cid}/resync")
+    assert page.status_code == 200
+    text = " ".join(_soup(page.text).get_text().split())
+    assert _ALL_REPLACED in text
+    # The entry v2 does not carry the added source -> the link is dropped, not re-created.
+    assert "Correcting Misaligned Decisions link will be removed" in text
+
+    r = await csrf_post(client, f"/controls/{cid}/resync", {}, follow_redirects=False)
+    assert r.status_code == 303
+    assert set(await _rows(db_session, cid)) == {IMPL, RES}
 
 
 @pytest.mark.asyncio
@@ -700,6 +843,7 @@ async def test_a_resync_integrity_error_redirects_with_a_fixed_alert_and_changes
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     from idraa.routes import controls as controls_routes
 
@@ -716,9 +860,17 @@ async def test_a_resync_integrity_error_redirects_with_a_fixed_alert_and_changes
     audits_before = await _audit_count(db_session, org_id)
 
     monkeypatch.setattr(controls_routes, "apply_resync", _boom)
-    r = await csrf_post(client, f"/controls/{cid}/resync", {}, follow_redirects=False)
+    with caplog.at_level("WARNING", logger="idraa.routes.controls"):
+        r = await csrf_post(client, f"/controls/{cid}/resync", {}, follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == f"/controls/{cid}?resync_error=1"
+    # The server-side log line carries org, control and user ids (and the DB error, which
+    # never reaches the client).
+    logged = [
+        rec.getMessage() for rec in caplog.records if "resync IntegrityError" in rec.getMessage()
+    ]
+    assert len(logged) == 1
+    assert f"org={org_id}" in logged[0] and f"control={cid}" in logged[0] and "user=" in logged[0]
 
     page = await client.get(r.headers["location"])
     assert page.status_code == 200
