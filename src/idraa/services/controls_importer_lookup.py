@@ -5,9 +5,11 @@ strings. The canonical CSV at docs/reference/fair-cam-controls-library.csv
 was cleaned (#68 step 1) to use one canonical phrasing per sub-function
 — no fuzzy matching, no synonym table.
 
-VIRTUAL_REJECT is returned for paths that name the virtual
-DSC_CORR_MISALIGNED sub-function (enums.py — no Control may be assigned
-to it). Callers must skip the assignment + log warning.
+VIRTUAL_REJECT is returned for paths that name DSC_CORR_MISALIGNED
+because that row is never authored directly — it exists only as a
+derived row set through the control form's Correcting Misaligned
+Decisions link (#268), so the CSV importer skips it. Callers must skip
+the assignment + log warning.
 
 Coverage of the canonical CSV is enforced by
 tests/unit/test_controls_importer_lookup.py — adding a new path string
