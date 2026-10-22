@@ -279,6 +279,7 @@ async def _sync_derived_row(
     audit: AuditWriter,
     user_id: uuid.UUID | None,
     ip_address: str | None,
+    now: datetime | None = None,
 ) -> None:
     """Make the control's derived row match ``source_sf`` (create / re-point / keep).
 
@@ -291,7 +292,9 @@ async def _sync_derived_row(
     act, so ``confirmed_by_user_at`` / ``measured_by`` / ``measured_at`` = now — the
     "save = confirm" convention every saved row gets — with a ``.confirm`` audit row
     when the row already existed (the ``.create`` payload carries the confirmation
-    for a new row). ``confirm=False`` (``duplicate_control``, ``apply_resync``): not an
+    for a new row). ``now`` is the CALLER's save timestamp, so the derived row carries
+    the same instant as its sibling rows from the same save; it defaults to the
+    current time only when the caller has none. ``confirm=False`` (``duplicate_control``, ``apply_resync``): not an
     authoring act, so the row is written / left unconfirmed like every other row those
     paths write.
 
@@ -315,7 +318,7 @@ async def _sync_derived_row(
         raise ValueError(
             f"cannot link Correcting Misaligned Decisions: the control has no {source_sf.value} row"
         )
-    now = datetime.now(UTC)
+    now = now if now is not None else datetime.now(UTC)
     derived = await _row_by_sub_function(db, control_id, organization_id, _DSC_CORR)
 
     if derived is None:
@@ -464,6 +467,7 @@ async def create_control(
             audit=audit,
             user_id=user_id,
             ip_address=ip_address,
+            now=now,
         )
 
     await audit.log(
@@ -702,6 +706,7 @@ async def update_control(
             audit=audit,
             user_id=user_id,
             ip_address=ip_address,
+            now=now,
         )
 
     return control

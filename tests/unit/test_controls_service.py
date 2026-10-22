@@ -688,3 +688,98 @@ async def test_maintenance_query_ignores_a_lone_null_confirmed_derived_row(
     assert summary.unconfirmed_assignments_count == 0
     assert summary.total_needs_attention == 0
     assert await maintenance_badge_count(db_session, org.id) == 0
+
+
+@pytest.mark.parametrize(
+    "ineligible",
+    [
+        pytest.param(FairCamSubFunction.VMC_CORR_TREATMENT_SELECTION, id="treatment-selection"),
+        pytest.param(FairCamSubFunction.LEC_RESP_LOSS_REDUCTION, id="loss-reduction"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_refuses_ineligible_source_and_leaves_the_session_clean(
+    db_session: AsyncSession, seed_org_user: Any, ineligible: FairCamSubFunction
+) -> None:
+    """Update-path twin of ``test_create_refuses_bad_link_and_writes_nothing``: the
+    ineligible source IS among the submitted assignments, so only the eligibility rule
+    can refuse it. Refusal precedes the rename, the merge and any audit row."""
+    org, user = await seed_org_user(db_session)
+    control = await svc.create_control(
+        db_session,
+        org_id=org.id,
+        user_id=user.id,
+        form=_linked_form(_IMPL, ineligible, _RES, name="Before"),
+        dsc_corr_source=_IMPL,
+    )
+    await db_session.refresh(control, attribute_names=["assignments"])
+    audit_count_before = (
+        await db_session.execute(select(func.count()).select_from(AuditLog))
+    ).scalar_one()
+    rows_before = {sf: r.id for sf, r in (await _cfa_rows(db_session, control.id)).items()}
+    derived_link_before = rows_before[_DSC]
+    _assert_session_clean(db_session)
+
+    with pytest.raises(ValueError, match="not an eligible source"):
+        await svc.update_control(
+            db_session,
+            control=control,
+            user_id=user.id,
+            form=_linked_form(_IMPL, ineligible, _RES, name="After"),
+            dsc_corr_source=ineligible,
+        )
+
+    _assert_session_clean(db_session)
+    assert control.name == "Before"
+    assert (
+        await db_session.execute(select(func.count()).select_from(AuditLog))
+    ).scalar_one() == audit_count_before
+    rows_after = await _cfa_rows(db_session, control.id)
+    assert {sf: r.id for sf, r in rows_after.items()} == rows_before
+    assert rows_after[_DSC].id == derived_link_before
+    assert rows_after[_DSC].derived_from_assignment_id == rows_after[_IMPL].id  # still on IMPL
+
+
+@pytest.mark.asyncio
+async def test_confirm_assignment_on_source_restamps_an_already_confirmed_derived_row(
+    db_session: AsyncSession, seed_org_user: Any
+) -> None:
+    """Pins spec §3.4 (and the plan-gate r6 ruling): confirming a source row confirms
+    the derived row linked to it UNCONDITIONALLY — also when the derived row is already
+    confirmed (periodic re-assessment). It gets a new timestamp equal to the source's,
+    the confirming user, and exactly one new ``.confirm`` row with a truthful
+    ``[prev, now]`` pair. A NULL-only rule would leave its measured_at/by older than the
+    values it carries (it is scored from its source)."""
+    org, user = await seed_org_user(db_session)
+    control = await svc.create_control(
+        db_session,
+        org_id=org.id,
+        user_id=user.id,
+        form=_linked_form(_IMPL, _RES),
+        dsc_corr_source=_IMPL,
+    )
+    rows = await _cfa_rows(db_session, control.id)
+    source, derived = rows[_IMPL], rows[_DSC]
+    derived_id = derived.id
+    prev = derived.confirmed_by_user_at
+    assert prev is not None  # form create confirmed it
+    # create_control writes a .create (not a .confirm) row for the derived row.
+    assert await _audit_rows(db_session, "control_function_assignment.confirm", derived_id) == []
+
+    other_user_id = user.id  # same actor; the instant is what must change
+    await svc.confirm_assignment(db_session, assignment=source, user_id=other_user_id)
+
+    rows = await _cfa_rows(db_session, control.id)
+    source, derived = rows[_IMPL], rows[_DSC]
+    assert derived.confirmed_by_user_at is not None and source.confirmed_by_user_at is not None
+    assert _utc(derived.confirmed_by_user_at) > _utc(prev)  # re-stamped, new instant
+    assert _utc(derived.confirmed_by_user_at) == _utc(source.confirmed_by_user_at)
+    assert derived.measured_by == source.measured_by == other_user_id
+    assert derived.measured_at is not None and source.measured_at is not None
+    assert _utc(derived.measured_at) == _utc(source.measured_at)
+
+    audits = await _audit_rows(db_session, "control_function_assignment.confirm", derived_id)
+    assert len(audits) == 1
+    stamp = cast(list[Any], audits[0].changes["confirmed_by_user_at"])
+    assert _utc(datetime.fromisoformat(stamp[0])) == _utc(prev)
+    assert _utc(datetime.fromisoformat(stamp[1])) == _utc(derived.confirmed_by_user_at)

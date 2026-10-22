@@ -289,11 +289,19 @@ async def test_repoint_updates_the_same_row_and_audits_the_change(
     assert len(await _audits(db_session, "control_function_assignment.confirm", derived_id)) == 1
 
 
+@_BOTH_ORDERS
 async def test_clearing_the_link_deletes_the_derived_row_with_a_pinned_audit(
-    db_session: AsyncSession, seed_org_user: Any
+    db_session: AsyncSession, seed_org_user: Any, source_id: uuid.UUID, derived_id: uuid.UUID
 ) -> None:
-    _, user, control = await _create_linked(db_session, seed_org_user, _IMPL, _RES, source=_IMPL)
-    derived_id = (await _rows(db_session, control.id))[_DSC].id
+    """Link cleared, source kept: only the derived row goes (fixed ids, both orders)."""
+    _, user, control = await _seed_fixed(
+        db_session,
+        seed_org_user,
+        source_sf=_IMPL,
+        source_id=source_id,
+        derived_id=derived_id,
+        others={_RES: _MID_A},
+    )
 
     await svc.update_control(
         db_session,
@@ -302,9 +310,10 @@ async def test_clearing_the_link_deletes_the_derived_row_with_a_pinned_audit(
         form=_form(_IMPL, _RES),
         dsc_corr_source=None,
     )
+    await db_session.commit()
 
     rows = await _rows(db_session, control.id)
-    assert set(rows) == {_IMPL, _RES}
+    assert {sf: r.id for sf, r in rows.items()} == {_IMPL: source_id, _RES: _MID_A}
     deletes = await _audits(db_session, "control_function_assignment.delete", derived_id)
     assert len(deletes) == 1
     assert deletes[0].changes == _DELETE_PAYLOAD_IMPL
@@ -347,6 +356,52 @@ async def test_adding_a_link_to_an_unlinked_control_creates_a_confirmed_row(
         "sub_function": [None, "dsc_corr_misaligned"],
         "derived_from_sub_function": [None, "vmc_corr_implementation"],
     }
+
+
+async def test_form_save_stamps_derived_row_with_the_same_instant_as_its_siblings(
+    db_session: AsyncSession, seed_org_user: Any
+) -> None:
+    """One authoring act, one instant: on create AND on an unchanged save the derived
+    row's confirmed_by_user_at / measured_at (and the instant in its audit payload)
+    equal those of the rows saved in the same call."""
+    _, user, control = await _create_linked(db_session, seed_org_user, _IMPL, _RES, source=_IMPL)
+
+    rows = await _rows(db_session, control.id)
+    stamp = _utc(rows[_DSC].confirmed_by_user_at)
+    for sf in (_IMPL, _RES):
+        assert _utc(rows[sf].confirmed_by_user_at) == stamp
+        assert _utc(rows[sf].measured_at) == _utc(rows[_DSC].measured_at) == stamp
+    creates = await _audits(db_session, "control_function_assignment.create", rows[_DSC].id)
+    _assert_stamp(
+        cast(list[Any], creates[0].changes["confirmed_by_user_at"]),
+        None,
+        rows[_DSC].confirmed_by_user_at,
+    )
+
+    await svc.update_control(
+        db_session,
+        control=control,
+        user_id=user.id,
+        form=_form(_IMPL, _RES),
+        dsc_corr_source=_IMPL,
+    )
+
+    rows = await _rows(db_session, control.id)
+    stamp2 = _utc(rows[_DSC].confirmed_by_user_at)
+    assert stamp2 > stamp
+    for sf in (_IMPL, _RES):
+        assert _utc(rows[sf].confirmed_by_user_at) == stamp2
+        assert _utc(rows[sf].measured_at) == _utc(rows[_DSC].measured_at) == stamp2
+    # The derived row's .confirm payload carries the same instant as a sibling's.
+    derived_confirm = (
+        await _audits(db_session, "control_function_assignment.confirm", rows[_DSC].id)
+    )[0]
+    sibling_confirm = (
+        await _audits(db_session, "control_function_assignment.confirm", rows[_RES].id)
+    )[0]
+    derived_pair = cast(list[Any], derived_confirm.changes["confirmed_by_user_at"])
+    sibling_pair = cast(list[Any], sibling_confirm.changes["confirmed_by_user_at"])
+    assert derived_pair[1] == sibling_pair[1]
 
 
 # ---------------------------------------------------------------------------
