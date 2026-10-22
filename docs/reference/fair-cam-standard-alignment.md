@@ -138,7 +138,7 @@ Where the Standard's diagrams use different terminology than the section titles,
 | DSC | Misaligned Decision Prevention | `dsc_prev_ensure_capability` | Ensure Capability (Authority in §5.1 diagram — diagram shorthand for skills, authority, and resources; §5.1.4, page 44) | Probability responsible persons have skills and resources to act in alignment | §5.1.4 | 44-45 | AND (with all other §5.1 sub-functions) |
 | DSC | Misaligned Decision Prevention | `dsc_prev_incentives` | Incentives | Probability appropriate incentives are in place for well-aligned decisions | §5.1.5 | 45-46 | AND (with all other §5.1 sub-functions) |
 | DSC | Identifying Misaligned Decisions | `dsc_id_misaligned` | Identifying Misaligned Decisions | Elapsed time from misaligned decision to its identification | §5.2 | 47-48 | AND with §5.3 Correcting; AND with §5.1.1 Defined Expectations |
-| DSC | Correcting Misaligned Decisions | `dsc_corr_misaligned` | Correcting Misaligned Decisions (VIRTUAL) | Elapsed time from recognition of misaligned decision to correction | §5.3 | 49-50 | AND with §5.2 Identifying; VIRTUAL — no distinct controls |
+| DSC | Correcting Misaligned Decisions | `dsc_corr_misaligned` | Correcting Misaligned Decisions (VIRTUAL — derived) | Elapsed time from recognition of misaligned decision to correction | §5.3 | 49-50 | AND with §5.2 Identifying; VIRTUAL — no distinct controls; exists only as a derived row linked to the same control's Variance Correction Implementation, Event Termination or Resilience assignment (register C12) |
 
 **Total: 26 sub-functions across 3 domains (25 with distinct controls + 1 virtual).**
 
@@ -166,9 +166,9 @@ The DSC domain is the most structurally complex, with three-level nesting under 
 
 Identifying Misaligned Decisions (§5.2) and Correcting Misaligned Decisions (§5.3) are in a strict AND relationship. Defined Expectations (§5.1.1) is also in an AND relationship with Identifying — you cannot identify misalignment without having defined what alignment looks like.
 
-Correcting Misaligned Decisions (§5.3) is a VIRTUAL function. The Standard states (page 50): "there are no distinct controls that serve this function" — it is "wholly dependent upon those other functions" within Variance Correction or LEC Response. The slug `dsc_corr_misaligned` appears in the enum for completeness, but no distinct control should be assigned to it. PR ι should enforce this with a model-level Pydantic validator and a DB CHECK constraint as a backstop. [interpretation, not direct citation]: the Standard does not specify which other-domain function fulfils the virtual role in any given scenario; that mapping is context-specific.
+Correcting Misaligned Decisions (§5.3) is a VIRTUAL function. The Standard states (page 50): "there are no distinct controls that serve this function" — it is "wholly dependent upon those other functions" within Variance Correction or LEC Response. The slug `dsc_corr_misaligned` appears in the enum for completeness, but no distinct control is assigned to it directly: PR ι enforces this with a model-level Pydantic validator and a DB CHECK constraint as a backstop. [interpretation, not direct citation]: the Standard does not specify which other-domain function fulfils the virtual role in any given scenario; that mapping is context-specific, so Idraa leaves it to the analyst, per control.
 
-**Forward-compat note on computed virtuals**: The schema should reserve a `derived_from_assignment_id: UUID NULLABLE` column on `ControlFunctionAssignment`. This enables future computed-virtual assignments where effectiveness for `dsc_corr_misaligned` is derived from a referenced LEC Response or VMC Variance Correction assignment — without requiring a schema migration. The enforcement constraint becomes: `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL`. Decision deferred to PR ι plan-gate: ship the column reserved-but-unused now, or commit to no-virtual-rows-ever and revisit if needed?
+**Computed virtuals (live, issue #268)**: `derived_from_assignment_id: UUID NULLABLE` on `ControlFunctionAssignment` is the link that realises the dependency. A `dsc_corr_misaligned` row exists only as a DERIVED row whose link points at another assignment of the SAME control with sub-function `vmc_corr_implementation`, `lec_resp_event_termination` or `lec_resp_resilience` (the opeff-bearing members of Variance Correction ∪ LEC Response; Treatment Selection is excluded because register C8 keeps it score-neutral, Loss Reduction because it is currency-valued). The analyst sets the link on the control form (not through CSV import); the engine resolves it into a probability-unit assignment carrying the source's converted capability, coverage and authored reliability, so the derived row scores exactly as its source does and the §5.2∧§5.3 pair can contribute to `E_meta`. The enforcement constraint is `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL`. Provenance: the dependency is PRESCRIBED (§5.3 p. 50), its numeric realisation IMPLEMENTATION-DEFINED, a Resilience source a labelled PROXY (register C12).
 
 **§3.3 vs §10.1.3 reconciliation**: Section §10.1.3 previously listed virtual-function enforcement as an open question. That question is resolved here: enforcement is required via Pydantic validator plus DB CHECK constraint (with the derived_from carve-out above). §10.1.3 is updated accordingly.
 
@@ -432,7 +432,7 @@ The schema described here is a **candidate**. Four architectural decisions are e
 | `coverage` | FLOAT NOT NULL [0.0, 1.0] | [M1: see coverage placement decision below] |
 | `reliability` | FLOAT NOT NULL [0.0, 1.0] | Probability control performs consistently as designed |
 | `confirmed_by_user_at` | TIMESTAMPTZ NULLABLE | NULL means backfilled, not yet human-confirmed (see §7.1.4) |
-| `derived_from_assignment_id` | UUID NULLABLE FK → control_function_assignments.id | Reserved for computed-virtual assignments (see §3.3) |
+| `derived_from_assignment_id` | UUID NULLABLE FK → control_function_assignments.id | Live link of a derived `dsc_corr_misaligned` row to its same-control source assignment (see §3.3; register C12) |
 | `measured_at` | TIMESTAMPTZ NULLABLE | When this effectiveness was last measured or assessed |
 | `measured_by` | UUID NULLABLE FK → users.id ON DELETE SET NULL | [m4: see below — depends on whether measurement is human-entered or system-computed] |
 | `organization_id` | UUID NOT NULL | Denormalized for query performance |
@@ -595,7 +595,7 @@ class ControlFunctionAssignmentDTO(BaseModel):
     measured_at: datetime | None = None
     measured_by: UUID | None = None  # plan-gate decides pairing — see §10.1.10
     confirmed_by_user_at: datetime | None = None  # null = backfilled, unconfirmed
-    derived_from_assignment_id: UUID | None = None  # forward-compat for computed-virtual rows
+    derived_from_assignment_id: UUID | None = None  # link of a derived dsc_corr_misaligned row to its same-control source (#268)
 
     @field_validator("sub_function")
     def reject_virtual_unless_derived(cls, v, info):
@@ -832,7 +832,7 @@ Surfaces that read snapshot data and must be version-aware:
 
 2. **`FairCamSubFunction` slug naming convention**: The table in §3 uses underscore-separated slugs with domain prefix (e.g., `lec_prev_avoidance`). Confirm this is the enum value (not the display name), and that the slugs are stable — they will appear in serialized run snapshots and cannot be changed without a migration.
 
-3. **Virtual sub-function enforcement** (resolved from §3.3): Enforce that `dsc_corr_misaligned` cannot be assigned to a distinct control via Pydantic validator (schema layer) plus DB CHECK constraint (backstop). Constraint form: `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL`. PR ι ships this constraint. Implementation note: `derived_from_assignment_id` column should be included reserved-but-unused to enable future computed-virtual assignments without a schema migration — unless plan-gate decides to commit to no-virtual-rows-ever.
+3. **Virtual sub-function enforcement** (resolved from §3.3): Enforce that `dsc_corr_misaligned` cannot be assigned to a distinct control via Pydantic validator (schema layer) plus DB CHECK constraint (backstop). Constraint form: `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL`. PR ι ships this constraint. Implementation note: the `derived_from_assignment_id` column shipped with PR ι and became live in issue #268 as the same-control link of a derived `dsc_corr_misaligned` row (§3.3, register C12); no schema migration was needed.
 
 4. **Unique constraint on `(control_id, sub_function)`** (M4): One assignment per sub-function per control (unique constraint), or allow multiple rows with a version key, or no constraint? Standard §2.4.2 page 7 speaks of coverage variation across assets/scenarios. Decision deferred to PR ι plan-gate.
 
@@ -844,7 +844,7 @@ Surfaces that read snapshot data and must be version-aware:
 
 8. **Backfill `confirmed_by_user_at` semantics**: Exclude unconfirmed assignments from composition (option a) vs. include with warning indicator (option b). Decision deferred to PR ι plan-gate.
 
-9. **Computed-virtual `derived_from_assignment_id` column**: Ship reserved-but-unused in PR ι, or commit to no-virtual-rows-ever? Decision deferred to PR ι plan-gate.
+9. **Computed-virtual `derived_from_assignment_id` column**: RESOLVED — shipped in PR ι and written since issue #268 as the link of a derived `dsc_corr_misaligned` row to the same control's Variance Correction Implementation, Event Termination or Resilience assignment (§3.3, register C12).
 
 10. **`measured_by` pairing** (m4): Include `measured_by: UUID FK → users.id ON DELETE SET NULL` alongside `measured_at`? Depends on whether measurement is human-entered or system-computed. Decision deferred to PR ι plan-gate.
 
@@ -936,7 +936,7 @@ v3 importer.
 
 **Variance Duration (VD)**: How long a variance condition persists when it occurs (days). Deferred to Phase 2, alongside VF.
 
-**Virtual Function**: A Standard sub-function (§5.3, Correcting Misaligned Decisions) that is "wholly dependent upon those other functions" (page 50). It is fulfilled by execution of controls in other domains. A virtual function must be represented in the sub-function enum for completeness; the constraint `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL` enforces this at model and DB level.
+**Virtual Function**: A Standard sub-function (§5.3, Correcting Misaligned Decisions) that is "wholly dependent upon those other functions" (page 50). It is fulfilled by execution of controls in other domains. A virtual function must be represented in the sub-function enum for completeness; the constraint `sub_function != 'dsc_corr_misaligned' OR derived_from_assignment_id IS NOT NULL` enforces this at model and DB level. In Idraa it is realised as a **derived row**: a link from a `dsc_corr_misaligned` row to the same control's correction / response assignment, which it scores as (register C12).
 
 **Boolean AND composition**: All sub-functions in an AND-coupled group must perform for the group to function. Applies to Detection (strict), Detection-Response coupling, VMC Identification-Correction, DSC §5.1 sub-functions. Specific AND operator (worst-link vs. multiplicative) is a PR κ plan-gate decision.
 

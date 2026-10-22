@@ -319,8 +319,11 @@ class FairCamSubFunction(StrEnum):
     """FAIR-CAM Standard V1.0 sub-function identifiers.
 
     26 values spanning 3 domains (LEC, VMC, DSC). One value is virtual
-    (DSC_CORR_MISALIGNED) — no distinct control should be assigned to it;
-    enforcement via Pydantic validator + DB CHECK constraint (spec §4.3).
+    (DSC_CORR_MISALIGNED) — no distinct control is assigned to it directly; it
+    exists only as a DERIVED row linked (derived_from_assignment_id) to the same
+    control's assignment in ``DSC_CORR_LINK_SOURCES`` and scores as that source
+    (#268, register C12). Enforcement via Pydantic validator + DB CHECK
+    constraint (spec §4.3) plus the service's ``validate_dsc_corr_link``.
 
     SLUG FREEZE: These values appear in serialized risk_analysis_runs.snapshot
     JSON and in control library seed data (PR lambda). A rename requires a data
@@ -654,12 +657,15 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
         "decision is identified within a meaningful window. FAIR-CAM §5.2."
     ),
     FairCamSubFunction.DSC_CORR_MISALIGNED: (
-        "Correct misalignment — re-align decision-makers when their decisions "
-        "have drifted from expectations. Examples: retraining, reassignment, "
-        "enforcement action, escalation to leadership. VIRTUAL sub-function "
-        "per FAIR-CAM §5.3 — no distinct controls of its own; requires "
-        "derived_from_assignment_id pointing at the governing LEC Response "
-        "or VMC Variance Correction control."
+        "Correcting Misaligned Decisions — re-align decision-makers when their "
+        "decisions have drifted from expectations. Examples: retraining, "
+        "reassignment, enforcement action, escalation to leadership. VIRTUAL "
+        "sub-function per FAIR-CAM §5.3 — no distinct controls of its own: it is "
+        "credited by linking this control's own Variance Correction "
+        "Implementation, Event Termination or Resilience assignment on the "
+        "control form (not by CSV import), and it scores with that assignment's "
+        "capability, coverage and reliability. Pairs with Identify misalignment "
+        "on any control in the same run."
     ),
 }
 

@@ -385,6 +385,18 @@ docstring).
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified earlier in the same handler
   (`routes/controls.py:692-693`).
+- **Correcting Misaligned Decisions link is a same-control slug, never a
+  client id (issue #268):** the control form's link is a top-level field
+  (`corrects_misaligned_decisions_from`, not a `ControlForm` field) carrying an
+  eligible sub-function slug, and the server resolves it to the row of the SAME,
+  already org-verified control that carries that sub-function — so the link can
+  never name another control's or another org's assignment. Any client-supplied
+  `assignments[N][derived_from_assignment_id]` is stripped from the parsed form
+  before validation and, if it survives, refused; a submitted
+  `dsc_corr_misaligned` assignment row is refused; an unknown slug is refused.
+  All refusals happen in a pure check that runs before any mutation (no row
+  written, no audit entry) and render a 422 whose messages are fixed text or
+  enum values only — the client string is never echoed.
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any

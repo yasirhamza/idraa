@@ -28,7 +28,10 @@ by newlines. Each path is normalized (whitespace+case) and looked up in
 ``controls_importer_lookup.PATH_TO_SUB_FUNCTION`` — one
 ``ControlFunctionAssignment`` is created per recognized non-virtual path.
 Unknown / virtual (``DSC_CORR_MISALIGNED``) paths skip the assignment
-and log a warning; the Control still imports. The Control's domain set
+and log a warning; the Control still imports. The importer never writes a
+Correcting Misaligned Decisions link (#268): that derived row is authored on
+the control form only (``corrects_misaligned_decisions_from``), so an imported
+control has no derived row until an analyst edits it. The Control's domain set
 is derived at read time from its assignments via ``Control.domains``
 (issue #90 dropped the denormalized ``Control.domain`` column).
 

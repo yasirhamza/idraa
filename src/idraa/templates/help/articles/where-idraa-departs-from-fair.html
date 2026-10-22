@@ -220,6 +220,23 @@
   are authored, and a truthful selection claim can never lower a score.
 </p>
 <p class="text-body text-ink-2 mb-3">
+  <strong>Correcting misaligned decisions borrows a correction or response
+  process (prescribed dependency, implementation choice).</strong> FAIR-CAM
+  says this decision-support function has no controls of its own and is
+  fulfilled by variance-correction or response controls, but gives no formula.
+  Idraa lets you link a control&rsquo;s own implementation, event-termination
+  or resilience assignment as also correcting misaligned decisions; the linked
+  function then scores exactly as that assignment does (same capability,
+  coverage and authored reliability) and pairs with misalignment detection on
+  any control in the run. Treatment selection cannot be the source, since it
+  never changes a score. A resilience source is a weaker proxy: a probability
+  of recovery stands in for the standard&rsquo;s time-to-correct. Where the same
+  implementation process feeds both the variance pair and the decision-support
+  pair, treating them as independent overstates their combined strength by at
+  most one quarter, which moves any control&rsquo;s reliability by at most
+  0.025 at the library defaults.
+</p>
+<p class="text-body text-ink-2 mb-3">
   <strong>Formulas the standard leaves open (implementation choices).</strong>
   Capability, coverage, and reliability are multiplied together. Elapsed-time
   functions decay exponentially, with a per-function decay time traced to a

@@ -40,11 +40,15 @@ class ControlFunctionAssignmentDTO(BaseModel):
          (Decision 3, reject_virtual_unless_derived).
       2. Unit-correct capability_value bounds (M1, validate_capability_value_unit).
 
-    The defense-in-depth assertion that PR iota forbids non-NULL
-    derived_from_assignment_id lives at the SERVICE LAYER (services/controls.py),
-    NOT on this DTO. Reason: this DTO is shared with _snapshot_control_v2 and will
-    be constructed from Phase 2 rows that have non-NULL derived_from_assignment_id.
-    A DTO-level rejection would block Phase 2 snapshot reads. (B-NEW3)
+    derived_from_assignment_id is LIVE (#268): a dsc_corr_misaligned row is a
+    derived row linking to the same control's Variance Correction Implementation,
+    Event Termination or Resilience assignment, and scores as that source. The
+    client never supplies it: the routes strip it from submitted assignment rows
+    and the SERVICE LAYER (services/controls.py, validate_dsc_corr_link) refuses
+    any that survives, resolving the link server-side from the control form's
+    top-level source slug. Enforcement is NOT on this DTO because the DTO is
+    shared with the snapshot writers and readers, which legitimately carry the
+    link. (B-NEW3, superseded in scope by #268)
     """
 
     # derived_from_assignment_id declared first so it is available in model_validator
@@ -106,7 +110,8 @@ class ControlFunctionAssignmentDTO(BaseModel):
         """Enforce Standard §5.3 (page 50): DSC_CORR_MISALIGNED is a virtual
         sub-function — 'there are no distinct controls that serve this function.'
         Assignment is only permitted when derived_from_assignment_id references
-        the governing LEC Response or VMC Variance Correction assignment.
+        the governing LEC Response or VMC Variance Correction assignment of the
+        same control (the derived row of #268; register C12).
 
         Decision 3 (spec §4.3): enforce at Pydantic layer AND DB CHECK constraint.
         """
