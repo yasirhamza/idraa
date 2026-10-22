@@ -11,6 +11,20 @@
 
        {% from "macros/_control.html" import control_domains %}
        <td>{{ control_domains(c) }}</td>
+
+   ``meta_tags(slugs, notes=none)`` (issue #268, spec §3.6) renders the `VMC` /
+   `DSC` tags of a control from its sub-function slug strings: `VMC` if any
+   ``vmc_*`` slug, `DSC` if any ``dsc_*`` slug (a derived
+   ``dsc_corr_misaligned`` row counts). Derived, never stored. ``notes`` is the
+   optional ``{"VMC"|"DSC": reason}`` dict from ``meta_tag_notes`` (control
+   detail page only): a noted tag renders ``badge-warning`` with the reason as
+   its ``title``; otherwise ``badge-ghost`` with the tag definition. Emits
+   nothing when the control carries neither family. Existing DaisyUI badge
+   classes and Tailwind utilities already in the built stylesheet only (no CSS
+   rebuild).
+
+       {% from "macros/_control.html" import meta_tags %}
+       {{ meta_tags(c.assignments | map(attribute="sub_function.value") | list) }}
 #}
 
 {% macro control_domains(c) -%}
@@ -22,4 +36,27 @@
 {%- else -%}
   <span class="text-body text-ink-3">&mdash;</span>
 {%- endif %}
+{%- endmacro %}
+
+
+{% macro meta_tags(slugs, notes=none) -%}
+{%- set ns = namespace(vmc=false, dsc=false) -%}
+{%- for s in (slugs or []) -%}
+  {%- if s.startswith("vmc_") -%}{%- set ns.vmc = true -%}
+  {%- elif s.startswith("dsc_") -%}{%- set ns.dsc = true -%}{%- endif -%}
+{%- endfor -%}
+{%- if ns.vmc or ns.dsc -%}
+  {#- ``inline-flex flex-wrap`` so the pair wraps as a unit inside a narrow (390px)
+      name cell or card title instead of widening it; ``whitespace-nowrap`` keeps
+      each three-letter tag on one line. -#}
+  {%- set _n = notes or {} -%}
+  <span class="inline-flex flex-wrap items-center gap-1 ml-1 align-middle">
+  {%- if ns.vmc -%}
+    <span class="badge badge-xs {{ 'badge-warning' if _n.get('VMC') else 'badge-ghost' }} whitespace-nowrap cursor-help" data-meta-tag="VMC" title="{{ _n.get('VMC') or 'Variance Management — strengthens the reliability of every loss-event control in the scenario (or scenario group in an aggregate run); it does not reduce loss on its own.' }}">VMC</span>
+  {%- endif -%}
+  {%- if ns.dsc -%}
+    <span class="badge badge-xs {{ 'badge-warning' if _n.get('DSC') else 'badge-ghost' }} whitespace-nowrap cursor-help" data-meta-tag="DSC" title="{{ _n.get('DSC') or 'Decision Support — strengthens the reliability of every loss-event control in the scenario (or scenario group in an aggregate run); it does not reduce loss on its own.' }}">DSC</span>
+  {%- endif -%}
+  </span>
+{%- endif -%}
 {%- endmacro %}

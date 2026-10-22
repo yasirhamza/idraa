@@ -27,7 +27,8 @@ def test_dto_rejects_virtual_without_derived() -> None:
     # #199 slice 1 / #268: the DTO keeps this refusal (a virtual row needs a link). The
     # service's old "reserved-but-unused" guard is retired and replaced by
     # `validate_dsc_corr_link` (services/controls.py), which refuses any CLIENT-supplied
-    # link — see `_LABEL_ONLY_SUB_FUNCTIONS`.
+    # link. (`_LABEL_ONLY_SUB_FUNCTIONS` in services/_view_model_helpers.py no longer
+    # lists dsc_id_misaligned: with the link authorable its zero is run-scoped, #268.)
     with pytest.raises(ValidationError, match="virtual"):
         ControlFunctionAssignmentDTO(
             sub_function=FairCamSubFunction.DSC_CORR_MISALIGNED,

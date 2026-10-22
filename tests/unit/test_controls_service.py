@@ -179,10 +179,11 @@ async def test_create_control_rejects_client_supplied_derived_from(
     no row id is ever accepted from the client. The refusal lives in the pure
     ``validate_dsc_corr_link`` (the first statement of create/update).
     """
-    # #199 slice 1: `_LABEL_ONLY_SUB_FUNCTIONS` (services/_view_model_helpers.py) lists
-    # dsc_id_misaligned BECAUSE no org-authored row carried dsc_corr_misaligned; #268
-    # makes the derived row authorable, so that set must be revisited (cross-reference
-    # kept; this test and test_dto_rejects_virtual_without_derived guard the client side).
+    # #199 slice 1 listed dsc_id_misaligned in `_LABEL_ONLY_SUB_FUNCTIONS`
+    # (services/_view_model_helpers.py) BECAUSE no org-authored row carried
+    # dsc_corr_misaligned; #268 made the derived row authorable and removed it from that
+    # set (its zero is now run-scoped: control_zero_value_reason's run_has_* signals).
+    # This test and test_dto_rejects_virtual_without_derived guard the client side.
     import uuid
 
     org = await _seed_org(db_session)

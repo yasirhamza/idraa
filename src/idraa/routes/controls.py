@@ -874,7 +874,14 @@ async def control_detail(
     return templates.TemplateResponse(
         request,
         "controls/detail.html",
-        {"current_user": user, "flash": None, "c": c, "resync": resync},
+        {
+            "current_user": user,
+            "flash": None,
+            "c": c,
+            "resync": resync,
+            # #268 (spec §3.6): why a VMC / DSC header tag is muted, from the control's own slugs.
+            "meta_tag_notes": meta_tag_notes([a.sub_function.value for a in c.assignments]),
+        },
     )
 
 
@@ -1166,6 +1173,9 @@ async def control_delete(
 # source's values and never the stored sentinels. Registered here, below the pinned route
 # lines, rather than beside the other template globals in app.py, whose citation anchors
 # must not move.
-from idraa.services._view_model_helpers import assignment_display_rows  # noqa: E402
+from idraa.services._view_model_helpers import (  # noqa: E402
+    assignment_display_rows,
+    meta_tag_notes,
+)
 
 templates.env.globals["assignment_display_rows"] = assignment_display_rows

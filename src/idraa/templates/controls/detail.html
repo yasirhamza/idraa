@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_control.html" import control_domains %}
+{% from "macros/_control.html" import control_domains, meta_tags %}
 {% from "macros/unit_aware_inputs.html" import unit_display %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/form_field.html" import form_field %}
@@ -8,8 +8,12 @@
 {% block title %}{{ c.name }}{% endblock %}
 {% block content %}
 
+{# #268 (spec §3.6): VMC / DSC tags in the header, under the name. ``meta_tag_notes``
+   (route context) mutes the tags that do not credit loss reduction on their own. #}
+{%- set _meta_tags = meta_tags(c.assignments | map(attribute="sub_function.value") | list, meta_tag_notes | default({})) | trim -%}
 {{ page_header(
     title=c.name,
+    meta=_meta_tags or none,
     breadcrumb=[("Home", "/"), ("Controls", "/controls"), (c.name, none)],
     actions=[
       {"label": "Edit", "href": "/controls/" ~ c.id ~ "/edit", "style": "outline"},
