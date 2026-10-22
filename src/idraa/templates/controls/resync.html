@@ -71,10 +71,21 @@
 
   <div class="bg-surface-1 border border-border-strong rounded-card p-6">
     <p class="text-body text-ink-2 mb-3">Applying replaces this control's
-      library-derived fields and ALL function assignments with entry
-      v{{ info.current_version }} values (assignments land unconfirmed, like a fresh
-      adoption — your edits above are overwritten). Completed runs that used this
-      control will be marked stale so you can re-run them.</p>
+      library-derived fields and the function assignments that come from the library
+      entry with entry v{{ info.current_version }} values (assignments land unconfirmed,
+      like a fresh adoption — your edits above are overwritten). Completed runs that
+      used this control will be marked stale so you can re-run them.</p>
+    {# #268 — the derived Correcting Misaligned Decisions row is not an entry assignment (it
+       holds only a link to another row of this control); its fate is reported separately. #}
+    {% if info.derived_fate == "relinked" %}
+    <p class="text-body text-ink-2 mb-3">This control's Correcting Misaligned Decisions link
+      is kept: the entry still carries the sub-function it is linked to, so the link is
+      re-created against the re-synced row (unconfirmed until you next save the control).</p>
+    {% elif info.derived_fate == "dropped" %}
+    <p class="text-body text-ink-2 mb-3">This control's Correcting Misaligned Decisions link
+      will be removed: the entry no longer carries the sub-function it is linked to. You can
+      re-link it on the control form after the re-sync.</p>
+    {% endif %}
     <div class="flex gap-2">
       <form method="post" action="/controls/{{ c.id }}/resync">
         {{ csrf_field() }}

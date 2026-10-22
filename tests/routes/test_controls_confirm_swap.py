@@ -23,8 +23,10 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from idraa.models.audit_log import AuditLog
 from idraa.models.control import Control
 from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.enums import ControlType, EntityStatus, FairCamSubFunction
@@ -122,3 +124,95 @@ async def test_confirm_non_htmx_still_303_redirects(
     # Issue #154 added the ?confirmed=1 query flag for the non-HTMX flash banner.
     assert response.headers["location"].startswith("/controls/maintenance")
     assert "confirmed=1" in response.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# #268 — the derived Correcting Misaligned Decisions row through the confirm route
+# ---------------------------------------------------------------------------
+
+
+async def _seed_unconfirmed_linked_pair(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Returns (control_id, source_assignment_id, derived_assignment_id), both unconfirmed."""
+    ctrl_id, source_id = await _seed_unconfirmed_assignment(db, org_id)
+    source = await db.get(ControlFunctionAssignment, source_id)
+    assert source is not None
+    source.sub_function = FairCamSubFunction.LEC_RESP_RESILIENCE
+    derived = ControlFunctionAssignment(
+        organization_id=org_id,
+        control_id=ctrl_id,
+        sub_function=FairCamSubFunction.DSC_CORR_MISALIGNED,
+        capability_value=None,
+        coverage=0.0,
+        reliability=0.0,
+        derived_from_assignment_id=source_id,
+        confirmed_by_user_at=None,
+    )
+    db.add(derived)
+    await db.flush()
+    return ctrl_id, source_id, derived.id
+
+
+async def _confirm_audit_count(db: AsyncSession, entity_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(
+            AuditLog.entity_id == entity_id,
+            AuditLog.action == "control_function_assignment.confirm",
+        )
+    )
+    return int(result.scalar_one())
+
+
+@pytest.mark.asyncio
+async def test_confirming_the_source_row_also_confirms_the_derived_row(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_admin
+    ctrl_id, source_id, derived_id = await _seed_unconfirmed_linked_pair(db_session, org_id)
+    await db_session.commit()
+
+    csrf = await _csrf_token_for(client)
+    response = await client.post(
+        f"/controls/{ctrl_id}/assignments/{source_id}/confirm",
+        headers={"HX-Request": "true", "X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    source = await db_session.get(ControlFunctionAssignment, source_id)
+    derived = await db_session.get(ControlFunctionAssignment, derived_id)
+    assert source is not None and derived is not None
+    assert source.confirmed_by_user_at is not None
+    assert derived.confirmed_by_user_at is not None
+    assert await _confirm_audit_count(db_session, source_id) == 1
+    assert await _confirm_audit_count(db_session, derived_id) == 1  # its own audit row
+
+
+@pytest.mark.asyncio
+async def test_confirming_a_derived_row_directly_is_a_noop(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+) -> None:
+    client, org_id = authed_admin
+    ctrl_id, source_id, derived_id = await _seed_unconfirmed_linked_pair(db_session, org_id)
+    await db_session.commit()
+
+    csrf = await _csrf_token_for(client)
+    response = await client.post(
+        f"/controls/{ctrl_id}/assignments/{derived_id}/confirm",
+        headers={"HX-Request": "true", "X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 200  # the route is untouched; the service ignores the row
+
+    db_session.expire_all()
+    derived = await db_session.get(ControlFunctionAssignment, derived_id)
+    source = await db_session.get(ControlFunctionAssignment, source_id)
+    assert derived is not None and source is not None
+    assert derived.confirmed_by_user_at is None
+    assert source.confirmed_by_user_at is None
+    assert await _confirm_audit_count(db_session, derived_id) == 0

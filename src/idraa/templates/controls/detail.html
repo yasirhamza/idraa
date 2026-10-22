@@ -33,6 +33,11 @@
     <a class="btn btn-sm btn-primary" href="/controls/{{ c.id }}/resync">Review &amp; re-sync</a>
   </div>
   {% endif %}
+  {% if request.query_params.get("resync_error") == "1" %}
+  <div class="alert alert-error mb-4" role="alert">
+    <p>Resync could not be applied; no changes were saved.</p>
+  </div>
+  {% endif %}
   {% if request.query_params.get("resynced") == "1" %}
   <div class="alert alert-success mb-4" role="status">
     <p>Control re-synced to the current library entry.

@@ -8,9 +8,10 @@
    Field naming convention: assignments[N][fieldname] — FastAPI Form() parses
    into nested dict, ControlFunctionAssignmentDTO.model_validate consumes.
 
-   Sub-function dropdown excludes DSC_CORR_MISALIGNED (virtual sub-function
-   that requires derived_from_assignment_id, which is reserved-but-unused
-   in PR iota; service raises ValueError if non-NULL).
+   Sub-function dropdown excludes DSC_CORR_MISALIGNED: a virtual sub-function
+   that exists only as a DERIVED row (a link to another row of the control),
+   authored through the form's separate "Correcting Misaligned Decisions"
+   select (#268) and never rendered as an assignment row.
 
    F16: Label chrome updated to match form_field design-system pattern
    (text-meta text-ink-2 labels, focus:ring-brand inputs). Coverage and
