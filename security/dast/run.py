@@ -2,7 +2,7 @@
 
 The single orchestration entrypoint (``main``), invoked via
 ``python -m idraa.tasks dast`` (see ``src/idraa/tasks/runner.py::_dast``) both
-locally and from the advisory ``dast`` CI job.
+locally and from the ``dast`` CI job (part of ``ci-success`` since 2026-10-23, #158).
 
 **Safety invariant (design doc §0): this suite NEVER targets a deployed
 environment.** Before doing anything else, ``main`` asserts — via a real

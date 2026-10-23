@@ -15,10 +15,14 @@ What it does, in order:
    that guard for local dry runs.
 2. Imports EVERY module of the ``idraa`` and ``fair_cam`` packages via
    ``pkgutil.walk_packages`` — not just ``import idraa``, because a dev-only
-   package can hide behind a lazy or deep import. Test packages
-   (``fair_cam.tests``) and ``conftest`` modules are skipped: they are
-   dev-only by design. ``__main__`` modules ARE imported: both
-   (``idraa.__main__``, ``idraa.tasks.__main__``) guard their work behind
+   package can hide behind a lazy or deep import. Test modules (everything
+   under ``fair_cam.tests``) and ``conftest`` modules are never imported: they
+   are dev-only by design. The exception is a test package's own ``__init__``:
+   ``walk_packages`` imports every package to recurse into it, so
+   ``fair_cam.tests`` and its subpackages are imported by the walk itself (a
+   failure there is ignored; the ``__init__`` files are empty today).
+   ``__main__`` modules ARE imported: both (``idraa.__main__``,
+   ``idraa.tasks.__main__``) guard their work behind
    ``if __name__ == "__main__"``, so importing them has no side effects.
 3. Runs one async SQLAlchemy round-trip (``select 1`` on
    ``sqlite+aiosqlite:///:memory:``), which exercises the ``greenlet`` /
@@ -52,9 +56,10 @@ from collections.abc import Callable, Iterable, Iterator
 
 PACKAGES: tuple[str, ...] = ("idraa", "fair_cam")
 
-# Dotted-name components that mark a module as test-only. A module is skipped
-# when ANY component of its dotted name is in this set (so everything under
-# ``fair_cam.tests`` is skipped, as is a ``conftest`` anywhere).
+# Dotted-name components that mark a module as test-only. A module is never
+# imported by the smoke when ANY component of its dotted name is in this set (so
+# everything under ``fair_cam.tests`` is skipped, as is a ``conftest`` anywhere).
+# walk_packages still imports test PACKAGES' ``__init__`` itself to recurse.
 TEST_COMPONENTS: frozenset[str] = frozenset({"tests", "conftest"})
 
 # Packages that must NOT be importable in a ``--no-dev`` environment. If any is
