@@ -20,6 +20,9 @@ venv that runs the tools):
    services,repositories} sweep; negligible runtime (pure-Python parse of
    a few hundred files).
 4. mypy src/idraa (pyproject-configured, strict)
+4b. mypy ratchet (tests) — scripts/mypy_ratchet.py (#28): mypy over ``tests`` +
+   ``fair_cam/tests``, per-file error counts held at or below
+   scripts/mypy_tests_baseline.json; exit 2 on tool error. ~12s warm, ~17s cold.
 5. css staleness — ``python -m idraa.tasks.build_css --check`` (fails if
    the committed ``tailwind.css`` output is stale relative to its inputs)
 6. pytest fast suite (default addopts markers: not e2e / not slow /
@@ -77,7 +80,7 @@ no surfaces run). Runs before the ruff/mypy/pytest steps: it takes seconds and
 its findings are the cheapest to act on. It runs the ``uv`` binary with GIT_*
 and VIRTUAL_ENV removed, so like ``uv lock --check`` it sits outside GATE_STEPS.
 
-Runtime: steps 1-4 ~30s; step 5 ~1s; step 6 (pytest) runs under
+Runtime: steps 1-4b ~45s; step 5 ~1s; step 6 (pytest) runs under
 ``pytest-xdist -n auto`` — wall-clock scales with core count (the ~5.9k-test
 merge-path suite was the serial bottleneck; parallel it is a few minutes on a
 multi-core machine and ~a quarter of that on CI's 4-core runner).
@@ -107,12 +110,13 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("org-scoped lookups", ("-m", "scripts.lint_org_scoped_lookups", "--all")),
     # mypy scope is src/idraa + fair_cam SOURCE + security (the committed
-    # DAST harness, first-class-gated per arch-I4). tests/ and fair_cam/tests/
-    # are EXCLUDED: tests/ carries ~409 pre-existing errors (issue #359) and
-    # fair_cam/tests/ is untyped (relaxed in pyproject). fair_cam source was
-    # burned down to 0 errors when it became first-party; security has no
-    # tests/ subtree of its own. Once tests/ burns down, drop the explicit
-    # paths so the pyproject `files` key drives scope.
+    # DAST harness, first-class-gated per arch-I4), held at ZERO errors.
+    # tests/ and fair_cam/tests/ are EXCLUDED here: they carry ~2,100
+    # historical errors and are covered by the "mypy ratchet (tests)" step
+    # below instead (#28) — per-file counts may fall, never rise, against
+    # scripts/mypy_tests_baseline.json. fair_cam source was burned down to 0
+    # errors when it became first-party; security has no tests/ subtree of
+    # its own.
     (
         "mypy",
         (
@@ -126,6 +130,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "fair_cam/tests",
         ),
     ),
+    ("mypy ratchet (tests)", ("-m", "scripts.mypy_ratchet")),
     ("css staleness", ("-m", "idraa.tasks.build_css", "--check")),
     # `-n auto` (pytest-xdist) parallelizes across the machine's cores — the
     # merge-path suite is ~5.9k tests and was the gate's dominant wall-clock
