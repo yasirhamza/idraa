@@ -1,9 +1,8 @@
-"""Epic F (#192) scenario-library curation migration (e5f1a9c3d7b2) + its read-only
-dry-run script (scripts/check_epic_f_migration.py). Follows the tests/migrations/
-test_dataquality_followups.py dirty-then-run pattern and the alembic_runner/
-alembic_engine fixtures. No revision literal appears below beyond the names of the
-migration modules being loaded by path (PRE/REV come from the loaded module itself,
-S2-2/A2-5).
+"""Epic F (#192) scenario-library curation migration (e5f1a9c3d7b2). Follows the
+tests/migrations/test_dataquality_followups.py dirty-then-run pattern and the
+alembic_runner/alembic_engine fixtures. No revision literal appears below beyond the
+names of the migration modules being loaded by path (PRE/REV come from the loaded
+module itself, S2-2/A2-5).
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import importlib.util
 import json
 import math
 import re
-import sqlite3
 from pathlib import Path
 from types import ModuleType
 
@@ -24,7 +22,6 @@ from pytest_alembic import MigrationContext
 from sqlalchemy.engine import Engine
 
 import idraa
-from scripts import check_epic_f_migration
 
 _ROOT = Path(idraa.__file__).resolve().parent.parent.parent
 _VERSIONS = _ROOT / "alembic" / "versions"
@@ -102,14 +99,6 @@ def _dump_all_rows(engine: Engine) -> list[tuple[object, ...]]:
             sa.text("SELECT * FROM scenario_library_entries ORDER BY id, version")
         ).fetchall()
     return [tuple(r) for r in rows]
-
-
-def _db_path_from_config(alembic_config: Config) -> Path:
-    url = alembic_config.get_main_option("sqlalchemy.url")
-    assert url is not None
-    prefix = "sqlite+aiosqlite:///"
-    assert url.startswith(prefix), url
-    return Path(url[len(prefix) :])
 
 
 def _exact_equal(a: object, b: object) -> bool:
@@ -632,256 +621,3 @@ def test_imported_source_row_not_updated(
 
     raw = _read_column(alembic_engine, target_slug, target_column)
     assert mod._decode(target_column, raw) == target_old
-
-
-# ---------------------------------------------------------------------------
-# (j) dry-run script
-# ---------------------------------------------------------------------------
-
-
-def test_dry_run_pre_phase_clean_then_drift_then_post_phase(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(PRE)
-    _write_all_old(alembic_engine)
-    db_path = _db_path_from_config(alembic_config)
-    n = len(mod._CHANGES)
-
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert f"apply={n} already=0 drift=0" in out
-
-    # web-app-exploitation has 3 _CHANGES cells (applicable_industries, description,
-    # suggested_control_ids) -- drifting just `description` must report the WHOLE slug
-    # as drifted (M4-1 atomicity), not just the one cell.
-    drift_slug, drift_column = "web-app-exploitation", "description"
-    group_columns = sorted(c for s, c, _o, _n in mod._CHANGES if s == drift_slug)
-    assert len(group_columns) == 3, "test assumes a 3-cell slug"
-    _write_column(alembic_engine, drift_slug, drift_column, "DRIFT SENTINEL TEXT")
-
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    out = capsys.readouterr().out
-    assert rc == 1
-    for column in group_columns:
-        assert f"drift: {drift_slug} {column}" in out
-    assert f"apply={n - 3} already=0 drift=3" in out
-
-    # R4-N2: a one-line summary names ONLY the genuinely-drifted cell (`description`),
-    # not the two siblings demoted by the atomic-group guard, and carries no value.
-    assert f"drift detail: {drift_slug} drifted column(s): {drift_column}" in out
-    for sibling in group_columns:
-        if sibling != drift_column:
-            assert f"drifted column(s): {sibling}" not in out
-    assert "DRIFT SENTINEL TEXT" not in out
-
-    # Undo the drift, run the real migration, then check the post phase.
-    old_val = _CHANGES_BY_KEY[(drift_slug, drift_column)][0]
-    _write_column(alembic_engine, drift_slug, drift_column, old_val)
-    alembic_runner.migrate_up_to(REV)
-
-    rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert f"already={n}" in out
-
-    reset_slug, reset_column, reset_old, _new = mod._CHANGES[0]
-    _write_column(alembic_engine, reset_slug, reset_column, reset_old)
-
-    rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out = capsys.readouterr().out
-    assert rc == 1
-    assert f"apply: {reset_slug} {reset_column}" in out
-    assert "apply=1" in out
-
-
-def test_connect_ro_rejects_writes(tmp_path: Path) -> None:
-    db_path = tmp_path / "ro_write_test.db"
-    setup_conn = sqlite3.connect(db_path)
-    setup_conn.execute("CREATE TABLE t (x INTEGER)")
-    setup_conn.commit()
-    setup_conn.close()
-
-    ro = check_epic_f_migration._connect_ro(db_path)
-    try:
-        with pytest.raises(sqlite3.OperationalError):
-            ro.execute("INSERT INTO t VALUES (1)")
-    finally:
-        ro.close()
-
-
-def test_connect_ro_path_with_space_and_hash_opens(tmp_path: Path) -> None:
-    special_dir = tmp_path / "weird # dir with space"
-    special_dir.mkdir()
-    db_path = special_dir / "db.sqlite"
-    setup_conn = sqlite3.connect(db_path)
-    setup_conn.execute("CREATE TABLE t (x INTEGER)")
-    setup_conn.commit()
-    setup_conn.close()
-
-    ro = check_epic_f_migration._connect_ro(db_path)
-    try:
-        assert ro.execute("SELECT x FROM t").fetchall() == []
-    finally:
-        ro.close()
-
-
-def test_missing_db_path_exits_2_and_creates_nothing(tmp_path: Path) -> None:
-    db_path = tmp_path / "does-not-exist.db"
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    assert rc == 2
-    assert not db_path.exists()
-
-
-def test_sqlite_error_after_first_query_exits_4_not_2(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Spec NICE N-3 (tightened per controller ruling): exit 2 is scoped to
-    _connect_ro + the first query (the alembic_version read inside _check_revision); a
-    sqlite3.Error raised LATER (during _classify_rows) is an unexpected mid-run failure
-    and maps to exit 4 instead, with the same redacted message as any other unexpected
-    exception."""
-    alembic_runner.migrate_up_to(PRE)
-    _write_all_old(alembic_engine)
-    db_path = _db_path_from_config(alembic_config)
-
-    def _boom(*_a: object, **_kw: object) -> None:
-        raise sqlite3.OperationalError("simulated mid-run failure naming a real column")
-
-    monkeypatch.setattr(check_epic_f_migration, "_classify_rows", _boom)
-
-    capsys.readouterr()
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    out, err = capsys.readouterr()
-    assert rc == 4
-    assert out.strip() == "internal error: OperationalError"
-    assert "simulated mid-run failure" not in out
-    assert "simulated mid-run failure" not in err
-    assert "Traceback" not in out
-    assert "Traceback" not in err
-
-
-# ---------------------------------------------------------------------------
-# (j') revision precondition
-# ---------------------------------------------------------------------------
-
-
-def test_revision_precondition_wrong_pre_revision(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(PRE)
-    two_back = _load_migration_by_revision(PRE).down_revision
-    command.stamp(alembic_config, two_back)
-
-    db_path = _db_path_from_config(alembic_config)
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    out = capsys.readouterr().out
-    assert rc == 3
-    assert f"expected {PRE}" in out
-    assert f"found {two_back!r}" in out
-    assert "apply=" not in out
-
-
-def test_revision_precondition_post_phase_on_pre_db(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(PRE)
-    db_path = _db_path_from_config(alembic_config)
-
-    rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out = capsys.readouterr().out
-    assert rc == 3
-    assert "apply=" not in out
-
-
-def test_revision_precondition_post_phase_unknown_revision(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(REV)
-    with alembic_engine.begin() as conn:
-        conn.execute(sa.text("UPDATE alembic_version SET version_num = 'deadbeef0000'"))
-
-    db_path = _db_path_from_config(alembic_config)
-    rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out, err = capsys.readouterr()
-    assert rc == 3
-    assert "revision precondition failed" in out
-    assert f"expected {REV} (or a descendant of it)" in out  # spec N-2 tightening
-    assert "found 'deadbeef0000'" in out
-    assert "Traceback" not in out
-    assert "Traceback" not in err  # spec N-2 tightening (was only checked on stdout)
-
-
-def test_revision_precondition_resolves_from_different_cwd(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(REV)
-    db_path = _db_path_from_config(alembic_config)
-    other_cwd = tmp_path / "elsewhere"
-    other_cwd.mkdir()
-    monkeypatch.chdir(other_cwd)
-
-    rc = check_epic_f_migration.main(["--db", str(db_path), "--phase", "post"])
-    out = capsys.readouterr().out
-    assert rc == 0, out
-
-
-# ---------------------------------------------------------------------------
-# (j'') unexpected error: redacted message, no traceback
-# ---------------------------------------------------------------------------
-
-
-def test_unexpected_error_exits_4_and_redacts(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    alembic_config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    alembic_runner.migrate_up_to(PRE)
-    _write_all_old(alembic_engine)
-    db_path = _db_path_from_config(alembic_config)
-
-    real_load_migration = check_epic_f_migration._load_migration
-
-    def _poisoned_load_migration() -> ModuleType:
-        poisoned = real_load_migration()
-
-        def _boom(*_args: object, **_kwargs: object) -> str:
-            raise RuntimeError("SECRET-CELL")
-
-        setattr(poisoned, "_classify", _boom)  # noqa: B010 - ModuleType attr assignment for the test seam
-        return poisoned
-
-    monkeypatch.setattr(check_epic_f_migration, "_load_migration", _poisoned_load_migration)
-
-    capsys.readouterr()  # drain the migrate_up_to(PRE) bootstrap output
-    rc = check_epic_f_migration.main(["--db", str(db_path)])
-    out, err = capsys.readouterr()
-    assert rc == 4
-    assert out.strip() == "internal error: RuntimeError"
-    assert "SECRET-CELL" not in out
-    assert "SECRET-CELL" not in err
-    assert "Traceback" not in out
-    assert "Traceback" not in err

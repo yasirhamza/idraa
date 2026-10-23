@@ -64,10 +64,10 @@ counts *cells* (rows of ``_CHANGES``), not slugs: ``A + M + K`` always equals
 exceed the number of cells that are themselves individually off-script -- a
 single genuinely-drifted cell in a 4-cell slug poisons all 4, so all 4 count
 toward ``drift`` even though only 1 differs from both ``old`` and ``new``.
-The dry-run script (``scripts/check_epic_f_migration.py``) reports the same
-way, using the same shared ``_group_by_slug``/``_classify_slug_group``
-functions, so its counts and per-row report match what a real
-``alembic upgrade`` would do.
+A one-off read-only dry-run script (``scripts/check_epic_f_migration.py``,
+removed in #206) reported the same way, using the same shared
+``_group_by_slug``/``_classify_slug_group`` functions, so its counts and
+per-row report matched what a real ``alembic upgrade`` would do.
 
 Adopted rows (mirrors ``b5e2c7a9d413``'s adopted-rows paragraph): no
 org-owned row (``scenarios``, ``scenario_library_overrides``, SME estimates)
@@ -77,10 +77,10 @@ touched. A scenario cloned from ``accidental-insider-exposure`` before this
 migration ran keeps its own stored loss values until the org refreshes it
 (``loss_pinning.refresh_loss_from_library``) or re-estimates it; this
 migration does not reach into org data to force that update.
-``scripts/sweep_epic_f_adopted_rows.py --gate`` (read-only) is the repair
-trigger for any adoption left stale by this campaign; a repair, if the
-sweep finds one, lands as its own separate migration -- never folded into
-this one.
+A one-off read-only sweep (``scripts/sweep_epic_f_adopted_rows.py --gate``,
+removed in #206) was the repair trigger for any adoption left stale by this
+campaign; a repair, if the sweep found one, lands as its own separate
+migration -- never folded into this one.
 
 ``accidental-insider-exposure``'s ``primary_loss``/``secondary_loss``/
 ``loss_form_profile``/``threat_event_type`` cells are an in-place edit at

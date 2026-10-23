@@ -27,8 +27,8 @@ LIB = "a" * 32
 # Epic F (2026-09-29, #192): accidental-insider-exposure's threat_event_type moved
 # insider_misuse -> data_disclosure, so its #175 split moved 1/3 -> 3/7 and its seed
 # nodes legitimately moved on. The #175 NEW_* tables stay the #175 post-change values
-# (this script classifies #175 adoptions; Epic F adoptions are classified by
-# scripts/sweep_epic_f_adopted_rows.py), so the two current-seed pins skip these slugs
+# (this script classifies #175 adoptions; Epic F adoptions were classified by a one-off
+# sweep removed in #206), so the two current-seed pins skip these slugs
 # and test_superseded_slugs_now_carry_the_epic_f_nodes pins their Epic F nodes instead.
 SUPERSEDED_BY_EPIC_F: frozenset[str] = frozenset({"accidental-insider-exposure"})
 
