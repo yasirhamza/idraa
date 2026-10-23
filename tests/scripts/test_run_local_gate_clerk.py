@@ -290,7 +290,7 @@ def test_clerk_command_shape_surfaces() -> None:
 
 def test_clerk_step_is_outside_gate_steps() -> None:
     labels = [label for label, _ in g.GATE_STEPS]
-    assert "clerk gate" not in labels and len(labels) == 7
+    assert "clerk gate" not in labels and len(labels) == 8
     assert g.steps_to_run(env={g.CLERK_ROOT_ENV: "/x"}) == list(g.GATE_STEPS)
 
 

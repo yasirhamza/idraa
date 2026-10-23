@@ -19,7 +19,7 @@ run_local_gate = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(run_local_gate)
 
 
-def test_gate_includes_all_seven_tools() -> None:
+def test_gate_includes_all_steps() -> None:
     # PR2 Task 9: added a labeled equivalence-harness step (see run_local_gate.py
     # module docstring step 7) — fair_cam/tests collection was already folded
     # into the "pytest (fast suite)" step by Task 1b (testpaths), so it needed
@@ -27,12 +27,15 @@ def test_gate_includes_all_seven_tools() -> None:
     # org-scope-lint PR: added "org-scoped lookups" (scripts/lint_org_scoped_lookups.py),
     # a fast AST-based IDOR guard check — placed after ruff (cheap) and before
     # mypy (expensive), matching the cheap-to-expensive ordering rule.
+    # #28: added "mypy ratchet (tests)" (scripts/mypy_ratchet.py) immediately
+    # after "mypy" — the test tree's error counts may fall, never rise.
     labels = [label for label, _ in run_local_gate.GATE_STEPS]
     assert labels == [
         "ruff check",
         "ruff format --check",
         "org-scoped lookups",
         "mypy",
+        "mypy ratchet (tests)",
         "css staleness",
         "pytest (fast suite)",
         "pytest (equivalence harness, slow-marked)",
@@ -58,6 +61,7 @@ def test_skip_tests_env_drops_only_pytest() -> None:
         "ruff format --check",
         "org-scoped lookups",
         "mypy",
+        "mypy ratchet (tests)",
         "css staleness",
     ]
 
@@ -76,3 +80,15 @@ def test_pytest_step_disables_coverage_for_speed() -> None:
 def test_mypy_step_uses_pyproject_config() -> None:
     mypy_argv = dict(run_local_gate.GATE_STEPS)["mypy"]
     assert "--config-file=pyproject.toml" in mypy_argv
+
+
+def test_mypy_ratchet_step_follows_mypy_and_survives_skip_tests() -> None:
+    labels = [label for label, _ in run_local_gate.GATE_STEPS]
+    assert labels.index("mypy ratchet (tests)") == labels.index("mypy") + 1
+    assert dict(run_local_gate.GATE_STEPS)["mypy ratchet (tests)"] == (
+        "-m",
+        "scripts.mypy_ratchet",
+    )
+    # A lint-class step: the emergency pytest-skip hatch must not drop it.
+    skipped = run_local_gate.steps_to_run(env={run_local_gate.SKIP_TESTS_ENV: "1"})
+    assert "mypy ratchet (tests)" in [label for label, _ in skipped]
