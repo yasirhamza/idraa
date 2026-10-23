@@ -1,27 +1,2 @@
 # SCA suppressions (#555). One GHSA/PYSEC id per line. Every entry MUST carry a
 # comment stating why it is accepted/unfixable and a review-by date.
-
-# pillow 12.3.0 (transitive via reportlab) — fixed in 13.0.0, published 2026-10-16, which clears the
-# repo's 7-day release-age floor on 2026-10-23. Not reachable as used: Pillow never decodes untrusted
-# pixel data. The one untrusted path is the admin-only register import, where openpyxl calls
-# PIL.Image.open (header parse only) on images embedded in an uploaded xlsx; none of these 8 CVEs
-# is triggered by Image.open plus size/format (checked against each OSV write-up). PDFs are reportlab
-# vector drawings only. A future Pillow CVE in header parsing is NOT covered by this reason.
-# Remove when pillow is bumped.
-# Review-by 2026-10-24.
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112395
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112397
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112400
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112404
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112895
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112896
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112897
-# pillow CVE outside header parsing, unreachable as used (see above); review-by 2026-10-24
-CVE-2026-112899
