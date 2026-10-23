@@ -1,3 +1,4 @@
+{% from "macros/_control.html" import meta_tags %}
 {% if entries %}
   {% for entry in entries %}
     {% set assignments = (assignments_by_entry or {}).get((entry.id, entry.version)) or [] %}
@@ -6,6 +7,8 @@
       <div class="card-body">
         <h3 class="card-title text-lg">
           {{ entry.name }}
+          {# #268 (spec §3.6): VMC / DSC tags from the entry's assignment slugs. #}
+          {{ meta_tags(assignments | map(attribute="sub_function.value") | list) }}
           {% if already_adopted %}
             {# whitespace-nowrap: short status label must stay on one line — a
                stock fixed-height DaisyUI badge clips/overlaps if "Already

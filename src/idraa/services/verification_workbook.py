@@ -88,7 +88,18 @@ def snapshot_to_fair_cam_controls(
     frozen V3 control snapshots. compose_groups reads nothing else (domain/cost/
     timing deliberately omitted — they default on FairCamControl and are unread by
     composition; verified group_composition.py:94-96). Raises LegacySnapshotError
-    for any non-V3 or malformed snapshot (Pydantic-validated)."""
+    for any non-V3 or malformed snapshot (Pydantic-validated).
+
+    A derived ``dsc_corr_misaligned`` row (#268) is resolved by fair_cam's
+    ``resolve_derived_assignments`` from the row's ``derived_from_sub_function`` (the
+    engine's own resolver, so workbook and run cannot disagree); an unresolvable
+    derived row — including one written without that field — is a LegacySnapshotError.
+    ELAPSED_TIME rows (a derived row's source may be one) recompose under the CURRENT
+    tau table, not the one in force at run time: a pre-existing workbook limit."""
+    # Imported here (as composed_node_multipliers does) to leave the module header's
+    # cited line anchors (51-66) where they are.
+    from fair_cam.composition import resolve_derived_assignments
+
     controls: list[FairCamControl] = []
     for raw in controls_snapshot:
         try:
@@ -101,24 +112,36 @@ def snapshot_to_fair_cam_controls(
             )
         if not model.assignments:
             raise LegacySnapshotError("V3 control snapshot has no assignments")
-        fc_assignments: list[FairCamControlFunctionAssignment] = []
+        rows: list[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]] = []
         for a in model.assignments:  # iterate ALL — adapter iteration contract
             try:
-                fc_assignments.append(
-                    FairCamControlFunctionAssignment(
-                        # v3 enum -> fair_cam enum via parallel .value (matches
-                        # _v3_to_fair_cam_control's FairCamSubFunction(a.sub_function.value))
-                        sub_function=FairCamSubFunction(a.sub_function.value),
-                        capability_value=a.capability_value,  # None ok
-                        coverage=a.coverage,
-                        reliability=a.reliability,
-                        degradation_rate=0.0,  # unread by compose_groups
+                source_sf = (
+                    FairCamSubFunction(a.derived_from_sub_function.value)
+                    if a.derived_from_sub_function is not None
+                    else None
+                )
+                rows.append(
+                    (
+                        FairCamControlFunctionAssignment(
+                            # v3 enum -> fair_cam enum via parallel .value (matches
+                            # _v3_to_fair_cam_control's FairCamSubFunction(a.sub_function.value))
+                            sub_function=FairCamSubFunction(a.sub_function.value),
+                            capability_value=a.capability_value,  # None ok
+                            coverage=a.coverage,
+                            reliability=a.reliability,
+                            degradation_rate=0.0,  # unread by compose_groups
+                        ),
+                        source_sf,
                     )
                 )
             except (ValueError, TypeError) as exc:
                 # e.g. coverage/reliability out of [0,1] -> FairCam __post_init__
                 # ValueError; funnel to fail-loud rather than 500.
                 raise LegacySnapshotError(f"malformed V3 assignment: {exc}") from exc
+        try:
+            fc_assignments = resolve_derived_assignments(rows, control_ref=str(model.control_id))
+        except ValueError as exc:  # dangling/ineligible link, or a derived row w/o its field
+            raise LegacySnapshotError(f"unresolvable derived assignment: {exc}") from exc
         # FairCamControl: control_id + assignments only; name/domain/cost_model/
         # control_type all DEFAULT (verified control.py) and are unread by
         # compose_groups. __post_init__ raises on empty assignments — guarded above.
@@ -1526,6 +1549,7 @@ def _write_controls_sheet(
         UnitType,
     )
 
+    from idraa.services._view_model_helpers import assignment_display_rows
     from idraa.services.weight_robustness import band_endpoint_mappings
     from idraa.utils.text import humanize_slug
 
@@ -1695,18 +1719,34 @@ def _write_controls_sheet(
         # Track per-assignment cell addresses so the composition and band-endpoint
         # LET formulas can reference them by coordinate (never by user-data content).
         asn_cells: list[dict[str, Any]] = []
-        for asn in assignments:
+        for asn, disp in zip(assignments, assignment_display_rows(assignments), strict=True):
             sf_str = str(asn.get("sub_function") or "")
             unit_str = str(asn.get("unit_type") or "probability")
             cap_val = asn.get("capability_value")
-            cov_val = float(asn.get("coverage") or 1.0)
-            rel_val = float(asn.get("reliability") or 1.0)
+            # Only a MISSING value defaults to 1.0: a stored 0.0 is a real input the engine
+            # scores as 0 (coverage/reliability may be 0 through the DTO, the form and the
+            # DB CHECK), and ``or 1.0`` would show 1 and feed it to the Block 2/3 formulas.
+            cov_raw, rel_raw = asn.get("coverage"), asn.get("reliability")
+            cov_val: float | str = 1.0 if cov_raw is None else float(cov_raw)
+            rel_val: float | str = 1.0 if rel_raw is None else float(rel_raw)
             asn_row1 = rows.next_row_1based  # 1-based row of this write
             # C5: show the humanized sub-function name next to the raw slug (raw slug
             # kept first so the value stays auditable). humanize_slug is the SAME
             # canonical humanizer the web/PDF surfaces use (idraa.utils.text).
             human = humanize_slug(sf_str)
             sf_label = f"{sf_str} — {human}" if human and human != sf_str else sf_str
+            if disp.derived:
+                # #268: a derived Correcting Misaligned Decisions row stores inert 0.0
+                # sentinels, which are not inputs: show the linked source's unit,
+                # capability, coverage and reliability instead, or no numbers when the
+                # source is unavailable. No Block 2/3 formula reads these cells (the DSC
+                # Identification-Correction pair has no node target; pinned by
+                # test_no_sheet_formula_references_a_derived_rows_input_cells).
+                sf_label = f"{sf_str} — {disp.label}"
+                unit_str = disp.unit_type or "—"
+                cap_val = disp.capability_value
+                cov_val = "—" if disp.coverage is None else float(disp.coverage)
+                rel_val = "—" if disp.reliability is None else float(disp.reliability)
             rows.row(
                 [
                     sf_label,
@@ -1718,7 +1758,9 @@ def _write_controls_sheet(
                     # before touching cap_cell today, and a number format is
                     # display-only either way (bundled-review NTH-2).
                     (
-                        float(cap_val) if cap_val is not None else "null",
+                        "—"
+                        if disp.source_unavailable
+                        else (float(cap_val) if cap_val is not None else "null"),
                         styles.days
                         if unit_str == UnitType.ELAPSED_TIME.value
                         else styles.multiplier,

@@ -201,6 +201,7 @@ def test_drift_gate_passes_on_real_persisted_shape_snapshot():
 
 
 # --- Task 6: composed node multipliers (recomposition-equivalence) ------------
+from fair_cam.composition import derive_virtual_assignment  # noqa: E402
 from fair_cam.models.control import Control as FairCamControl  # noqa: E402
 from fair_cam.models.control import FairCamControlFunctionAssignment  # noqa: E402
 from fair_cam.models.sub_function import FairCamSubFunction  # noqa: E402
@@ -228,6 +229,10 @@ _CANON_KEYS = {"threat_event_frequency", "vulnerability", "primary_loss", "secon
 #       dsc_corr_misaligned, both PROBABILITY) present, so the AND group composes to
 #       a non-zero effectiveness and GROUP_NODE_MAPPING routes it to the magnitude
 #       targets (secondary_loss w=0.5, primary_loss w=0.2) -> both land off 1.0.
+#       dsc_corr_misaligned is DERIVED (#268, FAIR-CAM §5.3 p.50): a 5th tuple element
+#       names the same-control source sub-function it is linked to; its stored scalars
+#       are inert sentinels, and the engine side builds it with fair_cam's
+#       derive_virtual_assignment.
 #       c3 also carries lec_resp_loss_reduction (the only CURRENCY sub-function) with
 #       a realistic per-event dollar capability_value, so currency_subtractor_total
 #       accumulates cap*coverage*reliability != 0.0 (group_composition.py:101).
@@ -239,7 +244,8 @@ _TWO_CONTROL_INPUTS = [
         [
             # Complete DSC ID+Correction AND-pair -> primary_loss + secondary_loss.
             ("dsc_id_misaligned", 0.7, 1.0, 0.9),
-            ("dsc_corr_misaligned", 0.6, 1.0, 0.95),
+            ("vmc_corr_implementation", 30.0, 1.0, 0.95),
+            ("dsc_corr_misaligned", None, 0.0, 0.0, "vmc_corr_implementation"),
             # CURRENCY Loss-Reduction -> currency_subtractor_total (per-event $).
             ("lec_resp_loss_reduction", 25000.0, 1.0, 0.9),
         ],
@@ -265,12 +271,35 @@ def two_control_v3_snapshot():
                     coverage=cov,
                     reliability=rel,
                     unit_type=v3_enums.SUB_FUNCTION_UNITS[v3_enums.FairCamSubFunction(sub)],
+                    derived_from_sub_function=(
+                        v3_enums.FairCamSubFunction(link[0]) if link else None
+                    ),
                 )
-                for sub, cap, cov, rel in asns
+                for sub, cap, cov, rel, *link in asns
             ],
         )
         snaps.append(model.model_dump(mode="json"))
     return snaps
+
+
+def _engine_assignments(asns):
+    """fair_cam assignments for one _TWO_CONTROL_INPUTS control, built the way the
+    engine path builds them: a linked row is derive_virtual_assignment(<its source>)."""
+    plain = {
+        sub: FairCamControlFunctionAssignment(
+            sub_function=FairCamSubFunction(sub),
+            capability_value=cap,
+            coverage=cov,
+            reliability=rel,
+            degradation_rate=0.0,
+        )
+        for sub, cap, cov, rel, *link in asns
+        if not link
+    }
+    return [
+        derive_virtual_assignment(plain[link[0]]) if link else plain[sub]
+        for sub, _cap, _cov, _rel, *link in asns
+    ]
 
 
 @pytest.fixture
@@ -282,19 +311,7 @@ def engine_applied_mults():
     Controls are built directly as fair_cam dataclasses (NOT via
     composed_node_multipliers) so this is a genuine engine-path equivalence."""
     controls = [
-        FairCamControl(
-            control_id=control_id,
-            assignments=[
-                FairCamControlFunctionAssignment(
-                    sub_function=FairCamSubFunction(sub),
-                    capability_value=cap,
-                    coverage=cov,
-                    reliability=rel,
-                    degradation_rate=0.0,
-                )
-                for sub, cap, cov, rel in asns
-            ],
-        )
+        FairCamControl(control_id=control_id, assignments=_engine_assignments(asns))
         for control_id, asns in _TWO_CONTROL_INPUTS
     ]
     group_comp = compose_groups(controls)  # native_control_aware.py:124
@@ -415,8 +432,136 @@ def test_workbook_coupling_reconciliation_meta_plus_lec_availability():
         assert result[key] == pytest.approx(expected[key])
 
 
+# --- Issue #268: derived Correcting Misaligned Decisions row ------------------
+#
+# A V3 snapshot cannot carry the ORM link id (assignments have no id of their own), so
+# the writer records the SOURCE sub-function in ``derived_from_sub_function`` and the
+# workbook resolves it with fair_cam's resolve_derived_assignments, the same resolver
+# the run mapper uses. A snapshot ``dsc_corr_misaligned`` row without it cannot be
+# resolved (no such row was ever writable) -> LegacySnapshotError.
+
+
+def _derived_snapshot_assignments(source_sf="vmc_corr_implementation", source_cap=30.0):
+    return [
+        _v3_assignment(source_sf, "elapsed_time", cap=source_cap, cov=0.9, rel=0.9),
+        {
+            **_v3_assignment("dsc_corr_misaligned", "probability", cap=None, cov=0.0, rel=0.0),
+            "derived_from_sub_function": source_sf,
+        },
+        _v3_assignment("lec_prev_avoidance", "probability", cap=0.5),
+    ]
+
+
+def test_adapter_resolves_a_derived_row_and_preserves_order():
+    """N=3 in, N=3 out, in order; the derived row carries the source's opeff."""
+    from fair_cam.composition import compute_assignment_opeff_two_branch
+
+    ctl = snapshot_to_fair_cam_controls([_v3_control("c1", _derived_snapshot_assignments())])[0]
+    assert [a.sub_function.value for a in ctl.assignments] == [
+        "vmc_corr_implementation",
+        "dsc_corr_misaligned",
+        "lec_prev_avoidance",
+    ]
+    src, derived, _lec = ctl.assignments
+    assert compute_assignment_opeff_two_branch(derived) == compute_assignment_opeff_two_branch(src)
+    assert (derived.coverage, derived.reliability) == (0.9, 0.9)  # the source's, not 0.0
+
+
+def test_adapter_rejects_dsc_corr_row_without_derived_field_as_legacy():
+    bad = _v3_assignment("dsc_corr_misaligned", "probability", cap=0.6)
+    snap = _v3_control("c1", [_v3_assignment("vmc_corr_implementation", "elapsed_time"), bad])
+    with pytest.raises(LegacySnapshotError):
+        snapshot_to_fair_cam_controls([snap])
+
+
+@pytest.mark.parametrize("bad_source", ["lec_prev_avoidance", "vmc_corr_treatment_selection"])
+def test_adapter_rejects_a_derived_link_to_an_absent_or_ineligible_source_as_legacy(bad_source):
+    asns = [
+        _v3_assignment("vmc_corr_implementation", "elapsed_time", cap=30.0),
+        {
+            **_v3_assignment("dsc_corr_misaligned", "probability", cap=None, cov=0.0, rel=0.0),
+            "derived_from_sub_function": bad_source,
+        },
+    ]
+    with pytest.raises(LegacySnapshotError):
+        snapshot_to_fair_cam_controls([_v3_control("c1", asns)])
+
+
+def test_workbook_e_meta_for_a_derived_row_matches_the_run_mapper_on_the_orm_control():
+    """Parity (hand-math | mapper on ORM control | workbook on its V3 snapshot).
+
+    c_id carries dsc_id_misaligned; c_corr carries vmc_corr_implementation plus a
+    derived dsc_corr_misaligned linked to it. No other meta member exists, so
+    E_meta = E_dsc = OR(E_pair) = id * corr:
+        id   = 0.7 * 1.0 * 0.9                                 = 0.63
+        corr = exp(-30 / 79.3) * 0.9 * 0.9      (tau 79.3 d)  = 0.5543...
+        E_pair = id * corr
+    The workbook uses the CURRENT tau table, not the table in force when the run
+    executed: a pre-existing limit of the workbook for every ELAPSED_TIME row (the
+    snapshot freezes unit_type, not tau).
+    """
+    import math
+    import uuid
+    from decimal import Decimal
+
+    from fair_cam.risk_engine.group_composition import precompose_parts
+
+    from idraa.models.control import Control as OrmControl
+    from idraa.models.control_function_assignment import ControlFunctionAssignment as OrmCfa
+    from idraa.models.enums import ControlType, EntityStatus
+    from idraa.services.run_executor import _snapshot_control_v3, _v3_to_fair_cam_control
+
+    org = uuid.uuid4()
+
+    def _control(name, rows):
+        ctrl = OrmControl(
+            id=uuid.uuid4(),
+            organization_id=org,
+            name=name,
+            type=ControlType.TECHNICAL,
+            annual_cost=Decimal("0"),
+            status=EntityStatus.ACTIVE,
+            version="1.0",
+        )
+        ctrl.assignments = [
+            OrmCfa(
+                id=rid,
+                organization_id=org,
+                control_id=ctrl.id,
+                sub_function=v3_enums.FairCamSubFunction(sf),
+                capability_value=cap,
+                coverage=cov,
+                reliability=rel,
+                derived_from_assignment_id=link,
+            )
+            for rid, sf, cap, cov, rel, link in rows
+        ]
+        return ctrl
+
+    src_id = uuid.UUID(int=2)
+    c_id = _control("c_id", [(uuid.UUID(int=10), "dsc_id_misaligned", 0.7, 1.0, 0.9, None)])
+    c_corr = _control(
+        "c_corr",
+        [
+            (uuid.UUID(int=1), "dsc_corr_misaligned", None, 0.0, 0.0, src_id),  # sorts first
+            (src_id, "vmc_corr_implementation", 30.0, 0.9, 0.9, None),
+        ],
+    )
+    ctrls = [c_id, c_corr]
+
+    hand = 0.63 * (math.exp(-30.0 / 79.3) * 0.9 * 0.9)
+    mapper = precompose_parts([_v3_to_fair_cam_control(c) for c in ctrls]).e_meta
+    snaps = [_snapshot_control_v3(c).model_dump(mode="json") for c in ctrls]
+    workbook = precompose_parts(snapshot_to_fair_cam_controls(snaps)).e_meta
+
+    assert mapper == pytest.approx(hand, rel=1e-12)
+    assert workbook == pytest.approx(mapper, rel=1e-12)
+    assert hand > 0.0  # the pair scores: without the link E_meta would be 0.0
+
+
 # --- Task 9: single-run workbook assembly ------------------------------------
 import io  # noqa: E402
+import re  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
 import openpyxl  # noqa: E402
@@ -2902,3 +3047,250 @@ def test_controls_basis_note_absent_on_insufficient_budget_blob():
     strings = " ".join(_all_cell_strings(build_single_run_let_workbook(run, _make_org()))).lower()
     assert "different basis" not in strings
     assert "typical-case point" not in strings
+
+
+# --- Issue #268 Task 5: Controls sheet shows a derived row's SOURCE values -----------------
+#
+# The sheet's Input-cells block reads ``coverage or 1.0`` / ``reliability or 1.0`` from the
+# snapshot assignments: a derived row's stored 0.0 sentinels would be laundered into 1.0.
+# Derived rows bypass that fallback and show the linked source's values.
+
+
+def _derived_controls_sheet_snapshot() -> dict:
+    model = ControlSnapshotV3(
+        control_id="c-derived",
+        name="Linked response control",
+        domains=["loss_event"],
+        type="preventive",
+        assignments=[
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_prev_avoidance"),
+                capability_value=0.8,
+                coverage=1.0,
+                reliability=1.0,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+            ),
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_resp_event_termination"),
+                capability_value=30.0,
+                coverage=0.83,
+                reliability=0.61,
+                unit_type=v3_enums.UnitType.ELAPSED_TIME,
+            ),
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("dsc_corr_misaligned"),
+                capability_value=None,
+                coverage=0.0,
+                reliability=0.0,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+                derived_from_sub_function=v3_enums.FairCamSubFunction("lec_resp_event_termination"),
+            ),
+        ],
+    )
+    return model.model_dump(mode="json")
+
+
+def _sheet_row_with(ws, needle: str) -> tuple:
+    rows = [r for r in ws.iter_rows(values_only=True) if isinstance(r[0], str) and needle in r[0]]
+    assert len(rows) == 1, f"expected one Controls row containing {needle!r}, got {len(rows)}"
+    return rows[0]
+
+
+def test_controls_sheet_derived_row_shows_the_sources_values_not_the_sentinels():
+    run = _let_run(controls_snapshot=[_derived_controls_sheet_snapshot()])
+    ws = _open(build_single_run_let_workbook(run, _make_org()))["Controls"]
+    row = _sheet_row_with(ws, "derived from")
+    assert row[0] == (
+        "dsc_corr_misaligned — Correcting Misaligned Decisions — derived from "
+        "LEC Resp Event Termination"
+    )
+    # unit (the source's), capability, coverage, reliability: the SOURCE's, never the stored
+    # 0.0 sentinels and never the ``or 1.0`` fallback's 1.0.
+    assert row[1:5] == ("elapsed_time", 30.0, 0.83, 0.61)
+    # the plain source row is unchanged
+    src = _sheet_row_with(ws, "lec_resp_event_termination — ")
+    assert src[1:5] == ("elapsed_time", 30.0, 0.83, 0.61)
+
+
+def test_controls_sheet_derived_row_without_a_source_shows_no_numbers():
+    """Sheet-writer level: a derived row whose source is absent prints "derived (source
+    unavailable)" and no numbers, never the stored sentinels. (The full builder does not
+    raise on such a snapshot either: ``_residual_reconstructible`` catches the
+    LegacySnapshotError and degrades; see the test below.)"""
+    import xlsxwriter
+
+    from idraa.services.verification_workbook import _Styles, _write_controls_sheet
+
+    snap = _derived_controls_sheet_snapshot()
+    snap["assignments"] = [
+        a for a in snap["assignments"] if a["sub_function"] != "lec_resp_event_termination"
+    ]
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    ws = wb.add_worksheet("Controls")
+    _write_controls_sheet(ws, controls_snapshot=[snap], styles=_Styles(wb))
+    wb.close()
+    sheet = openpyxl.load_workbook(io.BytesIO(buf.getvalue()))["Controls"]
+    row = _sheet_row_with(sheet, "derived (source unavailable)")
+    assert row[0] == (
+        "dsc_corr_misaligned — Correcting Misaligned Decisions — derived (source unavailable)"
+    )
+    assert not any(isinstance(v, (int, float)) for v in row[1:5]), row
+
+
+def test_full_builder_degrades_instead_of_raising_on_an_unresolvable_derived_row():
+    """``_residual_reconstructible`` catches the adapter's LegacySnapshotError: the workbook
+    is still built, the MC sheet carries the fail-loud "composition not reconstructible"
+    text, and the Controls row reads "derived (source unavailable)" with no numbers."""
+    snap = _derived_controls_sheet_snapshot()
+    snap["assignments"] = [
+        a for a in snap["assignments"] if a["sub_function"] != "lec_resp_event_termination"
+    ]
+    run = _let_run(controls_snapshot=[snap])
+    out = build_single_run_let_workbook(run, _make_org())
+    row = _sheet_row_with(_open(out)["Controls"], "derived (source unavailable)")
+    assert not any(isinstance(v, (int, float)) for v in row[1:5]), row
+    assert "composition not reconstructible" in " ".join(_all_cell_strings(out))
+
+
+# --- Issue #268 Task 5 fix: only a MISSING coverage / reliability defaults to 1.0 ---------
+#
+# The Input-cells block used ``float(coverage or 1.0)``: a stored 0.0 (reachable through the
+# DTO, the form's min=0 and the DB CHECK) was displayed as 1 and fed to the Block 2/3
+# standalone formulas, which then overstated the control (cap 0.75, cov 0.0, r0 0.85 gave a
+# 0.49x TEF multiplier where the engine applies none). Engine and MC residual were right.
+
+_LET_FORMULA = re.compile(
+    r"LET\(_xlpm\.opeff,([A-Z]+\d+)\*([A-Z]+\d+)\*([A-Z]+\d+),1-_xlpm\.opeff\*([0-9.]+)\)"
+)
+
+
+def _plain_snapshot(cap: float, cov: float, rel: float) -> dict:
+    model = ControlSnapshotV3(
+        control_id="c-plain",
+        name="Plain prevention control",
+        domains=["loss_event"],
+        type="preventive",
+        assignments=[
+            ControlFunctionAssignmentSnapshotDTO(
+                sub_function=v3_enums.FairCamSubFunction("lec_prev_resistance"),
+                capability_value=cap,
+                coverage=cov,
+                reliability=rel,
+                unit_type=v3_enums.UnitType.PROBABILITY,
+            )
+        ],
+    )
+    return model.model_dump(mode="json")
+
+
+def _standalone_multipliers(ws) -> dict:
+    """Evaluate each Block 2 standalone LET (``1 - cap*cov*rel*w``) from the sheet's own
+    cell values: {node: multiplier}. The node name is read from the formula row's label."""
+    out = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            text = cell.value if isinstance(cell.value, str) else getattr(cell.value, "text", "")
+            m = _LET_FORMULA.search((text or "").replace(" ", ""))
+            if not m or cell.column != 3:
+                continue
+            label = ws.cell(row=cell.row, column=1).value
+            node_match = re.search(r"→ (\w+) ", label) if isinstance(label, str) else None
+            if node_match is None:  # a Block 3 band-endpoint row, not a Block 2 row
+                continue
+            cap, cov, rel = (ws[ref].value for ref in m.group(1, 2, 3))
+            node = node_match.group(1)
+            out[node] = 1 - cap * cov * rel * float(m.group(4))
+    return out
+
+
+@pytest.mark.parametrize(
+    ("cap", "cov", "rel"),
+    [
+        pytest.param(0.75, 0.0, 0.85, id="coverage-zero"),
+        pytest.param(0.75, 0.5, 0.0, id="reliability-zero"),
+        pytest.param(0.75, 0.0, 0.0, id="both-zero"),
+        pytest.param(0.75, 0.5, 0.85, id="positive-control"),
+    ],
+)
+def test_controls_sheet_shows_a_stored_zero_and_its_formula_matches_the_engine(cap, cov, rel):
+    snap = _plain_snapshot(cap, cov, rel)
+    run = _let_run(controls_snapshot=[snap])
+    ws = openpyxl.load_workbook(
+        io.BytesIO(build_single_run_let_workbook(run, _make_org())), data_only=False
+    )["Controls"]
+    row = _sheet_row_with(ws, "lec_prev_resistance — ")
+    # the stored values are displayed as stored: 0.0 stays 0, it is not defaulted to 1
+    assert row[1:5] == ("probability", cap, cov, rel)
+    # expected (hand): 1 - cap*cov*rel*w ; actual: engine's composed multipliers
+    engine = composed_node_multipliers([snap])
+    sheet = _standalone_multipliers(ws)
+    assert set(sheet) == {"threat_event_frequency", "vulnerability"}
+    for node, value in sheet.items():
+        assert value == pytest.approx(engine[node], rel=1e-12), node
+    if cov == 0.0 or rel == 0.0:
+        assert sheet == {"threat_event_frequency": 1.0, "vulnerability": 1.0}  # no-effect
+
+
+def test_controls_sheet_defaults_a_missing_coverage_or_reliability_to_one():
+    """The legacy default survives for a value that is genuinely absent (None / no key)."""
+    import xlsxwriter
+
+    from idraa.services.verification_workbook import _Styles, _write_controls_sheet
+
+    snap = _plain_snapshot(0.75, 0.5, 0.85)
+    snap["assignments"][0]["coverage"] = None
+    del snap["assignments"][0]["reliability"]
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    ws = wb.add_worksheet("Controls")
+    _write_controls_sheet(ws, controls_snapshot=[snap], styles=_Styles(wb))
+    wb.close()
+    sheet = openpyxl.load_workbook(io.BytesIO(buf.getvalue()))["Controls"]
+    assert _sheet_row_with(sheet, "lec_prev_resistance — ")[1:5] == ("probability", 0.75, 1, 1)
+
+
+def test_a_zero_coverage_source_and_its_derived_row_agree_on_the_sheet():
+    """Before the fix the source row showed coverage 1 and the derived row 0 for the same
+    stored 0.0; the engine scores both at 0.0."""
+    snap = _derived_controls_sheet_snapshot()
+    for a in snap["assignments"]:
+        if a["sub_function"] == "lec_resp_event_termination":
+            a["coverage"] = 0.0
+    ws = _open(build_single_run_let_workbook(_let_run(controls_snapshot=[snap]), _make_org()))[
+        "Controls"
+    ]
+    source = _sheet_row_with(ws, "lec_resp_event_termination — ")
+    derived = _sheet_row_with(ws, "derived from")
+    assert source[1:5] == derived[1:5] == ("elapsed_time", 30.0, 0.0, 0.61)
+
+
+def test_no_sheet_formula_references_a_derived_rows_input_cells():
+    """Hardening (M5-N2): a derived row's C/D/E hold the SOURCE's values (a day-count for an
+    ELAPSED_TIME source) under a PROBABILITY slug, so no Controls-sheet formula may read them.
+    Today the DSC Identification-Correction pair has no node target; if that ever changes
+    this test fails instead of the sheet silently multiplying days as a probability."""
+    out = build_single_run_let_workbook(
+        _let_run(controls_snapshot=[_derived_controls_sheet_snapshot()]), _make_org()
+    )
+    wb = openpyxl.load_workbook(io.BytesIO(out), data_only=False)
+    controls = wb["Controls"]
+    derived_row = next(
+        r[0].row
+        for r in controls.iter_rows()
+        if isinstance(r[0].value, str) and "derived from" in r[0].value
+    )
+    ref = re.compile(rf"(?<![A-Z$!])\$?[CDE]\$?{derived_row}(?!\d)")
+    controls_ref = re.compile(rf"Controls!\$?[CDE]\$?{derived_row}(?!\d)")
+    referencing = []
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                v = cell.value
+                text = v if isinstance(v, str) else getattr(v, "text", None)
+                if not isinstance(text, str) or not (cell.data_type == "f" or text.startswith("=")):
+                    continue
+                pattern = ref if sheet.title == "Controls" else controls_ref
+                if pattern.search(text):
+                    referencing.append((sheet.title, cell.coordinate, text))
+    assert referencing == []

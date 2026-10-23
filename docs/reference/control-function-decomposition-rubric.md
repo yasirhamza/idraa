@@ -34,7 +34,7 @@ product — a single product (e.g., CSPM) commonly spans multiple rows.
 | Directly reduces realized losses (currency) | LEC Response (LossReduction) | LEC channel — **`lec_resp_loss_reduction` only** | **Scores standalone** (the single CURRENCY exception; see §5) |
 | Monitors / corrects **another control's** operational health or drift | VMC Identification / Correction | **meta** — couples via reliability uplift (κ coupling, Slice 2 #439, SHIPPED: `KAPPA_META_RELIABILITY` in `fair_cam/models/composition_topology.py`) | The Identification∧Correction AND-pair contributes to `E_meta` when both sides are present: Identification is OR over its present members; Correction is implementation-anchored (absent `vmc_corr_implementation` → 0, so the pair is 0; present → the Implementation member's effectiveness; `vmc_corr_treatment_selection` is label-only; register C8, `precompose_parts` in `fair_cam/risk_engine/group_composition.py`). `E_meta` uplifts the reliability of every LEC assignment present in the run (including the entry's own) via `r_eff = r0 + (1-r0)·κ·E_meta` — NOT a direct vulnerability/magnitude multiplier of its own (that direct target was retired by Slice 2). An isolated meta-only entry with no co-present LEC control (or no r0<1 headroom) still shows $0 — correctly, not as pending future work. |
 | Reduces frequency or probability of changes that introduce control variance | VMC Variance Prevention | **meta** — the SAME κ reliability coupling; its direct Vulnerability target (the pre-#439 `Vuln×0.3` proxy) was retired in Slice 2: `GROUP_NODE_MAPPING[VMC_VARIANCE_PREVENTION]` has no targets (`fair_cam/models/composition_topology.py`) | **Does NOT score standalone.** OR group over its two members (`GROUP_TYPE`); the group value is one operand of `E_vmc = OR(E_variance_prevention, E_id∧corr_pair)` and then of `E_meta = OR(E_vmc, E_dsc)` (`precompose_parts`; register C7). A single `vmc_prev_*` member therefore moves `E_meta` on its own, realised only through the LEC assignments present in the run (including the entry's own) with r0 < 1. |
-| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** — couples via the SAME κ reliability coupling as VMC (Slice 2 #439, SHIPPED); DSC's direct Loss-Magnitude target was retired on the same §2.2 p.5 "Indirectly Affect Risk" grounds | DSC_PREVENTION is composed by the **best-coherent-subset mean of its present members, which equals `max`** (`_best_coherent_subset_mean`, applied in `precompose_parts`; register C6) — one present member sets `E_dsc` at its own level and no member count is required. `E_dsc` feeds `E_meta`, uplifting the reliability of every LEC assignment present in the run (including the entry's own); it produces no direct Loss-Magnitude multiplier of its own. **DSC assignments are therefore NOT label-only**: any new DSC member can move `E_meta` (§2.7, §6.5). DSC id+corr pair is **unreachable**: `dsc_corr_misaligned` is virtual (no control may claim it). |
+| Improves decisions / prioritization / situational awareness | DSC Prevention / Identification+Correction | **meta** — couples via the SAME κ reliability coupling as VMC (Slice 2 #439, SHIPPED); DSC's direct Loss-Magnitude target was retired on the same §2.2 p.5 "Indirectly Affect Risk" grounds | DSC_PREVENTION is composed by the **best-coherent-subset mean of its present members, which equals `max`** (`_best_coherent_subset_mean`, applied in `precompose_parts`; register C6) — one present member sets `E_dsc` at its own level and no member count is required. `E_dsc` feeds `E_meta`, uplifting the reliability of every LEC assignment present in the run (including the entry's own); it produces no direct Loss-Magnitude multiplier of its own. **DSC assignments are therefore NOT label-only**: any new DSC member can move `E_meta` (§2.7, §6.5). The DSC id+corr AND-pair scores when a `dsc_id_misaligned` carrier is in the run together with a control whose correction / response process is linked as Correcting Misaligned Decisions (§2.8, register C12): `dsc_corr_misaligned` is virtual (no control claims it directly) and exists only as that derived link. |
 
 **Key principle — scoring ≠ channel (B1).** Channel is where the effect routes
 (direct/meta). Whether an entry produces `v(S) > 0` is a separate, topology-derived
@@ -272,13 +272,14 @@ can raise it further. Do not author DSC assignments chasing `E_meta` — classif
 where the behavior is genuinely attested (§3, §6.1) and put every new DSC
 assignment through a score-delta audit in the §6.5 spirit (its `E_meta` delta in a
 run with LEC assignments present, even when the entry's standalone v(S) stays $0).
-The one score-neutral DSC claim is `dsc_id_misaligned`: its pair partner is
-virtual (§2.8), so the pair's AND is always 0. The per-sub-function
+`dsc_id_misaligned` is score-neutral only while no control in the run carries the
+Correcting Misaligned Decisions link (§2.8): its pair partner is virtual, so
+without the link the pair's AND is 0. The per-sub-function
 `scores_standalone` predicate (§2.9) returns **No** for every DSC member, and the
 entry-level `entry_scores` predicate composes the entry alone at κ = 0, so a
 DSC-only entry is a non-scoring residual (§6.3), never a standalone scorer.
 
-### 2.8 DSC Identification+Correction pair — unreachable in authoring
+### 2.8 DSC Identification+Correction pair — reachable through the Correcting Misaligned Decisions link
 
 Group: `dsc_identification_correction_pair` | Type: **AND** (a leaf group over its
 two members, `GROUP_MEMBERSHIP`; an absent member is padded 0.0) |
@@ -288,27 +289,51 @@ Targets: *(none — the direct Loss-Magnitude target was retired in Slice 2 #439
 | Sub-function | UnitType | Scores standalone |
 |---|---|---|
 | `dsc_id_misaligned` | PROBABILITY | **No** |
-| `dsc_corr_misaligned` | PROBABILITY | **No** |
+| `dsc_corr_misaligned` | PROBABILITY (derived) | **No** |
 
-If both members were present, the pair's AND would be one operand of
-`E_dsc = OR(E_dsc_prevention, E_pair)` → `E_meta` (§2.7). It is **unreachable in
-authoring**: `dsc_corr_misaligned` is a virtual sub-function. On the org-authored
-path the DTO validator `reject_virtual_unless_derived` (`src/idraa/schemas/control.py`)
-rejects it unless `derived_from_assignment_id` is set, the DB CHECK
-`ck_cfa_virtual_requires_derived` (`src/idraa/models/control_function_assignment.py`)
-enforces the same, the controls form never offers it (`_FORM_SUB_FUNCTIONS`,
-`src/idraa/routes/controls.py`) and the service refuses any
-`derived_from_assignment_id` as reserved-but-unused (`src/idraa/services/controls.py`);
-on the seed path `ControlLibraryAssignmentSeed` raises a validation error if any entry
-attempts to claim it ("sub_function dsc_corr_misaligned is virtual; no control may
-claim it"). A lone `dsc_id_misaligned` therefore composes to `AND(0.512, 0.0) = 0`
-(engine: `E_meta` 0.0 at the 0.8 defaults; pinned beside a co-present Resistance in
-`fair_cam/tests/risk_engine/test_meta_reliability_coupling.py`), which is why it is
-the one score-neutral DSC claim (§2.7) and a member of `_LABEL_ONLY_SUB_FUNCTIONS`
-(`src/idraa/services/_view_model_helpers.py`). The derived-row path is reserved, not
-absent (`derived_from_assignment_id`): the PR that builds it retires the service
-guard (pinned by `tests/unit/test_controls_service.py`) and must then remove
-`dsc_id_misaligned` from that set. No score-rescue guard is needed for it.
+When both members are present in a run, the pair's AND is one operand of
+`E_dsc = OR(E_dsc_prevention, E_pair)` → `E_meta` (§2.7). `dsc_corr_misaligned` is a
+virtual sub-function (FAIR-CAM §5.3 p. 50: fulfilled by Variance Correction or LEC
+Response controls, none of its own), so no control claims it directly. It is reached
+through a **derived row** (register C12): on the control form the analyst links the
+control's own `vmc_corr_implementation`, `lec_resp_event_termination` or
+`lec_resp_resilience` assignment as also Correcting Misaligned Decisions
+(`DSC_CORR_LINK_SOURCES`, `src/idraa/models/enums.py`, mirroring fair_cam's
+`DERIVABLE_SOURCES`); the server stores a `dsc_corr_misaligned` row whose
+`derived_from_assignment_id` points at that same-control source, and the engine
+scores it with the source's capability, coverage and authored reliability
+(`derive_virtual_assignment`, `fair_cam/composition.py`). The identifying member may
+sit on a different control; each member is OR-pooled across the run's controls
+(register C11) before the AND. Only `dsc_id_misaligned` identifies for this pair — a
+`vmc_id_*` row does not. Enforcement of the virtual rule is unchanged: the DTO
+validator `reject_virtual_unless_derived` (`src/idraa/schemas/control.py`) and the DB
+CHECK `ck_cfa_virtual_requires_derived`
+(`src/idraa/models/control_function_assignment.py`) both require the link; the
+controls form never offers `dsc_corr_misaligned` as an assignment row
+(`_FORM_SUB_FUNCTIONS`, `src/idraa/routes/controls.py`) and the service refuses any
+client-supplied `derived_from_assignment_id` or submitted `dsc_corr_misaligned` row
+(`validate_dsc_corr_link`, `src/idraa/services/controls.py`); CSV import skips the
+virtual path; on the seed path `ControlLibraryAssignmentSeed` raises a validation
+error if any entry attempts to claim it ("sub_function dsc_corr_misaligned is
+virtual; no control may claim it") — library entries carry no derived rows, and a
+library resync re-links a control's derived row only when the entry still carries
+its source sub-function (else drops it, audited).
+
+A lone `dsc_id_misaligned` in a run with no linked control still composes to
+`AND(0.512, 0.0) = 0` (engine: `E_meta` 0.0 at the 0.8 defaults; pinned beside a
+co-present Resistance in `fair_cam/tests/risk_engine/test_meta_reliability_coupling.py`),
+which is why it is score-neutral in that run (§2.7) and the run's zero-value reason
+reads "Decision Support identification with no correcting link in this run"
+(`control_zero_value_reason`, `src/idraa/services/_view_model_helpers.py`;
+`_LABEL_ONLY_SUB_FUNCTIONS` there is now `vmc_corr_treatment_selection` alone). With a
+linked carrier present the pair scores — hand-math pin: identification (0.6, 0.9, 0.8)
+→ 0.432, implementation t = 30 d (τ 79.3), coverage 0.8, r0 0.8 → 0.43841149…,
+`E_pair` = 0.18939377… (`test_linked_correction_scores_the_dsc_pair`, same file).
+Curation: do not link a process as Correcting Misaligned Decisions to chase `E_meta`;
+link it only where the process genuinely re-aligns decision-makers (retraining,
+reassignment, enforcement, escalation — §5.3's examples), and note that
+`vmc_corr_treatment_selection` is not an eligible source (register C8 keeps it
+score-neutral).
 
 ### 2.9 Summary: scores_standalone predicate
 
@@ -325,8 +350,8 @@ topology-derived and returns False for every `vmc_*`/`dsc_*` member.)
 
 `vmc_corr_treatment_selection` is additionally **score-neutral in every
 composition**: it is a label-only member of the implementation-anchored Correction
-group (§2.6, register C8), so, like `dsc_id_misaligned` (§2.7), it never moves
-`E_meta`.
+group (§2.6, register C8), so it never moves `E_meta`. (`dsc_id_misaligned` is
+score-neutral only in a run with no Correcting Misaligned Decisions link, §2.7–2.8.)
 
 This is **per-sub-function** — a rubric helper. The **entry-level** scoring
 judgment uses the engine-based pair-aware `entry_scores(entry)` (Task 4),

@@ -89,6 +89,24 @@
   {%- set cur_stage = form_data.implementation_stage if form_data and form_data.implementation_stage else (control.implementation_stage.value if control and control.implementation_stage else 'active') -%}
   {%- set cur_annual_cost = form_data.annual_cost if form_data and form_data.annual_cost is not none else (control.annual_cost if control else 0) -%}
 
+  {# #268 — Correcting Misaligned Decisions link. A POST re-render (form_data) echoes the
+     SUBMITTED selection; the edit GET passes the derived row's source slug as
+     dsc_corr_selected. Anything that is not a string (a multipart file part) is dropped so
+     `| tojson` below can never see a non-serialisable object. #}
+  {%- set cur_link = form_data.get("corrects_misaligned_decisions_from") if form_data else (dsc_corr_selected if dsc_corr_selected is defined else "") -%}
+  {%- if cur_link is not string -%}{%- set cur_link = "" -%}{%- endif -%}
+  {# Eligible sources = DSC_CORR_LINK_SOURCES (models/enums.py). The template cannot import
+     it, and the routes that build this page's context are anchored, so the three slugs are
+     listed here and pinned equal to the enum by tests/routes/test_controls_derived_link_form.py.
+     Option text comes from the shared sub_function_options groups, never from the slug. #}
+  {%- set link_sources = ["lec_resp_event_termination", "lec_resp_resilience", "vmc_corr_implementation"] -%}
+  {%- set link_options = [] -%}
+  {%- for g in sub_function_groups_json -%}
+    {%- for o in g.options -%}
+      {%- if o.value in link_sources -%}{%- set _ = link_options.append(o) -%}{%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+
   <form
     id="control-form"
     {% if control %}
@@ -271,6 +289,53 @@
         class="btn btn-outline btn-sm mt-2">
         + Add assignment
       </button>
+    </fieldset>
+
+    {# ------------------------------------------------------------------ #}
+    {#  Decision Support fieldset (#268)                                    #}
+    {# ------------------------------------------------------------------ #}
+    {# Correcting Misaligned Decisions (FAIR-CAM §5.3) is a VIRTUAL function: no control
+       serves it directly, so it is never an assignment row. The analyst credits it from
+       this control's own correction / response process; the server stores a link and the
+       engine takes that process's effectiveness. Alpine hides the options whose
+       sub-function is not among the CURRENT assignment rows (read from the DOM — rows are
+       added by HTMX and removed client-side) and resets the select to none when the chosen
+       one disappears. The server is authoritative either way (validate_dsc_corr_link).
+       Escaping: the state is a JSON literal via `| tojson` inside a SINGLE-QUOTED
+       attribute; `selected` on each option is a Jinja comparison against the trusted list. #}
+    <fieldset
+      class="space-y-3"
+      x-data='{
+        selected: {{ cur_link | tojson }},
+        present: [],
+        sync() {
+          const picks = document.querySelectorAll("#assignments select");
+          this.present = Array.from(picks)
+            .filter((s) => s.name.endsWith("[sub_function]"))
+            .map((s) => s.value)
+            .filter(Boolean);
+          if (this.selected && !this.present.includes(this.selected)) this.selected = "";
+        }
+      }'
+      x-init='sync(); new MutationObserver(() => sync()).observe(document.getElementById("assignments"), { childList: true, subtree: true })'
+      @change.window="sync()">
+      <legend class="block text-h3 text-ink-1 border-b border-border-subtle pb-2 mb-3 w-full">Decision Support</legend>
+      <div class="space-y-1 max-w-md">
+        <label for="corrects_misaligned_decisions_from" class="text-meta text-ink-2">Correcting Misaligned Decisions</label>
+        <select id="corrects_misaligned_decisions_from"
+                name="corrects_misaligned_decisions_from"
+                x-model="selected"
+                class="h-10 w-full px-3 rounded-input bg-surface-1 text-ink-1 border border-border-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2">
+          <option value="" {% if not cur_link %}selected{% endif %}>— none —</option>
+          {% for o in link_options %}
+            <option value="{{ o.value }}"
+                    {% if cur_link == o.value %}selected{% endif %}
+                    :hidden="!present.includes($el.value)"
+                    :disabled="!present.includes($el.value)">{{ o.label }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-micro text-ink-3">Also credit this control's correction or response process with Correcting Misaligned Decisions (FAIR-CAM §5.3). It takes that process's effectiveness.</p>
+      </div>
     </fieldset>
 
     {# #454-sweep2 item 1: bottom clearance — see app.css `form:has(.sticky-action-bar)`. #}

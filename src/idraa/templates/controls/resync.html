@@ -70,11 +70,28 @@
   {% endfor %}
 
   <div class="bg-surface-1 border border-border-strong rounded-card p-6">
-    <p class="text-body text-ink-2 mb-3">Applying replaces this control's
-      library-derived fields and ALL function assignments with entry
-      v{{ info.current_version }} values (assignments land unconfirmed, like a fresh
-      adoption — your edits above are overwritten). Completed runs that used this
-      control will be marked stale so you can re-run them.</p>
+    <p class="text-body text-ink-2 mb-3">Applying replaces this control's library-derived
+      fields and ALL of its function assignments — including any you added — with the
+      entry v{{ info.current_version }} assignments (they land unconfirmed, like a fresh
+      adoption — your edits above are overwritten). Completed runs that used this control
+      will be marked stale so you can re-run them.</p>
+    {# #268 — the derived Correcting Misaligned Decisions row holds only a link to another
+       row of this control, so it is neither an entry assignment nor "replaced": its fate is
+       reported separately (the old derived row is deleted either way; "relinked" creates a
+       new one). The source row may have been one the analyst added, so the wording never
+       assumes the entry carried it before. #}
+    {% if info.derived_fate == "relinked" %}
+    <p class="text-body text-ink-2 mb-3">This control's Correcting Misaligned Decisions link
+      is kept: the entry v{{ info.current_version }} assignments include the sub-function it
+      is linked to, so the link is re-created against the re-synced row of that
+      sub-function (unconfirmed until you next save the control or confirm that row on the
+      maintenance page).</p>
+    {% elif info.derived_fate == "dropped" %}
+    <p class="text-body text-ink-2 mb-3">This control's Correcting Misaligned Decisions link
+      will be removed: the entry v{{ info.current_version }} assignments do not include the
+      sub-function it is linked to (the old row is replaced either way). You can re-link it
+      on the control form after the re-sync.</p>
+    {% endif %}
     <div class="flex gap-2">
       <form method="post" action="/controls/{{ c.id }}/resync">
         {{ csrf_field() }}

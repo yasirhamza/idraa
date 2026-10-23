@@ -24,8 +24,11 @@ from idraa.schemas.control import ControlFunctionAssignmentDTO
 
 def test_dto_rejects_virtual_without_derived() -> None:
     """DSC_CORR_MISALIGNED without derived_from_assignment_id → ValidationError."""
-    # #199 slice 1: a derived-row feature keeps this refusal but retires the service guard
-    # (services/controls.py "reserved-but-unused") — see `_LABEL_ONLY_SUB_FUNCTIONS`.
+    # #199 slice 1 / #268: the DTO keeps this refusal (a virtual row needs a link). The
+    # service's old "reserved-but-unused" guard is retired and replaced by
+    # `validate_dsc_corr_link` (services/controls.py), which refuses any CLIENT-supplied
+    # link. (`_LABEL_ONLY_SUB_FUNCTIONS` in services/_view_model_helpers.py no longer
+    # lists dsc_id_misaligned: with the link authorable its zero is run-scoped, #268.)
     with pytest.raises(ValidationError, match="virtual"):
         ControlFunctionAssignmentDTO(
             sub_function=FairCamSubFunction.DSC_CORR_MISALIGNED,
@@ -46,7 +49,11 @@ def test_dto_permits_virtual_when_derived_from_provided() -> None:
 
 
 def test_dto_permits_non_null_derived_from_on_non_virtual_subfn() -> None:
-    """Non-virtual sub_function + non-NULL derived_from → DTO succeeds (B-NEW3)."""
+    """Non-virtual sub_function + non-NULL derived_from → DTO succeeds (B-NEW3).
+
+    The DTO is shared with the snapshot reader, so it must accept a link; refusing a
+    client-supplied one is the service's job (``validate_dsc_corr_link``, #268).
+    """
     dto = ControlFunctionAssignmentDTO(
         sub_function=FairCamSubFunction.LEC_PREV_RESISTANCE,
         capability_value=0.85,

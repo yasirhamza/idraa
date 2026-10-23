@@ -24,12 +24,18 @@ shared note constants) to avoid a circular import and so all surfaces
 Issue #436: `control_zero_value_reason` and `snapshot_sub_functions_by_id`
 added here so the structural-zero reason label is computed at the view-model
 boundary (same convert-once pattern as the monetary values).
+
+Issue #268: `meta_tag_notes` (which VMC/DSC tags the control detail page mutes, and why)
+and the run-scoped DSC identification / correction zero-value reasons.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
+
+from idraa.utils.text import humanize_slug
 
 # ---- Task 1 (#353): DIST_STATS_DEFINITIONAL_NOTE — single source of truth ----
 #
@@ -811,10 +817,17 @@ def process_weight_robustness_for_display(
             # classifier sees only this control's own slugs (Spec-I2), so compute
             # the partner signal here from the run's other controls.
             has_co_present_lec = _any_other_control_has_lec(cid, sub_functions_by_id)
+            # #268: the DSC identification / correction pair is scored or not as a
+            # property of the WHOLE run (any control), so the run-level signals come
+            # from every control's slugs, this one included (spec §3.3).
+            run_slugs = {sf for run_sfs in sub_functions_by_id.values() for sf in run_sfs}
             converted_cell["zero_reason"] = control_zero_value_reason(
                 sfs,
                 availability_effect=availability_effect,
                 has_co_present_lec=has_co_present_lec,
+                run_has_dsc_id="dsc_id_misaligned" in run_slugs,
+                run_has_dsc_corr="dsc_corr_misaligned" in run_slugs,
+                run_has_vmc_id=not _VMC_ID_SLUGS.isdisjoint(run_slugs),
             )
         else:
             converted_cell["zero_reason"] = None
@@ -900,26 +913,44 @@ _META_SUBTHRESHOLD_REASON: str = (
 )
 # #199 slice 1 (register C8): label-only members are composed and recorded but
 # never scored, so a control carrying ONLY label-only members has a structurally
-# zero uplift — not a sub-threshold one. vmc_corr_treatment_selection is label-only
-# in the implementation-anchored Correction group. dsc_id_misaligned is the DSC
-# pair's label-only member (rubric §2.8: the pair is a padded AND and its partner
-# dsc_corr_misaligned is virtual — no org-authored row can carry it: the DTO
-# validator schemas/control.py:105-120, the ck_cfa_virtual_requires_derived CHECK,
-# the form exclusion routes/controls.py:72 and the services/controls.py:138 guard).
-# That derived-row path is RESERVED, not absent (control_function_assignment.py:43):
-# remove dsc_id_misaligned from this set if derived dsc_corr_misaligned rows are ever
-# written. The fair_cam engine pin
-# test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner pins the
-# padded-AND fact and cannot see a v3 write path; the guards that go red that day are
-# tests/unit/test_controls_service.py
-# (test_create_control_iota_rejects_derived_from_not_null — the services/controls.py:138
-# guard) and tests/unit/test_cfa_dto.py (test_dto_rejects_virtual_without_derived),
-# which carry a cross-reference back to this set.
-_LABEL_ONLY_SUB_FUNCTIONS: frozenset[str] = frozenset(
-    {"vmc_corr_treatment_selection", "dsc_id_misaligned"}
-)
+# zero uplift — not a sub-threshold one. vmc_corr_treatment_selection is the one
+# unconditionally label-only member (implementation-anchored Correction group).
+#
+# #268: dsc_id_misaligned is NOT in this set any more. It is the DSC pair's
+# identification member (rubric §2.8: the pair is a padded AND), and its partner
+# dsc_corr_misaligned CAN now be authored as a derived row linked to a control's own
+# vmc_corr_implementation / lec_resp_* sub-function. Whether either member scores is
+# therefore a property of the RUN, not of the control alone, so control_zero_value_reason
+# explains the two pure-DSC cases from run-level signals (run_has_dsc_corr /
+# run_has_dsc_id / run_has_vmc_id, spec §3.3) instead of a fixed label.
+_LABEL_ONLY_SUB_FUNCTIONS: frozenset[str] = frozenset({"vmc_corr_treatment_selection"})
 _META_LABEL_ONLY_REASON: str = (
     "Label-only sub-function — recorded for classification, never scored (register C8)"
+)
+# #268 (spec §3.3): run-scoped copies for the DSC identification / correction pair.
+# The pair is a leaf AND over {dsc_id_misaligned, dsc_corr_misaligned} ONLY, so
+# dsc_id_misaligned scores only when some control in the run carries a correcting
+# dsc_corr_misaligned row, and dsc_corr_misaligned scores only when some control in the
+# run carries dsc_id_misaligned. A vmc_id_* row is NOT an identification operand of this
+# pair (it feeds the VMC pair). run_has_vmc_id is consulted because a pure-meta
+# correcting control carries vmc_corr_implementation, whose OTHER pair (VMC identification
+# AND implementation) would otherwise score: a vmc_id_* row anywhere in the run rescues
+# the control through that VMC pair, not through the dsc_corr_misaligned member. So the
+# "no identifying control" copy fires only when BOTH of the control's pairs are
+# structurally zero.
+_DSC_ID_NO_LINK_REASON: str = "Decision Support identification with no correcting link in this run"
+_DSC_CORR_NO_ID_REASON: str = (
+    "Correction with no identifying control in this run "
+    "(neither Decision Support nor Variance identification)"
+)
+_VMC_ID_SLUGS: frozenset[str] = frozenset(
+    {"vmc_id_threat_intelligence", "vmc_id_control_monitoring"}
+)
+# Sub-function sets (spec §3.3) inside which the two run-scoped copies apply: a control
+# whose every slug is in the set, and which carries the pair member in question.
+_DSC_ID_PURE_SET: frozenset[str] = frozenset({"vmc_corr_treatment_selection", "dsc_id_misaligned"})
+_DSC_CORR_PURE_SET: frozenset[str] = frozenset(
+    {"vmc_corr_treatment_selection", "vmc_corr_implementation", "dsc_corr_misaligned"}
 )
 
 
@@ -928,6 +959,9 @@ def control_zero_value_reason(
     *,
     availability_effect: bool = False,
     has_co_present_lec: bool = True,
+    run_has_dsc_id: bool = True,
+    run_has_dsc_corr: bool = True,
+    run_has_vmc_id: bool = True,
 ) -> str | None:
     """Return a plain-English reason label when a control's modeled value is
     structurally zero, or None when the zero is genuine (overlap-dominated) or
@@ -955,6 +989,19 @@ def control_zero_value_reason(
             in the run gets the sub-threshold copy rather than "nothing to
             strengthen". This is defensible (aggregate ranges ARE the display unit)
             but per-scenario granularity is a possible future refinement.
+        run_has_dsc_id / run_has_dsc_corr / run_has_vmc_id: whole-run signals (#268,
+            spec §3.3) — whether ANY control in the run carries ``dsc_id_misaligned``,
+            ``dsc_corr_misaligned`` (a derived correcting row) or a ``vmc_id_*``
+            identification sub-function. The DSC identification / correction pair is an
+            AND over ``dsc_id_misaligned`` and ``dsc_corr_misaligned`` only, so each
+            member's zero is explained by the run, not by the control alone;
+            ``run_has_vmc_id`` is consulted for a different reason: a ``vmc_id_*`` row
+            does not make ``dsc_corr_misaligned`` score, but it makes the correcting
+            control's OTHER pair (VMC identification AND ``vmc_corr_implementation``)
+            score, so without one in the run both pairs are structurally zero.
+            All default True, the fail-safe "partner exists" direction (the ordinary
+            partner-split copy rather than the stronger "structurally zero in this run"
+            claim). Only consulted for a pure-meta control (Rule 3).
 
     Returns:
         A human-readable label string, or None when:
@@ -972,9 +1019,15 @@ def control_zero_value_reason(
            threshold". A HYBRID control (its own LEC channel present) is NOT pure
            meta and falls through to the LEC rules below — its own LEC channel is
            itself strengthenable. A control whose slugs are ALL label-only
-           (``_LABEL_ONLY_SUB_FUNCTIONS``: ``vmc_corr_treatment_selection``,
-           ``dsc_id_misaligned``) → ``_META_LABEL_ONLY_REASON`` first (#199 slice 1,
-           register C8).
+           (``_LABEL_ONLY_SUB_FUNCTIONS``: ``vmc_corr_treatment_selection``) →
+           ``_META_LABEL_ONLY_REASON`` first (#199 slice 1, register C8). Then the two
+           #268 run-scoped copies: ``dsc_id_misaligned`` in a control whose slugs lie in
+           ``{vmc_corr_treatment_selection, dsc_id_misaligned}`` with no correcting row
+           anywhere in the run, and ``dsc_corr_misaligned`` in a control whose slugs lie
+           in ``{vmc_corr_treatment_selection, vmc_corr_implementation,
+           dsc_corr_misaligned}`` with no ``dsc_id_misaligned`` and no ``vmc_id_*``
+           identification anywhere in the run. Every other pure-meta set (including a
+           hybrid ``vmc_id_*`` + ``dsc_id_misaligned``) takes the partner split.
         4. Has non-currency LEC Response but no LEC Detection **and not availability_effect**
            → "No detection partner…" (availability effects self-detect, FAIR-CAM §3.3.2
            p.19, so the response benefit IS creditable → None).
@@ -1030,6 +1083,18 @@ def control_zero_value_reason(
         # whatever the partner situation. Checked BEFORE the partner split.
         if sfs.issubset(_LABEL_ONLY_SUB_FUNCTIONS):
             return _META_LABEL_ONLY_REASON
+        # #268 (spec §3.3): the DSC identification / correction pair is run-scoped.
+        # The correcting copy needs BOTH pairs of the control to be zero: no
+        # dsc_id_misaligned (DSC pair) AND no vmc_id_* (VMC pair via its implementation).
+        if "dsc_id_misaligned" in sfs and sfs <= _DSC_ID_PURE_SET and not run_has_dsc_corr:
+            return _DSC_ID_NO_LINK_REASON
+        if (
+            "dsc_corr_misaligned" in sfs
+            and sfs <= _DSC_CORR_PURE_SET
+            and not run_has_dsc_id
+            and not run_has_vmc_id
+        ):
+            return _DSC_CORR_NO_ID_REASON
         if has_co_present_lec:
             return _META_SUBTHRESHOLD_REASON
         return _META_NO_PARTNER_REASON
@@ -1071,6 +1136,46 @@ def _any_other_control_has_lec(cid: str, sub_functions_by_id: dict[str, list[str
     return False
 
 
+# ---- Issue #268 (spec §3.6): VMC / DSC tag notes ---------------------------------------
+#
+# The controls list, control detail header and library entry card tag a control `VMC` /
+# `DSC` from its sub-function slugs (templates/macros/_control.html). On the control
+# DETAIL page a tag whose only slug does not, by itself, credit loss reduction renders
+# muted with the reason in its `title`. The run-scoped truth is the run's zero-value
+# reason (`control_zero_value_reason`); these notes describe the control in isolation.
+_META_TAG_NOTE_TREATMENT_SELECTION = (
+    "label-only: Treatment Selection is recorded, never scored (register C8)"
+)
+_META_TAG_NOTE_DSC_ID = (
+    "identifies misaligned decisions; scores only when a control in the same run corrects them"
+)
+_META_TAG_NOTE_DSC_CORR = (
+    "corrects misaligned decisions; scores only when a control in the same run identifies them"
+)
+
+
+def meta_tag_notes(sub_functions: Iterable[str]) -> dict[str, str]:
+    """Map tag code (``"VMC"`` / ``"DSC"``) to the reason that tag is muted, from ONE
+    control's own sub-function slugs (spec §3.6). Absent code = the tag is not muted.
+
+    - ``VMC``: the control's only ``vmc_*`` slug is ``vmc_corr_treatment_selection``.
+    - ``DSC``: the control's only ``dsc_*`` slug is ``dsc_id_misaligned`` (identification
+      with no correcting row of its own) or ``dsc_corr_misaligned`` (a derived correcting
+      row with no identification of its own).
+    """
+    slugs = set(sub_functions)
+    vmc = {sf for sf in slugs if sf.startswith("vmc_")}
+    dsc = {sf for sf in slugs if sf.startswith("dsc_")}
+    notes: dict[str, str] = {}
+    if vmc == {"vmc_corr_treatment_selection"}:
+        notes["VMC"] = _META_TAG_NOTE_TREATMENT_SELECTION
+    if dsc == {"dsc_id_misaligned"}:
+        notes["DSC"] = _META_TAG_NOTE_DSC_ID
+    elif dsc == {"dsc_corr_misaligned"}:
+        notes["DSC"] = _META_TAG_NOTE_DSC_CORR
+    return notes
+
+
 def snapshot_sub_functions_by_id(
     controls_snapshot: list[Any],
 ) -> dict[str, list[str]]:
@@ -1103,3 +1208,137 @@ def snapshot_sub_functions_by_id(
                 sfs.append(str(sf))
         result[str(cid)] = sfs
     return result
+
+
+# ---- Issue #268: display of derived Correcting Misaligned Decisions rows ----------------
+#
+# A derived ``dsc_corr_misaligned`` row stores only a link to another row of the same
+# control plus inert sentinels (capability NULL, coverage 0.0, reliability 0.0). Every
+# display surface (control detail, run controls snapshot, PDF controls table, workbook
+# Controls sheet) renders through ``assignment_display_rows`` so the sentinels are never
+# shown. Pure: stdlib + the slug humanizer only, so the PDF renderer can use it without
+# importing the ORM (tests/unit/test_pdf_report.py purity test).
+
+DSC_CORR_DISPLAY_LABEL = "Correcting Misaligned Decisions"
+_DSC_CORR_SLUG = "dsc_corr_misaligned"
+
+
+@dataclass(frozen=True)
+class AssignmentDisplayRow:
+    """One assignment row as displayed (never the derived row's stored sentinels).
+
+    ``capability_sub_function`` is the slug whose unit ``capability_value`` is expressed
+    in: the row's own for a plain row, the SOURCE's for a derived row (so a 30-day
+    ELAPSED_TIME source is not rendered as a bare probability). ``unit_type`` is the
+    snapshot's frozen unit when the input carried one (V3 snapshot rows), else None.
+    A derived row whose source cannot be found has ``source_unavailable`` set and no
+    capability / coverage / reliability / unit.
+    """
+
+    sub_function: str
+    label: str
+    capability_value: float | None
+    capability_sub_function: str
+    unit_type: str | None
+    coverage: float | None
+    reliability: float | None
+    confirmed: bool
+    derived: bool
+    source_unavailable: bool
+
+
+def _field(row: Any, name: str) -> Any:
+    """Read ``name`` from an ORM row / DTO (attribute) or a snapshot dict (key)."""
+    if isinstance(row, Mapping):
+        return row.get(name)
+    return getattr(row, name, None)
+
+
+def _slug(value: Any) -> str | None:
+    """A sub-function / unit slug from an enum member or a plain string."""
+    if value is None:
+        return None
+    return str(getattr(value, "value", value))
+
+
+def assignment_display_rows(rows: Iterable[Any]) -> list[AssignmentDisplayRow]:
+    """Display values for the assignment rows of ONE control, in input order.
+
+    ``rows`` are ORM ``ControlFunctionAssignment`` rows (the link is the source row's
+    ``id``), V3 snapshot DTOs or their JSON dicts (the link is the source's sub-function
+    slug, ``derived_from_sub_function``: a snapshot row carries no id of its own). A
+    ``dsc_corr_misaligned`` row displays its SOURCE's capability / coverage /
+    reliability under the label "Correcting Misaligned Decisions — derived from
+    <source>"; when no non-derived source row can be found (dangling or cleared link,
+    source absent, link to another derived row) it displays "derived (source
+    unavailable)" and no numbers. Every other row displays its own values.
+    """
+    items = list(rows)
+    plain_by_sf: dict[str, Any] = {}
+    plain_by_id: dict[Any, Any] = {}
+    for row in items:
+        slug = _slug(_field(row, "sub_function"))
+        if slug is None or slug == _DSC_CORR_SLUG:
+            continue
+        plain_by_sf[slug] = row
+        row_id = _field(row, "id")
+        if row_id is not None:
+            plain_by_id[row_id] = row
+
+    out: list[AssignmentDisplayRow] = []
+    for row in items:
+        own = _slug(_field(row, "sub_function")) or ""
+        confirmed = bool(_field(row, "confirmed_by_user_at"))
+        if own != _DSC_CORR_SLUG:
+            out.append(
+                AssignmentDisplayRow(
+                    sub_function=own,
+                    label=humanize_slug(own),
+                    capability_value=_field(row, "capability_value"),
+                    capability_sub_function=own,
+                    unit_type=_slug(_field(row, "unit_type")),
+                    coverage=_field(row, "coverage"),
+                    reliability=_field(row, "reliability"),
+                    confirmed=confirmed,
+                    derived=False,
+                    source_unavailable=False,
+                )
+            )
+            continue
+        link_sf = _slug(_field(row, "derived_from_sub_function"))
+        link_id = _field(row, "derived_from_assignment_id")
+        source = plain_by_sf.get(link_sf) if link_sf is not None else None
+        if source is None and link_sf is None and link_id is not None:
+            source = plain_by_id.get(link_id)
+        if source is None:
+            out.append(
+                AssignmentDisplayRow(
+                    sub_function=own,
+                    label=f"{DSC_CORR_DISPLAY_LABEL} — derived (source unavailable)",
+                    capability_value=None,
+                    capability_sub_function=own,
+                    unit_type=None,
+                    coverage=None,
+                    reliability=None,
+                    confirmed=confirmed,
+                    derived=True,
+                    source_unavailable=True,
+                )
+            )
+            continue
+        source_slug = _slug(_field(source, "sub_function")) or ""
+        out.append(
+            AssignmentDisplayRow(
+                sub_function=own,
+                label=f"{DSC_CORR_DISPLAY_LABEL} — derived from {humanize_slug(source_slug)}",
+                capability_value=_field(source, "capability_value"),
+                capability_sub_function=source_slug,
+                unit_type=_slug(_field(source, "unit_type")),
+                coverage=_field(source, "coverage"),
+                reliability=_field(source, "reliability"),
+                confirmed=confirmed,
+                derived=True,
+                source_unavailable=False,
+            )
+        )
+    return out

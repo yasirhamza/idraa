@@ -7,7 +7,8 @@ ControlForm model_validator catches duplicate sub_functions before they reach th
 
 # Phase 2: VF/VD columns (variance_freq_per_year, variance_duration_days) deferred
 #           -- see audit §10.3 and spec §4.7.
-# Phase 2: derived_from_assignment_id index -- add when column is populated.
+# derived_from_assignment_id is populated by the Correcting Misaligned Decisions
+# derived link (#268); an index on it is tracked as a follow-up issue.
 """
 
 from __future__ import annotations
@@ -40,8 +41,8 @@ class ControlFunctionAssignment(IdMixin, TimestampMixin, OrgMixin, Base):
       coverage          -- Deployment breadth [0,1] (Standard §2.4.2 pages 6-7)
       reliability       -- Probability of consistent performance [0,1] (§2.4.3 page 7)
       confirmed_by_user_at -- NULL = backfilled/unconfirmed; set via confirm endpoint (OQ4)
-      derived_from_assignment_id -- Reserved for computed-virtual DSC_CORR_MISALIGNED rows;
-                                    all NULL in PR iota (spec §4.9)
+      derived_from_assignment_id -- LIVE link (#268): a DSC_CORR_MISALIGNED row stores only
+                                    this link to a row of the SAME control (see column note)
       measured_at       -- When effectiveness was last assessed (set via confirm endpoint)
       measured_by       -- Who last assessed (FK -> users.id; set via confirm endpoint)
     """
@@ -98,8 +99,19 @@ class ControlFunctionAssignment(IdMixin, TimestampMixin, OrgMixin, Base):
     confirmed_by_user_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Phase 2: reserved for computed-virtual assignments (spec §4.9).
-    # Service layer asserts this is NULL during PR iota write paths.
+    # LIVE LINK (#268, FAIR-CAM §5.3 Correcting Misaligned Decisions). A
+    # ``dsc_corr_misaligned`` row is DERIVED: it stores only this link to another
+    # (non-derived) row of the SAME control — never inputs (capability NULL, coverage
+    # 0.0, reliability 0.0 sentinels) — and is scored from the linked row at run time.
+    # Every other sub-function leaves it NULL; ck_cfa_virtual_requires_derived makes
+    # the link mandatory for the virtual row. ``ondelete="SET NULL"`` is therefore
+    # unreachable in service code: every path that deletes assignment rows deletes the
+    # derived row and flushes FIRST (services/controls.py ``_delete_derived_rows_first``;
+    # SQLAlchemy sorts one flush's DELETEs by primary key, so a surviving derived row
+    # would hit the CHECK). There is NO hard-delete path for a Control (soft delete only,
+    # ``soft_delete_control``): a DB-level ``controls`` DELETE would cascade to the
+    # assignment rows and could fire the SET NULL on a derived row before it is itself
+    # removed, tripping the CHECK — that conflict is unreachable by construction.
     derived_from_assignment_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("control_function_assignments.id", ondelete="SET NULL"),

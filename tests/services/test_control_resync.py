@@ -10,20 +10,27 @@ overwrites, re-pins, re-snapshots, and flags COMPLETED runs stale via the
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
+from idraa.models.audit_log import AuditLog
+from idraa.models.control import Control
+from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.control_library import (
     ControlLibraryEntry,
     ControlLibraryEntryAssignment,
 )
-from idraa.models.enums import ControlType
+from idraa.models.enums import ControlSource, ControlType
 from idraa.models.enums import FairCamSubFunction as F
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
+from idraa.schemas.control import ControlForm, ControlFunctionAssignmentDTO
 from idraa.services.control_resync import apply_resync, resync_info
-from idraa.services.controls import adopt_from_library
+from idraa.services.controls import _build_adopted_snapshot, adopt_from_library, update_control
 
 from .test_control_adopt import _published_entry
 
@@ -208,3 +215,335 @@ async def test_apply_resync_rejects_custom_control(db_session: Any, seed_org_use
     control.library_pin = None
     with pytest.raises(ValueError, match="not adopted"):
         await apply_resync(db_session, control, user_id=user.id)
+
+
+# ---------------------------------------------------------------------------
+# #268 — a derived dsc_corr_misaligned row survives (or is dropped by) a re-sync
+# ---------------------------------------------------------------------------
+#
+# The derived row stores only a link to another row of the SAME control. A re-sync
+# deletes ALL of the control's rows and re-adds the entry's, so the link is
+# captured first (the derived row is deleted and flushed FIRST — SQLAlchemy sorts
+# the DELETEs of one flush by primary key and FK ON DELETE SET NULL on a surviving
+# derived row violates ck_cfa_virtual_requires_derived), then re-created against
+# the new source row if the entry still carries the source sub-function, or dropped.
+# Fixed ids in BOTH orders pin the ordering.
+
+_LOW = uuid.UUID("00000000-0000-4000-8000-000000000001")
+_HIGH = uuid.UUID("ffffffff-ffff-4fff-bfff-fffffffffffe")
+_MID = uuid.UUID("7fffffff-ffff-4fff-8fff-00000000000a")
+_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+_BOTH_ORDERS = pytest.mark.parametrize(
+    ("source_id", "derived_id"),
+    [
+        pytest.param(_LOW, _HIGH, id="source_id_lt_derived_id"),
+        pytest.param(_HIGH, _LOW, id="source_id_gt_derived_id"),
+    ],
+)
+
+_CAP: dict[F, float] = {
+    F.VMC_CORR_IMPLEMENTATION: 3.0,
+    F.LEC_RESP_RESILIENCE: 0.7,
+    F.LEC_PREV_RESISTANCE: 0.75,
+}
+
+_DELETE_PAYLOAD = {
+    "sub_function": ["dsc_corr_misaligned", None],
+    "derived_from_sub_function": ["vmc_corr_implementation", None],
+}
+
+
+async def _entry_version(
+    db: Any, *, funcs: list[F], version: int, entry_id: uuid.UUID | None = None
+) -> tuple[ControlLibraryEntry, list[ControlLibraryEntryAssignment]]:
+    kwargs: dict[str, Any] = {} if entry_id is None else {"id": entry_id}
+    entry = ControlLibraryEntry(
+        version=version,
+        slug="linked-control",
+        name="Linked control",
+        description="a" * 25,
+        control_type=ControlType.TECHNICAL,
+        reference_annual_cost=30000,
+        nist_csf_subcategories=["PR.AC-7"],
+        cis_safeguards=["6.3"],
+        iso_27001_controls=["A.9.4.2"],
+        compliance_mappings={"csa_ccm_v4": ["IAM-01"]},
+        applicable_industries=[],
+        applicable_org_sizes=[],
+        tags=[],
+        source_citations=[],
+        status="published",
+        **kwargs,
+    )
+    db.add(entry)
+    await db.flush()
+    assignments = [
+        ControlLibraryEntryAssignment(
+            library_entry_id=entry.id,
+            library_entry_version=version,
+            sub_function=fn,
+            capability_default=_CAP[fn],
+            coverage_default=0.8,
+            reliability_default=0.8,
+        )
+        for fn in funcs
+    ]
+    db.add_all(assignments)
+    await db.flush()
+    return entry, assignments
+
+
+async def _adopted_with_derived(
+    db: Any,
+    seed_org_user: Any,
+    *,
+    source_id: uuid.UUID,
+    derived_id: uuid.UUID,
+    v1_funcs: list[F],
+) -> tuple[Any, Any, Control, ControlLibraryEntry]:
+    """An adopted control (pinned to v1) carrying a derived row, FIXED primary keys.
+
+    ``v1_funcs`` must contain vmc_corr_implementation (the link source); the other
+    rows get ``_MID``-range ids.
+    """
+    org, user = await seed_org_user(db)
+    entry, v1 = await _entry_version(db, funcs=v1_funcs, version=1)
+    control = Control(
+        organization_id=org.id,
+        created_by=user.id,
+        name=entry.name,
+        description=entry.description,
+        type=entry.control_type,
+        annual_cost=Decimal("30000"),
+        source=ControlSource.LIBRARY_DERIVED,
+        library_pin={"entry_id": str(entry.id), "version": 1},
+        adopted_snapshot=_build_adopted_snapshot(entry, v1),
+    )
+    db.add(control)
+    await db.flush()
+    others = [fn for fn in v1_funcs if fn is not F.VMC_CORR_IMPLEMENTATION]
+    ids = {F.VMC_CORR_IMPLEMENTATION: source_id}
+    ids.update({fn: uuid.UUID(int=_MID.int + i) for i, fn in enumerate(others)})
+    for fn, row_id in ids.items():
+        db.add(
+            ControlFunctionAssignment(
+                id=row_id,
+                control_id=control.id,
+                organization_id=org.id,
+                sub_function=fn,
+                capability_value=_CAP[fn],
+                coverage=0.8,
+                reliability=0.8,
+                confirmed_by_user_at=_T0,
+            )
+        )
+    await db.flush()
+    db.add(
+        ControlFunctionAssignment(
+            id=derived_id,
+            control_id=control.id,
+            organization_id=org.id,
+            sub_function=F.DSC_CORR_MISALIGNED,
+            capability_value=None,
+            coverage=0.0,
+            reliability=0.0,
+            derived_from_assignment_id=source_id,
+            confirmed_by_user_at=_T0,
+        )
+    )
+    await db.flush()
+    return org, user, control, entry
+
+
+async def _cfa_rows(db: Any, control_id: uuid.UUID) -> dict[F, ControlFunctionAssignment]:
+    result = await db.execute(
+        select(ControlFunctionAssignment).where(ControlFunctionAssignment.control_id == control_id)
+    )
+    return {r.sub_function: r for r in result.scalars().all()}
+
+
+async def _audits(db: Any, action: str, entity_id: uuid.UUID) -> list[AuditLog]:
+    result = await db.execute(
+        select(AuditLog)
+        .where(AuditLog.action == action, AuditLog.entity_id == entity_id)
+        .order_by(AuditLog.timestamp, AuditLog.id)
+    )
+    return list(result.scalars().all())
+
+
+@_BOTH_ORDERS
+@pytest.mark.asyncio
+async def test_resync_relinks_derived_row_when_the_entry_still_carries_the_source(
+    db_session: Any, seed_org_user: Any, source_id: uuid.UUID, derived_id: uuid.UUID
+) -> None:
+    org, user, control, entry = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=source_id,
+        derived_id=derived_id,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    await _entry_version(
+        db_session,
+        funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_RESP_RESILIENCE],
+        version=2,
+        entry_id=entry.id,
+    )
+
+    info = await resync_info(db_session, control)
+    assert info is not None and info.stale
+    assert info.derived_fate == "relinked"
+    # The derived row is excluded from the assignment diff (no sentinel is shown).
+    assert "dsc_corr_misaligned" not in {r.field for r in info.assignments}
+
+    await apply_resync(db_session, control, user_id=user.id)
+
+    rows = await _cfa_rows(db_session, control.id)
+    assert set(rows) == {F.VMC_CORR_IMPLEMENTATION, F.LEC_RESP_RESILIENCE, F.DSC_CORR_MISALIGNED}
+    new = rows[F.DSC_CORR_MISALIGNED]
+    assert new.id != derived_id  # a NEW row
+    assert new.derived_from_assignment_id == rows[F.VMC_CORR_IMPLEMENTATION].id
+    assert new.derived_from_assignment_id != source_id  # the NEW source row
+    assert (new.capability_value, new.coverage, new.reliability) == (None, 0.0, 0.0)
+    # Resync is not an authoring act: unconfirmed like every row it writes.
+    assert (new.confirmed_by_user_at, new.measured_by, new.measured_at) == (None, None, None)
+
+    deletes = await _audits(db_session, "control_function_assignment.delete", derived_id)
+    assert [a.changes for a in deletes] == [_DELETE_PAYLOAD]
+    creates = await _audits(db_session, "control_function_assignment.create", new.id)
+    assert [a.changes for a in creates] == [
+        {
+            "sub_function": [None, "dsc_corr_misaligned"],
+            "derived_from_sub_function": [None, "vmc_corr_implementation"],
+            "confirmed_by_user_at": [None, None],
+        }
+    ]
+    await db_session.commit()  # the DB-level CHECK/FK is satisfied at commit too
+
+
+@_BOTH_ORDERS
+@pytest.mark.asyncio
+async def test_resync_drops_derived_row_when_the_entry_no_longer_carries_the_source(
+    db_session: Any, seed_org_user: Any, source_id: uuid.UUID, derived_id: uuid.UUID
+) -> None:
+    org, user, control, entry = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=source_id,
+        derived_id=derived_id,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    await _entry_version(
+        db_session,
+        funcs=[F.LEC_PREV_RESISTANCE, F.LEC_RESP_RESILIENCE],
+        version=2,
+        entry_id=entry.id,
+    )
+
+    info = await resync_info(db_session, control)
+    assert info is not None and info.stale
+    assert info.derived_fate == "dropped"
+    assert "dsc_corr_misaligned" not in {r.field for r in info.assignments}
+
+    await apply_resync(db_session, control, user_id=user.id)
+
+    rows = await _cfa_rows(db_session, control.id)
+    assert set(rows) == {F.LEC_PREV_RESISTANCE, F.LEC_RESP_RESILIENCE}
+    deletes = await _audits(db_session, "control_function_assignment.delete", derived_id)
+    assert [a.changes for a in deletes] == [_DELETE_PAYLOAD]
+    created_dsc = [
+        a
+        for a in (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "control_function_assignment.create")
+            )
+        )
+        .scalars()
+        .all()
+        if a.changes.get("sub_function") == [None, "dsc_corr_misaligned"]
+    ]
+    assert created_dsc == []
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_resync_info_reports_no_derived_fate_without_a_derived_row_or_staleness(
+    db_session: Any, seed_org_user: Any
+) -> None:
+    org, user = await seed_org_user(db_session)
+    entry = await _published_entry(db_session)
+    control = await adopt_from_library(
+        db_session, org_id=org.id, user_id=user.id, entry_id=entry.id, version=None
+    )
+    fresh = await resync_info(db_session, control)
+    assert fresh is not None and not fresh.stale and fresh.derived_fate is None
+
+    await _recurate_to_v2(db_session, entry)
+    stale = await resync_info(db_session, control)
+    assert stale is not None and stale.stale and stale.derived_fate is None
+
+
+@pytest.mark.asyncio
+async def test_resync_info_derived_fate_is_none_while_the_control_is_in_sync(
+    db_session: Any, seed_org_user: Any
+) -> None:
+    _, _, control, _ = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=_LOW,
+        derived_id=_HIGH,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    info = await resync_info(db_session, control)
+    assert info is not None and not info.stale and info.derived_fate is None
+
+
+@pytest.mark.asyncio
+async def test_form_save_confirms_the_derived_row_a_resync_left_null(
+    db_session: Any, seed_org_user: Any
+) -> None:
+    org, user, control, entry = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=_LOW,
+        derived_id=_HIGH,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    await _entry_version(
+        db_session,
+        funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_RESP_RESILIENCE],
+        version=2,
+        entry_id=entry.id,
+    )
+    await apply_resync(db_session, control, user_id=user.id)
+    await db_session.refresh(control, ["assignments"])
+    derived = (await _cfa_rows(db_session, control.id))[F.DSC_CORR_MISALIGNED]
+    derived_id = derived.id
+    assert derived.confirmed_by_user_at is None
+
+    form = ControlForm(
+        name=control.name,
+        type=ControlType.TECHNICAL,
+        annual_cost=Decimal("30000"),
+        assignments=[
+            ControlFunctionAssignmentDTO(
+                sub_function=fn, capability_value=_CAP[fn], coverage=0.8, reliability=0.8
+            )
+            for fn in (F.VMC_CORR_IMPLEMENTATION, F.LEC_RESP_RESILIENCE)
+        ],
+    )
+    await update_control(
+        db_session,
+        control=control,
+        user_id=user.id,
+        form=form,
+        dsc_corr_source=F.VMC_CORR_IMPLEMENTATION,
+    )
+
+    after = (await _cfa_rows(db_session, control.id))[F.DSC_CORR_MISALIGNED]
+    assert after.id == derived_id
+    assert after.confirmed_by_user_at is not None
+    assert after.measured_by == user.id
+    confirms = await _audits(db_session, "control_function_assignment.confirm", derived_id)
+    assert len(confirms) == 1

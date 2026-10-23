@@ -99,10 +99,10 @@ class Control(IdMixin, TimestampMixin, OrgMixin, Base):
     # a second query. Hard-cap at 1 per control during PR iota -> PR kappa window
     # (Pydantic + service layer enforce cap; DB enforces uniqueness per §4.4).
     #
-    # Deterministic ordering (plan-gate fix Arch-I1, issue #90): `assignments[0]`
-    # in adapter code (run_executor._v3_to_fair_cam_control representative-domain
-    # pick) must be stable across SQLA reloads so the FAIR-CAM bridge choice is
-    # reproducible across run executions.
+    # Deterministic ordering (plan-gate fix Arch-I1, issue #90): the first NON-DERIVED
+    # row in adapter code (run_executor._v3_to_fair_cam_control representative-domain
+    # pick; a derived row can tie on created_at and sort first) must be stable across
+    # SQLA reloads so the FAIR-CAM bridge choice is reproducible across run executions.
     #
     # `id` tiebreaker: `created_at` is DateTime(timezone=True) with microsecond
     # precision and is NOT unique — bulk-import loops that create multiple

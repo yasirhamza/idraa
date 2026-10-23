@@ -36,9 +36,17 @@
       <li><strong>Identify:</strong> Misalignment detection</li>
     </ul>
     <p class="text-micro text-ink-2 mt-1">
-      FAIR-CAM §5.3 also defines a virtual <em>Correct misalignment</em> function. It has no
-      controls of its own (it is fulfilled by the LEC/VMC correction functions), so it is
-      <strong>not</strong> a pickable sub-function.
+      FAIR-CAM §5.3 also defines <em>Correcting Misaligned Decisions</em>. It has no controls
+      of its own &mdash; it is fulfilled by a control&rsquo;s correction or response process
+      &mdash; so it is not an assignment you pick. Instead, on the control form you can link
+      the control&rsquo;s own Implementation, Event termination or Resilience assignment as
+      also correcting misaligned decisions; the engine then scores that function with the
+      linked assignment&rsquo;s capability, coverage and reliability, and it pairs with
+      Misalignment detection on any control in the same run. The link is set on the control
+      form only, not by CSV import. Because a control is credited once per sub-function it
+      performs, a linked control&rsquo;s displayed per-control effectiveness (run page, PDF,
+      effectiveness chart &mdash; a summary, not the risk maths) counts the linked function
+      beside its source.
     </p>
   </section>
 </div>

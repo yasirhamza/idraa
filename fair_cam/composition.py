@@ -11,8 +11,36 @@ from dataclasses import dataclass, field
 from .calibration.elapsed_time_taus import get_canonical_tau
 from .models.composition_topology import BooleanGroup, GroupType
 from .models.control import FairCamControlFunctionAssignment
-from .models.sub_function import SUB_FUNCTION_UNITS, FairCamSubFunction, UnitType
+from .models.sub_function import (
+    DERIVABLE_SOURCES,
+    SUB_FUNCTION_UNITS,
+    FairCamSubFunction,
+    UnitType,
+)
 from .normalization import elapsed_time_to_opeff
+
+
+def capability_opeff(assignment: FairCamControlFunctionAssignment) -> float | None:
+    """Unit-converted capability in [0, 1], before coverage and reliability.
+
+    None for a NULL capability (the caller applies the 0.5 anchor). CURRENCY has no
+    opeff and raises — callers short-circuit it first.
+
+    Unit dispatch (issue #268; the single source of capability normalization —
+    :func:`compute_assignment_part` is built on it with the BASE operation order,
+    so every pre-existing value is bit-identical):
+      - PROBABILITY / PERCENT_REDUCTION: the capability itself.
+      - ELAPSED_TIME: exp(-t/τ) with τ = ``get_canonical_tau(sub_function)``.
+    """
+    unit = SUB_FUNCTION_UNITS[assignment.sub_function]
+    if unit == UnitType.CURRENCY:
+        raise ValueError(f"{assignment.sub_function.value} is CURRENCY; it has no opeff")
+    if assignment.capability_value is None:
+        return None
+    if unit == UnitType.ELAPSED_TIME:
+        tau = get_canonical_tau(assignment.sub_function)
+        return elapsed_time_to_opeff(assignment.capability_value, tau)
+    return assignment.capability_value
 
 
 def compute_assignment_part(
@@ -45,16 +73,13 @@ def compute_assignment_part(
     unit = SUB_FUNCTION_UNITS[assignment.sub_function]
     if unit == UnitType.CURRENCY:
         return None
-    if unit == UnitType.ELAPSED_TIME:
-        if assignment.capability_value is None:
-            return 0.5 * assignment.coverage
-        tau = get_canonical_tau(assignment.sub_function)
-        opeff: float = elapsed_time_to_opeff(assignment.capability_value, tau)
-        return opeff * assignment.coverage
-    # PROBABILITY / PERCENT_REDUCTION (spec §3.1 Layer-1 multiplicative).
-    if assignment.capability_value is None:
+    # Unit conversion lives in capability_opeff (#268); the BASE operation order
+    # (converted capability × coverage, left-associative) is preserved here so
+    # every pre-existing value is bit-identical.
+    x = capability_opeff(assignment)
+    if x is None:
         return 0.5 * assignment.coverage
-    return assignment.capability_value * assignment.coverage
+    return x * assignment.coverage
 
 
 def compute_assignment_opeff_two_branch(
@@ -94,6 +119,95 @@ def compute_assignment_opeff_two_branch(
     if part is None:
         return None
     return part * assignment.reliability
+
+
+def derive_virtual_assignment(
+    source: FairCamControlFunctionAssignment,
+    sub_function: FairCamSubFunction = FairCamSubFunction.DSC_CORR_MISALIGNED,
+) -> FairCamControlFunctionAssignment:
+    """FAIR-CAM §5.3 p.50: Correcting Misaligned Decisions is fulfilled by controls
+    within other functions. Returns a PROBABILITY-unit assignment that carries the
+    source's converted capability, coverage and AUTHORED reliability r0, so its
+    opeff equals the source's bit-for-bit (register C12).
+
+    Provenance (register C12): dependency PRESCRIBED (§5.3 p.50); numeric
+    realisation IMPLEMENTATION-DEFINED; a lec_resp_resilience source is a labelled
+    PROXY. measured_at / confirmed_by_user_at are not copied: no composition path
+    reads them.
+
+    Identity (pinned exact ``==`` in tests/test_derive_virtual_assignment.py):
+    ``compute_assignment_opeff_two_branch(derived) ==
+    compute_assignment_opeff_two_branch(source)`` for every source in
+    ``DERIVABLE_SOURCES``, including the NULL-capability 0.5 anchor — a NULL
+    capability is carried as NULL (never pre-resolved to 0.5) so the consumer
+    applies the very same anchor the source gets.
+
+    Raises ``ValueError`` for a target other than ``DSC_CORR_MISALIGNED`` or a
+    source outside ``DERIVABLE_SOURCES`` (incl. CURRENCY, which has no opeff).
+    """
+    if sub_function is not FairCamSubFunction.DSC_CORR_MISALIGNED:
+        raise ValueError(f"{sub_function.value} is not a derivable virtual sub-function")
+    if source.sub_function not in DERIVABLE_SOURCES:
+        raise ValueError(f"{source.sub_function.value} cannot fulfil {sub_function.value}")
+    return FairCamControlFunctionAssignment(
+        sub_function=sub_function,
+        capability_value=capability_opeff(source),
+        coverage=source.coverage,
+        reliability=source.reliability,
+        degradation_rate=source.degradation_rate,
+    )
+
+
+def resolve_derived_assignments(
+    rows: Sequence[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]],
+    *,
+    control_ref: str,
+) -> list[FairCamControlFunctionAssignment]:
+    """Resolve the Correcting-Misaligned-Decisions links of ONE control (issue #268).
+
+    Each item is ``(mapped assignment, derived_from sub-function or None)``. A
+    non-derived row passes through untouched (same object); a derived row — the
+    link names the sub-function of this control's own correction/response row —
+    is replaced by ``derive_virtual_assignment(<that non-derived row>)``. Order is
+    preserved. The single resolver shared by the v3 run mapper (ORM rows) and the
+    verification workbook (V3 snapshots), so the two cannot disagree.
+
+    Raises ``ValueError`` naming ``control_ref`` and sub-function slugs only (no
+    stored value, no user text) when: a link sits on a row other than
+    ``dsc_corr_misaligned``; ``dsc_corr_misaligned`` has no link; the link names a
+    sub-function that is itself a derived row, absent from this control's
+    non-derived rows, or not in ``DERIVABLE_SOURCES``.
+    """
+    virtual = FairCamSubFunction.DSC_CORR_MISALIGNED
+    derived_sfs = {a.sub_function for a, link in rows if link is not None}
+    plain = {a.sub_function: a for a, link in rows if link is None}  # uq: one per sub-function
+    resolved: list[FairCamControlFunctionAssignment] = []
+    for assignment, link in rows:
+        if link is None:
+            if assignment.sub_function is virtual:
+                raise ValueError(f"control {control_ref}: {virtual.value} has no source link")
+            resolved.append(assignment)
+            continue
+        if assignment.sub_function is not virtual:
+            raise ValueError(
+                f"control {control_ref}: {assignment.sub_function.value} cannot carry a "
+                f"derived link (only {virtual.value} is derived)"
+            )
+        if link in derived_sfs:
+            raise ValueError(
+                f"control {control_ref}: {virtual.value} link names {link.value}, "
+                f"which is itself a derived row"
+            )
+        source = plain.get(link)
+        if source is None:
+            raise ValueError(
+                f"control {control_ref}: {virtual.value} link names {link.value}, "
+                f"which this control does not carry"
+            )
+        if link not in DERIVABLE_SOURCES:
+            raise ValueError(f"control {control_ref}: {link.value} cannot fulfil {virtual.value}")
+        resolved.append(derive_virtual_assignment(source, virtual))
+    return resolved
 
 
 def or_compose(values: Sequence[float]) -> float:

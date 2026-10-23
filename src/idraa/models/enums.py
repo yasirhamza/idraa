@@ -319,8 +319,11 @@ class FairCamSubFunction(StrEnum):
     """FAIR-CAM Standard V1.0 sub-function identifiers.
 
     26 values spanning 3 domains (LEC, VMC, DSC). One value is virtual
-    (DSC_CORR_MISALIGNED) — no distinct control should be assigned to it;
-    enforcement via Pydantic validator + DB CHECK constraint (spec §4.3).
+    (DSC_CORR_MISALIGNED) — no distinct control is assigned to it directly; it
+    exists only as a DERIVED row linked (derived_from_assignment_id) to the same
+    control's assignment in ``DSC_CORR_LINK_SOURCES`` and scores as that source
+    (#268, register C12). Enforcement via Pydantic validator + DB CHECK
+    constraint (spec §4.3) plus the service's ``validate_dsc_corr_link``.
 
     SLUG FREEZE: These values appear in serialized risk_analysis_runs.snapshot
     JSON and in control library seed data (PR lambda). A rename requires a data
@@ -362,6 +365,19 @@ class FairCamSubFunction(StrEnum):
     DSC_PREV_INCENTIVES = "dsc_prev_incentives"  # §5.1.5 p45-46
     DSC_ID_MISALIGNED = "dsc_id_misaligned"  # §5.2 p47-48
     DSC_CORR_MISALIGNED = "dsc_corr_misaligned"  # §5.3 p49-50 VIRTUAL
+
+
+# Eligible sources of a derived DSC_CORR_MISALIGNED link (#268, spec §3.1): the
+# opeff-bearing members of Variance Correction + LEC Response. v3 mirror of
+# ``fair_cam.models.sub_function.DERIVABLE_SOURCES`` (services outside the
+# methodology lane may not import fair_cam; tests/unit/test_enum_parity.py pins parity).
+DSC_CORR_LINK_SOURCES: frozenset[FairCamSubFunction] = frozenset(
+    {
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+        FairCamSubFunction.LEC_RESP_RESILIENCE,
+    }
+)
 
 
 class ScenarioFieldset(StrEnum):
@@ -641,12 +657,15 @@ SUB_FUNCTION_DESCRIPTIONS: dict[FairCamSubFunction, str] = {
         "decision is identified within a meaningful window. FAIR-CAM §5.2."
     ),
     FairCamSubFunction.DSC_CORR_MISALIGNED: (
-        "Correct misalignment — re-align decision-makers when their decisions "
-        "have drifted from expectations. Examples: retraining, reassignment, "
-        "enforcement action, escalation to leadership. VIRTUAL sub-function "
-        "per FAIR-CAM §5.3 — no distinct controls of its own; requires "
-        "derived_from_assignment_id pointing at the governing LEC Response "
-        "or VMC Variance Correction control."
+        "Correcting Misaligned Decisions — re-align decision-makers when their "
+        "decisions have drifted from expectations. Examples: retraining, "
+        "reassignment, enforcement action, escalation to leadership. VIRTUAL "
+        "sub-function per FAIR-CAM §5.3 — no distinct controls of its own: it is "
+        "credited by linking this control's own Variance Correction "
+        "Implementation, Event Termination or Resilience assignment on the "
+        "control form (not by CSV import), and it scores with that assignment's "
+        "capability, coverage and reliability. Pairs with Identify misalignment "
+        "on any control in the same run."
     ),
 }
 

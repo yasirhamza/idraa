@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_control.html" import control_domains %}
+{% from "macros/_control.html" import control_domains, meta_tags %}
 {% from "macros/unit_aware_inputs.html" import unit_display %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/form_field.html" import form_field %}
@@ -8,8 +8,12 @@
 {% block title %}{{ c.name }}{% endblock %}
 {% block content %}
 
+{# #268 (spec §3.6): VMC / DSC tags in the header, under the name. ``meta_tag_notes``
+   (route context) mutes the tags that do not credit loss reduction on their own. #}
+{%- set _meta_tags = meta_tags(c.assignments | map(attribute="sub_function.value") | list, meta_tag_notes | default({})) | trim -%}
 {{ page_header(
     title=c.name,
+    meta=_meta_tags or none,
     breadcrumb=[("Home", "/"), ("Controls", "/controls"), (c.name, none)],
     actions=[
       {"label": "Edit", "href": "/controls/" ~ c.id ~ "/edit", "style": "outline"},
@@ -31,6 +35,11 @@
         function assignments.</p>
     </div>
     <a class="btn btn-sm btn-primary" href="/controls/{{ c.id }}/resync">Review &amp; re-sync</a>
+  </div>
+  {% endif %}
+  {% if request.query_params.get("resync_error") == "1" %}
+  <div class="alert alert-error mb-4" role="alert">
+    <p>Resync could not be applied; no changes were saved.</p>
   </div>
   {% endif %}
   {% if request.query_params.get("resynced") == "1" %}
@@ -90,14 +99,16 @@
       <p class="text-body text-ink-2">No function assignments yet. Edit this control to add one.</p>
     {% else %}
       {% set asgn_rows = [] %}
-      {% for asgn in c.assignments %}
+      {#- #268: a derived Correcting Misaligned Decisions row shows its SOURCE's values
+          (never the stored 0.0 sentinels); one with no resolvable source shows no numbers. -#}
+      {% for d in assignment_display_rows(c.assignments) %}
         {% set _ = asgn_rows.append({
-          "sub_function":     asgn.sub_function.value | humanize_slug,
-          "sub_function_raw": asgn.sub_function.value,
-          "capability":   unit_display(asgn),
-          "coverage":     "%.3f" | format(asgn.coverage),
-          "reliability":  "%.3f" | format(asgn.reliability),
-          "confirmed":    "✓" if asgn.confirmed_by_user_at else "—",
+          "sub_function":     d.label,
+          "sub_function_raw": d.sub_function,
+          "capability":   "—" if d.source_unavailable else unit_display({"sub_function": d.capability_sub_function, "capability_value": d.capability_value}),
+          "coverage":     "—" if d.coverage is none else "%.3f" | format(d.coverage),
+          "reliability":  "—" if d.reliability is none else "%.3f" | format(d.reliability),
+          "confirmed":    "✓" if d.confirmed else "—",
         }) %}
       {% endfor %}
       {{ data_table(

@@ -115,6 +115,12 @@ class ControlFunctionAssignmentSnapshotDTO(BaseModel):
     measured_at: datetime | None = None
     measured_by: uuid.UUID | None = None
     derived_from_assignment_id: uuid.UUID | None = None
+    # Issue #268: a derived ``dsc_corr_misaligned`` row's link names a row id that this
+    # snapshot does not carry, so the writer records the SOURCE row's sub-function here;
+    # the verification workbook resolves the derivation from it. None for every other
+    # row, for a dangling link, and for every V3 snapshot written before #268 (additive;
+    # ``snapshot_version`` stays 3).
+    derived_from_sub_function: FairCamSubFunction | None = None
 
 
 class ControlSnapshotV3(BaseModel):

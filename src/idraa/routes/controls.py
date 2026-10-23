@@ -67,16 +67,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Sub-functions exposed in the form dropdown. Excludes virtual functions
-# that require derived_from_assignment_id (reserved-but-unused in PR lambda).
+# Form dropdown choices; the derived-only dsc_corr_misaligned has its own link select (#268).
 _FORM_SUB_FUNCTIONS = [sf for sf in FairCamSubFunction if sf.value != "dsc_corr_misaligned"]
 
-# Server-set fields stripped from form input before Pydantic validation.
-# These are owned by the service layer (set from authenticated user_id +
-# now()) — analyst form submissions claiming these would be silently
-# overridden by create_control / update_control. Pop before model_validate
-# to make the contract explicit and prevent confusion.
-# derived_from_assignment_id is reserved-but-unused (spec Decision 9 / B-NEW3).
+# Server-set fields stripped from assignment rows before Pydantic validation: the service owns
+# them (user_id + now()), and derived_from_assignment_id is never client-supplied — the
+# Correcting Misaligned Decisions link is authored via its own form field (#268).
 _ASSIGNMENT_SERVER_SET_FIELDS = frozenset(
     {
         "confirmed_by_user_at",
@@ -402,7 +398,7 @@ async def control_new_post(
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    org = await require_sole_org(db)
+    org_id = (await require_sole_org(db)).id
     form_dict = await _parse_control_form_dict(request)
     try:
         form = ControlForm.model_validate(form_dict)
@@ -413,7 +409,7 @@ async def control_new_post(
         formatted = _format_errors(e)
         logger.info(
             "control_new validation failed org=%s user=%s errors=%s",
-            org.id,
+            org_id,
             user.id,
             formatted,
         )
@@ -430,12 +426,16 @@ async def control_new_post(
     try:
         control = await svc.create_control(
             db,
-            org_id=org.id,
+            org_id=org_id,
             user_id=user.id,
             form=form,
             ip_address=client_ip(request),
+            dsc_corr_source=_parse_dsc_corr_source(form_dict),
         )
         await db.commit()
+    except ValueError as e:
+        await db.rollback()
+        return _refused_save_response(request, user, None, form_dict, str(e))
     except IntegrityError as e:
         await db.rollback()
         # Do NOT leak str(e.orig) — that includes raw DB internals (table
@@ -444,7 +444,7 @@ async def control_new_post(
         # ops debugging.
         logger.warning(
             "Control create IntegrityError org=%s user=%s: %s",
-            org.id,
+            org_id,
             user.id,
             e.orig,
         )
@@ -874,7 +874,14 @@ async def control_detail(
     return templates.TemplateResponse(
         request,
         "controls/detail.html",
-        {"current_user": user, "flash": None, "c": c, "resync": resync},
+        {
+            "current_user": user,
+            "flash": None,
+            "c": c,
+            "resync": resync,
+            # #268 (spec §3.6): why a VMC / DSC header tag is muted, from the control's own slugs.
+            "meta_tag_notes": meta_tag_notes([a.sub_function.value for a in c.assignments]),
+        },
     )
 
 
@@ -910,8 +917,8 @@ async def control_resync_apply(
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
 ) -> Response:
     """#438 — apply the re-sync (the review page is the consent step)."""
-    org = await require_sole_org(db)
-    c = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    org_id = (await require_sole_org(db)).id  # captured now: `org` is expired after a rollback
+    c = await svc.get_control_for_org(db, organization_id=org_id, control_id=control_id)
     if c is None or c.status is EntityStatus.DELETED:
         raise HTTPException(404)
     try:
@@ -919,9 +926,116 @@ async def control_resync_apply(
         await db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        # Defense in depth (#268): nothing was saved. e.orig stays server-side only (CWE-209);
+        # the detail page renders a fixed alert for ?resync_error=1.
+        await db.rollback()
+        logger.warning(
+            "Control resync IntegrityError org=%s control=%s user=%s: %s",
+            org_id,
+            control_id,
+            user.id,
+            exc.orig,
+        )
+        return RedirectResponse(f"/controls/{control_id}?resync_error=1", status_code=303)
     return RedirectResponse(
         f"/controls/{control_id}?resynced=1&stale_runs={flagged}", status_code=303
     )
+
+
+# ---------------------------------------------------------------------------
+# #268 — Correcting Misaligned Decisions link: form-field parsing and save-refusal helpers.
+# Defined below the anchored confirm route; the new/edit routes call them at request time.
+# ---------------------------------------------------------------------------
+
+_DSC_CORR_FIELD = "corrects_misaligned_decisions_from"
+_SUB_FUNCTION_SLUGS = frozenset(sf.value for sf in FairCamSubFunction)
+_UNKNOWN_DSC_CORR_SOURCE = (
+    "Unknown Correcting Misaligned Decisions source; choose one from the list, or none."
+)
+
+
+def _parse_dsc_corr_source(form_dict: dict[str, object]) -> FairCamSubFunction | None:
+    """The top-level ``corrects_misaligned_decisions_from`` field as an idraa sub-function.
+
+    Parsed here, not by ``ControlForm`` (the ORM <-> DTO field-sync contract). Absent or
+    empty -> None. Anything that is not exactly a sub-function slug (an unknown string, or a
+    non-string such as a multipart file part) raises ``ValueError`` with a FIXED message:
+    the client string never reaches the enum constructor's own error, which would echo it
+    into the page. Eligibility and presence among the submitted assignments are the
+    service's rules (``validate_dsc_corr_link``).
+    """
+    raw = form_dict.get(_DSC_CORR_FIELD)
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, str) and raw in _SUB_FUNCTION_SLUGS:
+        return FairCamSubFunction(raw)
+    raise ValueError(_UNKNOWN_DSC_CORR_SOURCE)
+
+
+def _split_derived_row(control: Control) -> tuple[list, str]:  # type: ignore[type-arg]
+    """``(editor rows, link-select pre-selection)`` for the edit form of ``control``.
+
+    The derived Correcting Misaligned Decisions row is not an editable assignment: it is
+    left out of the assignment editor and surfaces as the select's pre-selection, the
+    sub-function of the row it links to ("" when there is no derived row).
+    """
+    rows = list(control.assignments or [])
+    derived = next(
+        (a for a in rows if a.sub_function is FairCamSubFunction.DSC_CORR_MISALIGNED), None
+    )
+    if derived is None:
+        return rows, ""
+    source = next((a for a in rows if a.id == derived.derived_from_assignment_id), None)
+    return [a for a in rows if a is not derived], source.sub_function.value if source else ""
+
+
+def _refused_save_response(
+    request: Request,
+    user: User,
+    control: Control | None,
+    form_dict: dict[str, object],
+    message: str,
+) -> Response:
+    """422 re-render of the form after the service refused a save (a ``ValueError``).
+
+    ``form_dict`` carries the submitted link selection, which the template echoes. The
+    refusal is logged server-side (ids and the service-authored message only; never the
+    submitted values).
+    """
+    logger.info(
+        "Control save refused org=%s control=%s user=%s: %s",
+        user.organization_id,
+        control.id if control is not None else None,
+        user.id,
+        message,
+    )
+    return _render_form_with_errors(
+        request,
+        user=user,
+        control=control,
+        form_data=form_dict,
+        errors={"_global": [message]},
+        existing_assignments=_extract_form_assignments(form_dict),
+        status_code=422,
+    )
+
+
+async def _reload_after_rollback(
+    db: AsyncSession, *, org_id: uuid.UUID, control_id: uuid.UUID
+) -> Control:
+    """Re-read a control WITH its assignments after ``db.rollback()``.
+
+    Rollback expires every ORM instance of the session, and rendering the form from an
+    expired ``control`` would lazy-load under async (``MissingGreenlet``). Expunge the
+    stale instances and fetch through the org-scoped lookup; ``org_id`` must have been
+    captured before the ``try`` (the ``org`` row is expired too). 404 if the control is gone.
+    """
+    db.expunge_all()
+    control = await svc.get_control_for_org(db, organization_id=org_id, control_id=control_id)
+    if control is None or control.status == EntityStatus.DELETED:
+        raise HTTPException(status_code=404)
+    return control
 
 
 @router.get("/controls/{control_id}/edit", response_class=HTMLResponse)
@@ -936,6 +1050,7 @@ async def control_edit_get(
     if control is None or control.status == EntityStatus.DELETED:
         raise HTTPException(status_code=404)
 
+    editor_rows, dsc_corr_selected = _split_derived_row(control)
     return templates.TemplateResponse(
         request,
         "controls/form.html",
@@ -943,7 +1058,8 @@ async def control_edit_get(
             "current_user": user,
             "control": control,
             "form_data": None,
-            "existing_assignments": list(control.assignments or []),
+            "existing_assignments": editor_rows,
+            "dsc_corr_selected": dsc_corr_selected,
             "errors": {},
             "type_choices": list(ControlType),
             "status_choices": list(EntityStatus),
@@ -961,8 +1077,8 @@ async def control_edit_post(
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.ANALYST)),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    org = await require_sole_org(db)
-    control = await svc.get_control_for_org(db, organization_id=org.id, control_id=control_id)
+    org_id = (await require_sole_org(db)).id  # captured now: `org` is expired after a rollback
+    control = await svc.get_control_for_org(db, organization_id=org_id, control_id=control_id)
     if control is None or control.status == EntityStatus.DELETED:
         raise HTTPException(status_code=404)
 
@@ -987,17 +1103,26 @@ async def control_edit_post(
             user_id=user.id,
             form=form,
             ip_address=client_ip(request),
+            dsc_corr_source=_parse_dsc_corr_source(form_dict),
         )
         await db.commit()
+    except ValueError as e:
+        # validate_dsc_corr_link refuses before any mutation, but other service ValueErrors
+        # (e.g. in _sync_derived_row) can be raised after a flush. Either way the rollback is
+        # required (get_db commits on a normal return) and expires the session: reload first.
+        await db.rollback()
+        control = await _reload_after_rollback(db, org_id=org_id, control_id=control_id)
+        return _refused_save_response(request, user, control, form_dict, str(e))
     except IntegrityError as e:
         await db.rollback()
         logger.warning(
             "Control update IntegrityError org=%s control=%s user=%s: %s",
-            org.id,
-            control.id,
+            org_id,
+            control_id,
             user.id,
             e.orig,
         )
+        control = await _reload_after_rollback(db, org_id=org_id, control_id=control_id)
         return _render_form_with_errors(
             request,
             user=user,
@@ -1040,3 +1165,17 @@ async def control_delete(
     # Transaction commit owned by get_db dependency.
     # Issue #154: query-string flash so the list page can confirm the delete.
     return RedirectResponse("/controls?deleted=1", status_code=303)
+
+
+# Jinja access to the shared assignment display helper (#268): the control detail page and
+# the run controls snapshot component (runs/components/controls_snapshot.html) both render
+# assignment rows through it, so a derived Correcting Misaligned Decisions row shows its
+# source's values and never the stored sentinels. Registered here, below the pinned route
+# lines, rather than beside the other template globals in app.py, whose citation anchors
+# must not move.
+from idraa.services._view_model_helpers import (  # noqa: E402
+    assignment_display_rows,
+    meta_tag_notes,
+)
+
+templates.env.globals["assignment_display_rows"] = assignment_display_rows

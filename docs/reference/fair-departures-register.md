@@ -640,8 +640,8 @@ Everything numeric in this section is therefore Idraa's.
   provenance) and **not realised numerically**: `E_corr` = the Implementation
   member's effectiveness when Implementation is present, 0 when it is absent.
   Treatment Selection is composed and recorded (it appears in the sub-function
-  effectiveness map and in `contributing`) but is **score-neutral — label-only**,
-  like `dsc_id_misaligned`. Idraa credits decision-support quality only
+  effectiveness map and in `contributing`) but is **score-neutral — label-only**.
+  Idraa credits decision-support quality only
   additively, through `E_dsc` (C6, C7), when decision-support functions are
   authored; nothing here penalises poor selection. Identification pair → OR, since
   the two members cover different variance sources.
@@ -753,6 +753,128 @@ Everything numeric in this section is therefore Idraa's.
 - **Where.** `fair_cam/composition.py` (`or_compose`, "within-sub-function
   across controls" and "per-control Layer-2 squash").
 - **Evaluate.** `fair_cam/tests/test_composition_operators.py`.
+
+### C12. Correcting Misaligned Decisions fulfilled by a linked correction / response assignment
+
+- **Standard.** §5.3 (pp. 49–50): Correcting Misaligned Decisions "is fulfilled
+  by controls within other functions" — Variance Correction or LEC Response —
+  and is "wholly dependent upon those other functions"; "there are no distinct
+  controls that serve this function". Its measure is the elapsed time between
+  when a misaligned decision was recognised and when it was corrected. §5.2 and
+  §5.3 are in a strict AND. The Standard does not say which other-function
+  control fulfils the role in a given deployment, and gives §5.3 no calibration
+  of its own.
+- **Idraa.** `dsc_corr_misaligned` exists only as a DERIVED row on a control:
+  a link (`derived_from_assignment_id`) to one of the SAME control's own
+  assignments whose sub-function is in the closed set `DERIVABLE_SOURCES` =
+  {`vmc_corr_implementation`, `lec_resp_event_termination`,
+  `lec_resp_resilience`} — the opeff-bearing members of Variance Correction ∪
+  LEC Response. At scoring time the link is resolved
+  (`resolve_derived_assignments`) into a PROBABILITY-unit assignment
+  (`derive_virtual_assignment`) that carries the source's unit-converted
+  capability (`capability_opeff`: `exp(−t/τ)` for the two ELAPSED_TIME sources,
+  the probability itself for Resilience; a NULL capability stays NULL so the
+  consumer applies the same 0.5 anchor), the source's coverage and the source's
+  AUTHORED reliability r0 — not the κ-uplifted r_eff. Its operational
+  effectiveness therefore equals the source's bit-for-bit. The derived row
+  lands in the DSC Identification∧Correction leaf AND (absent member padded 0;
+  each member OR-pooled across the run's controls, C11); `E_dsc = OR(E_dsc_prev,
+  E_pair)`, `E_meta = OR(E_vmc, E_dsc)`, and every LEC assignment's `r_eff = r0
+  + (1 − r0)·κ·E_meta` (C7) — including the source's own LEC row when the source
+  is a Response member (self-uplift of the carrying control). Composition, κ
+  and the C6/C7/C8/C11 operators are unchanged; a run with no derived row is
+  bit-identical to one before the link existed. Only `dsc_id_misaligned`
+  identifies for the DSC pair (a `vmc_id_*` row does not). Stored scalars on the
+  derived row are sentinels (`NULL`, 0.0, 0.0), never inputs and never
+  displayed; a consumer that ignores the link scores 0, not the 0.5 anchor.
+- **Class.** PRESCRIBED dependency (§5.3 p. 50: the function is fulfilled by
+  correction/response controls) realised as IMPLEMENTATION-DEFINED (the derived
+  row takes the source's operational effectiveness; the Standard gives no
+  formula for "fulfilled by"); the `lec_resp_resilience` source is a labelled
+  PROXY (below). The same provenance label is in the
+  `derive_virtual_assignment` docstring.
+- **Rationale.** A correction or response process that also re-aligns
+  decision-makers is one process credited under two sub-functions (owner ruling:
+  a multi-function control is, in effect, several controls, each credited
+  separately). Same-process assumption: for the two ELAPSED_TIME sources the
+  process's own time-to-correct (variance implementation, event termination)
+  stands in for §5.3's "elapsed time between when a misaligned decision was
+  recognized and corrected"; for `lec_resp_resilience` (PROBABILITY) §5.3's
+  elapsed-time measure is replaced by a probability of successful recovery — a
+  weaker proxy, labelled as such. The derived row inherits the source's τ and
+  its anchor philosophy (Event Termination τ = 64 d is a MEAN anchor, IBM CODB
+  MTTC; Implementation τ = 79.3 d is a MEDIAN anchor, DBIR/CISA KEV 55 d ÷ ln 2;
+  C2) — §5.3 has no calibration of its own to prefer. Using the authored r0
+  rather than r_eff mirrors how every meta opeff is computed (C7: meta uses raw
+  r0 precisely to avoid a fixed point); the price is the self-uplift above,
+  which is the existing hybrid-control behaviour, not a new coupling.
+  `vmc_corr_treatment_selection` is excluded as a source because C8 commits
+  Treatment Selection to be score-neutral in every composition and pins
+  Treatment-Selection-value invariance on `E_corr` and `E_meta`; a TS-sourced
+  derived row would make TS move `E_meta` and break that pin (TS is also a
+  probability of choosing the right treatment, not a corrective process with an
+  elapsed time). `lec_resp_loss_reduction` is CURRENCY and has no operational
+  effectiveness. Same-control placement is what lets Shapley / if-removed (D1,
+  D2) credit the control that does the work; scoring is scenario-wide
+  regardless. Display-only consequence, consistent with per-sub-function
+  crediting: the per-control "effectiveness" squash
+  (`calculate_risk_reduction_factor`, an OR over all of a control's assignments
+  shown on the run page, in the PDF and in the effectiveness chart; not risk
+  math) counts the derived row beside its source, so a linked control whose only
+  opeff-bearing assignment is its source `b` displays `1 − (1 − b)²` rather than
+  `b`.
+- **Bound.** The derived row and its source are the same process, yet the two
+  pairs that contain Implementation enter `E_meta` as independent OR operands.
+  With VMC pair `a·i` and DSC pair `b·i` sharing implementation value `i`
+  (`a` = VMC Identification OR, `b` = DSC Identification OR) and the other
+  members of each family composed as `E_vp`, `E_dp`, the independent OR gives
+  `1 − (1−E_vp)(1−E_dp)(1−a·i)(1−b·i)` where the fully dependent value is
+  `1 − (1−E_vp)(1−E_dp)(1 − i·(a + b − a·b))`; the overstatement is
+  `(1−E_vp)(1−E_dp)·a·b·i·(1−i) ≤ a·b·i·(1−i) ≤ 1/4`, attained at `E_vp = E_dp =
+  0`, `a = b = 1`, `i = 1/2`. Additional unlinked Implementation carriers (pooled
+  value `u`) raise only the VMC-side value: with linked implementation value
+  `i_d` and VMC-side value `i_v = OR(i_d, u) ≥ i_d`, the overstatement is
+  `(1−E_vp)(1−E_dp)·a·b·i_d·(1−i_v) ≤ a·b·i_d·(1−i_d) ≤ 1/4`, so the bound still
+  holds. All of these are absolute differences in `E_meta`, not relative. Through
+  the κ coupling any LEC reliability moves by at most `κ·(1 − r0)` times that:
+  0.025 absolute at κ = 0.5, r0 = 0.8. For a Response-sourced link the shared
+  process is the control's own LEC row, which is on the other side of the
+  coupling, so no such double count arises.
+- **Where.** `fair_cam/composition.py` (`capability_opeff`,
+  `derive_virtual_assignment`, `resolve_derived_assignments`, `DERIVABLE_SOURCES`
+  imported there); `src/idraa/services/run_executor.py`
+  (`_v3_to_fair_cam_control`, ORM rows → the resolver; the derived row adds no
+  control to Shapley / if-removed / ensemble paths);
+  `src/idraa/services/verification_workbook.py`
+  (`snapshot_to_fair_cam_controls`, V3 snapshots → the same resolver, so mapper
+  and workbook cannot disagree); `src/idraa/services/_view_model_helpers.py`
+  (derived rows display their source's values; the run-scoped zero-value reasons
+  for an unpaired identifying or correcting control; `dsc_id_misaligned` left
+  the label-only set).
+- **Evaluate.**
+  `fair_cam/tests/test_derive_virtual_assignment.py::test_derived_assignment_scores_bit_identical_to_source`
+  (exact `==` over every source, capability, coverage and reliability on the
+  grid, NULL anchor included);
+  `fair_cam/tests/risk_engine/test_meta_reliability_coupling.py::test_linked_correction_scores_the_dsc_pair`
+  (hand-math pin: `dsc_id_misaligned` (0.6, 0.9, 0.8) → `a` = 0.432;
+  `vmc_corr_implementation` t = 30 d, coverage 0.8, r0 0.8 → `b` = exp(−30/79.3)
+  · 0.64 = 0.43841149…; `E_pair` = `a·b` = 0.18939377…; `r_eff` = 0.8 + 0.2 · 0.5
+  · `E_pair` = 0.81893938…; LEC Prevention 0.40946969… against 0.4 without the
+  link) and `::test_linked_correction_is_membership_monotone` (adding the
+  identifying or the linked carrier never lowers `E_meta` or any LEC group
+  value, so attribution stays non-negative on the meta channel); the workbook
+  parity test
+  `test_workbook_e_meta_for_a_derived_row_matches_the_run_mapper_on_the_orm_control`
+  in the verification workbook's service tests (hand-math | run mapper on the
+  ORM control | workbook on its V3 snapshot; the workbook uses the current τ
+  table, a pre-existing limit for every ELAPSED_TIME row); and
+  `test_dsc_corr_link_sources_mirror_fair_cam_derivable_sources` in the v3
+  enum-parity unit tests (the write-path mirror of `DERIVABLE_SOURCES`; v3
+  files outside the methodology lane may not import fair_cam). Authoring: the link is set
+  on the control form only (one eligible source of the same control; never by
+  CSV import, which skips the virtual path); a library resync replaces all of a
+  control's assignments and re-links the derived row when the entry still
+  carries the source sub-function, else drops it, both audited.
 
 ---
 

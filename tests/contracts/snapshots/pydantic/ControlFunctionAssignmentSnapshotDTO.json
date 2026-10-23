@@ -20,6 +20,11 @@
       "optional": true,
       "type": "uuid.UUID | None"
     },
+    "derived_from_sub_function": {
+      "has_default": true,
+      "optional": true,
+      "type": "idraa.models.enums.FairCamSubFunction | None"
+    },
     "measured_at": {
       "has_default": true,
       "optional": true,

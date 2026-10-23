@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/data_table.html" import data_table %}
-{% from "macros/_control.html" import control_domains %}
+{% from "macros/_control.html" import control_domains, meta_tags %}
 {% from "macros/help_trigger.html" import help_trigger %}
 
 {% block title %}Controls{% endblock %}
@@ -62,9 +62,16 @@
    excluded from analyses until Active); active is quiet/neutral. Uses the enum's
    canonical .label (plan-gate Arch-S1) — never value|replace|title. #}
 {%- set _stage = c.implementation_stage -%}
+{# #268 (spec §3.6): VMC / DSC tags beside the name, derived from the control's
+   sub-function slugs. The name cell is composed markup (autoescape escapes
+   ``c.name``; the macro output is already Markup), consumed unchanged by the
+   data_table desktop link and its mobile card title. #}
+{%- set _name_cell -%}
+  {{- c.name -}}{{- meta_tags(c.assignments | map(attribute="sub_function.value") | list) -}}
+{%- endset -%}
 {%- set _ = rows.append({
   "id":           c.id | string,
-  "name":         c.name,
+  "name":         _name_cell,
   "domains_label": (c.domains | map(attribute="value") | sort | map("humanize_slug") | join(", ")) if c.domains else "—",
   "type_value":   c.type.value,
   "source_label": "From library" if c.source == ControlSource.LIBRARY_DERIVED else "Custom",

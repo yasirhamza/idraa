@@ -293,3 +293,95 @@ def test_snapshot_v3_unit_type_for_post_131_reclassified_sub_functions(
     c = _ctrl([a])
     snap = _snapshot_control_v3(c)
     assert snap.assignments[0].unit_type == UnitType.PROBABILITY
+
+
+# ---------------------------------------------------------------------------
+# Issue #268: derived_from_sub_function — the audit record of a derived
+# dsc_corr_misaligned row names its SOURCE sub-function (snapshot assignments
+# carry no row id of their own, so the id link alone would be unresolvable).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "source_sf",
+    [
+        FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+        FairCamSubFunction.LEC_RESP_RESILIENCE,
+    ],
+)
+def test_snapshot_v3_writes_the_source_sub_function_for_a_linked_control(
+    source_sf: FairCamSubFunction,
+) -> None:
+    """The derived row sorts FIRST here (smaller id); the lookup is by id, not position."""
+    src = _assignment(source_sf, 0.6)
+    src.id = uuid.UUID(int=2)
+    derived = _assignment(
+        FairCamSubFunction.DSC_CORR_MISALIGNED,
+        None,
+        coverage=0.0,
+        reliability=0.0,
+        derived_from_assignment_id=src.id,
+    )
+    derived.id = uuid.UUID(int=1)
+    other = _assignment(FairCamSubFunction.LEC_PREV_RESISTANCE, 0.85)
+    other.id = uuid.UUID(int=3)
+
+    snap = _snapshot_control_v3(_ctrl([derived, src, other]))
+
+    assert [a.sub_function for a in snap.assignments] == [
+        FairCamSubFunction.DSC_CORR_MISALIGNED,
+        source_sf,
+        FairCamSubFunction.LEC_PREV_RESISTANCE,
+    ]
+    assert snap.assignments[0].derived_from_sub_function == source_sf
+    assert snap.assignments[0].derived_from_assignment_id == src.id  # M-B1 still preserved
+    assert snap.assignments[1].derived_from_sub_function is None
+    assert snap.assignments[2].derived_from_sub_function is None
+    dumped = snap.model_dump(mode="json")
+    assert dumped["assignments"][0]["derived_from_sub_function"] == source_sf.value
+    assert dumped["assignments"][1]["derived_from_sub_function"] is None
+
+
+def test_snapshot_v3_dangling_link_writes_none_without_raising() -> None:
+    """An audit writer never raises: a link whose id is not on the control writes None
+    (the run mapper already fails such a run loudly)."""
+    src = _assignment(FairCamSubFunction.VMC_CORR_IMPLEMENTATION, 30.0)
+    src.id = uuid.UUID(int=2)
+    derived = _assignment(
+        FairCamSubFunction.DSC_CORR_MISALIGNED,
+        None,
+        coverage=0.0,
+        reliability=0.0,
+        derived_from_assignment_id=uuid.UUID(int=99),
+    )
+    derived.id = uuid.UUID(int=1)
+
+    snap = _snapshot_control_v3(_ctrl([src, derived]))
+
+    assert snap.assignments[1].derived_from_sub_function is None
+    assert snap.assignments[1].derived_from_assignment_id == uuid.UUID(int=99)
+
+
+def test_old_v3_dict_without_the_key_parses_to_none() -> None:
+    """Every V3 snapshot persisted before #268 lacks ``derived_from_sub_function``: it
+    parses unchanged, to None (additive; snapshot_version stays 3)."""
+    old = {
+        "snapshot_version": 3,
+        "control_id": "c1",
+        "name": "Ctl",
+        "domains": ["loss_event"],
+        "type": "preventive",
+        "assignments": [
+            {
+                "sub_function": "lec_prev_resistance",
+                "capability_value": 0.8,
+                "coverage": 0.9,
+                "reliability": 0.7,
+                "unit_type": "probability",
+            }
+        ],
+    }
+    model = ControlSnapshotV3.model_validate(old)
+    assert model.snapshot_version == 3
+    assert model.assignments[0].derived_from_sub_function is None

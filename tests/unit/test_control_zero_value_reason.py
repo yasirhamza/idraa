@@ -25,6 +25,14 @@ from idraa.services._view_model_helpers import (
     snapshot_sub_functions_by_id,
 )
 
+# Spec §3.3 strings, verbatim: the two run-scoped copies for the DSC identification /
+# correction pair (#268).
+_DSC_ID_NO_LINK = "Decision Support identification with no correcting link in this run"
+_DSC_CORR_NO_ID = (
+    "Correction with no identifying control in this run "
+    "(neither Decision Support nor Variance identification)"
+)
+
 # ---------------------------------------------------------------------------
 # control_zero_value_reason: scorer present → None
 # ---------------------------------------------------------------------------
@@ -109,22 +117,120 @@ def test_reason_treatment_selection_only_is_label_only() -> None:
     )
 
 
-def test_reason_dsc_id_misaligned_only_is_label_only() -> None:
-    """dsc_id_misaligned is the other label-only member (rubric §2.8 carries the
-    derivation; §2.7 and §2.9 name it): its partner dsc_corr_misaligned is virtual and no
-    org-authored row can carry it today (schemas/control.py:105-120 validator, the
-    ck_cfa_virtual_requires_derived CHECK, routes/controls.py:72, services/controls.py:138),
-    so the pair is AND(x, 0) = 0 whatever else is present. The engine fact is pinned in
-    fair_cam/tests/risk_engine/test_meta_reliability_coupling.py
-    (test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner, R-T-25).
-    Same copy for both partner values — this replaces the former
-    `test_reason_dsc_id_only_meta_no_partner` pin (:131-134), which asserted the
-    no-partner copy for a structurally-zero member (audited obsolete, #199 slice 1)."""
-    assert control_zero_value_reason(["dsc_id_misaligned"]) == _META_LABEL_ONLY_REASON
+def test_reason_dsc_id_misaligned_only_is_run_scoped() -> None:
+    """#268 (spec §3.3): dsc_id_misaligned is no longer label-only. Its pair
+    dsc_corr_misaligned CAN now be authored (a derived row linked to a control's own
+    vmc_corr_implementation / lec_resp_* sub-function), so the zero is explained by the
+    RUN: with no correcting link anywhere in the run the pair is AND(x, 0) = 0; with one
+    it is scored and a $0 is the ordinary partner-split copy.
+
+    Replaces the #199 slice-1 pin that asserted `_META_LABEL_ONLY_REASON` for both
+    partner values (audited obsolete: it encoded 'no row can carry the partner', which the
+    link removes). The fair_cam padded-AND fact it cited still holds for a run without a
+    link, which is exactly the no-link branch below."""
+    sfs = ["dsc_id_misaligned"]
+    # No correcting link in the run → the new, run-scoped copy, whatever the LEC partner.
+    assert control_zero_value_reason(sfs, run_has_dsc_corr=False) == _DSC_ID_NO_LINK
     assert (
-        control_zero_value_reason(["dsc_id_misaligned"], has_co_present_lec=False)
-        == _META_LABEL_ONLY_REASON
+        control_zero_value_reason(sfs, has_co_present_lec=False, run_has_dsc_corr=False)
+        == _DSC_ID_NO_LINK
     )
+    # A correcting link exists in the run → scored: the ordinary partner split applies.
+    assert control_zero_value_reason(sfs, run_has_dsc_corr=True) == _META_SUBTHRESHOLD_REASON
+    assert (
+        control_zero_value_reason(sfs, has_co_present_lec=False, run_has_dsc_corr=True)
+        == _META_NO_PARTNER_REASON
+    )
+    # Fail-safe default (signal not supplied) = "a partner exists" → the partner split.
+    assert control_zero_value_reason(sfs) == _META_SUBTHRESHOLD_REASON
+
+
+def test_reason_treatment_selection_plus_dsc_id_misaligned_is_run_scoped() -> None:
+    """TS is label-only and dsc_id_misaligned is link-dependent: the pair of them is
+    still 'identification with no link' when the run has no correcting link."""
+    sfs = ["vmc_corr_treatment_selection", "dsc_id_misaligned"]
+    assert control_zero_value_reason(sfs, run_has_dsc_corr=False) == _DSC_ID_NO_LINK
+    assert control_zero_value_reason(sfs, run_has_dsc_corr=True) == _META_SUBTHRESHOLD_REASON
+    assert (
+        control_zero_value_reason(sfs, has_co_present_lec=False, run_has_dsc_corr=True)
+        == _META_NO_PARTNER_REASON
+    )
+
+
+def test_reason_hybrid_vmc_id_with_dsc_id_misaligned_keeps_partner_copy() -> None:
+    """A hybrid (vmc_id_* + dsc_id_misaligned) control has its own scorable VMC-id
+    channel, so the DSC no-link copy does not apply even with no link in the run
+    (spec §3.3: pinned)."""
+    sfs = ["vmc_id_control_monitoring", "dsc_id_misaligned"]
+    assert (
+        control_zero_value_reason(sfs, run_has_dsc_corr=False, has_co_present_lec=True)
+        == _META_SUBTHRESHOLD_REASON
+    )
+    assert (
+        control_zero_value_reason(sfs, run_has_dsc_corr=False, has_co_present_lec=False)
+        == _META_NO_PARTNER_REASON
+    )
+
+
+def test_reason_dsc_corr_with_implementation_and_no_identifier_in_run() -> None:
+    """A control carrying the derived dsc_corr_misaligned row plus its source
+    vmc_corr_implementation, in a run with NEITHER a dsc_id_misaligned control NOR a
+    vmc_id_* control: both of its pairs are structurally zero."""
+    sfs = ["vmc_corr_implementation", "dsc_corr_misaligned"]
+    assert (
+        control_zero_value_reason(sfs, run_has_dsc_id=False, run_has_vmc_id=False)
+        == _DSC_CORR_NO_ID
+    )
+    # Same with Treatment Selection beside them (still inside the allowed set).
+    assert (
+        control_zero_value_reason(
+            ["vmc_corr_treatment_selection", *sfs], run_has_dsc_id=False, run_has_vmc_id=False
+        )
+        == _DSC_CORR_NO_ID
+    )
+    # Independent of the LEC-partner signal.
+    assert (
+        control_zero_value_reason(
+            sfs, has_co_present_lec=False, run_has_dsc_id=False, run_has_vmc_id=False
+        )
+        == _DSC_CORR_NO_ID
+    )
+
+
+def test_reason_dsc_corr_with_an_identifier_in_run_keeps_partner_copy() -> None:
+    """Either signal in the run keeps the ordinary partner split, for different reasons:
+    a dsc_id_misaligned control scores the DSC pair (the pair is an AND over
+    dsc_id_misaligned and dsc_corr_misaligned only); a vmc_id_* control does NOT identify
+    for dsc_corr_misaligned, but it scores the control's OTHER pair (VMC identification
+    AND vmc_corr_implementation), so the control's value is not structurally zero."""
+    sfs = ["vmc_corr_implementation", "dsc_corr_misaligned"]
+    assert (
+        control_zero_value_reason(sfs, run_has_dsc_id=True, run_has_vmc_id=False)
+        == _META_SUBTHRESHOLD_REASON
+    )
+    assert (
+        control_zero_value_reason(sfs, run_has_dsc_id=False, run_has_vmc_id=True)
+        == _META_SUBTHRESHOLD_REASON
+    )
+    assert (
+        control_zero_value_reason(
+            sfs, has_co_present_lec=False, run_has_dsc_id=True, run_has_vmc_id=True
+        )
+        == _META_NO_PARTNER_REASON
+    )
+    # Fail-safe defaults (signals not supplied) = "an identifier exists".
+    assert control_zero_value_reason(sfs) == _META_SUBTHRESHOLD_REASON
+
+
+def test_reason_dsc_corr_beside_an_lec_source_falls_through_unchanged() -> None:
+    """The derived row can also hang off an lec_resp_* source; that control is not pure
+    meta (it has its own LEC channel), so Rule 3 and the new copies never apply."""
+    reason = control_zero_value_reason(
+        ["lec_resp_event_termination", "dsc_corr_misaligned"],
+        run_has_dsc_id=False,
+        run_has_vmc_id=False,
+    )
+    assert reason == "No detection partner — response benefit not creditable"
 
 
 def test_reason_treatment_selection_with_implementation_keeps_meta_copy() -> None:
@@ -392,6 +498,72 @@ def test_zero_reason_wiring_label_only_control_with_lec_partner() -> None:
     result = process_weight_robustness_for_display(wr, _IDENTITY, "USD", sub_functions_by_id=sfs)
     assert result is not None
     assert result["per_control"][cid]["zero_reason"] == _META_LABEL_ONLY_REASON
+
+
+def _reason_for(cid: str, sfs: dict[str, list[str]]) -> str | None:
+    """Zero-reason of the $0 cell ``cid`` computed over the whole run ``sfs``."""
+    wr = _make_wr(cid, 0.0)
+    result = process_weight_robustness_for_display(wr, _IDENTITY, "USD", sub_functions_by_id=sfs)
+    assert result is not None
+    reason: str | None = result["per_control"][cid]["zero_reason"]
+    return reason
+
+
+def test_zero_reason_wiring_dsc_id_scoped_to_correcting_link_in_run() -> None:
+    """#268 (spec §3.3): through the real call site, a $0 dsc_id_misaligned-only cell is
+    explained by the RUN's other controls. The whole-run signal is read from
+    ``sub_functions_by_id`` — a correcting (derived dsc_corr_misaligned) assignment on ANY
+    control counts."""
+    cid, lec_cid, corr_cid = "dsc1", "lec1", "corr1"
+    no_link = {cid: ["dsc_id_misaligned"], lec_cid: ["lec_prev_avoidance"]}
+    assert _reason_for(cid, no_link) == _DSC_ID_NO_LINK
+    with_link = {
+        **no_link,
+        corr_cid: ["vmc_corr_implementation", "dsc_corr_misaligned"],
+    }
+    assert _reason_for(cid, with_link) == _META_SUBTHRESHOLD_REASON
+
+
+def test_zero_reason_wiring_ts_plus_dsc_id_scoped_to_correcting_link_in_run() -> None:
+    cid, lec_cid = "dsc1", "lec1"
+    sfs = {
+        cid: ["vmc_corr_treatment_selection", "dsc_id_misaligned"],
+        lec_cid: ["lec_prev_avoidance"],
+    }
+    assert _reason_for(cid, sfs) == _DSC_ID_NO_LINK
+    sfs["corr"] = ["vmc_corr_implementation", "dsc_corr_misaligned"]
+    assert _reason_for(cid, sfs) == _META_SUBTHRESHOLD_REASON
+
+
+def test_zero_reason_wiring_dsc_corr_scoped_to_identifiers_in_run() -> None:
+    """The correcting control's $0 is structurally zero only when BOTH of its pairs are
+    zero: no dsc_id_misaligned in the run (DSC pair; vmc_id_* is not an operand of it) AND
+    no vmc_id_* in the run (VMC pair with the control's vmc_corr_implementation). Either a
+    dsc_id_misaligned control or a vmc_id_* control therefore rescues it, via a different
+    pair each."""
+    cid, lec_cid = "corr1", "lec1"
+    base = {
+        cid: ["vmc_corr_implementation", "dsc_corr_misaligned"],
+        lec_cid: ["lec_prev_avoidance"],
+    }
+    assert _reason_for(cid, base) == _DSC_CORR_NO_ID
+    assert _reason_for(cid, {**base, "id1": ["dsc_id_misaligned"]}) == _META_SUBTHRESHOLD_REASON
+    assert (
+        _reason_for(cid, {**base, "id2": ["vmc_id_threat_intelligence"]})
+        == _META_SUBTHRESHOLD_REASON
+    )
+    assert (
+        _reason_for(cid, {**base, "id3": ["vmc_id_control_monitoring"]})
+        == _META_SUBTHRESHOLD_REASON
+    )
+    # Variance-management slugs that are NOT identification do not rescue it.
+    assert _reason_for(cid, {**base, "x": ["vmc_prev_reduce_change_freq"]}) == _DSC_CORR_NO_ID
+
+
+def test_zero_reason_wiring_hybrid_vmc_id_plus_dsc_id_keeps_partner_copy() -> None:
+    cid, lec_cid = "hyb1", "lec1"
+    sfs = {cid: ["vmc_id_control_monitoring", "dsc_id_misaligned"], lec_cid: ["lec_prev_avoidance"]}
+    assert _reason_for(cid, sfs) == _META_SUBTHRESHOLD_REASON
 
 
 def test_zero_reason_none_when_p50_nonzero() -> None:

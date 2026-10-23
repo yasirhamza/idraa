@@ -2,6 +2,10 @@
 
 A control "needs maintenance" if either:
 - One or more ControlFunctionAssignment rows have confirmed_by_user_at IS NULL.
+  Derived Correcting Misaligned Decisions rows (``derived_from_assignment_id IS NOT
+  NULL``, #268) are skipped: they have no inputs of their own, so there is nothing for
+  an operator to review. Confirming their source row (``confirm_assignment``) confirms
+  them, so confirming every listed row leaves the control fully confirmed.
 - Its ``annual_cost`` column equals ``Decimal('0')`` — the importer + wizard
   default for "placeholder cost not yet set".
 
@@ -71,7 +75,7 @@ async def maintenance_summary(
 
     Two queries:
     1. All controls for the org → Python filter → zero-cost subset.
-    2. ControlFunctionAssignment rows where confirmed_by_user_at IS NULL,
+    2. NON-derived ControlFunctionAssignment rows where confirmed_by_user_at IS NULL,
        with eager-loaded .control (for downstream per-domain grouping).
     """
     all_controls_stmt = (
@@ -102,6 +106,8 @@ async def maintenance_summary(
         .where(
             ControlFunctionAssignment.organization_id == org_id,
             ControlFunctionAssignment.confirmed_by_user_at.is_(None),
+            # #268: a derived row is never listed or counted (see module docstring).
+            ControlFunctionAssignment.derived_from_assignment_id.is_(None),
         )
         .order_by(ControlFunctionAssignment.sub_function)
     )

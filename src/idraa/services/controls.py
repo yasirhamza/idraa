@@ -19,17 +19,33 @@ Service-layer design decisions (spec §8.1):
     Control ORM — prevents assignments being silently passed as ORM kwargs.
   - OQ3 cap guard: raises ValueError if len(assignments_data) != 1, mirrors
     Pydantic max_length=1 for defense-in-depth.
-  - B-NEW3 / Decision 9: raise ValueError if derived_from_assignment_id is
-    not None — reserved-but-unused in PR iota. Enforcement lives HERE (not on DTO)
-    because the DTO is shared with _snapshot_control_v2 and Phase 2 reads.
+  - B-NEW3 / Decision 9 (superseded by #268): a client may never supply
+    derived_from_assignment_id. Enforcement lives HERE (``validate_dsc_corr_link``,
+    not on the DTO) because the DTO is shared with _snapshot_control_v2 and the
+    snapshot readers, which legitimately carry a link.
   - confirmed_by_user_at is set on wizard/form-submitted assignments but NOT
     on importer assignments (which surface in the unconfirmed-warning UX).
   - confirm_assignment: captures prior values before mutation so re-confirms
     produce non-misleading audit diffs (M-NEW3, spec §5.3).
+
+Derived Correcting Misaligned Decisions row (#268, FAIR-CAM §5.3, spec §3.4):
+  - A ``dsc_corr_misaligned`` assignment exists only as a DERIVED row holding a link
+    (``derived_from_assignment_id``) to another row of the SAME control, with
+    sentinels capability NULL / coverage 0.0 / reliability 0.0. It is authored through
+    the separate ``dsc_corr_source`` argument of ``create_control`` / ``update_control``
+    (an idraa ``FairCamSubFunction`` from ``DSC_CORR_LINK_SOURCES``), never through
+    the submitted assignments; the link is resolved server-side from that slug.
+  - ``validate_dsc_corr_link`` is pure and is the FIRST statement of both writers: a
+    refusal leaves the session untouched.
+  - Delete ordering: SQLAlchemy sorts one flush's DELETEs by primary key, and with
+    ``PRAGMA foreign_keys=ON`` a surviving derived row's ``ON DELETE SET NULL``
+    violates ``ck_cfa_virtual_requires_derived``. Every path that deletes assignment
+    rows deletes the derived row and flushes FIRST (``_delete_derived_rows_first``).
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -43,13 +59,19 @@ from idraa.models.control import Control
 from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.control_library import ControlLibraryEntryAssignment
 from idraa.models.enums import (
+    DSC_CORR_LINK_SOURCES,
     ControlDomain,
     ControlSource,
     EntityStatus,
+    FairCamSubFunction,
     sub_functions_for_domain,
 )
 from idraa.schemas.control import ControlForm
 from idraa.services.audit import AuditWriter
+
+logger = logging.getLogger(__name__)
+
+_DSC_CORR = FairCamSubFunction.DSC_CORR_MISALIGNED
 
 
 async def list_controls(
@@ -106,6 +128,265 @@ async def get_control_for_org(
     return control
 
 
+# ---------------------------------------------------------------------------
+# Derived Correcting Misaligned Decisions row (#268)
+# ---------------------------------------------------------------------------
+
+
+def validate_dsc_corr_link(
+    assignments: list[dict[str, Any]], dsc_corr_source: FairCamSubFunction | None
+) -> None:
+    """Refuse an invalid Correcting Misaligned Decisions authoring request.
+
+    PURE: reads its arguments, mutates nothing, touches no session. It is the first
+    statement of ``create_control`` and ``update_control``, so a refusal leaves
+    ``db.dirty`` / ``db.new`` / ``db.deleted`` empty and writes no audit row.
+
+    ``assignments`` are the SUBMITTED assignment dicts (``ControlForm.model_dump()``).
+    Raises ``ValueError`` (the routes render it as a 422) when
+      - a submitted assignment is ``dsc_corr_misaligned`` (the row is derived, never
+        client-authored; the DTO only admits one together with a link id, which is
+        refused below anyway);
+      - a submitted assignment carries ``derived_from_assignment_id`` (no row id is
+        ever accepted from the client — the link is resolved server-side from the
+        slug on the same control);
+      - ``dsc_corr_source`` is not in ``DSC_CORR_LINK_SOURCES``;
+      - ``dsc_corr_source`` names a sub-function the submission does not carry
+        (source removed while the link still names it).
+    """
+    submitted: set[FairCamSubFunction] = set()
+    for ad in assignments:
+        sub_function = FairCamSubFunction(ad["sub_function"])
+        if sub_function is _DSC_CORR:
+            raise ValueError(
+                "Correcting Misaligned Decisions (dsc_corr_misaligned) cannot be submitted as "
+                "an assignment; it is derived from a correction or response assignment of "
+                "this control. Choose its source instead."
+            )
+        if ad.get("derived_from_assignment_id") is not None:
+            raise ValueError(
+                "derived_from_assignment_id cannot be supplied; the Correcting Misaligned "
+                "Decisions link is set by choosing its source sub-function."
+            )
+        submitted.add(sub_function)
+
+    if dsc_corr_source is None:
+        return
+    source = FairCamSubFunction(dsc_corr_source)
+    if source not in DSC_CORR_LINK_SOURCES:
+        eligible = ", ".join(sorted(s.value for s in DSC_CORR_LINK_SOURCES))
+        raise ValueError(
+            f"{source.value} is not an eligible source for Correcting Misaligned Decisions; "
+            f"eligible sources are: {eligible}."
+        )
+    if source not in submitted:
+        raise ValueError(
+            f"Correcting Misaligned Decisions is linked to {source.value}, which this control "
+            "no longer has; choose another source or none."
+        )
+
+
+async def _row_by_sub_function(
+    db: AsyncSession,
+    control_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    sub_function: FairCamSubFunction,
+) -> ControlFunctionAssignment | None:
+    """Explicit, org-scoped lookup of a control's row by sub-function.
+
+    Never goes through the (possibly stale, under async) ``control.assignments``
+    collection. ``uq_cfa_control_sub_function`` guarantees at most one row.
+    """
+    result = await db.execute(
+        select(ControlFunctionAssignment).where(
+            ControlFunctionAssignment.control_id == control_id,
+            ControlFunctionAssignment.organization_id == organization_id,
+            ControlFunctionAssignment.sub_function == sub_function,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _source_sub_function(
+    db: AsyncSession, derived: ControlFunctionAssignment
+) -> FairCamSubFunction | None:
+    """The sub-function of the row a derived row links to (same control only).
+
+    None when the link is NULL or does not resolve to a row of the same control —
+    callers treat that as "no recoverable source" rather than raising, so cleanup
+    paths stay total.
+    """
+    if derived.derived_from_assignment_id is None:
+        return None
+    result = await db.execute(
+        select(ControlFunctionAssignment.sub_function).where(
+            ControlFunctionAssignment.id == derived.derived_from_assignment_id,
+            ControlFunctionAssignment.control_id == derived.control_id,
+            ControlFunctionAssignment.organization_id == derived.organization_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _delete_derived_rows_first(
+    db: AsyncSession,
+    control_id: uuid.UUID,
+    *,
+    organization_id: uuid.UUID,
+    audit: AuditWriter,
+    user_id: uuid.UUID | None,
+    ip_address: str | None,
+) -> FairCamSubFunction | None:
+    """Delete the control's derived row (if any) and FLUSH it, before any other delete.
+
+    SQLAlchemy sorts the DELETEs of one flush by primary key, not by call order; with
+    ``PRAGMA foreign_keys=ON`` a surviving derived row's ``ON DELETE SET NULL`` would
+    violate ``ck_cfa_virtual_requires_derived`` whenever its source row is deleted
+    first. Every path that deletes assignment rows calls this BEFORE it deletes any.
+
+    Writes the ``.delete`` audit row (``[before, after]`` pairs) before the row leaves
+    the session, flushes, and returns the removed row's SOURCE sub-function (None when
+    there was no derived row) so the caller can re-link against the new source row.
+    """
+    derived = await _row_by_sub_function(db, control_id, organization_id, _DSC_CORR)
+    if derived is None:
+        return None
+    source_sf = await _source_sub_function(db, derived)
+    await audit.log(
+        organization_id=organization_id,
+        entity_type="control_function_assignment",
+        entity_id=derived.id,
+        action="control_function_assignment.delete",
+        changes={
+            "sub_function": [_DSC_CORR.value, None],
+            "derived_from_sub_function": [source_sf.value if source_sf else None, None],
+        },
+        user_id=user_id,
+        ip_address=ip_address,
+    )
+    await db.delete(derived)
+    await db.flush()
+    return source_sf
+
+
+async def _sync_derived_row(
+    db: AsyncSession,
+    control_id: uuid.UUID,
+    organization_id: uuid.UUID,
+    source_sf: FairCamSubFunction | None,
+    *,
+    confirm: bool,
+    audit: AuditWriter,
+    user_id: uuid.UUID | None,
+    ip_address: str | None,
+    now: datetime | None = None,
+) -> None:
+    """Make the control's derived row match ``source_sf`` (create / re-point / keep).
+
+    Called AFTER the assignment merge (or row copy), so the source row is found by an
+    explicit ``select`` on (control_id, sub_function). ``source_sf is None`` means "no
+    link": any leftover derived row is removed (callers that delete source rows have
+    already called ``_delete_derived_rows_first``).
+
+    ``confirm=True`` (every analyst form save): the derived row follows the authoring
+    act, so ``confirmed_by_user_at`` / ``measured_by`` / ``measured_at`` = now — the
+    "save = confirm" convention every saved row gets — with a ``.confirm`` audit row
+    when the row already existed (the ``.create`` payload carries the confirmation
+    for a new row). ``now`` is the CALLER's save timestamp, so the derived row carries
+    the same instant as its sibling rows from the same save; it defaults to the
+    current time only when the caller has none. ``confirm=False`` (``duplicate_control``, ``apply_resync``): not an
+    authoring act, so the row is written / left unconfirmed like every other row those
+    paths write.
+
+    Audit (existing ``[before, after]`` convention): create ->
+    ``.create`` ``{sub_function, derived_from_sub_function, confirmed_by_user_at}``;
+    re-point -> ``.update`` ``{derived_from_sub_function: [old, new]}``.
+    """
+    if source_sf is None:
+        await _delete_derived_rows_first(
+            db,
+            control_id,
+            organization_id=organization_id,
+            audit=audit,
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+        return
+
+    source = await _row_by_sub_function(db, control_id, organization_id, source_sf)
+    if source is None:
+        raise ValueError(
+            f"cannot link Correcting Misaligned Decisions: the control has no {source_sf.value} row"
+        )
+    now = now if now is not None else datetime.now(UTC)
+    derived = await _row_by_sub_function(db, control_id, organization_id, _DSC_CORR)
+
+    if derived is None:
+        derived = ControlFunctionAssignment(
+            control_id=control_id,
+            organization_id=organization_id,
+            sub_function=_DSC_CORR,
+            # Fail-closed sentinels: never inputs, never displayed (spec §3.1).
+            capability_value=None,
+            coverage=0.0,
+            reliability=0.0,
+            derived_from_assignment_id=source.id,
+            confirmed_by_user_at=now if confirm else None,
+            measured_by=user_id if confirm else None,
+            measured_at=now if confirm else None,
+        )
+        db.add(derived)
+        await db.flush()
+        await audit.log(
+            organization_id=organization_id,
+            entity_type="control_function_assignment",
+            entity_id=derived.id,
+            action="control_function_assignment.create",
+            changes={
+                "sub_function": [None, _DSC_CORR.value],
+                "derived_from_sub_function": [None, source_sf.value],
+                "confirmed_by_user_at": [None, now.isoformat() if confirm else None],
+            },
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+        return
+
+    if derived.derived_from_assignment_id != source.id:
+        old_sf = await _source_sub_function(db, derived)
+        derived.derived_from_assignment_id = source.id
+        await audit.log(
+            organization_id=organization_id,
+            entity_type="control_function_assignment",
+            entity_id=derived.id,
+            action="control_function_assignment.update",
+            changes={
+                "derived_from_sub_function": [old_sf.value if old_sf else None, source_sf.value]
+            },
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+    if confirm:
+        prev_confirmed = derived.confirmed_by_user_at
+        derived.confirmed_by_user_at = now
+        derived.measured_by = user_id
+        derived.measured_at = now
+        await audit.log(
+            organization_id=organization_id,
+            entity_type="control_function_assignment",
+            entity_id=derived.id,
+            action="control_function_assignment.confirm",
+            changes={
+                "confirmed_by_user_at": [
+                    prev_confirmed.isoformat() if prev_confirmed else None,
+                    now.isoformat(),
+                ]
+            },
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+
+
 async def create_control(
     db: AsyncSession,
     *,
@@ -113,6 +394,7 @@ async def create_control(
     user_id: uuid.UUID | None,
     form: ControlForm,
     ip_address: str | None = None,
+    dsc_corr_source: FairCamSubFunction | None = None,
 ) -> Control:
     """Create a Control row + ControlFunctionAssignment rows transactionally.
 
@@ -120,7 +402,12 @@ async def create_control(
     ORM constructor kwarg. PR kappa: multiple assignments now permitted (spec §6.1).
     User-submitted assignments are confirmed (confirmed_by_user_at = now);
     importer-created assignments leave confirmed_by_user_at = NULL. (spec §8.1)
+
+    ``dsc_corr_source`` (#268) names the submitted sub-function the derived
+    Correcting Misaligned Decisions row is linked to (``DSC_CORR_LINK_SOURCES``);
+    None = no derived row. ``ValueError`` (nothing written) on an invalid request.
     """
+    validate_dsc_corr_link([a.model_dump() for a in form.assignments], dsc_corr_source)
     # M5: explicit unpack — never **form.model_dump() on Control constructor
     form_data: dict[str, Any] = form.model_dump()
     assignments_data: list[dict[str, Any]] = form_data.pop("assignments")
@@ -133,14 +420,8 @@ async def create_control(
     audit = AuditWriter(db)
 
     for assignment_data in assignments_data:
-        # Decision 9 / B-NEW3: derived_from is reserved-but-unused in PR iota.
-        # Enforcement lives here (service layer), not on DTO.
-        if assignment_data.get("derived_from_assignment_id") is not None:
-            raise ValueError(
-                "derived_from_assignment_id is reserved-but-unused in PR iota. "
-                "Phase 2 removes this guard when computed-virtual rows are introduced. "
-                "(Decision 9, B-NEW3)"
-            )
+        # A client-supplied derived_from_assignment_id was already refused by
+        # validate_dsc_corr_link (the derived row is written below, server-side).
         # Drop DTO-side measurement fields — service overrides them with
         # current values for user-submitted forms (spec §8.1, §4.8).
         # Without this pop, **assignment_data conflicts with the explicit
@@ -174,6 +455,21 @@ async def create_control(
             ip_address=ip_address,
         )
 
+    # Derived Correcting Misaligned Decisions row, after its source row exists (a new
+    # control has no derived row to clean up, so "no link" needs no query).
+    if dsc_corr_source is not None:
+        await _sync_derived_row(
+            db,
+            control.id,
+            org_id,
+            dsc_corr_source,
+            confirm=True,
+            audit=audit,
+            user_id=user_id,
+            ip_address=ip_address,
+            now=now,
+        )
+
     await audit.log(
         organization_id=org_id,
         entity_type="control",
@@ -198,10 +494,11 @@ async def update_control(
     user_id: uuid.UUID | None,
     form: ControlForm,
     ip_address: str | None = None,
+    dsc_corr_source: FairCamSubFunction | None = None,
 ) -> Control:
     """Update a Control row and diff-detect changes on assignment fields.
 
-    Performs a three-way merge on assignments:
+    Performs a three-way merge on the NON-DERIVED assignments:
       - new sub_functions not in DB -> inserted
       - sub_functions in both -> updated if any of (capability_value, coverage,
         reliability) changed
@@ -211,7 +508,16 @@ async def update_control(
     assignment in the form (insert OR update branches), regardless of prior
     state. Supersedes the prior PR iota "OQ4/§4.8" rule. /controls/maintenance
     survives as the bulk-confirm-without-editing surface for backfills.
+
+    The derived Correcting Misaligned Decisions row (#268) is NOT part of the merge:
+    ``dsc_corr_source`` is the full desired link (None = no link — the DEFAULT, so a
+    caller that omits it clears the link). The derived row is deleted and flushed
+    BEFORE the merge when it must go (link cleared, or its source row is leaving the
+    submission), then ``_sync_derived_row`` creates / re-points / keeps it AFTER the
+    merge (and confirms it: save = confirm). ``ValueError`` — raised before any
+    mutation — on an invalid request.
     """
+    validate_dsc_corr_link([a.model_dump() for a in form.assignments], dsc_corr_source)
     form_data: dict[str, Any] = form.model_dump()
     assignments_data: list[dict[str, Any]] = form_data.pop("assignments")
 
@@ -238,18 +544,35 @@ async def update_control(
             ip_address=ip_address,
         )
 
-    # Three-way merge on assignments keyed by sub_function
+    # Three-way merge on the NON-DERIVED assignments keyed by sub_function; the
+    # derived row is handled separately (delete-first below, sync after the merge).
     existing_by_subfn: dict[str, ControlFunctionAssignment] = {
-        a.sub_function.value: a for a in (control.assignments or [])
+        a.sub_function.value: a
+        for a in (control.assignments or [])
+        if a.sub_function is not _DSC_CORR
     }
     incoming_subfns: set[str] = set()
     now = datetime.now(UTC)
 
-    for ad in assignments_data:
-        if ad.get("derived_from_assignment_id") is not None:
-            raise ValueError(
-                "derived_from_assignment_id is reserved-but-unused in PR iota. (Decision 9)"
+    # The derived row goes FIRST (and is flushed) when its link is cleared or its
+    # source row is leaving the submission — before the merge deletes any other row
+    # (primary-key-sorted DELETEs + FK SET NULL vs ck_cfa_virtual_requires_derived).
+    # A source that stays is handled by _sync_derived_row (keep / re-point).
+    current_derived = await _row_by_sub_function(db, control.id, control.organization_id, _DSC_CORR)
+    if current_derived is not None:
+        current_source = await _source_sub_function(db, current_derived)
+        submitted_sfs = {a.sub_function for a in form.assignments}
+        if dsc_corr_source is None or current_source not in submitted_sfs:
+            await _delete_derived_rows_first(
+                db,
+                control.id,
+                organization_id=control.organization_id,
+                audit=audit,
+                user_id=user_id,
+                ip_address=ip_address,
             )
+
+    for ad in assignments_data:
         subfn_val: str = (
             ad["sub_function"].value if hasattr(ad["sub_function"], "value") else ad["sub_function"]
         )
@@ -323,8 +646,8 @@ async def update_control(
             ad.pop("confirmed_by_user_at", None)
             ad.pop("measured_by", None)
             ad.pop("measured_at", None)
-            # derived_from_assignment_id is reserved-but-unused (Decision 9 / B-NEW3)
-            # Service raises ValueError if non-NULL — but defense-in-depth, drop here too.
+            # validate_dsc_corr_link already refused any non-NULL
+            # derived_from_assignment_id; defense-in-depth, drop the (None) key here too.
             ad.pop("derived_from_assignment_id", None)
             new_assignment = ControlFunctionAssignment(
                 control_id=control.id,
@@ -369,6 +692,23 @@ async def update_control(
             )
             await db.delete(existing)
 
+    # Derived Correcting Misaligned Decisions row, after the merge (the source row
+    # now exists — possibly inserted just above). The helper's first query autoflushes
+    # the deletes above. "No link" needs nothing here: a derived row that existed was
+    # already deleted (and flushed) before the merge.
+    if dsc_corr_source is not None:
+        await _sync_derived_row(
+            db,
+            control.id,
+            control.organization_id,
+            dsc_corr_source,
+            confirm=True,
+            audit=audit,
+            user_id=user_id,
+            ip_address=ip_address,
+            now=now,
+        )
+
     return control
 
 
@@ -387,10 +727,14 @@ async def duplicate_control(
       - lands in status = DRAFT (regardless of source.status)
       - clones every assignment with NEW IDs and confirmed_by_user_at = NULL
         (clone is not an authoring act; analyst confirms via subsequent /edit)
+      - a derived Correcting Misaligned Decisions row (#268) is NOT copied as a row
+        (its link would point at the ORIGINAL's source): it is recreated after the
+        copy, linked to the CLONE's row of the same source sub-function, unconfirmed
 
     Audit:
       - one control.duplicate row keyed to the new control id
       - one control_function_assignment.create row per cloned assignment
+        (the recreated derived row's carries ``confirmed_by_user_at: [None, None]``)
 
     Implementation note: uses inspect(Control).columns to enumerate fields
     so that future Control field additions don't silently drop on clone.
@@ -432,7 +776,19 @@ async def duplicate_control(
     db.add(new_control)
     await db.flush()
 
+    source_derived_sf: FairCamSubFunction | None = None
     for src_a in control.assignments or []:
+        if src_a.sub_function is _DSC_CORR:
+            # Derived row: recreated below against the clone's own source row.
+            source_derived_sf = await _source_sub_function(db, src_a)
+            if source_derived_sf is None:
+                logger.warning(
+                    "duplicate_control: control %s has a derived %s row whose link does not "
+                    "resolve to a row of the same control; the clone gets no derived row",
+                    control.id,
+                    _DSC_CORR.value,
+                )
+            continue
         new_assignment = ControlFunctionAssignment(
             control_id=new_control.id,
             organization_id=org_id,
@@ -457,6 +813,18 @@ async def duplicate_control(
                 "coverage": [None, new_assignment.coverage],
                 "reliability": [None, new_assignment.reliability],
             },
+            user_id=user_id,
+            ip_address=ip_address,
+        )
+
+    if source_derived_sf is not None:
+        await _sync_derived_row(
+            db,
+            new_control.id,
+            org_id,
+            source_derived_sf,
+            confirm=False,  # clone is NOT an authoring act
+            audit=audit,
             user_id=user_id,
             ip_address=ip_address,
         )
@@ -691,14 +1059,51 @@ async def confirm_assignment(
 
     Idempotent semantics: if already confirmed at the same instant (in tests),
     the audit row still lands with the captured prior values.
+
+    Derived Correcting Misaligned Decisions row (#268): it has no inputs of its own,
+    so confirming it directly is a NO-OP (no write, no audit row), and confirming
+    its SOURCE row also confirms it (its own ``.confirm`` audit row) — confirming
+    every row the maintenance page lists (which never lists a derived row) thus
+    leaves a duplicated / re-synced control fully confirmed.
     """
+    if assignment.derived_from_assignment_id is not None:
+        return assignment
+    now = datetime.now(UTC)
+    audit = AuditWriter(db)
+    await _confirm_row(audit, assignment, user_id=user_id, ip_address=ip_address, now=now)
+    derived_rows = (
+        (
+            await db.execute(
+                select(ControlFunctionAssignment).where(
+                    ControlFunctionAssignment.derived_from_assignment_id == assignment.id,
+                    ControlFunctionAssignment.control_id == assignment.control_id,
+                    ControlFunctionAssignment.organization_id == assignment.organization_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for derived in derived_rows:
+        await _confirm_row(audit, derived, user_id=user_id, ip_address=ip_address, now=now)
+    return assignment
+
+
+async def _confirm_row(
+    audit: AuditWriter,
+    assignment: ControlFunctionAssignment,
+    *,
+    user_id: uuid.UUID | None,
+    ip_address: str | None,
+    now: datetime,
+) -> None:
+    """Stamp one row confirmed and write its own ``.confirm`` audit row."""
     prior_confirmed = assignment.confirmed_by_user_at
     prior_measured_by = assignment.measured_by
-    now = datetime.now(UTC)
     assignment.confirmed_by_user_at = now
     assignment.measured_by = user_id
     assignment.measured_at = now
-    await AuditWriter(db).log(
+    await audit.log(
         organization_id=assignment.organization_id,
         entity_type="control_function_assignment",
         entity_id=assignment.id,
@@ -716,4 +1121,3 @@ async def confirm_assignment(
         user_id=user_id,
         ip_address=ip_address,
     )
-    return assignment

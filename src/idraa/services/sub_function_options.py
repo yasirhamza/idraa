@@ -35,9 +35,10 @@ _DOMAIN_ORDER: tuple[ControlDomain, ...] = (
 )
 
 # Sub-functions the combobox should NOT offer: same set the existing
-# template excludes from the dropdown (DSC_CORR_MISALIGNED is virtual per
-# FAIR-CAM §5.3 — requires derived_from_assignment_id which the wizard
-# doesn't expose yet).
+# template excludes from the dropdown. DSC_CORR_MISALIGNED is virtual per
+# FAIR-CAM §5.3 — it exists only as a DERIVED row (a link to another row of
+# the same control, #268), authored through the control form's separate
+# "Correcting Misaligned Decisions" select, never picked as an assignment.
 _HIDDEN: frozenset[FairCamSubFunction] = frozenset({FairCamSubFunction.DSC_CORR_MISALIGNED})
 
 

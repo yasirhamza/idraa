@@ -53,17 +53,21 @@
                                 <tr><th>Sub-function</th><th>Capability</th><th>Coverage</th><th>Reliability</th><th>Confirmed</th></tr>
                               </thead>
                               <tbody>
-                                {% for a in c.assignments %}
+                                {#- #268: a derived Correcting Misaligned Decisions row shows its SOURCE's
+                                    values in the source's unit (never the stored 0.0 sentinels); one with no
+                                    resolvable source shows "derived (source unavailable)" and no numbers. -#}
+                                {% for d in assignment_display_rows(c.assignments) %}
                                   <tr>
-                                    <td title="{{ a.sub_function }}">{{ a.sub_function | humanize_slug }}</td>
+                                    <td title="{{ d.sub_function }}">{{ d.label }}</td>
                                     <td>
-                                      {% if a.capability_value is not none %}{{ unit_display(a) }}
+                                      {% if d.source_unavailable %}&mdash;
+                                      {% elif d.capability_value is not none %}{{ unit_display({"sub_function": d.capability_sub_function, "capability_value": d.capability_value}) }}
                                       {% else %}<span class="text-status-warning text-xs">— (re-entry needed)</span>{% endif %}
                                     </td>
-                                    <td>{{ "%.3f" | format(a.coverage) }}</td>
-                                    <td>{{ "%.3f" | format(a.reliability) }}</td>
+                                    <td>{% if d.coverage is none %}&mdash;{% else %}{{ "%.3f" | format(d.coverage) }}{% endif %}</td>
+                                    <td>{% if d.reliability is none %}&mdash;{% else %}{{ "%.3f" | format(d.reliability) }}{% endif %}</td>
                                     <td>
-                                      {% if a.get('confirmed_by_user_at') %}
+                                      {% if d.confirmed %}
                                         <span class="text-status-success" aria-label="confirmed" title="Confirmed by a user">●</span>
                                       {% else %}
                                         <span class="text-ink-3" aria-label="unconfirmed" title="Not yet confirmed">○</span>

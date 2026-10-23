@@ -23,7 +23,11 @@ import math
 
 import pytest
 
-from fair_cam.composition import WEAK_AND_OPERATOR_PROVENANCE
+from fair_cam.composition import (
+    WEAK_AND_OPERATOR_PROVENANCE,
+    derive_virtual_assignment,
+    or_compose,
+)
 from fair_cam.models.composition_topology import BooleanGroup
 from fair_cam.models.control import (
     Control,
@@ -401,15 +405,13 @@ def test_dsc_id_misaligned_alone_is_label_only_beside_a_resistance_partner() -> 
     E_meta = 0.0, and the co-present Resistance (0.5, 1.0, r0 0.5) scores
     0.5 * 0.5 = 0.25 — bit-identical to Resistance alone. SCOPE: this pin
     guards the engine's padded-AND fact and the recorded-not-dropped property
-    only; it cannot see a v3 write path (fair_cam has no derivation concept
-    and this fixture never carries the derived member, so it stays green if
-    derived rows are ever written). The derived-row path is RESERVED, not
-    absent (`control_function_assignment.py:43`, `enums.py:645-647`); its
-    write-path guards are pinned by tests/unit/test_controls_service.py
-    (test_create_control_iota_rejects_derived_from_not_null) and
-    tests/unit/test_cfa_dto.py (test_dto_rejects_virtual_without_derived) —
-    the PR that retires those guards must remove `dsc_id_misaligned` from the
-    label-only set."""
+    only; it cannot see a v3 write path. #268 (register C12): the pair DOES
+    score when a DERIVED `dsc_corr_misaligned` row exists — built by
+    `derive_virtual_assignment` from a linked same-control correction/response
+    assignment (see `test_linked_correction_scores_the_dsc_pair` above). This
+    fixture carries no derived row, so the absent member still pads to 0.0
+    and the pin stays green; the label-only status of `dsc_id_misaligned` in
+    the v3 view-model is now conditional on no linked row being present."""
     dsc = _ctrl("dsc", [("dsc_id_misaligned", 0.8, 0.8, 0.8)])  # 0.512
     res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.5)])
     both = compose_groups([dsc, res], kappa=0.5)
@@ -479,6 +481,166 @@ def test_correction_membership_is_monotone_exhaustive() -> None:
             assert _e([impl, sel])[0] == pytest.approx(i)
             assert _e([impl])[0] == pytest.approx(i)
             assert _e([sel])[0] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# #268 — Correcting Misaligned Decisions (§5.3, virtual) DERIVED from a linked
+# correction/response assignment on the same control (register C12). The
+# derived row lands in the DSC Identification∧Correction leaf AND, so a
+# `dsc_id_misaligned` carrier beside a linked carrier now scores the pair.
+# --------------------------------------------------------------------------- #
+
+
+def _impl_with_derived(
+    cid: str, t_days: float | None, cov: float, rel: float
+) -> tuple[Control, FairCamControlFunctionAssignment]:
+    """Control carrying `vmc_corr_implementation` (t, cov, r0) PLUS the derived
+    `dsc_corr_misaligned` row built from that same implementation row."""
+    impl = FairCamControlFunctionAssignment(
+        sub_function=FairCamSubFunction.VMC_CORR_IMPLEMENTATION,
+        capability_value=t_days,
+        coverage=cov,
+        reliability=rel,
+    )
+    ctrl = Control(
+        control_id=cid,
+        name=cid,
+        domain=ControlDomain.VARIANCE_MANAGEMENT,
+        control_type=ControlType.CORRECTIVE,
+        assignments=[impl, derive_virtual_assignment(impl)],
+    )
+    return ctrl, impl
+
+
+def test_linked_correction_scores_the_dsc_pair() -> None:
+    """Hand math (all inline): A `dsc_id_misaligned` (0.6, 0.9, 0.8) ->
+    a = 0.432; B `vmc_corr_implementation` t=30 days (tau 79.3), cov 0.8,
+    r0 0.8 -> b = exp(-30/79.3)*0.8*0.8 = 0.43841149...; the derived row
+    scores b bit-for-bit, so E_pair = AND(a, b) = a*b = 0.18939377....
+    No DSC Prevention members -> E_dsc = OR([E_pair]) = E_pair; no VMC
+    Identification -> E_vmc = 0.0; E_meta = OR(E_vmc, E_dsc) = 0.18939377....
+    LEC consequence at kappa 0.5 on Resistance (0.5, 1.0, r0 0.8):
+    r_eff = 0.8 + 0.2*0.5*E_meta = 0.81893938...; LEC_PREVENTION =
+    0.5*1.0*r_eff = 0.40946969... (0.4 without B)."""
+    a = 0.6 * 0.9 * 0.8
+    b = math.exp(-30.0 / 79.3) * 0.8 * 0.8
+    e_pair = a * b
+    assert b == pytest.approx(0.43841149778, rel=1e-9)
+    assert e_pair == pytest.approx(0.189393767, rel=1e-9)
+
+    ctrl_a = _ctrl("dsc", [("dsc_id_misaligned", 0.6, 0.9, 0.8)])
+    ctrl_b, _ = _impl_with_derived("pmgt", 30.0, 0.8, 0.8)
+    res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.8)])
+    with_b = compose_groups([ctrl_a, ctrl_b, res], kappa=0.5)
+    without_b = compose_groups([ctrl_a, res], kappa=0.5)
+
+    pair = BooleanGroup.DSC_IDENTIFICATION_CORRECTION_PAIR
+    sub_eff = with_b.sub_function_effectiveness[pair]
+    assert sub_eff[FairCamSubFunction.DSC_ID_MISALIGNED] == pytest.approx(a, rel=1e-12)
+    assert sub_eff[FairCamSubFunction.DSC_CORR_MISALIGNED] == pytest.approx(b, rel=1e-12)
+    e_pair_actual = with_b.group_effectiveness[pair]
+    assert e_pair_actual == pytest.approx(e_pair, rel=1e-12)
+    assert e_pair_actual == pytest.approx(
+        sub_eff[FairCamSubFunction.DSC_ID_MISALIGNED]
+        * sub_eff[FairCamSubFunction.DSC_CORR_MISALIGNED],
+        rel=1e-12,
+    )
+    # E_dsc = OR(E_dsc_prev, E_pair) with no DSC Prevention member present.
+    assert with_b.group_effectiveness[BooleanGroup.DSC_PREVENTION] is None
+    e_dsc = or_compose([e_pair])
+    assert e_dsc == pytest.approx(e_pair, rel=1e-12)
+    # E_vmc = 0.0: no VMC Identification member -> the VMC pair is AND(0, b) = 0.
+    assert with_b.group_effectiveness[BooleanGroup.VMC_IDENTIFICATION_CORRECTION_PAIR] == 0.0
+    assert with_b.group_effectiveness[BooleanGroup.VMC_VARIANCE_PREVENTION] == 0.0
+    e_vmc = 0.0
+    e_meta = or_compose([e_vmc, e_dsc])
+    assert with_b.meta_strength == pytest.approx(e_meta, rel=1e-12)
+    assert with_b.meta_strength == pytest.approx(0.189393767, rel=1e-9)
+    # LEC consequence.
+    r_eff = 0.8 + 0.2 * 0.5 * e_meta
+    assert r_eff == pytest.approx(0.818939377, rel=1e-9)
+    prev = BooleanGroup.LEC_PREVENTION
+    assert with_b.group_effectiveness[prev] == pytest.approx(0.5 * 1.0 * r_eff, rel=1e-12)
+    assert with_b.group_effectiveness[prev] == pytest.approx(0.409469688, rel=1e-9)
+    # Without B the pair pads the absent member to 0: E_meta 0, Resistance 0.4.
+    assert without_b.meta_strength == 0.0
+    assert without_b.group_effectiveness[prev] == pytest.approx(0.5 * 1.0 * 0.8, rel=1e-12)
+
+
+# Implementation (t days, coverage) tuples at r0 = 1.0 whose source opeff spans
+# {0.0, ~0.1, ~0.5, ~0.9, 1.0}: opeff = exp(-t/79.3) * cov, so t = 79.3*ln(1/x)
+# at cov 1.0 reaches x exactly (up to libm rounding); 0.0 is reached through
+# coverage 0 (a NULL capability has opeff 0.5*0 = 0), 1.0 through t = 0.
+_LINKED_IMPL_GRID: dict[float, tuple[float | None, float]] = {
+    0.0: (None, 0.0),
+    0.1: (79.3 * math.log(1.0 / 0.1), 1.0),
+    0.5: (79.3 * math.log(1.0 / 0.5), 1.0),
+    0.9: (79.3 * math.log(1.0 / 0.9), 1.0),
+    1.0: (0.0, 1.0),
+}
+_DSC_ID_GRID = (0.0, 0.1, 0.5, 0.9, 1.0)  # PROBABILITY: capability x, cov 1, rel 1
+_LEC_GROUPS = (
+    BooleanGroup.LEC_PREVENTION,
+    BooleanGroup.LEC_DETECTION,
+    BooleanGroup.LEC_RESPONSE,
+    BooleanGroup.LEC_DETECTION_RESPONSE_PAIR,
+)
+
+
+def test_linked_correction_is_membership_monotone() -> None:
+    """For every (dsc_id opeff, source opeff) on the grid and every subset S of
+    {A = dsc_id carrier, B = impl + derived carrier} beside a fixed Resistance
+    control, adding a member never lowers E_meta or any LEC group value.
+    Modelled on test_correction_membership_is_monotone_exhaustive above."""
+    res = _ctrl("res", [("lec_prev_resistance", 0.5, 1.0, 0.8)])
+
+    def _e(members: list[Control]) -> tuple[float, dict[BooleanGroup, float | None]]:
+        comp = compose_groups([res, *members], kappa=0.5)
+        assert 0.0 <= comp.meta_strength <= 1.0
+        return comp.meta_strength, {g: comp.group_effectiveness[g] for g in _LEC_GROUPS}
+
+    for x in _DSC_ID_GRID:
+        ctrl_a = _ctrl("dsc", [("dsc_id_misaligned", x, 1.0, 1.0)])
+        for i, (t_days, cov) in _LINKED_IMPL_GRID.items():
+            ctrl_b, _ = _impl_with_derived("pmgt", t_days, cov, 1.0)
+            # The source opeff hits the grid point (the derived row carries it).
+            source_opeff = ctrl_b.assignments[1]
+            assert source_opeff.sub_function is FairCamSubFunction.DSC_CORR_MISALIGNED
+            cap = source_opeff.capability_value
+            assert (cap if cap is not None else 0.5) * source_opeff.coverage == pytest.approx(
+                i, rel=1e-12
+            )
+            subsets: dict[frozenset[str], list[Control]] = {
+                frozenset(): [],
+                frozenset({"a"}): [ctrl_a],
+                frozenset({"b"}): [ctrl_b],
+                frozenset({"a", "b"}): [ctrl_a, ctrl_b],
+            }
+            for s, members in subsets.items():
+                e_meta_s, lec_s = _e(members)
+                for added in ("a", "b"):
+                    if added in s:
+                        continue
+                    e_meta_sx, lec_sx = _e(subsets[s | {added}])
+                    assert e_meta_sx >= e_meta_s - 1e-12, (
+                        f"E_meta not monotone: x={x} i={i} S={sorted(s)} added={added}"
+                    )
+                    for g in _LEC_GROUPS:
+                        before, after = lec_s[g], lec_sx[g]
+                        if before is None:
+                            assert after is None, (x, i, sorted(s), added, g)
+                            continue
+                        assert after is not None
+                        assert after >= before - 1e-12, (
+                            f"{g.value} not monotone: x={x} i={i} S={sorted(s)} added={added}"
+                        )
+            # The pair value itself: AND(x, i) with both present.
+            both = compose_groups([res, ctrl_a, ctrl_b], kappa=0.5)
+            assert both.group_effectiveness[
+                BooleanGroup.DSC_IDENTIFICATION_CORRECTION_PAIR
+            ] == pytest.approx(x * i, rel=1e-12, abs=1e-15)
+            # B alone (no Identification) scores nothing through the DSC pair.
+            assert compose_groups([res, ctrl_b], kappa=0.5).meta_strength == 0.0
 
 
 def test_elapsed_time_lec_assignment_gets_uplift() -> None:
