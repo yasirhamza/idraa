@@ -13,11 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from idraa.models.enums import IndustryType
 
-# Allowed revenue tier slugs — must match _REVENUE_TIER_SLUGS at
-# services/library_calibration.py and the v3 tier taxonomy. Duplicated here
-# instead of imported to keep the seed loader independent of the
-# library_calibration runtime (Pydantic validator usable in isolation, e.g.
-# CI-side schema checks).
+# Allowed revenue tier slugs — the six IRIS revenue-tier slugs (mirrors
+# _REVENUE_TIER_THRESHOLDS in services/calibration.py and the v3 tier taxonomy).
+# Local to the seed loader so the Pydantic validator is usable in isolation,
+# e.g. CI-side schema checks.
 _REVENUE_TIER_SLUGS: frozenset[str] = frozenset(
     {
         "less_than_10m",

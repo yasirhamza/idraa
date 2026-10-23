@@ -4,8 +4,7 @@ Org revenue-tier loss scaling was REMOVED 2026-07-07 (the IRIS sector envelope I
 the calibration; the per-entry anchor tier no longer matched the loss basis).
 These tests pin the new behavior: ``library_calibrated_pre_fill`` returns
 ENTRY-ABSOLUTE pl/sl (override fall-through preserved) and ``None`` metadata,
-regardless of the org context. ``CalibrationAnchor`` is retained as the anchor
-provenance-shape validator. Pure functions — no DB, no async, no mocks.
+regardless of the org context. Pure functions — no DB, no async, no mocks.
 """
 
 from __future__ import annotations
@@ -22,10 +21,7 @@ from idraa.models.scenario_library import (
     ScenarioLibraryOverride,
 )
 from idraa.models.threat_community import canonical_threat_community_id
-from idraa.services.library_calibration import (
-    CalibrationAnchor,
-    library_calibrated_pre_fill,
-)
+from idraa.services.library_calibration import library_calibrated_pre_fill
 
 
 def _entry(**overrides: Any) -> ScenarioLibraryEntry:
@@ -68,27 +64,6 @@ def _override(**overrides: Any) -> ScenarioLibraryOverride:
     }
     base.update(overrides)
     return ScenarioLibraryOverride(**base)
-
-
-# ---------- CalibrationAnchor Pydantic validator (retained provenance shape) ----------
-
-
-def test_calibration_anchor_accepts_known_industry_and_tier() -> None:
-    anchor = CalibrationAnchor(industry="healthcare", revenue_tier="10b_to_100b")
-    assert anchor.industry == "healthcare"
-    assert anchor.revenue_tier == "10b_to_100b"
-
-
-def test_calibration_anchor_rejects_unknown_industry() -> None:
-    with pytest.raises(ValidationError) as exc:
-        CalibrationAnchor(industry="not-an-industry", revenue_tier="10b_to_100b")
-    assert "industry" in str(exc.value).lower()
-
-
-def test_calibration_anchor_rejects_unknown_revenue_tier() -> None:
-    with pytest.raises(ValidationError) as exc:
-        CalibrationAnchor(industry="healthcare", revenue_tier="trillions")
-    assert "revenue_tier" in str(exc.value).lower()
 
 
 # ---------- library_calibrated_pre_fill: entry-absolute, NO org scaling ----------
@@ -228,30 +203,6 @@ def test_calibration_anchor_rejects_unknown_extra_key() -> None:
     with pytest.raises(ValueError, match="calibration_anchor"):
         LibraryEntrySeed.model_validate(
             {**_MINIMAL_VALID_KWARGS, "calibration_anchor": anchor_with_unknown}
-        )
-
-
-def test_calibration_anchor_model_accepts_new_optional_fields() -> None:
-    anchor = CalibrationAnchor.model_validate(
-        {
-            "industry": "manufacturing",
-            "revenue_tier": "1b_to_10b",
-            "loss_anchor": "IRIS 2025 Figure A3 p.35 manufacturing pair",
-            "vuln_posture": "inherent (control-naive) per fair-cam-methodology 'Vulnerability anchor'",
-        }
-    )
-    assert anchor.loss_anchor == "IRIS 2025 Figure A3 p.35 manufacturing pair"
-    assert anchor.vuln_posture is not None
-
-
-def test_calibration_anchor_model_rejects_unknown_extra() -> None:
-    with pytest.raises(ValidationError):
-        CalibrationAnchor.model_validate(
-            {
-                "industry": "manufacturing",
-                "revenue_tier": "1b_to_10b",
-                "unknown_extra": "bad",
-            }
         )
 
 
