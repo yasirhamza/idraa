@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sqlite3
 import uuid
 from pathlib import Path
@@ -632,3 +633,32 @@ def test_sweep_end_to_end_counts_each_class(
     assert mod.main(["--gate", str(db)]) == 1  # pristine/copy-stale/override rows present
     assert mod.main([]) == 2
     assert mod.main([str(tmp_path / "missing.db")]) == 2
+
+
+def test_sweep_opens_a_wal_mode_offline_backup(tmp_path: Path) -> None:
+    """#206: an online-backup copy keeps the source's WAL header. SQLite cannot create
+    the -shm sidecar in a read-only directory, so the old ``?mode=ro`` URI fails there;
+    the sweep opens with immutable=1, which needs no -shm."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores directory write permission")
+    slug = sorted(mod.OLD_PAIRS)[0]
+    db = _fixture_db(tmp_path, slug)
+    c = sqlite3.connect(db)
+    assert c.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+    c.close()
+    for suffix in ("-wal", "-shm"):
+        (db.parent / (db.name + suffix)).unlink(missing_ok=True)
+    assert db.read_bytes()[18:20] == b"\x02\x02"  # WAL file-format version bytes
+
+    tmp_path.chmod(0o500)
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            legacy = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+            try:
+                legacy.execute("SELECT id FROM scenario_library_entries").fetchall()
+            finally:
+                legacy.close()
+
+        assert mod.sweep(db)["affected_scenarios"] == 10
+    finally:
+        tmp_path.chmod(0o700)

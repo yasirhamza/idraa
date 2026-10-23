@@ -146,8 +146,8 @@ private note; do not paste it into a public PR or issue body.
 Sunset: delete this script once the repair PR lands or every deployment's sweep
 reports clean (the frozen OLD/NEW tables are a one-shot diagnostic).
 
-Opened with SQLite URI mode=ro (the sweep_run_samples_finite.py idiom); run
-against a clean online-backup copy or the live DB, not a raw cp of a WAL database.
+Opened with SQLite URI mode=ro&immutable=1; it expects an OFFLINE backup copy (no
+concurrent writer), so run it against a clean online-backup copy, not the live DB.
 """
 
 from __future__ import annotations
@@ -1115,7 +1115,9 @@ def _canonical(raw: object) -> str:
 
 
 def sweep(db_path: Path) -> dict[str, int]:
-    conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
+    # Reads an OFFLINE backup copy (no concurrent writer). immutable=1 lets SQLite open a
+    # WAL-header file with no -shm sidecar; never use it on a live database.
+    conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
     try:
         slug_by_entry = {
             str(r[0]).replace("-", "").lower(): r[1]
