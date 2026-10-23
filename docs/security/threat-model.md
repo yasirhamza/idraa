@@ -130,11 +130,13 @@ docstring).
 - **Residual risk**: single shared credential (not per-user), by design for a UAT gate —
   compromise exposes the instance only to the inner (still-intact) session auth. Guesses are not
   throttled and leave only uvicorn's access line, so the strength is C6's 16-character floor.
-  Its *presence* and coarse *position* are pinned by
+  Its *presence* and *position* are pinned by
   `tests/unit/test_app_middleware_order.py::test_middleware_wire_order`,
   which asserts the 8-element `app.user_middleware` class list (framing guard
-  outermost); but `uat_basic_auth` and `setup_guard` are both `BaseHTTPMiddleware`,
-  so swapping those two (or replacing either function) still passes that test.
+  outermost) and, because `uat_basic_auth` and `setup_guard` are both
+  `BaseHTTPMiddleware`, their dispatch names at indices 1–2
+  (that test's last assertion), so removing, reordering or swapping them fails;
+  a same-named replacement would still pass.
   What nothing checks is whether THIS DOCUMENT still enumerates the real
   middleware stack (see §12 item 6).
 
@@ -381,8 +383,8 @@ docstring).
   pre-authentication login POSTs (`routes/auth.py:129,274,360,368`) plus
   `POST /logout` (`routes/auth.py:459-463`, takes `user: User | None =
   Depends(current_user)` — no-op on an already-logged-out session, correct
-  by design) and `/setup` (`routes/setup.py:58`), gated ONLY by its own `_has_any_user`
-  re-check (`routes/setup.py:77-78`): the outer `setup_guard`
+  by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
+  `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
   (`app.py:1190-1224`) allowlists `/setup` (`app.py:826-829`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
@@ -584,6 +586,13 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   two more pick one of two literals by a flag (`routes/scenarios.py:2985-2987`, `routes/help.py:134`);
   one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
   slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
+- **CSP is not an XSS backstop (2026-10-23)** — `SecurityHeadersMiddleware` (§1) sends a
+  CSP whose `script-src` still carries `'unsafe-inline'` and `'unsafe-eval'`
+  (`CSP_POLICY`, `middleware/security_headers.py:68-80`; the latter is Alpine's expression
+  evaluator), so it does not stop injected inline script or an injected Alpine expression:
+  output escaping, `| tojson` in `x-data` and the href gates above are the only defence.
+  Tracked publicly: dropping `'unsafe-eval'` via the `@alpinejs/csp` build (#281) and a
+  nonce-based `script-src` that drops `'unsafe-inline'` (#282).
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /
   `render_template_string()` with any request-derived string (a "custom
@@ -1043,8 +1052,8 @@ invalidate every later citation into it silently and en masse.
 
 **Second full re-audit (2026-10-23).** Run by the method above, in the same split: three parallel
 reviewers over §1–§5 / §6–§8 / §9–§13, each opening every cited file:line and re-deriving every
-counting claim from the tree. Citations checked: 64 + 60 + 87 (HOLDS 59 / 58 / 85, DRIFTED 1 / 0 / 0,
-WRONG 4 / 2 / 2, DEAD 0 / 0 / 0). The findings were applied as one consolidated pass (#263). The two
+counting claim from the tree. Cited ranges checked: 81 + 60 + 87 (HOLDS 75 / 58 / 85, DRIFTED 1 / 0 / 0,
+WRONG 5 / 2 / 2, DEAD 0 / 0 / 0). The findings were applied as one consolidated pass (#263). The two
 highest-yield classes this time were counting claims gone stale after later PRs, and mechanisms with
 no entry at all (the `reset-mfa` factor reset in B2, the σ and SME-row caps in B10; both now documented).
 Last full re-audit: 2026-10-23; the next is due 2027-01-23.

@@ -48,6 +48,7 @@
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/enrollment_guard.py", "line": 36, "pattern": "class EnrollmentGuardMiddleware(BaseHTTPMiddleware):", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/request_framing.py", "line": 33, "pattern": "def framing_violation(scope: Scope) -> tuple[int, bytes] | None:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/request_framing.py", "line": 78, "pattern": "(b\"connection\", b\"close\"),", "regex": false},
+  {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/security_headers.py", "line": 68, "pattern": "CSP_POLICY = (", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/session.py", "line": 33, "pattern": "class SessionMiddleware(BaseHTTPMiddleware):", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/session.py", "line": 58, "pattern": "user = await db.get(User, sess.user_id)", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/uat_basic_auth.py", "line": 33, "pattern": "EXEMPT_PATHS = frozenset(", "regex": false},

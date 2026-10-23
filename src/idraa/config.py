@@ -391,8 +391,8 @@ class Settings(BaseSettings):
     #     header your edge/CDN sets (and discards any client-supplied copy).
     #   trusted_proxy_count: for X-Forwarded-For-only edges — the number of
     #     trusted proxies that append to X-Forwarded-For.
-    # Both empty/0 (default) -> the throttle no-ops (source untrusted). NEVER
-    # keyed on request.client.host (the edge hop; spoofable only under ``*``). Header wins.
+    # Both empty/0 (default) -> the throttle no-ops (source untrusted). NEVER keyed on
+    # request.client.host (proxy hop unless FORWARDED_ALLOW_IPS trusts it; forged under *). Header wins.
     trusted_client_ip_header: str = ""
     trusted_proxy_count: int = Field(default=0, ge=0)
 
