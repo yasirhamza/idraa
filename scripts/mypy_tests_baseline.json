@@ -1,6 +1,6 @@
 {
-  "_generated_with": "mypy 2.3.1",
-  "_total": 2159,
+  "_generated_with": "mypy 2.3.1 --platform linux --python-version 3.11",
+  "_total": 2157,
   "fair_cam/tests/composition/test_layer2_operators.py": 1,
   "fair_cam/tests/controls/test_effectiveness_breakdown_field.py": 5,
   "fair_cam/tests/models/test_calculate_risk_reduction_factor_two_branch.py": 1,
@@ -208,7 +208,6 @@
   "tests/scripts/curation_check/test_report.py": 8,
   "tests/scripts/test_build_attack_catalog_seed.py": 1,
   "tests/scripts/test_clerk_config.py": 6,
-  "tests/scripts/test_clerk_manifests.py": 2,
   "tests/services/test_attack_coverage.py": 51,
   "tests/services/test_attack_mappings.py": 18,
   "tests/services/test_calibration.py": 1,

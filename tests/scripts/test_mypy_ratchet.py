@@ -13,9 +13,11 @@ from pathlib import Path
 
 import pytest
 from scripts.mypy_ratchet import (
+    PLATFORM_FLAGS_TEXT,
     Baseline,
     MypyRun,
     ToolError,
+    baseline_mypy_version,
     collect_counts,
     compare,
     format_report,
@@ -27,6 +29,7 @@ from scripts.mypy_ratchet import (
 from scripts import mypy_ratchet
 
 VERSION = "mypy 9.9.9"
+GENERATED_WITH = f"{VERSION} {PLATFORM_FLAGS_TEXT}"
 
 SAMPLE_OUTPUT = """\
 tests/a/test_one.py:3: error: Function is missing a return type annotation  [no-untyped-def]
@@ -37,8 +40,12 @@ fair_cam/tests/test_three.py: error: Source file found twice  [import-not-found]
 """
 
 
-def _write_baseline(path: Path, counts: dict[str, int], version: str = VERSION) -> None:
-    payload: dict[str, object] = {"_generated_with": version, "_total": sum(counts.values())}
+def _write_baseline(
+    path: Path, counts: dict[str, int], generated_with: str | None = GENERATED_WITH
+) -> None:
+    payload: dict[str, object] = {"_total": sum(counts.values())}
+    if generated_with is not None:
+        payload["_generated_with"] = generated_with
     payload.update(counts)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -112,7 +119,7 @@ def test_load_baseline_roundtrip(tmp_path: Path) -> None:
     path = tmp_path / "baseline.json"
     _write_baseline(path, {"tests/a.py": 2, "tests/b.py": 3})
     assert load_baseline(path) == Baseline(
-        counts={"tests/a.py": 2, "tests/b.py": 3}, total=5, generated_with=VERSION
+        counts={"tests/a.py": 2, "tests/b.py": 3}, total=5, generated_with=GENERATED_WITH
     )
 
 
@@ -144,7 +151,7 @@ def test_load_baseline_missing_file_is_a_tool_error(tmp_path: Path) -> None:
 
 
 def _baseline(counts: dict[str, int]) -> Baseline:
-    return Baseline(counts=counts, total=sum(counts.values()), generated_with=VERSION)
+    return Baseline(counts=counts, total=sum(counts.values()), generated_with=GENERATED_WITH)
 
 
 def test_compare_equal_passes_without_improvements() -> None:
@@ -328,7 +335,7 @@ def test_write_baseline_creates_sorted_file(tmp_path: Path) -> None:
     out = _errors({"tests/b.py": 1, "fair_cam/tests/z.py": 2, "tests/a.py": 3})
     assert main(["--write-baseline"], runner=_runner(out), baseline_path=base) == 0
     data = json.loads(base.read_text(encoding="utf-8"))
-    assert data["_total"] == 6 and data["_generated_with"] == VERSION
+    assert data["_total"] == 6 and data["_generated_with"] == GENERATED_WITH
     assert list(data) == [
         "_generated_with",
         "_total",
@@ -398,9 +405,72 @@ def test_mypy_argv_covers_both_test_trees_with_the_pyproject_config() -> None:
     assert "tests" in argv and str(Path("fair_cam") / "tests") in argv
 
 
+def test_mypy_argv_pins_platform_and_python_version() -> None:
+    # Host-independent counts: macOS dev machines and the Linux CI runner must agree.
+    argv = list(mypy_ratchet.MYPY_ARGV)
+    assert argv[argv.index("--platform") + 1] == "linux"
+    assert argv[argv.index("--python-version") + 1] == "3.11"
+    assert PLATFORM_FLAGS_TEXT == "--platform linux --python-version 3.11"
+
+
 def test_committed_baseline_parses_and_is_consistent() -> None:
     baseline = load_baseline(mypy_ratchet.BASELINE_PATH)
     assert baseline.total >= 0
     assert baseline.generated_with is not None and baseline.generated_with.startswith("mypy ")
+    # The committed baseline records the flags the ratchet runs with (else the gate exits 2).
+    assert baseline_mypy_version(baseline).startswith("mypy ")
+    assert baseline.generated_with.endswith(PLATFORM_FLAGS_TEXT)
     assert list(baseline.counts) == sorted(baseline.counts)
     assert all(p.startswith(("tests/", "fair_cam/tests/")) for p in baseline.counts)
+
+
+# --- recorded-flags check -------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "generated_with",
+    [
+        None,  # key absent
+        VERSION,  # written without any flags (the pre-#28-follow-up format)
+        f"{VERSION} --platform darwin --python-version 3.11",
+        f"{VERSION} --platform linux --python-version 3.12",
+        f"{VERSION} --platform linux",
+        f"{VERSION} {PLATFORM_FLAGS_TEXT} --strict",  # extra flags are a different rule set too
+        PLATFORM_FLAGS_TEXT,  # flags without a mypy version
+    ],
+)
+def test_main_refuses_a_baseline_without_the_ratchets_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], generated_with: str | None
+) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 2}, generated_with=generated_with)
+    # Counts equal: without the flags check this would PASS.
+    rc = main([], runner=_runner(_errors({"tests/a.py": 2})), baseline_path=base)
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "tool error" in out and PLATFORM_FLAGS_TEXT in out and "— PASS" not in out
+
+
+def test_baseline_mypy_version_returns_the_recorded_version() -> None:
+    baseline = Baseline(counts={}, total=0, generated_with=f"mypy 1.2.3 {PLATFORM_FLAGS_TEXT}")
+    assert baseline_mypy_version(baseline) == "mypy 1.2.3"
+
+
+def test_write_baseline_regenerates_over_a_baseline_with_old_flags(tmp_path: Path) -> None:
+    # The refusal above must not wedge the fix: --write-baseline replaces a flagless file.
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 2}, generated_with=VERSION)
+    rc = main(["--write-baseline"], runner=_runner(_errors({"tests/a.py": 2})), baseline_path=base)
+    assert rc == 0
+    assert load_baseline(base).generated_with == GENERATED_WITH
+    assert main([], runner=_runner(_errors({"tests/a.py": 2})), baseline_path=base) == 0
+
+
+def test_report_version_drift_note_uses_the_recorded_mypy_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 2}, generated_with=f"mypy 1.0.0 {PLATFORM_FLAGS_TEXT}")
+    rc = main([], runner=_runner(_errors({"tests/a.py": 3})), baseline_path=base)
+    assert rc == 1
+    assert "baseline was generated with mypy 1.0.0, running mypy 9.9.9" in capsys.readouterr().out

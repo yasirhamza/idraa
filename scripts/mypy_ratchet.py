@@ -19,7 +19,11 @@ passed, so the ratchet only loosens on purpose (state the reason in the commit).
 
 Exit codes (fail closed, same convention as ``scripts/sca_gate.py``):
 0 = PASS, 1 = FAIL (or a refused baseline increase), 2 = tool error (mypy not
-installed or crashed, output that does not parse, a corrupt baseline).
+installed or crashed, output that does not parse, a corrupt baseline, or a baseline
+whose recorded ``_generated_with`` flags differ from the ones this script runs mypy with).
+
+mypy runs with ``--platform linux --python-version 3.11`` so the count is the same on a
+macOS dev machine and on the Linux CI runner; the baseline records those flags.
 
 Stdlib only; mypy itself runs via ``sys.executable -m mypy`` so the venv that
 runs the gate is the venv that runs the tool.
@@ -42,10 +46,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = REPO_ROOT / "scripts" / "mypy_tests_baseline.json"
 
 TEST_TREES: tuple[str, ...] = ("tests", str(PurePath("fair_cam") / "tests"))
+# mypy's own flags: type-check as if on this platform/version whatever the host is, so a
+# macOS dev machine and the Linux CI runner count identically (sys.platform branches and
+# platform-conditional stubs would otherwise shift per-file counts between them).
+PLATFORM_FLAGS: tuple[str, ...] = ("--platform", "linux", "--python-version", "3.11")
+PLATFORM_FLAGS_TEXT = " ".join(PLATFORM_FLAGS)
 MYPY_ARGV: tuple[str, ...] = (
     "-m",
     "mypy",
     "--config-file=pyproject.toml",
+    *PLATFORM_FLAGS,
     *TEST_TREES,
     "--no-error-summary",
     "--show-error-codes",
@@ -61,6 +71,9 @@ WRITE_HINT = "python -m scripts.mypy_ratchet --write-baseline"
 _DIAG_RE = re.compile(
     r"^(?P<path>.+?):(?:\d+:){0,2} (?P<kind>error|note|warning): ",
 )
+
+# `_generated_with` = "mypy <version> <PLATFORM_FLAGS_TEXT>".
+_GENERATED_WITH_RE = re.compile(r"^(?P<version>mypy \S+) (?P<flags>.+)$")
 
 _MAX_LISTED = 40
 
@@ -154,6 +167,23 @@ def load_baseline(path: Path) -> Baseline:
             f" ({sum(counts.values())}) — hand-edited? regenerate with {WRITE_HINT}"
         )
     return Baseline(counts=counts, total=total, generated_with=generated_with)
+
+
+def baseline_mypy_version(baseline: Baseline) -> str:
+    """The mypy version a baseline was written with, after checking its recorded flags.
+
+    A baseline written without (or with different) ``PLATFORM_FLAGS`` was counted under other
+    rules than this run uses, so comparing against it could pass or fail for the wrong
+    reason; refuse with a tool error (exit 2) instead of passing silently.
+    """
+    match = _GENERATED_WITH_RE.match(baseline.generated_with or "")
+    if match is None or match.group("flags") != PLATFORM_FLAGS_TEXT:
+        raise ToolError(
+            f"baseline {GENERATED_WITH_KEY} {baseline.generated_with!r} does not record"
+            f" the flags this ratchet runs mypy with ({PLATFORM_FLAGS_TEXT!r})"
+            f" — regenerate with {WRITE_HINT} (--allow-increase if the total rose)"
+        )
+    return match.group("version")
 
 
 def compare(current: dict[str, int], baseline: Baseline) -> Comparison:
@@ -257,14 +287,17 @@ def write_baseline(
             )
             return 1
     payload: dict[str, object] = {
-        GENERATED_WITH_KEY: version,
+        GENERATED_WITH_KEY: f"{version} {PLATFORM_FLAGS_TEXT}",
         TOTAL_KEY: new_total,
         **counts,
     }
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(f"mypy ratchet: wrote {path.name}: {new_total} errors in {len(counts)} files ({version})")
+    print(
+        f"mypy ratchet: wrote {path.name}: {new_total} errors in {len(counts)} files"
+        f" ({version} {PLATFORM_FLAGS_TEXT})"
+    )
     return 0
 
 
@@ -297,14 +330,13 @@ def main(
                 counts, run.version, baseline_path, allow_increase=args.allow_increase
             )
         baseline = load_baseline(baseline_path)
+        baseline_version = baseline_mypy_version(baseline)
     except ToolError as exc:
         print(f"mypy ratchet: tool error — {exc}")
         return 2
 
     result = compare(counts, baseline)
-    for line in format_report(
-        result, baseline_version=baseline.generated_with, version=run.version
-    ):
+    for line in format_report(result, baseline_version=baseline_version, version=run.version):
         print(line)
     return 0 if result.passed else 1
 

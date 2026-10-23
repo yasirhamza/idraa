@@ -864,7 +864,7 @@ def test_accept_drift_requires_write(tmp_path: Path) -> None:
 
 
 def _committed() -> list[dict[str, object]]:
-    return json.loads((ROOT / cm.MANIFEST).read_text(encoding="utf-8"))["entries"]
+    return list(json.loads((ROOT / cm.MANIFEST).read_text(encoding="utf-8"))["entries"])
 
 
 def _tracked() -> set[str]:
@@ -921,7 +921,7 @@ def test_committed_citation_anchors_hold() -> None:
         rel = str(entry["file"])
         assert rel in files and ".." not in rel.split("/"), rel
         lines = cm.lines_of((ROOT / rel).read_bytes().decode("utf-8"))
-        line = int(entry["line"])
+        line = int(str(entry["line"]))
         if line > len(lines) or str(entry["pattern"]) not in lines[line - 1]:
             stale.append(f"{rel}:{line} (cited in {entry['doc']})")
     assert stale == [], f"cited anchors moved; {_REMEDY}: {stale}"
