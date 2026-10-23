@@ -42,12 +42,18 @@ _ORIGINAL_8 = frozenset(
 _ALL_39 = frozenset(m.value for m in IndustrySubSector)
 
 
-def _check_values(engine: Engine) -> list[str]:
-    """Return the value list of the ``industry_sub_sector_enum`` CHECK, from the DDL."""
+def _organizations_ddl(engine: Engine) -> str:
+    """Return the stored ``CREATE TABLE`` statement of ``organizations``."""
     with engine.connect() as conn:
-        ddl = conn.execute(
+        ddl: str = conn.execute(
             sa.text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'organizations'")
         ).scalar_one()
+    return ddl
+
+
+def _check_values(engine: Engine) -> list[str]:
+    """Return the value list of the ``industry_sub_sector_enum`` CHECK, from the DDL."""
+    ddl = _organizations_ddl(engine)
     matches = re.findall(
         rf"CONSTRAINT {_CONSTRAINT} CHECK \(industry_sub_sector IN \(([^)]*)\)\)", ddl
     )
@@ -97,11 +103,7 @@ def test_upgrade_widens_the_named_check_to_the_full_enum(
     # widening migration fails here, not on a user's first save.
     assert set(values) == _ALL_39
     # The sibling CHECK on the same table survives the rebuild.
-    with alembic_engine.connect() as conn:
-        ddl = conn.execute(
-            sa.text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'organizations'")
-        ).scalar_one()
-    assert "CONSTRAINT industrytype CHECK" in ddl
+    assert "CONSTRAINT industrytype CHECK" in _organizations_ddl(alembic_engine)
 
 
 def test_new_member_persists_and_every_member_is_insertable(
@@ -145,7 +147,7 @@ def test_downgrade_is_blocked_while_an_added_member_is_in_use(
 
     # Nothing changed: still at this revision, CHECK still 39-wide, both rows intact.
     with alembic_engine.connect() as conn:
-        version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+        version: str = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert version == _THIS_REV
     assert set(_check_values(alembic_engine)) == _ALL_39
     assert _sub_sector_of(alembic_engine, offender_id) == "hospital"
