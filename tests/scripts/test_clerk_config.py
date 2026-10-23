@@ -135,6 +135,9 @@ def test_escalation_subjects_and_paths() -> None:
         "clerk.toml",
         ".clerk/**",
         "scripts/run_local_gate.py",
+        "scripts/mypy_ratchet.py",
+        "scripts/mypy_tests_baseline.json",
+        "tests/scripts/test_mypy_ratchet.py",
         "tests/scripts/test_clerk_*.py",
         "tests/arch/**",
         ".gitleaks.toml",
@@ -180,6 +183,12 @@ def test_lanes_manifest_four_lanes() -> None:
     assert "clerk.toml" in lanes["security"]["globs"]
     assert ".clerk/**" in lanes["security"]["globs"]
     assert "scripts/clerk_manifests.py" in lanes["security"]["globs"]
+    for ratchet_file in (
+        "scripts/mypy_ratchet.py",
+        "scripts/mypy_tests_baseline.json",
+        "tests/scripts/test_mypy_ratchet.py",
+    ):
+        assert ratchet_file in lanes["security"]["globs"], ratchet_file
     assert "fair_cam/**" in lanes["methodology"]["globs"]
 
 
