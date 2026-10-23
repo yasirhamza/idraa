@@ -201,3 +201,9 @@ closed on a mismatch.
   typesafe-sdk 0.7.2, httpx2 2.13.1 or httpcore2 2.13.1 is yanked; every sha256 digest in `uv.lock` for them
   matches PyPI; and no GitHub advisory affects the locked versions (httpx2's five advisories cover versions below
   2.12.0, and httpcore2's one covers versions below 2.10.0).
+- **2026-10-23, `pillow` 13.0.0 as a security update inside the cooldown.** 13.0.0 (uploaded 2026-10-16
+  22:15 UTC) is the first patched version for every open Dependabot alert on 12.3.0, one of them critical, and
+  for CVE-2026-112396, which failed the dependency audit unsuppressed. Security updates bypass the cooldown (§2);
+  this repo's Dependabot security updates are off, so the bump was locked by hand about 17 hours before the
+  window closed. Checked the same day: 13.0.0 is not yanked, all 83 sha256 digests in `uv.lock` match PyPI, and no
+  GitHub advisory covers 13.0.0. Only pillow moved in the lock, and the 8 dated pillow suppressions were removed.
