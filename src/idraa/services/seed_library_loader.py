@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from idraa.models.enums import IndustryType
+from idraa.models.enums import IndustrySubSector, IndustryType
 
 # Allowed revenue tier slugs — the six IRIS revenue-tier slugs (mirrors
 # _REVENUE_TIER_THRESHOLDS in services/calibration.py and the v3 tier taxonomy).
@@ -33,6 +33,12 @@ _REVENUE_TIER_SLUGS: frozenset[str] = frozenset(
 # are ``IndustryType`` members and matches ``applicable_industries`` against them, so any other
 # string would surface as a facet option that applies no filter (idraa#203).
 _INDUSTRY_TYPE_VALUES: frozenset[str] = frozenset(m.value for m in IndustryType)
+
+# Allowed sub-sector slugs for ``applicable_sub_sectors`` items: exactly the
+# ``IndustrySubSector`` values. Same defect class as the industries check above: the library
+# browse filter keeps only ``IndustrySubSector`` members, so any other string would surface as
+# a facet option that applies no filter (idraa#241).
+_INDUSTRY_SUB_SECTOR_VALUES: frozenset[str] = frozenset(m.value for m in IndustrySubSector)
 
 # Threat Agent Library: fields kept on LibraryEntrySeed ONLY for back-compat parsing
 # of pre-P1 bundles. Never read by the P1+ insert path.
@@ -169,8 +175,25 @@ class LibraryEntrySeed(BaseModel):
         for item in v:
             if item not in _INDUSTRY_TYPE_VALUES:
                 raise ValueError(
-                    f"applicable_industries item {item!r} is not an IndustryType value; "
+                    f"applicable_industries item {item[:64]!r} is not an IndustryType value; "
                     f"allowed: {sorted(_INDUSTRY_TYPE_VALUES)}"
+                )
+        return v
+
+    @field_validator("applicable_sub_sectors")
+    @classmethod
+    def _applicable_sub_sectors_are_industry_sub_sectors(
+        cls, v: list[str] | None
+    ) -> list[str] | None:
+        """Every item must be an ``IndustrySubSector`` value. ``None`` ("applies to all") passes
+        through unchanged; items are checked only when a list is present."""
+        if v is None:
+            return v
+        for item in v:
+            if item not in _INDUSTRY_SUB_SECTOR_VALUES:
+                raise ValueError(
+                    f"applicable_sub_sectors item {item[:64]!r} is not an IndustrySubSector value; "
+                    f"allowed: {sorted(_INDUSTRY_SUB_SECTOR_VALUES)}"
                 )
         return v
 

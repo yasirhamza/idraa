@@ -74,6 +74,46 @@ _SUB_SECTOR_LABELS: dict[str, str] = {
     IndustrySubSector.PIPELINE: "Pipeline",
     IndustrySubSector.PROCESS_MANUFACTURING: "Process manufacturing",
     IndustrySubSector.OTHER: "Other",
+    # Healthcare
+    IndustrySubSector.HEALTH_PLAN: "Health plan",
+    IndustrySubSector.HEALTH_SYSTEM: "Health system",
+    IndustrySubSector.HOSPITAL: "Hospital",
+    IndustrySubSector.PHYSICIAN_PRACTICE: "Physician practice",
+    # Education
+    IndustrySubSector.COMMUNITY_COLLEGE: "Community college",
+    IndustrySubSector.HIGHER_EDUCATION: "Higher education",
+    IndustrySubSector.K12: "K-12 education",
+    # Public
+    IndustrySubSector.FEDERAL_GOVERNMENT: "Federal government",
+    IndustrySubSector.STATE_GOVERNMENT: "State government",
+    IndustrySubSector.LOCAL_GOVERNMENT: "Local government",
+    IndustrySubSector.JUDICIARY: "Judiciary",
+    IndustrySubSector.LAW_ENFORCEMENT: "Law enforcement",
+    IndustrySubSector.INTELLIGENCE_COMMUNITY: "Intelligence community",
+    # Information
+    IndustrySubSector.BROADBAND_PROVIDER: "Broadband provider",
+    IndustrySubSector.WIRELESS_CARRIER: "Wireless carrier",
+    IndustrySubSector.MVNO: "MVNO (mobile virtual network operator)",
+    # Professional
+    IndustrySubSector.ACCOUNTING: "Accounting",
+    IndustrySubSector.CONSULTING: "Consulting",
+    IndustrySubSector.ENGINEERING_SERVICES: "Engineering services",
+    IndustrySubSector.LAW_FIRM: "Law firm",
+    # Manufacturing
+    IndustrySubSector.AEROSPACE: "Aerospace",
+    IndustrySubSector.AUTOMOTIVE: "Automotive",
+    IndustrySubSector.FOOD_MANUFACTURING: "Food manufacturing",
+    # Utilities
+    IndustrySubSector.GAS_UTILITY: "Gas utility",
+    # Transportation
+    IndustrySubSector.AIRLINE: "Airline",
+    IndustrySubSector.CAR_RENTAL: "Car rental",
+    # Hospitality
+    IndustrySubSector.CASINO: "Casino",
+    IndustrySubSector.HOTEL_LODGING: "Hotel & lodging",
+    IndustrySubSector.RESORT: "Resort",
+    IndustrySubSector.RESTAURANT: "Restaurant",
+    IndustrySubSector.ENTERTAINMENT_VENUE: "Entertainment venue",
 }
 
 _INDUSTRY_LABELS: dict[str, str] = {

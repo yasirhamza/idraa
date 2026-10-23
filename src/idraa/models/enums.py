@@ -217,18 +217,29 @@ class RiskAppetite(StrEnum):
 
 
 class IndustrySubSector(StrEnum):
-    """v3 canonical 8-value enum — superset of fair_cam's 5-value enum.
+    """v3 canonical 39-value sub-sector facet enum.
 
     Used by:
     - Organization.industry_sub_sector column (PR η F8).
-    - Phase 1.5a scenario library content filter.
+    - Phase 1.5a scenario library content filter (``applicable_sub_sectors``).
 
     Values:
-    - First 5 values mirror fair_cam.parameters.sub_sector_overlays.IndustrySubSector
-      exactly (parity test enforces fair_cam ⊆ v3).
-    - NUCLEAR, PROCESS_MANUFACTURING, OTHER are 1.5a-only — they exist for
-      library content filtering but resolve to NAICS-2 baseline at the
-      calibration layer (silent fall-through per spec §6.6).
+    - The first 8 are the original OT/energy slice (PR η). The sub-sector
+      calibration layer they once keyed (vendor-sourced lifts applied over the
+      IRIS NAICS-2 baseline for CHEMICAL_MANUFACTURING, ELECTRIC_UTILITY,
+      OIL_AND_GAS, PIPELINE and WATER_UTILITY) was retired in PR π and fair_cam
+      no longer carries an ``IndustrySubSector``; this enum is standalone.
+    - The remaining 31 (#241) exist so the library's sub-sector filter spans
+      every ``applicable_sub_sectors`` value the seed entries use. All 39
+      members are facets only: none changes a calibration or any FAIR input
+      (calibration keys on industry and revenue tier alone).
+    - The comment groups below are for reading only: each added facet sits
+      under the industry the seed entries most often pair it with, not under a
+      NAICS parent. The seed data uses sub-sectors across several industries,
+      so no parent mapping is enforced.
+
+    The column carries a named CHECK constraint (``industry_sub_sector_enum``);
+    adding a member requires an Alembic migration that widens it.
 
     Spec: docs/superpowers/specs/2026-04-28-pr-eta-iris-sub-sector-overlays-design.md §6.5.
     """
@@ -241,6 +252,50 @@ class IndustrySubSector(StrEnum):
     PIPELINE = "pipeline"
     PROCESS_MANUFACTURING = "process_manufacturing"
     WATER_UTILITY = "water_utility"
+
+    # --- Library-filter facets (#241): no calibration effect, same as the original 8. ---
+    # Grouped by the industry the seed entries most often pair them with, for
+    # reading only -- not a NAICS parent mapping.
+    # Healthcare
+    HEALTH_PLAN = "health_plan"
+    HEALTH_SYSTEM = "health_system"
+    HOSPITAL = "hospital"
+    PHYSICIAN_PRACTICE = "physician_practice"
+    # Education
+    COMMUNITY_COLLEGE = "community_college"
+    HIGHER_EDUCATION = "higher_education"
+    K12 = "k12"
+    # Public
+    FEDERAL_GOVERNMENT = "federal_government"
+    STATE_GOVERNMENT = "state_government"
+    LOCAL_GOVERNMENT = "local_government"
+    JUDICIARY = "judiciary"
+    LAW_ENFORCEMENT = "law_enforcement"
+    INTELLIGENCE_COMMUNITY = "intelligence_community"
+    # Information
+    BROADBAND_PROVIDER = "broadband_provider"
+    WIRELESS_CARRIER = "wireless_carrier"
+    MVNO = "mvno"
+    # Professional
+    ACCOUNTING = "accounting"
+    CONSULTING = "consulting"
+    ENGINEERING_SERVICES = "engineering_services"
+    LAW_FIRM = "law_firm"
+    # Manufacturing
+    AEROSPACE = "aerospace"
+    AUTOMOTIVE = "automotive"
+    FOOD_MANUFACTURING = "food_manufacturing"
+    # Utilities
+    GAS_UTILITY = "gas_utility"
+    # Transportation
+    AIRLINE = "airline"
+    CAR_RENTAL = "car_rental"
+    # Hospitality
+    CASINO = "casino"
+    HOTEL_LODGING = "hotel_lodging"
+    RESORT = "resort"
+    RESTAURANT = "restaurant"
+    ENTERTAINMENT_VENUE = "entertainment_venue"
 
 
 # fair_cam industries that have a calibration curve. Others fall back → warning banner.

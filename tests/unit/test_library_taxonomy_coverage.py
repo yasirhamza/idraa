@@ -16,9 +16,14 @@ Guarded dimensions (fully-covered scalar taxonomies):
                        replaces the retired threat_actor_type dimension)
   - ThreatCategory   (JSON field: "threat_event_type")
 
-NOT hard-guarded (open taxonomies with many legitimately-uncovered values):
+NOT hard-guarded here (list fields; entries legitimately omit most values):
   - IndustryType     (applicable_industries — list field, many values uncovered)
-  - IndustrySubSector (applicable_sub_sectors — list field, many values uncovered)
+  - IndustrySubSector (applicable_sub_sectors — list field; since #241 every
+                       seed value is an enum member and every member but the
+                       catch-all OTHER is used by at least one seed entry, but
+                       a given entry names only a few, so per-member coverage is
+                       not guarded here — membership and labels are guarded by
+                       tests/unit/test_seed_sub_sectors_enum.py)
   Those two dimensions ARE included in the informational coverage report
   (test_coverage_report_smoke).
 """
@@ -227,8 +232,8 @@ def test_allowlist_has_no_stale_entries() -> None:
 
 def test_coverage_report_smoke() -> None:
     """Informational: build a per-dimension coverage dict and assert it is
-    non-empty. This is NOT a hard gate on open taxonomies (IndustryType /
-    IndustrySubSector have many legitimately-uncovered values); it exists so
+    non-empty. This is NOT a hard gate on the list-field taxonomies (IndustryType /
+    IndustrySubSector; entries name only a few values each); it exists so
     curators can run this test with -s and see the full coverage breakdown.
 
     Coverage numbers are also printed to stdout so they're visible in CI logs.
