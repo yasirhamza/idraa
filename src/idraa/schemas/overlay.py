@@ -38,7 +38,7 @@ from idraa.models._methodology import METHODOLOGY_MIN_LENGTH
 _TAG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 # Sanity cap on multipliers. Anything above this is operator error;
-# legitimate overlay multipliers live in the 1.0-10.0 range.
+# typical overlay multipliers are 0.5-10 (below 1 lowers the value).
 _MULTIPLIER_MAX = 1e6
 
 
