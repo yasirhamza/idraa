@@ -956,7 +956,7 @@ can leave a stale citation green; cited lines swapped or rotated in the code und
 citations; a stale citation offset by a newly added citation on the moved text (one new citation
 can cover a whole chain of stale ones, or an in-place edit when it lands on an identical line, or
 copy an old line number while the original is re-cited); a citation re-cited to the wrong line,
-which can let a forgotten neighbour pass (the pre-flight accepts all of these; the orchestrator's
+which can let a forgotten neighbour pass (the pre-flight accepts these three; the orchestrator's
 base-manifest `clerk gate` run reports them, not CI); the prose counting claims; the
 meaning of a citation (a correct line can still support a wrong sentence);
 citations of `fly.toml` (deployment config, deliberately untracked); citations without a line

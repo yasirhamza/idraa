@@ -1,13 +1,13 @@
 """CI DAST Phase 1 — Schemathesis-based per-PR API-fuzzing harness.
 
-This package is a **dev-only** tool, never imported by ``src/idraa/`` at
-runtime. It is invoked exclusively via ``python -m idraa.tasks dast`` (both
-locally and from the advisory ``dast`` CI job) and orchestrates: extracting
-``app.openapi()`` offline, migrating + seeding a throwaway SQLite DB, spinning
-up an ephemeral ``uvicorn`` instance bound to ``127.0.0.1``, logging in as a
-seeded admin, and running ``schemathesis run`` against the authenticated
-surface with a ``before_call`` hook that injects a valid CSRF token into
-state-changing form bodies.
+This package is a **dev-only** tool, never imported by ``src/idraa/`` at runtime. It
+is invoked exclusively via ``python -m idraa.tasks dast`` (both locally and from the
+``dast`` CI job, part of ``ci-success`` since 2026-10-23, #158) and orchestrates:
+extracting ``app.openapi()`` offline, migrating + seeding a throwaway SQLite DB,
+spinning up an ephemeral ``uvicorn`` instance bound to ``127.0.0.1``, logging in as a
+seeded admin, and running ``schemathesis run`` against the authenticated surface with
+a ``before_call`` hook that injects a valid CSRF token into state-changing form
+bodies.
 
 **This suite NEVER targets a deployed environment** — see
 ``docs/security/2026-08-14-ci-dast-design.md`` §0 for the safety invariants

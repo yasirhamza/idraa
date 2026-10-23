@@ -99,12 +99,12 @@ why the design doc's gating self-test (§10) proves non-vacuousness by
 reverting a *fuzzer-reachable* fix (an unbounded-`page` `500`), not a
 CSRF-guard fix.
 
-## Advisory-first in CI
+## Merge-blocking in CI
 
-The `dast` job in `.github/workflows/ci.yml` runs on every PR but is
-**deliberately not** in `ci-success`'s `needs` — it does not block merges
-yet. This is a burn-in period: promoting it into `ci-success` is a tracked
-follow-up PR once the job has proven it doesn't flake.
+The `dast` job in `.github/workflows/ci.yml` runs on every PR and is in
+`ci-success`'s `needs`, so a failure blocks merge. It was advisory-first
+during its burn-in; it was promoted on 2026-10-23 (#158) after 25/25
+green runs on `main`.
 
 ## Module layout
 

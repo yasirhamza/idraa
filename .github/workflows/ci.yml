@@ -62,15 +62,13 @@ jobs:
       - name: zizmor (GitHub-workflow SAST; locked dev dep)
         run: uv run zizmor .github/workflows/
 
-  # Advisory-first: schemathesis-based DAST fuzzing against an ephemeral
-  # local uvicorn (throwaway migrated/seeded SQLite — never a deployed
-  # target, see security/dast/README.md). Deliberately NOT in ci-success's
-  # `needs` below — this job is new and needs a burn-in period to prove it
-  # doesn't flake before it can block merges. Promotion into ci-success is a
-  # tracked follow-up PR once burn-in is clean (docs/security/2026-08-14-ci-dast-design.md
-  # "Out of scope (Phase 2+, tracked)").
+  # Schemathesis-based DAST fuzzing against an ephemeral local uvicorn
+  # (throwaway migrated/seeded SQLite — never a deployed target, see
+  # security/dast/README.md). Merge-blocking: promoted into ci-success's
+  # `needs` below on 2026-10-23 (#158) after the burn-in came back clean
+  # (docs/security/2026-08-14-ci-dast-design.md §8).
   dast:
-    name: dast (schemathesis, advisory)
+    name: dast (schemathesis)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -86,6 +84,36 @@ jobs:
         env:
           PYTHONHASHSEED: "0"
         run: uv run python -m idraa.tasks dast
+
+  # Production installs with `uv sync --frozen --no-dev` (Dockerfile), but every
+  # other job here installs `--extra dev`, so a runtime dependency that only a
+  # dev package pulls in transitively is invisible to them (the #230 greenlet
+  # miss, #260). This job installs WITHOUT dev extras, imports every idraa /
+  # fair_cam module and does one async SQLAlchemy round-trip. `uv run --no-sync`
+  # cannot re-add the dev extras, and the script itself refuses to run if
+  # dev-only packages are importable.
+  runtime-smoke:
+    name: runtime-smoke (--no-dev install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Sync (runtime deps only, frozen)
+        run: uv sync --frozen --no-dev
+      - name: Import every module + async select 1 (no dev extras)
+        # Settings refuses the default SESSION_SECRET outside ENVIRONMENT=test;
+        # test mode needs no secret-shaped value (same as security/dast/run.py
+        # and tests/conftest.py). The in-memory DSN keeps the import graph off
+        # any on-disk database. Both are non-secret literals.
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: uv run --no-sync python scripts/runtime_smoke.py
 
   secrets:
     name: secrets (gitleaks, full history)
@@ -161,7 +189,8 @@ jobs:
           name: idraa-sbom-${{ github.sha }}
           path: idraa-sbom.cdx.json
 
-  # Aggregator over the DETERMINISTIC core only (gate, secrets, sast).
+  # Aggregator over the DETERMINISTIC core only (gate, secrets, sast, dast,
+  # runtime-smoke).
   # docker-build / notebook-smoke stay visible-but-advisory so a flaky
   # kernel can never wedge merges (plan-gate A-I5). The advisory Playwright
   # e2e job was REMOVED 2026-07-19 (owner call): its only failures were a
@@ -176,7 +205,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [gate, secrets, sast]
+    needs: [gate, secrets, sast, dast, runtime-smoke]
     runs-on: ubuntu-latest
     steps:
       # Expression-based check: the original grep idiom NEVER failed
