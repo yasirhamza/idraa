@@ -344,12 +344,10 @@ def assert_public_artifact_is_clean(
 
 
 def _prod() -> tuple[sqlite3.Connection, float, str]:
-    # READ-ONLY by construction. The module comment and the design both instruct
-    # pointing SIGMA_RECAL_PROD_DB at a prod-backup COPY, but that was
-    # documentation-only and already not followed in practice (the carryover's own
-    # reproduce command points at the single local backup). mode=ro enforces it,
-    # and cannot create -wal/-shm files beside the backup.
-    db = sqlite3.connect(f"file:{PROD_DB}?mode=ro", uri=True)
+    # READ-ONLY by construction, and meant for an OFFLINE backup copy only (no concurrent
+    # writer). immutable=1 neither creates -wal/-shm sidecars nor needs a writable
+    # directory, so a WAL-mode copy opens; never point this at a live database.
+    db = sqlite3.connect(f"file:{PROD_DB}?mode=ro&immutable=1", uri=True)
     revs = db.execute(
         "SELECT id, annual_revenue FROM organizations WHERE annual_revenue IS NOT NULL ORDER BY id"
     ).fetchall()
