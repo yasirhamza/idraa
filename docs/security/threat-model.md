@@ -593,15 +593,15 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 ## 9. B9 — File import / export
 
-**Import** — two parser modules, both size- and row-capped; zip-bomb-guarded
-only where it applies (the XLSX-capable module — the other has no zip path).
+**Import** — five admin-only upload routes, each size- and row-capped; zip-bomb-guarded
+only where it applies (the XLSX-capable register path — the others have no zip path).
 `services/register_import_parsers.py` accepts CSV and XLSX, sniffed by
 extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
-`services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
-module docstring — it has no XLSX path). Guards: 5 MB upload cap via
-`Content-Length` (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
-`routes/register_import.py:253-257`, `routes/scenario_import.py:124-128`,
-`library_import.py:80-84`); a zip-bomb guard on the XLSX path that reads only
+`services/scenario_import_parsers.py` accepts CSV and JSON only (per its own module docstring — it has no XLSX path); `services/library_bundle_import.py` parses JSON bundles into the GLOBAL library catalog every org reads; `services/controls_importer.py` and `services/overlays_importer.py` parse CSV.
+Guards: 5 MB upload cap via a forgeable
+`Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
+`routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
+`library_import.py:80-89`, `routes/controls.py:492-501`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
@@ -625,12 +625,12 @@ transient is
 survivable on the 4 GB VM. The non-bypassable tightening (parse
 `[Content_Types].xml` to bound buffered parts by role) is deferred as
 disproportionate for an admin-only surface; revisit if import ever becomes
-non-admin. There is also a single
+non-admin. Row caps: one shared
 `MAX_ROWS = 500` constant (`scenario_import_parsers.py:85`) enforced at
-every entry point that accepts row data — CSV (`scenario_import_parsers.py:275`)
+the scenario and register entry points — CSV (`scenario_import_parsers.py:275`)
 and JSON (`scenario_import_parsers.py:325`) in that module, and re-imported and enforced again
 for XLSX (`register_import_parsers.py:221-222`) and CSV
-(`register_import_parsers.py:250-251`) in the other; `defusedxml`
+(`register_import_parsers.py:250-251`) in the other; the other three importers carry their own — `MAX_ENTRIES = 500` (`services/library_bundle_import.py:57`), `MAX_CSV_ROWS = 500` (`services/overlays_importer.py:103`) and `MAX_CSV_ROWS = 10_000` (`services/controls_importer.py:104`), the last truncating with a logged warning rather than rejecting the file; `defusedxml`
 auto-substitution blocking XML entity expansion (billion-laughs class,
 `register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
@@ -677,7 +677,7 @@ and shrinking (back-compat for bundles exported before P1), not a live
 dual-write surface.
 
 **Export — download header (C9, 2026-09)**: every download in `src/idraa`
-(CSV, scenario JSON, library bundle, PDF reports, samples export, the four
+(CSV, scenario JSON, library bundle, PDF reports, the verification workbook, samples export, the four
 template/sample downloads) builds `Content-Disposition` through one helper,
 `attachment_disposition()` (`utils/download.py`), which quotes the name and
 replaces `"`, `;`, `\` and every control character. The scenario JSON and
@@ -687,9 +687,9 @@ every caller passed a literal or a UUID). A guard in
 `"Content-Disposition"` key in the source tree.
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
-cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
-`services/sample_export.py:68,181` and `services/verification_workbook.py:51-66`, which also
-guards legacy `{=...}` array-formula braces). PDF report
+cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, applied by `csv_response` to every cell and reused by
+`services/sample_export.py:68,181`); the XLSX verification workbook has its own superset guard, `_neutralize` (`services/verification_workbook.py:51-69`), which also prefixes a leading `\n` and
+legacy `{=...}` array-formula braces. PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
 (`services/pdf_report.py:25-27,515-517,561` plus the by-threat-community
 names/amounts at `services/pdf_report.py:1363,1371`). The TOC/URI fix
@@ -704,24 +704,24 @@ new export format must re-implement, not assume is "someone else's problem."
 
 ## 10. B10 — Run execution / Monte Carlo (resource exhaustion)
 
-- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-76`, default
-  1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
-  `POST /analyses` (`routes/runs.py:1186-1197`) — the HTML form's `max=`
+- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
+  1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
+  routes share (`services/runs.py:142-151`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
   shared across all orgs on one VM (`config.py:253-295`): high-fidelity
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
-  BACKGROUND runs to `max_concurrent_standard_runs` (default 8). The
-  sub-1000-iteration INLINE dispatch path is intentionally UNGATED — such runs
+  BACKGROUND runs to `max_concurrent_standard_runs` (default 8). A standard
+  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — such runs
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
   the run pipeline (`del enhanced` at `services/run_executor.py:2237`; `del calculator, fc_controls`
   at `services/run_executor.py:2405` and again at `services/run_executor.py:2591`; `del per_scenario_inputs` at `services/run_executor.py:2592`;
-  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`) each paired
-  with an explicit `gc.collect()` (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
+  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -729,9 +729,9 @@ new export format must re-implement, not assume is "someone else's problem."
   plus scenario/control loads autobegin an uncommitted transaction — so absent
   a release a run would PIN its pooled DB connection for the whole compute
   window. A burst of concurrent runs would then drain the 15-slot pool (size 5
-  + overflow 10, `db.py`), and every other request — INCLUDING `/login` — 500s
+  + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
-  reports.py production outage (`routes/reports.py:220-229,333-347`). Control
+  reports.py production outage (`routes/reports.py:217-229,329-347`). Control
   (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1857`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
@@ -756,13 +756,46 @@ new export format must re-implement, not assume is "someone else's problem."
   `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
   budget (`config.py:275-279`) — fits the 4 GB VM; re-derive with the MC caps if
   the VM shape changes.
+- **D (inputs that size the sampler and the wizard fit, #256).** Two caps bound
+  user-supplied inputs before they reach the engine or the elicitation fit; both
+  predate the 2026-08-05 audit and were simply never listed here. (1) **σ cap:** a
+  lognormal σ above 10 (`_SIGMA_MAX`, `services/fair_cam_validation.py:44-47`, "a
+  user-controllable OOM/DoS path to the engine sampler") is refused for a scalar
+  lognormal (`services/fair_cam_validation.py:156-157`) and for every mixture
+  component (`services/fair_cam_validation.py:206-210`); a mixture also carries 1 to
+  `max_smes_per_fieldset` components (`services/fair_cam_validation.py:168-173`).
+  The check sits in `validate_fair_distributions`, which every distribution write
+  path calls — form create and update, wizard save, scenario and library-bundle
+  import, loss pinning, library overrides. (2) **SME-row cap:**
+  `max_smes_per_fieldset` (`config.py:180-184`, default 20, env
+  `MAX_SMES_PER_FIELDSET`) bounds the SME-estimate rows per fieldset through one
+  shared validator (`schemas/wizard_step3.py:52-58`) that both fieldset models call;
+  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2672-2673`) and
+  again before finalize (`routes/scenarios.py:3220`). The finalize fit is further
+  bounded per fit (`quantile_fit_maxiter` 200, `config.py:188`;
+  `quantile_fit_wall_clock_ms` 500 ms, `config.py:193`) and per call
+  (`finalize_wall_clock_ms` 5000 ms, `config.py:196`). The row schema does not
+  itself reject a non-finite `high` (#141, open).
+- **D (disk).** A dispatch is refused while the DB volume has less than
+  `min_free_disk_bytes` free (`config.py:241`, default 300 MB;
+  `services/runs.py:153-166`), the 2026-06-29 full-disk outage class; per-iteration
+  samples are reclaimed by the operator-set retention purge
+  (`retention_sample_purge_days`, off by default). Check-then-dispatch with no byte
+  reservation: it stops sequential accumulation, not a concurrent burst nor one run
+  whose samples outgrow the space left. This is the disk guard §11's C1 note means.
+- **D (export and report compute).** The raw-samples export runs one at a time
+  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:399`; a concurrent request
+  gets 429), and the verification workbook builds its in-Excel Monte Carlo for at
+  most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
+  (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and
+  the per-user export rate limit at the §11 bulk-export choke point.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
   actually read `performance / 2 cpus / 4096mb` since 2026-06-29 (PR #428/
-  #429) — a ~5-week drift. **CLAUDE.md now carries the corrected figures**
-  plus its own inline "Corrected 2026-08-05" note. Kept here (rather than
-  deleted) because the underlying coupling still matters: `config.py:71-77`
+  #429) — a ~5-week drift. **CLAUDE.md carries the corrected figures** (it is operator-local, untracked since 2026-07-23);
+  the inline "Corrected 2026-08-05" note it gained then has since been removed. Kept here (rather than
+  deleted) because the underlying coupling still matters: `config.py:71-78`
   ties the 1,000,000-iteration cap directly to the 4GB headroom (~700MB peak
   RSS at N=1M/M=30), so if the VM shape is ever downgraded, that cap must be
   re-benchmarked, not just inherited. This document defers to `fly.toml` as
@@ -778,10 +811,10 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-full run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
-delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`) — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
+delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
-(`services/audit.py:171-252`). Emails redacted
+(`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
 raw email — `routes/users.py` invite and `routes/setup.py` first admin — were
 fixed in 2026-09 (advisory C4) and an AST guard,
@@ -793,11 +826,14 @@ for users since hard-deleted, whose own `user.delete` row is redacted, so the
 old create row is then the only place the address survives. They are not
 rewritten automatically, because rewriting audit history undermines its
 tamper-evidence; an erasure request for such a user needs a manual, audited
-redaction of that one row. Financial values bucketed
-(`bucket_amount`, `audit.py:119-137`) before storage. 70+ call sites spot-
+redaction of that one row. Financial values are NOT redacted: the SME-estimate row stores the raw low/high
+next to an order-of-magnitude bucket (`bucket_amount`, `audit.py:119-137`; both at `services/wizard_finalize.py:759-762`). 70+ call sites spot-
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known
 gap, not a finding of an actual miss.
+The operator CLI `python -m idraa auth reset-mfa` (§3) writes its `user.mfa_admin_reset` and
+`user.sessions_revoked` rows with `user_id` and `ip_address` NULL and `"via": "cli"`: those rows show
+that an operator acted, not which one.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
@@ -884,12 +920,12 @@ watching:
 
 1. Org-scoping discipline (§7) is **gate-enforced as of 2026-08-05**
    (`scripts/lint_org_scoped_lookups.py`) for its one specific shape (bare
-   `.get(Model, id)`); still convention-only for any other shape a future
-   lookup might take, and for keeping the checker's model allowlist current.
+   `.get(Model, id)`), with a function-wide org-check search not bound to the flagged call (#151, open); still convention-only for any other shape a future
+   lookup might take. Allowlist currency is gate-enforced since 2026-10-01 by the parity test cited in §7.
 2. Audit-logging coverage (§11) is spot-checked, not exhaustively matrixed.
 3. ~~`CLAUDE.md`'s role list (§6) and VM-envelope figures (§10) are stale~~ —
    **CLOSED 2026-08-05**: both corrected in CLAUDE.md the same day, each with
-   an inline "Corrected 2026-08-05" note recording the stale value (the VM
+   an inline "Corrected 2026-08-05" note (both notes since removed from the now operator-local file) recording the stale value (the VM
    note dates the drift to ~5 weeks; the role note records the duration as
    unknown). See §10's and §6's resolved drift flags. Note the first closure
    attempt carried the pre-audit VIEWER undercount ("2 routes") into
@@ -898,9 +934,9 @@ watching:
 4. `fly.toml:4`'s `uat-deploy.yml` comment (§2) references a workflow file
    that doesn't exist — cosmetic, low severity. Still open (re-confirmed by
    the 2026-08-05 re-audit).
-5. `REVIEWER` (§6) functions almost entirely as a read-only allowlist member
-   rather than a fully distinct write-permission tier — confirm this matches
-   intended RBAC design; not treated as a defect here.
+5. ~~`REVIEWER` (§6) functions almost entirely as a read-only allowlist member~~
+   — **CLOSED 2026-10-23**: the owner kept the reviewer role read-only by design;
+   promotion stays analyst/admin (#51; help copy #285). Not a defect.
 6. The `uat_basic_auth` boundary (§2a) was **entirely absent** from this
    document's first version — found only by the 2026-08-05 full re-audit, not
    by any per-PR review. Nothing automated enumerates the middleware stack
@@ -911,7 +947,7 @@ watching:
    leaves no request-level trace carrying user identity. A proper fix is a
    request-access-log middleware (bounded, authenticated-only, to avoid
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
-   because it changes the middleware stack. Tracked as a follow-up.
+   because it changes the middleware stack. Tracked in GHSA-46jj-823j-mjj9's open checklist (C1).
 8. ~~**Non-atomic per-account lockout counter**~~ — **CLOSED 2026-08-15.**
    `register_failed_login` (`services/auth.py:393-434`) was a plain
    read-modify-write (`user.failed_login_count += 1`) that lost increments under
@@ -949,18 +985,29 @@ watching:
     nothing. The clerk reads the
     API key only from the OS keyring (macOS Keychain; on Linux the secret service); the checker
     from the Keychain or, off macOS, from a per-command environment variable. CI never
-    holds the key, and neither tool is a boundary of the running application. Listed so the
+    holds the key (pinned by `tests/arch/test_workflows_no_secrets.py` since 2026-10-23), and neither tool is a boundary of the running application. Listed so the
     quarterly re-audit knows the flows exist.
+12. **Merge-gate integrity (#277, open).** Every test this document names as a pin
+    blocks a merge only through `ci-success`, which fails only when a needed job's
+    result is `failure` or `cancelled` (`.github/workflows/ci.yml:214-216`). A needed
+    job that gains `if:` or `continue-on-error`, or a step ending in `|| true`,
+    reports `skipped`/`success` and silently stops gating — including §13's
+    citation-freshness test (in the `gate` job) and, since 2026-10-23 (#158), `dast`.
+13. **WebAuthn login: an inactive user's passkey use advances the counter with no
+    audit row (C3 in GHSA-46jj-823j-mjj9, open).** `login_passkey_verify` writes
+    `sign_count`/`last_used_at` before its active-user check, and the inactive
+    branch returns without an `AuditWriter` call (`routes/auth.py:434-440`); the
+    request-end commit persists the counter. Low: the account is already inactive.
 
 ## 13. Keeping this document current
 
 This is a living document, kept current three ways.
 
 **Reactive (per-PR).** `CLAUDE.md` → Review ceremony → Security-auditor
-persona requires the security-auditor role to check, at every milestone
+persona (operator-local, as is the `security-auditor` skill it loads) requires the security-auditor role to check, at every milestone
 PR-gate and whenever a PR touches a boundary listed in §2–§11, whether this
 document needs updating — and to include that update in the same PR rather
-than deferring it. A boundary section whose file:line citations no longer
+than deferring it; since #262 every design spec's Risk-assessment table names the boundaries it changes, checked at the plan-gate. A boundary section whose file:line citations no longer
 match the code is itself a finding.
 
 **Periodic (full re-audit).** The reactive pass alone is provably
@@ -985,6 +1032,14 @@ Practical note for re-auditors: the highest-yield check is not "is this
 mechanism still correct" (they usually are) but "did an unrelated edit to a
 cited file shift the line numbers." Insertions early in a long file
 invalidate every later citation into it silently and en masse.
+
+**Second full re-audit (2026-10-23).** Run by the method above, in the same split: three parallel
+reviewers over §1–§5 / §6–§8 / §9–§13, each opening every cited file:line and re-deriving every
+counting claim from the tree. Citations checked: 64 + 60 + 87 (HOLDS 59 / 58 / 85, DRIFTED 1 / 0 / 0,
+WRONG 4 / 2 / 2, DEAD 0 / 0 / 0). The findings were applied as one consolidated pass (#263). The two
+highest-yield classes this time were counting claims gone stale after later PRs, and mechanisms with
+no entry at all (the `reset-mfa` factor reset in B2, the σ and SME-row caps in B10; both now documented).
+Last full re-audit: 2026-10-23; the next is due 2027-01-23.
 
 **Automated (citation freshness, 2026-10).** The backticked `file:line` citations in this
 document and in `docs/reference/fair-departures-register.md` are compiled by

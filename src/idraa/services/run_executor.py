@@ -2605,15 +2605,15 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # Cyclic GC pass: numpy arrays held inside fair_cam dataclasses can
             # form reference cycles via back-references; explicit gc.collect()
             # drops them before the SQLite commit allocates serialization
-            # buffers. Marginal on small runs; meaningful on the 100k-iter VM
-            # OOM path (issue #211 root cause).
+            # buffers. Marginal on small runs; meaningful on high-iteration runs
+            # near the VM memory ceiling (issue #211 root cause).
             gc.collect()
 
             # Split the heavy per-iteration sample arrays out of the payload
             # (#297/#294). copy=False is the no-copy/move mode: it mutates
             # results_payload in place, popping the arrays into sample_arrays, so
-            # we never hold two copies of the (up to 100k-iter AGGREGATE) heavy
-            # arrays near the 2GB VM ceiling. The stripped summary stays on the
+            # we never hold two copies of the (up to mc_iterations_max-iter AGGREGATE)
+            # heavy arrays near the VM memory ceiling. The stripped summary stays on the
             # run; the arrays go to run_samples. Run identity locals
             # (run_id_local / org_id_local / created_by_local) were captured
             # before the try (#131) — do not read off the `run` ORM object

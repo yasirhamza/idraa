@@ -289,7 +289,7 @@ async def overlays_import(
 ) -> Response:
     """Step 1 of two-step CSV import: validate, stash, render preview.
 
-    Mirrors ``routes/controls.py:222-234`` for the upload size guard:
+    Mirrors ``routes/controls.py:489-501`` for the upload size guard:
     Content-Length is checked BEFORE ``await file.read()`` (so a forged-
     massive file is rejected without spilling into memory), then re-
     checked post-read because Content-Length is client-supplied and

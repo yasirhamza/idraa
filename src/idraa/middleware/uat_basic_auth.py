@@ -1,6 +1,6 @@
 """UAT basic-auth pre-gate middleware (Phase 1.5.5).
 
-The OUTERMOST request-path layer for the hosted UAT runtime. When
+The outermost auth layer of the hosted UAT runtime (only the framing guard is outside). When
 ``UAT_BASIC_AUTH_PASSWORD`` is set in the env (platform secrets in production
 UAT), every request without a valid ``Authorization: Basic`` header is
 rejected with 401 — except the exact paths in ``EXEMPT_PATHS``:
@@ -11,7 +11,7 @@ entries — see the EXEMPT_PATHS comment).
 
 When the password is unset (dev, test, local docker), this middleware is
 a no-op: the existing inner stack (setup_guard → SecurityHeaders → CSRF
-→ Session → UnconfirmedCount) handles the request normally.
+→ Session → EnrollmentGuard → MaintenanceBadgeCount) handles the request normally.
 
 The pre-gate is layered on top of the app's existing /login session
 auth; compromise of the edge credential does not equal compromise of
