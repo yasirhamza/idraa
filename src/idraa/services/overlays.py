@@ -17,9 +17,9 @@ Two distinct responsibilities live here:
    ``expected_version`` (preamble B8): two admins editing the same row
    concurrently produce an ``OverlayVersionConflictError`` rather than
    a silent overwrite. ``tag`` rename is intentionally rejected — the
-   tag is a stable identifier that pinned scenarios reference; renaming
-   it would orphan revisions for existing pins. Use deactivate +
-   create-new to retire a tag.
+   tag is the overlay's stable per-org identity: the CSV importer upserts
+   on it and every revision records it, so a rename would split one
+   overlay's history in two. Use deactivate + create-new to retire a tag.
 
 Audit ``action`` strings follow the project-wide ``<entity>.<verb>``
 taxonomy: ``overlay.create`` / ``overlay.update`` / ``overlay.deactivate``.
@@ -144,8 +144,9 @@ _DIFFABLE_FIELDS: tuple[str, ...] = (
 )
 
 _TAG_RENAME_MSG = (
-    "tag rename not allowed: tag is a stable identifier referenced by "
-    "pinned scenarios; use deactivate + create-new instead"
+    "tag rename not allowed: the tag is the stable identity of an overlay (the "
+    "CSV import upserts on it and each revision is recorded under it); use "
+    "deactivate + create-new instead"
 )
 
 
@@ -230,8 +231,8 @@ class OverlayService:
         - Raises ``OverlayVersionConflictError`` if ``overlay.version``
           doesn't match ``expected_version`` (B8 optimistic lock).
         - Raises ``ValueError`` if ``form.tag`` differs from
-          ``overlay.tag`` — tag rename is forbidden because pinned
-          revisions reference the tag as a stable identifier.
+          ``overlay.tag`` — tag rename is forbidden because the tag is the
+          overlay's stable identity (see ``_TAG_RENAME_MSG``).
         - If no diffable field changed, returns ``overlay`` unchanged
           — no audit row, no revision row, no version bump. The
           ``methodology_change_reason`` is therefore only persisted

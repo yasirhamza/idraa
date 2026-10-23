@@ -101,6 +101,48 @@ def test_edit_html_renders_hidden_expected_version_for_existing_overlay() -> Non
     assert 'value="7"' in html
 
 
+def test_edit_html_multiplier_help_names_the_scaled_fair_inputs() -> None:
+    """#249: the help text must say what the multipliers scale at wizard pre-fill
+    (TEF; Primary + Secondary Loss), never the old "Applied to LEF / LM" wording."""
+    overlay = _fake_overlay()
+    html = _render(
+        "overlays/edit.html",
+        current_user=_admin_user(),
+        flash=None,
+        form={
+            "tag": overlay.tag,
+            "display_name": overlay.display_name,
+            "frequency_multiplier": overlay.frequency_multiplier,
+            "magnitude_multiplier": overlay.magnitude_multiplier,
+            "sources": "; ".join(overlay.sources),
+            "methodology": overlay.methodology,
+            "methodology_change_reason": "",
+        },
+        overlay=overlay,
+        action=f"/overlays/{overlay.id}/edit",
+        errors=[],
+    )
+    assert "Scales Threat Event Frequency (TEF) when the overlay pre-fills the wizard" in html
+    assert "Scales Primary and Secondary Loss when the overlay pre-fills the wizard" in html
+    assert not re.search(r"\bLEF\b", html)
+    assert "Applied to LM" not in html
+
+
+def test_overlay_help_article_describes_wizard_prefill_not_run_time_application() -> None:
+    """#249 / register B7: overlays pre-fill the wizard; nothing multiplies at run time
+    and runs do not record overlays. Pins the Help article against the old claims."""
+    html = templates.env.get_template("help/articles/controls-overlays.html").render(
+        request=_fake_request()
+    )
+    text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+    assert "Prefill options" in text
+    assert "Nothing multiplies at run time" in text
+    assert "runs do not record overlays" in text
+    assert "in each Monte Carlo iteration" not in text
+    assert "recorded in the run snapshot" not in text
+    assert "Applied across all scenarios in the run" not in text
+
+
 def test_edit_html_marks_tag_readonly_when_editing_existing_overlay() -> None:
     """Tag rename is forbidden — UI must mark the field readonly on edit."""
     overlay = _fake_overlay()

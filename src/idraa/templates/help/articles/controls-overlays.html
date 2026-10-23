@@ -15,7 +15,8 @@
 <p class="text-body text-ink-2 mb-3">
   When you attach a control to a scenario and run an analysis, Idraa passes your
   control assignments to the FAIR-CAM engine. The engine applies
-  <strong>multipliers to Threat Event Frequency (TEF) and/or Vulnerability</strong>
+  <strong>multipliers to Threat Event Frequency (TEF), Vulnerability and loss
+  magnitude</strong> (response controls act on Primary and Secondary Loss)
   inside the Monte Carlo simulation — each iteration of the simulation draws from
   distributions shaped by those multipliers.
 </p>
@@ -53,25 +54,30 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="what-is-an-overlay">What is an overlay?</h2>
 <p class="text-body text-ink-2 mb-3">
-  An <strong>overlay</strong> is a cross-cutting risk multiplier applied
-  organisation-wide rather than to a single scenario. Overlays carry two
+  An <strong>overlay</strong> is a named, organisation-wide preset that you
+  apply to a scenario draft in the scenario wizard. Overlays carry two
   multipliers — <strong>frequency multiplier</strong> and
-  <strong>magnitude multiplier</strong> — that scale the TEF and loss outcomes of
-  every scenario included in an analysis run.
+  <strong>magnitude multiplier</strong>. In the Likelihood and Impact steps, open
+  <strong>Prefill options</strong> and choose an overlay: the frequency multiplier
+  scales the draft&rsquo;s Threat Event Frequency (TEF) rows, and the magnitude
+  multiplier scales its Primary and Secondary Loss rows by the same factor.
+  Vulnerability is never scaled.
 </p>
 <p class="text-body text-ink-2 mb-3">
   Typical use-cases include:
 </p>
 <ul class="list-disc list-inside text-body text-ink-2 mb-6 space-y-1">
   <li>A macro threat-environment adjustment (e.g., elevated nation-state activity this quarter).</li>
-  <li>An organisation-wide cyber-insurance effect on secondary loss magnitude.</li>
-  <li>A temporary uplift during a high-risk period such as a merger or system migration.</li>
+  <li>An organisation-wide adjustment to loss magnitude, such as a sector with unusually high incident costs.</li>
+  <li>An uplift for a high-risk period such as a merger or system migration (the values stay in the draft you apply it to, so revisit them afterwards).</li>
 </ul>
 <p class="text-body text-ink-2 mb-3">
-  Overlays <em>compound multiplicatively</em> with controls: the simulation applies
-  all active control multipliers and all active overlay multipliers together in each
-  Monte Carlo iteration. Both are recorded in the run snapshot so the report always
-  reflects exactly which overlays were active at the time.
+  Applying an overlay <em>edits the values in your draft</em>; it does not link the
+  scenario to the overlay, and the values you end up with are yours to edit.
+  Applying an overlay again compounds, because the rows are scaled again. Nothing
+  multiplies at run time: a run uses the scenario&rsquo;s stored distributions, and
+  runs do not record overlays. Controls are applied separately, inside the
+  simulation, to whatever values the scenario stores.
 </p>
 <p class="text-body text-ink-2 mb-6">
   To <strong>create or manage</strong> overlays, go to
@@ -91,11 +97,11 @@
       <tr>
         <td><strong>Scope</strong></td>
         <td>Attached per-scenario</td>
-        <td>Applied across all scenarios in the run</td>
+        <td>Applied to a scenario draft from the wizard&rsquo;s Prefill options</td>
       </tr>
       <tr>
         <td><strong>Models</strong></td>
-        <td>A specific security capability (TEF and/or Vuln multiplier)</td>
+        <td>A specific security capability (TEF, Vuln and/or loss-magnitude multipliers)</td>
         <td>An org-wide environmental factor (frequency + magnitude multiplier)</td>
       </tr>
       <tr>
@@ -106,7 +112,7 @@
       <tr>
         <td><strong>Changes inherent Vuln?</strong></td>
         <td>No — separate simulation multiplier</td>
-        <td>No — separate simulation multiplier</td>
+        <td>No — overlays never scale Vulnerability</td>
       </tr>
     </tbody>
   </table>

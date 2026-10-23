@@ -79,7 +79,11 @@ class OverlayDefinition(IdMixin, TimestampMixin, OrgMixin, Base):
 
 
 class OverlayDefinitionRevision(IdMixin, TimestampMixin, Base):
-    """Append-only revision history. Scenarios pin to specific revisions."""
+    """Append-only revision history: one row per create/update, with the change reason.
+
+    Audit trail only. No scenario or run references a revision (overlays pre-fill
+    the wizard; they are not pinned), and nothing reads this table back today.
+    """
 
     __tablename__ = "overlay_definition_revisions"
 

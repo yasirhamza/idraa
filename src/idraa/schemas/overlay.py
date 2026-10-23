@@ -14,15 +14,15 @@ Security-critical validators (post-paranoid-review preamble fold-ins):
 - ``frequency_multiplier`` / ``magnitude_multiplier`` reject
   non-finite values (``inf``/``-inf``/``nan``) and values above a
   ``1e6`` sanity cap. ``Field(gt=0)`` alone would let ``float('inf')``
-  through and then the FAIR multiplicative compose would NaN/overflow
-  silently downstream.
+  through, and the wizard's ``apply_overlay_multipliers`` would scale draft
+  rows by a non-finite factor that ``_clamp`` can only squash to a bound.
 - ``methodology`` is required to be at least 20 chars after stripping —
   matches the DB CHECK constraint
   ``length(trim(methodology)) >= 20`` so a service that bypasses the
   form (e.g. Alembic seed) cannot insert a row that the form would
   later reject on edit.
 - ``tag`` is locked to snake_case starting with a lowercase letter so
-  that pinned-revision lookups remain stable across catalogs.
+  it stays a stable per-org identifier (the CSV import upsert key).
 """
 
 from __future__ import annotations
