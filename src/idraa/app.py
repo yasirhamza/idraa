@@ -1160,12 +1160,12 @@ def create_app() -> FastAPI:
     )
 
     # Middleware is LIFO. Final wire order (outermost to innermost):
-    #   request -> uat_basic_auth -> setup_guard -> SecurityHeaders ->
+    #   request -> RequestFraming -> uat_basic_auth -> setup_guard -> SecurityHeaders ->
     #              CSRF -> Session -> EnrollmentGuard -> MaintenanceBadgeCount -> route
     #   response <- (reverse)
     #
-    # LIFO add-order; uat_basic_auth registered last (after setup_guard
-    # below) → outermost overall.
+    # LIFO add-order; RequestFraming is registered last (below) → outermost
+    # overall, with uat_basic_auth just inside it (registered after setup_guard).
     #
     # EnrollmentGuard MUST be added after Maintenance but before Session so it
     # ends up inner to Session (Session runs first inbound and populates
@@ -1188,8 +1188,8 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware, enable_hsts=(settings.environment == "prod"))
 
     # Setup-guard: if no users exist in the DB, redirect everything that
-    # isn't allowlisted to /setup. Registered as the OUTERMOST http middleware
-    # so it can short-circuit a redirect before the request pays the cost of
+    # isn't allowlisted to /setup. Sits just inside the framing guard and the Basic
+    # pre-gate, outside the rest: it can short-circuit a redirect before the request pays the
     # SecurityHeaders + CSRF + Session + DB session load for the session
     # middleware. That short-circuit is also why the guard hits the DB with
     # its OWN session rather than taking one from the route-level

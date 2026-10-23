@@ -12,31 +12,32 @@ Threat/Asset/Method/Effect scenario taxonomy). That's a product feature, not
 an app-security artifact, and isn't covered here.
 
 **Status.** Drafted 2026-08-05 from a live code sweep (not carried forward
-from an earlier doc — none existed). **Fully re-audited 2026-08-05** — every
-file:line citation re-opened and every counting claim re-derived against the
-tree by three parallel reviewers; findings applied in one consolidated pass
-(see §13 for what that caught and why the periodic pass exists). Every claim
-below cites a file:line as of that re-audit; re-verify before trusting an old
-citation, per the project's own "point-in-time observation" convention.
+from an earlier doc — none existed). **First full re-audit 2026-08-05, second
+2026-10-23** — each time every file:line citation was re-opened and every
+counting claim re-derived against the tree by three parallel reviewers, with
+findings applied in one consolidated pass (see §13 for what the first caught
+and why the periodic pass exists). Every claim below cites a file:line as of
+the latest re-audit; re-verify before trusting an old citation, per the
+project's own "point-in-time observation" convention.
 
 ## 1. System overview
 
 ```
-Internet
-   │  TLS terminated at Fly edge
-   ▼
-Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XFF hop-count
-   │  HTTP, port 8000 only — no other port published
+Internet ──TLS (ends at the Fly edge)──▶ Fly.io edge/proxy ──(B1)── trusted client-IP header (Fly secret) or XFF hop-count
+   │  HTTP, port 8000 only — no other port published (operators reach the VM over Fly's private ssh: §3 factor reset)
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1173-1237) — B0 and B3 run BEFORE B2 (session lookup hits the
-   │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
+   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1173-1237), then
+   │  per-route dependencies (step-up resolves before role on every gated route); [ ] = no letter.
+   │  B0/B3 reject before B2's session lookup; [setup_guard] still reads the user count first.
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
+   ├─ [setup_guard] — no user yet → 307 /setup, the first-run admin claim (§3; allowlist §6)
+   ├─ [SecurityHeadersMiddleware] — CSP, X-Frame-Options, nosniff, HSTS (prod) on responses from below
    ├─ CSRFMiddleware ──(B3)── state-changing request ↔ verified-origin request
    ├─ SessionMiddleware (ASGI-wide, before routing) ──(B2)── unauth ↔ authenticated
    ├─ EnrollmentGuardMiddleware ──(B4)── authenticated ↔ MFA-enrolled
+   ├─ [MaintenanceBadgeCountMiddleware] (innermost) — navbar count only, no access decision
    ├─ require_step_up dependency ──(B5)── authenticated ↔ freshly-reauthenticated
    ├─ require_role dependency ──(B6)── role tier (viewer/analyst/reviewer/admin)
    ├─ organization_id scoping ──(B7)── org boundary (single-org today, schema-ready)
@@ -57,11 +58,11 @@ covered by another boundary's row."
 
 ## 2. B1 — Public internet ↔ Fly edge
 
-- **S**: `request.client.host` is spoofable behind Fly's edge and is **never**
-  trusted directly (`routes/deps.py:62-69,98-99`). Two opt-in trust
-  strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
-  `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
-  `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
+- **S**: `request.client.host` is **never** trusted for a security decision
+  (`routes/deps.py:62-69,98-99`): behind the edge it is the proxy hop unless
+  `FORWARDED_ALLOW_IPS` is set (a `*` makes it an attacker-chosen XFF entry). Two opt-in
+  strategies: a Fly-secret header (`trusted_client_ip_header`, `fly.toml:27-31`) or an N-hop XFF
+  walk (`trusted_proxy_count`, `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
   trusting a spoofable value (`routes/deps.py:120-130`); audit logging falls back to
   best-effort `request.client` instead (`routes/deps.py:133-154`) — a deliberate
   forensic-vs-security-critical asymmetry.
@@ -71,9 +72,9 @@ covered by another boundary's row."
   two shapes it accepted — a body on GET/HEAD/OPTIONS and
   `Transfer-Encoding` on HTTP/1.0 — are gadgets only if the Fly edge frames
   them differently, which cannot be tested locally. The outermost
-  `RequestFramingMiddleware` (`middleware/request_framing.py:33-50`) refuses
+  `RequestFramingMiddleware` (`middleware/request_framing.py:33-49`) refuses
   both with 400 and any method outside GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS
-  with 405 + `Allow`, always with `Connection: close`, before any other layer reads the
+  with 405 + `Allow`, always with `Connection: close` (`middleware/request_framing.py:78-82`), before any other layer reads the
   request. Live uvicorn probe: GET+body with a pipelined second request →
   one 400, connection closed, the pipelined request never runs; pinned by
   `tests/unit/test_request_framing.py`.
@@ -88,7 +89,7 @@ covered by another boundary's row."
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
   `.github/workflows/` (only `ci.yml`, `dependency-review.yml`). Deploys
   actually run through `./scripts/fly` per project convention; the comment is
-  stale. Low severity (comment, not behavior) — worth a follow-up cleanup.
+  stale, as is line 5's "bootstrap workflow". Low severity (comment, not behavior) — worth a follow-up cleanup.
 
 ## 2a. B0 — UAT basic-auth pre-gate (hosted UAT only)
 
@@ -97,7 +98,7 @@ full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
 (`middleware/uat_basic_auth.py`, wired at `app.py:1231`; confirmed order
 `app.py:1173-1237`) — outside even `setup_guard` (which carries no boundary
-letter of its own; see §6), B3's CSRF, and B2's session auth. A single
+letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
 the edge credential does not equal compromising the app, per the module
@@ -126,14 +127,16 @@ docstring).
   assigned to locals and AND-ed at the end rather than short-circuited
   (`uat_basic_auth.py:135-137`) — the docstring explains the short-circuit
   form would leak "wrong user" vs. "wrong password" via response timing.
-- **Residual risk**: single shared credential (not per-user), by design for
-  a UAT gate — compromise of that one credential exposes the whole hosted
-  instance to the inner (still-intact) session-auth boundary, not to a
-  specific account. The middleware's *presence and position* ARE pinned by
+- **Residual risk**: single shared credential (not per-user), by design for a UAT gate —
+  compromise exposes the instance only to the inner (still-intact) session auth. Guesses are not
+  throttled and leave only uvicorn's access line, so the strength is C6's 16-character floor.
+  Its *presence* and *position* are pinned by
   `tests/unit/test_app_middleware_order.py::test_middleware_wire_order`,
-  which asserts the exact 8-element `app.user_middleware` list with the
-  request-framing guard outermost and `uat_basic_auth` next — removing or
-  reordering either fails that test.
+  which asserts the 8-element `app.user_middleware` class list (framing guard
+  outermost) and, because `uat_basic_auth` and `setup_guard` are both
+  `BaseHTTPMiddleware`, their dispatch names at indices 1–2
+  (that test's last assertion), so removing, reordering or swapping them fails;
+  a same-named replacement would still pass.
   What nothing checks is whether THIS DOCUMENT still enumerates the real
   middleware stack (see §12 item 6).
 
@@ -152,10 +155,10 @@ docstring).
   `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
   would invalidate every open page's forms (one 403 + reload each) — design it
   with that in mind.
-- **S** (credential stuffing): Argon2 password hashing with a precomputed
-  dummy-hash timing-safe check for nonexistent/inactive users
-  (`_DUMMY_PW_HASH`/`verify_user_password`, `services/auth.py:75-89`) — prevents a
-  login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
+- **S** (credential stuffing): Argon2 password hashing with a precomputed dummy hash, so
+  a nonexistent/inactive user pays the same single verify (`_DUMMY_PW_HASH`/`verify_user_password`,
+  `services/auth.py:75-89`); a known user's miss also writes the lockout UPDATE and C2 audit row
+  (unmeasured timing gap; ≤5 samples per lockout window by default). **A3 (2026-08-15):** the Argon2
   verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
   a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
   `services/auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:367`), isolated
@@ -163,11 +166,11 @@ docstring).
   keeps the single event loop non-blocking (was a measured 13.7× head-of-line
   block) while preserving the timing-equal anti-enumeration property (both
   branches offloaded identically, exactly one verify each).
-- **D/brute-force**: two independent DB-backed throttles, both fail-open on
-  store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `services/auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
-  `config.py:401-403`; `services/login_throttle.py`), applied to both
-  `/login` and step-up re-verification (`routes/step_up.py:217,245`).
+- **D/brute-force**: two independent DB-backed throttles — per-account lockout (5 attempts/900s,
+  `config.py:355-356`; `services/auth.py:384-434`; a store error fails the request) and per-source
+  `LoginAttempt` (20/900s/900s, `config.py:401-403`; fail-open, `services/login_throttle.py`).
+  `/login` and `/login/mfa` apply both, passkey login only per-source; step-up code/password verify
+  only per-account (`routes/step_up.py:124`), step-up passkey only per-source (`routes/step_up.py:217,245`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
   (`register_failed_login`) was a non-atomic read-modify-write that lost
   increments under concurrency (~1 of 5 retained); it now does a guarded
@@ -201,15 +204,46 @@ docstring).
   (`services/mfa_enrollment.py:18-29`) accepts either.
   `EnrollmentGuardMiddleware` (`middleware/enrollment_guard.py:36-54`)
   force-redirects unenrolled users to `/account/security` when the effective
-  MFA policy is `required`. **Recovery-code single-use (B6, 2026-08-15):** a
+  MFA policy is `required`. **Recovery-code single-use (finding B6, 2026-08-15):** a
   matched recovery code is burned by an atomic guarded UPDATE
   (`_claim_recovery_code`, `UPDATE ... WHERE used_at IS NULL` + `rowcount==1`,
-  `services/second_factor.py:47-78`), mirroring the TOTP step claim — replacing
+  `services/second_factor.py:47-79`), mirroring the TOTP step claim — replacing
   a plain attribute set that let two concurrent redemptions of one code both
   mint a session. The recovery-loop Argon2 (`_match_recovery_code`) is offloaded
   to the same dedicated pool. A lost claim audits `user.recovery_code_claim_lost`
   (§11) and rejects; the caller additionally audits `user.login_mfa_failed` /
   `user.step_up_failed`, so a lost claim emits TWO rows by design.
+- **S/E (first-run bootstrap)**: while no user exists, `setup_guard` (§6) sends every
+  non-allowlisted request to `/setup`, and `POST /setup` creates the organization, the first
+  ADMIN and a logged-in session for whoever submits it first; no credential is checked, by
+  design. Residual: from first boot
+  until the operator completes `/setup`, any client that reaches the port can claim the
+  instance. The hosted UAT closes that window with B0 (`/setup` is not in `EXEMPT_PATHS`); a
+  self-hosted install without the pre-gate must finish `/setup` before exposing the port.
+- **E/R (factor reset: admin UI and operator CLI, idraa#256)**: both paths run `reset_user_mfa`
+  (`services/mfa_enrollment.py:61-84`: deletes the user's passkeys, TOTP and recovery codes and
+  clears `mfa_enrolled_at`), then `revoke_user_sessions` (`services/auth.py:472-482`: deletes
+  every `AuthSession` row of the user, so the next request is anonymous), and write
+  `user.mfa_admin_reset` and `user.sessions_revoked` rows; neither path sets or reveals a
+  credential. (1) `POST /users/{user_id}/reset-mfa` (`routes/users.py:512-553`): ADMIN role,
+  ADMIN step-up (§5), CSRF, a `confirm` field and an org-scoped `get_user` (cross-org 404); the
+  rows name the admin. (2) `python -m idraa auth reset-mfa <email>` (`__main__.py:22-61`), the
+  backstop for a locked-out sole admin, has no HTTP entry point and no in-app gate (no session,
+  role, step-up or CSRF): whoever can run a process with the app's environment and database runs
+  it (on Fly, a `scripts/fly ssh console` shell behind Fly org authentication). That access can
+  already write the database directly, so the command adds nothing to host access. It looks the
+  email up across every org (`services/auth.py:464-469`, `.first()`; one org today) and writes
+  its rows with `user_id` and `ip_address` NULL and `"via": "cli"`: the trail shows that an
+  operator acted, not which one. The `idraa` console script is the task runner; only
+  `python -m idraa` reaches this command. Deactivating a user runs the same revoke
+  (`routes/users.py:349-351`, and the set-active toggle); logout deletes its own row (§6).
+  **Residual (both paths):** a reset leaves a password-only account until it re-enrolls. A
+  password login then mints a full session (`routes/auth.py:246-252`), the enrollment guard
+  (policy `required`) holds it on `/account/security`, and step-up accepts the password from an
+  account with no factor (§5), so whoever signs in next with the password enrolls the next
+  factor. Invite passwords are chosen by the admin and there is no self-service password change,
+  so an admin who resets a user's factors can sign in as that user before they re-enroll; the
+  reset row names that admin. Coordinate each reset with its user.
 
 ## 4. B3 — CSRF (state-changing request ↔ verified-origin request)
 
@@ -259,7 +293,7 @@ docstring).
   `TypeError` (not a clean non-match) when either operand carries a
   non-ASCII character, so an attacker-crafted non-ASCII token used to escape
   as an unhandled 500 rather than the intended 403. Both `compare_digest`
-  call sites now guard with `.isascii()` first, rejecting as a normal
+  call sites in this middleware now guard with `.isascii()` first, rejecting as a normal
   verification failure instead: `verify_csrf_token`'s `sig_hex` check
   (`csrf.py:233-239`) covers the cookie-signature compare — this one closes
   an **unauthenticated 500-on-every-request** class, since `verify_csrf_token`
@@ -280,7 +314,7 @@ docstring).
   unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
   403. Not attacker-authenticated; a single-machine availability hardening.
 
-## 5. B4/B5 — Step-up & elevated-action freshness
+## 5. B5 — Step-up & elevated-action freshness (B4, the enrollment guard: §3 E)
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
@@ -288,20 +322,20 @@ docstring).
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
   `services/security_settings.py:146-188`). **43** real call sites (37 as of
-  the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
+  the 2026-08-05 re-derivation; +6 from finding B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
   `routes/deps.py:236` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
-  destructive deletes, **14** admin/user-mgmt (7 in
+  destructive (7 deletes, overlay deactivate, run sample purge), **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,256,376,467,510,557`, 1 in
-  `routes/settings.py:176`, and the **6 B2 additions** — `POST /organization`,
+  `routes/settings.py:176`, and the **6 finding-B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
   (`routes/mfa.py:96,136,190,232,259,337`). Re-verification
-  (`routes/step_up.py:90-332`) has its own throttle and stamps
-  `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `services/auth.py:308`).
-- **B1 — the settings write is never disarmed (2026-09).** The global
+  (`routes/step_up.py:90-332`) is throttled per route (§3 D/brute-force; five failed attempts there
+  also lock `/login`, which the passkey route avoids on purpose) and stamps `reauthenticated_at`;
+  login itself counts as a re-auth (`create_session`, `services/auth.py:308`).
+- **Finding B1 — the settings write is never disarmed (2026-09).** The global
   kill-switch (window ≤ 0) and the per-category ADMIN override both live in the
   settings that `POST /settings/security` writes. `step_up_required()` honours
   them, so one fresh write could previously switch step-up off for good —
@@ -316,23 +350,23 @@ docstring).
   `routes/settings.py::_parse_window`), which also keeps `is_step_up_fresh`
   clear of a `timedelta` overflow. Switched-off categories stay off everywhere
   else. Pinned by `tests/integration/test_step_up_categories.py::test_b1_*`.
-- **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
+- **Findings B6/A3, inherited (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
   (`routes/step_up.py:148,150`), so it inherits both the atomic recovery-code
   burn (§3 E) and the dedicated-pool Argon2 offload (§3 S) with no step-up-
   specific code.
-- **B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
+- **Finding B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
   that feed org-wide FAIR/financial computation (industry, risk_appetite,
   security_maturity, preferred_currency; the FX rates behind every ALE), so a
   stale admin session could previously change them freely while being bounced
   from `/settings/security`. All six are now `StepUpCategory.ADMIN`-gated. The
   count-regression tripwire (`tests/unit/test_step_up_call_sites.py`, now 43)
   is joined by a COMPLETENESS guard (`tests/unit/test_step_up_completeness.py`):
-  it introspects the live route table and fails if any admin-only
-  state-changing route is neither step-up-gated nor on an explicit exemption
+  it introspects the live route table and fails if any state-changing route gated by
+  `require_role(ADMIN)` alone is neither step-up-gated nor on an explicit exemption
   allowlist (the routine reference-data / multi-step-import surface) — so a NEW
-  admin route can no longer ship ungated unnoticed, the exact hole a count
-  cannot see.
+  admin-only route can no longer ship ungated unnoticed, the exact hole a count cannot
+  see (a broader role list or an in-handler role check is outside its scope, by its docstring).
 
 ## 6. B6 — RBAC (role tier)
 
@@ -343,15 +377,15 @@ docstring).
   `deps.py:180-186`) so privilege-probing leaves a trace (C1, 2026-08-09; a
   WARNING not a DB `AuditLog` row, to keep it bounded by log rotation rather
   than an attacker-driven write amplifier). Gating is 100% per-route (no
-  `APIRouter(dependencies=...)` blanket gate found) — every
-  `POST/PUT/PATCH/DELETE` handler across `routes/*.py` was diffed against
-  presence of an auth dependency; the only unguarded hits are the
-  pre-authentication login routes (`routes/auth.py:114,129,274,360,368`) plus
-  `POST /logout` (`routes/auth.py:459-460`, takes `user: User | None =
+  `APIRouter(dependencies=...)` blanket gate found) — all 80 state-changing
+  handlers across `routes/*.py` (every one a POST: no PUT/PATCH/DELETE route exists;
+  re-derived 2026-10-23) were diffed against an auth dependency; the 6 unguarded are the
+  pre-authentication login POSTs (`routes/auth.py:129,274,360,368`) plus
+  `POST /logout` (`routes/auth.py:459-463`, takes `user: User | None =
   Depends(current_user)` — no-op on an already-logged-out session, correct
-  by design) and `/setup` (`routes/setup.py:58`, gated instead by the
-  outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1190-1224`).
+  by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
+  `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
+  (`app.py:1190-1224`) allowlists `/setup` (`app.py:826-829`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for
@@ -365,19 +399,29 @@ docstring).
   dependency `routes/threat_communities.py:44`). Separately, `scenario_export_routes.py:51` deliberately
   uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
   admins and analysts, per its inline comment. Never a security defect, only
-  a doc-accuracy one; CLAUDE.md now names all four roles with an inline
-  "Corrected 2026-08-05" note.
+  a doc-accuracy one; CLAUDE.md (local, untracked) now names all four roles — its
+  "Corrected 2026-08-05" note was dropped in a later consolidation (re-checked 2026-10-23).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
   (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
   UserRole.ADMIN)` (`routes/scenarios.py:1542`) — REVIEWER and VIEWER get 403. It is the
   dedicated confirm path; edit-form and wizard saves also resolve it (§11).
+- **Role assignment and the last-admin invariant (added by the 2026-10-23 re-audit):** only
+  an ADMIN with a fresh ADMIN step-up can change a role or deactivate a user (`/users/{id}/edit`
+  and `/set-active`, §5). An admin cannot demote or deactivate themselves
+  (`routes/users.py:280-287`), and disarming the last active admin is refused inside the
+  write itself — `guarded_admin_disarm`'s UPDATE re-checks that another active admin
+  remains (`routes/users.py:321-344`, `services/users.py:159-194`, idraa#83). The role is
+  re-read from the `users` row on every request (`middleware/session.py:58-60`), so a
+  demotion takes effect on the next request; deactivation also revokes live sessions
+  (cited in §3). Measured 2026-10-23: REVIEWER is named only in the same six
+  four-role allowlists as VIEWER (the 9 GET routes above), so its reach equals VIEWER's.
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
-- **I/E**: enforcement is consistent, not incidental. Repos expose only
-  `*_for_org(organization_id, ...)` methods
-  (`repositories/scenario_repo.py:65-82`, `repositories/run_repo.py:27-41`);
+- **I/E**: repository reads of org-scoped tables take `organization_id` (`repositories/scenario_repo.py:65-82`,
+  `repositories/run_repo.py:27-41`), except the zero-caller, unscoped `get_override_by_version`
+  (`repositories/scenario_library_repo.py:361-377`, invisible to the checker below);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
@@ -386,24 +430,24 @@ docstring).
   transitively safe because `control` was org-verified earlier in the same handler
   (`routes/controls.py:692-693`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
-  client id (issue #268):** the control form's link is a top-level field
-  (`corrects_misaligned_decisions_from`, not a `ControlForm` field) carrying an
-  eligible sub-function slug, and the server resolves it to the row of the SAME,
-  already org-verified control that carries that sub-function — so the link can
-  never name another control's or another org's assignment. Any client-supplied
-  `assignments[N][derived_from_assignment_id]` is stripped from the parsed form
-  before validation and, if it survives, refused; a submitted
-  `dsc_corr_misaligned` assignment row is refused; an unknown slug is refused.
-  All refusals happen in a pure check that runs before any mutation (no row
-  written, no audit entry) and render a 422 whose messages are fixed text or
-  enum values only — the client string is never echoed.
+  client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
+  parsed to a sub-function slug (`routes/controls.py:958-973`); the server resolves it to the
+  row of the SAME, already org-verified control by an explicit control + org select
+  (`services/controls.py:189-207`), so it can never name another control's or org's row.
+  A client `assignments[N][derived_from_assignment_id]` is dropped before validation
+  (`routes/controls.py:76-83`); one that survives, a submitted `dsc_corr_misaligned` row and
+  an ineligible or absent source are refused by a pure check that runs first in create and
+  update (`services/controls.py:136-186`), and an unknown slug by the route parse — all before
+  any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
+  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:309`;
+  breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
   bare `<expr>.get(Model, id)` on an org-scoped model with no
   `organization_id` check (or `*_for_org*` delegated-safety call) anywhere
   in the enclosing function. Its first real run found exactly one live gap
-  and ten correct-but-undocumented exemptions:
+  and ten correct-but-undocumented exemptions (eleven suppressions today, listed below):
   - **Fixed**: `services/controls.py`'s `get_control()` — the concrete
     example this section used to cite as "no org check at all at that
     line, safe only by caller discipline" — is now `get_control_for_org(db,
@@ -417,8 +461,8 @@ docstring).
     `routes/step_up.py:103,313`); 3 sites resolving a user id from a
     source that's already unforgeable — a server-signed pending-MFA
     cookie (`routes/auth.py:301`) and an already-verified WebAuthn
-    credential's owner (`routes/auth.py:422,437` — login and the B5 replay-audit
-    lookup); 2 sites in
+    credential's owner (`routes/auth.py:422,437` — the B5 replay-audit lookup
+    and login); 2 sites in
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
     per-request handler with an attacker-suppliable id).
@@ -441,14 +485,21 @@ docstring).
   ordinary shape, so this is the more exploitable gap versus the allowlist-
   staleness one below — tracked as issue #151 (bind the check to the
   specific assigned variable / the flagged call's id argument, not just
-  "some check exists in this function"). Additionally: a new PK lookup
-  that skips both the `get_for_org` pattern AND ends up naming its model
-  outside the checker's maintained `ORG_SCOPED_MODELS` allowlist (new
-  model, allowlist not updated) would slip through silently, and a
-  suppression comment's *reason* is human-asserted, never verified — the
-  security-auditor persona (`CLAUDE.md` → Review ceremony) is the actual
-  backstop for both: keeping the allowlist current and reading each
-  suppression's reason for whether it's really true, not just present.
+  "some check exists in this function"). Additionally, the checker parses only the
+  `<expr>.get(Model, id)` shape on a bare model name: a `select(Model).where(Model.id == x)`
+  with no org predicate (the dead method above; `services/reports.py:1709-1735`'s legacy
+  fallback), an aliased or attribute-qualified model, and the two org-child tables in
+  `NON_ORG_COLUMN_MODELS` are never flagged; allowlist staleness is closed by the parity
+  test below (2026-10-01). A suppression's *reason* is human-asserted, never verified — the
+  security-auditor persona (`CLAUDE.md` → Review ceremony) is the backstop for both: reading
+  new lookups of those shapes and each suppression's reason for whether it is really true.
+- **Org scoping has two sources; one is single-org-only (re-audit 2026-10-23):** 44
+  `require_sole_org(db)` call sites in 11 route modules (controls 15, overlays 9, reports 4,
+  runs 3, users 3, six more with 1–2 each) scope by `select(Organization).first()` — the
+  first org row, no ORDER BY (`services/org.py:25-33`) — not by the caller's
+  `user.organization_id`. Correct only while exactly one org exists (the sole constructor is
+  `/setup`, `routes/setup.py:106`); all of them pass the checker. Any
+  multi-tenancy work must replace them, and the legacy fallback above, first.
 - **Threat Agent Library canonical catalog is deliberately NOT org-scoped
   (2026-10-01):** `ThreatCommunity` (`models/threat_community.py`) has no
   `organization_id` column — P1 ships a single canonical, shared catalog
@@ -476,9 +527,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   (`app.py:97-100`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
-  confirmed total — every file under `src/idraa/templates/` is `.html` (zero
-  non-html templates exist), so autoescape covers 100% of rendered output,
-  not a subset. **Alpine `x-data` is the sharp edge**: an attribute the browser
+  confirmed total — all 146 tracked templates are `.html`, so autoescape covers every
+  one; the two `| safe` bypasses emit app-built markup only (`app.py:152`'s `csrf_field()`
+  Markup, the segno TOTP SVG at `templates/account/_totp.html:12`). **Alpine `x-data` is the sharp edge**: an attribute the browser
   HTML-decodes before Alpine evaluates it as a JS expression, so autoescape is
   no defense there — the value must be JSON-encoded via `| tojson` inside a
   single-quoted attribute. The money-field / loss-readout `x-data` sites do
@@ -494,7 +545,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   pattern makes it cross-user). Now fixed: all three adopt the single-quoted +
   `| tojson` idiom, `data_table.html`'s `page_size` x-data gets a defensive
   `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
-  fails if any dist selector regresses to the raw shape.
+  fails if any dist selector regresses to the raw shape; #268's link select reflects its slug the same way (§7).
 - **URL-context injection (href)** — a third class, distinct from both:
   autoescape escapes `&<>"'` in an `href` value, preventing attribute
   breakout, but does not validate the URL scheme, so `javascript:` survives
@@ -515,7 +566,8 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   explicitly reject `javascript:` — regression-tested in
   `tests/unit/test_formatting_linkify.py`
   (`test_linkify_https_javascript_scheme_stays_inert`,
-  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
+  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`;
+  `test_linkify_https_malformed_url_is_total_and_inert` for totality on `https://[`)
   plus a route-level end-to-end check that a stored `javascript:` citation
   URL actually renders as inert text on a real response body
   (`tests/routes/test_threat_community_pages.py:128`,
@@ -528,12 +580,19 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   The only textual hit is an explanatory comment in `app.py:102-107` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
-  one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2373-2375`, the wizard step template
-  construction, consumed by the `TemplateResponse` call at `routes/scenarios.py:2538`) that
-  indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`routes/scenarios.py:2365`) — not attacker-controlled text, so it's path
-  *selection* among a fixed set, not path or template *construction*.
+  one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template
+  (`routes/scenarios.py:2373-2375`, consumed at `routes/scenarios.py:2538`) indexes a **fixed
+  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2365`), and
+  two more pick one of two literals by a flag (`routes/scenarios.py:2985-2987`, `routes/help.py:134`);
+  one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
+  slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
+- **CSP is not an XSS backstop (2026-10-23)** — `SecurityHeadersMiddleware` (§1) sends a
+  CSP whose `script-src` still carries `'unsafe-inline'` and `'unsafe-eval'`
+  (`CSP_POLICY`, `middleware/security_headers.py:68-80`; the latter is Alpine's expression
+  evaluator), so it does not stop injected inline script or an injected Alpine expression:
+  output escaping, `| tojson` in `x-data` and the href gates above are the only defence.
+  Tracked publicly: dropping `'unsafe-eval'` via the `@alpinejs/csp` build (#281) and a
+  nonce-based `script-src` that drops `'unsafe-inline'` (#282).
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /
   `render_template_string()` with any request-derived string (a "custom
@@ -544,15 +603,15 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 ## 9. B9 — File import / export
 
-**Import** — two parser modules, both size- and row-capped; zip-bomb-guarded
-only where it applies (the XLSX-capable module — the other has no zip path).
+**Import** — five admin-only upload routes, each size- and row-capped; zip-bomb-guarded
+only where it applies (the XLSX-capable register path — the others have no zip path).
 `services/register_import_parsers.py` accepts CSV and XLSX, sniffed by
 extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
-`services/scenario_import_parsers.py` accepts CSV and JSON only (per its own
-module docstring — it has no XLSX path). Guards: 5 MB upload cap via
-`Content-Length` (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
-`routes/register_import.py:253-257`, `routes/scenario_import.py:124-128`,
-`library_import.py:80-84`); a zip-bomb guard on the XLSX path that reads only
+`services/scenario_import_parsers.py` accepts CSV and JSON only (per its own module docstring — it has no XLSX path); `services/library_bundle_import.py` parses JSON bundles into the GLOBAL library catalog every org reads; `services/controls_importer.py` and `services/overlays_importer.py` parse CSV.
+Guards: 5 MB upload cap via a forgeable
+`Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
+`routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
+`library_import.py:80-89`, `routes/controls.py:492-501`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
@@ -576,12 +635,12 @@ transient is
 survivable on the 4 GB VM. The non-bypassable tightening (parse
 `[Content_Types].xml` to bound buffered parts by role) is deferred as
 disproportionate for an admin-only surface; revisit if import ever becomes
-non-admin. There is also a single
+non-admin. Row caps: one shared
 `MAX_ROWS = 500` constant (`scenario_import_parsers.py:85`) enforced at
-every entry point that accepts row data — CSV (`scenario_import_parsers.py:275`)
+the scenario and register entry points — CSV (`scenario_import_parsers.py:275`)
 and JSON (`scenario_import_parsers.py:325`) in that module, and re-imported and enforced again
 for XLSX (`register_import_parsers.py:221-222`) and CSV
-(`register_import_parsers.py:250-251`) in the other; `defusedxml`
+(`register_import_parsers.py:250-251`) in the other; the other three importers carry their own — `MAX_ENTRIES = 500` (`services/library_bundle_import.py:57`), `MAX_CSV_ROWS = 500` (`services/overlays_importer.py:103`) and `MAX_CSV_ROWS = 10_000` (`services/controls_importer.py:104`), the last truncating with a logged warning rather than rejecting the file; `defusedxml`
 auto-substitution blocking XML entity expansion (billion-laughs class,
 `register_import_parsers.py:29-37`). Parsed cells are coerced to
 `str(v).strip()` only — no formula evaluation on import.
@@ -628,7 +687,7 @@ and shrinking (back-compat for bundles exported before P1), not a live
 dual-write surface.
 
 **Export — download header (C9, 2026-09)**: every download in `src/idraa`
-(CSV, scenario JSON, library bundle, PDF reports, samples export, the four
+(CSV, scenario JSON, library bundle, PDF reports, the verification workbook, samples export, the four
 template/sample downloads) builds `Content-Disposition` through one helper,
 `attachment_disposition()` (`utils/download.py`), which quotes the name and
 replaces `"`, `;`, `\` and every control character. The scenario JSON and
@@ -638,9 +697,9 @@ every caller passed a literal or a UUID). A guard in
 `"Content-Disposition"` key in the source tree.
 
 **Export**: CSV/XLSX formula-injection guarded by single-quote-prefixing any
-cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, used by
-`services/sample_export.py:68,181` and `services/verification_workbook.py:51-66`, which also
-guards legacy `{=...}` array-formula braces). PDF report
+cell starting with `=+-@\t\r` (`utils/csv_export.py:33-40`, applied by `csv_response` to every cell and reused by
+`services/sample_export.py:68,181`); the XLSX verification workbook has its own superset guard, `_neutralize` (`services/verification_workbook.py:51-69`), which also prefixes a leading `\n` and
+legacy `{=...}` array-formula braces. PDF report
 strings pass through `rl_escape()` before hitting a reportlab `Paragraph`
 (`services/pdf_report.py:25-27,515-517,561` plus the by-threat-community
 names/amounts at `services/pdf_report.py:1363,1371`). The TOC/URI fix
@@ -655,24 +714,24 @@ new export format must re-implement, not assume is "someone else's problem."
 
 ## 10. B10 — Run execution / Monte Carlo (resource exhaustion)
 
-- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-76`, default
-  1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side at
-  `POST /analyses` (`routes/runs.py:1186-1197`) — the HTML form's `max=`
+- **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
+  1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
+  routes share (`services/runs.py:142-151`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
   shared across all orgs on one VM (`config.py:253-295`): high-fidelity
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
-  BACKGROUND runs to `max_concurrent_standard_runs` (default 8). The
-  sub-1000-iteration INLINE dispatch path is intentionally UNGATED — such runs
+  BACKGROUND runs to `max_concurrent_standard_runs` (default 8). A standard
+  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — such runs
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
   the run pipeline (`del enhanced` at `services/run_executor.py:2237`; `del calculator, fc_controls`
   at `services/run_executor.py:2405` and again at `services/run_executor.py:2591`; `del per_scenario_inputs` at `services/run_executor.py:2592`;
-  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`) each paired
-  with an explicit `gc.collect()` (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
+  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -680,9 +739,9 @@ new export format must re-implement, not assume is "someone else's problem."
   plus scenario/control loads autobegin an uncommitted transaction — so absent
   a release a run would PIN its pooled DB connection for the whole compute
   window. A burst of concurrent runs would then drain the 15-slot pool (size 5
-  + overflow 10, `db.py`), and every other request — INCLUDING `/login` — 500s
+  + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
-  reports.py production outage (`routes/reports.py:220-229,333-347`). Control
+  reports.py production outage (`routes/reports.py:217-229,329-347`). Control
   (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1857`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
@@ -707,13 +766,46 @@ new export format must re-implement, not assume is "someone else's problem."
   `argon2_max_threads × 64 MiB` ≈ 256 MiB transient at the default, atop the MC
   budget (`config.py:275-279`) — fits the 4 GB VM; re-derive with the MC caps if
   the VM shape changes.
+- **D (inputs that size the sampler and the wizard fit, #256).** Two caps bound
+  user-supplied inputs before they reach the engine or the elicitation fit; both
+  predate the 2026-08-05 audit and were simply never listed here. (1) **σ cap:** a
+  lognormal σ above 10 (`_SIGMA_MAX`, `services/fair_cam_validation.py:44-47`, "a
+  user-controllable OOM/DoS path to the engine sampler") is refused for a scalar
+  lognormal (`services/fair_cam_validation.py:156-157`) and for every mixture
+  component (`services/fair_cam_validation.py:206-210`); a mixture also carries 1 to
+  `max_smes_per_fieldset` components (`services/fair_cam_validation.py:168-173`).
+  The check sits in `validate_fair_distributions`, which every distribution write
+  path calls — form create and update, wizard save, scenario and library-bundle
+  import, loss pinning, library overrides. (2) **SME-row cap:**
+  `max_smes_per_fieldset` (`config.py:180-184`, default 20, env
+  `MAX_SMES_PER_FIELDSET`) bounds the SME-estimate rows per fieldset through one
+  shared validator (`schemas/wizard_step3.py:52-58`) that both fieldset models call;
+  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2672-2673`) and
+  again before finalize (`routes/scenarios.py:3220`). The finalize fit is further
+  bounded per fit (`quantile_fit_maxiter` 200, `config.py:188`;
+  `quantile_fit_wall_clock_ms` 500 ms, `config.py:193`) and per call
+  (`finalize_wall_clock_ms` 5000 ms, `config.py:196`). The row schema does not
+  itself reject a non-finite `high` (#141, open).
+- **D (disk).** A dispatch is refused while the DB volume has less than
+  `min_free_disk_bytes` free (`config.py:241`, default 300 MB;
+  `services/runs.py:153-166`), the 2026-06-29 full-disk outage class; per-iteration
+  samples are reclaimed by the operator-set retention purge
+  (`retention_sample_purge_days`, off by default). Check-then-dispatch with no byte
+  reservation: it stops sequential accumulation, not a concurrent burst nor one run
+  whose samples outgrow the space left. This is the disk guard §11's C1 note means.
+- **D (export and report compute).** The raw-samples export runs one at a time
+  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:399`; a concurrent request
+  gets 429), and the verification workbook builds its in-Excel Monte Carlo for at
+  most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
+  (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and
+  the per-user export rate limit at the §11 bulk-export choke point.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
   actually read `performance / 2 cpus / 4096mb` since 2026-06-29 (PR #428/
-  #429) — a ~5-week drift. **CLAUDE.md now carries the corrected figures**
-  plus its own inline "Corrected 2026-08-05" note. Kept here (rather than
-  deleted) because the underlying coupling still matters: `config.py:71-77`
+  #429) — a ~5-week drift. **CLAUDE.md carries the corrected figures** (it is operator-local, untracked since 2026-07-23);
+  the inline "Corrected 2026-08-05" note it gained then has since been removed. Kept here (rather than
+  deleted) because the underlying coupling still matters: `config.py:71-78`
   ties the 1,000,000-iteration cap directly to the 4GB headroom (~700MB peak
   RSS at N=1M/M=30), so if the VM shape is ever downgraded, that cap must be
   re-benchmarked, not just inherited. This document defers to `fly.toml` as
@@ -729,10 +821,10 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-full run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
-delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`) — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
+delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
-(`services/audit.py:171-252`). Emails redacted
+(`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
 raw email — `routes/users.py` invite and `routes/setup.py` first admin — were
 fixed in 2026-09 (advisory C4) and an AST guard,
@@ -744,11 +836,14 @@ for users since hard-deleted, whose own `user.delete` row is redacted, so the
 old create row is then the only place the address survives. They are not
 rewritten automatically, because rewriting audit history undermines its
 tamper-evidence; an erasure request for such a user needs a manual, audited
-redaction of that one row. Financial values bucketed
-(`bucket_amount`, `audit.py:119-137`) before storage. 70+ call sites spot-
+redaction of that one row. Financial values are NOT redacted: the SME-estimate row stores the raw low/high
+next to an order-of-magnitude bucket (`bucket_amount`, `audit.py:119-137`; both at `services/wizard_finalize.py:759-762`). 70+ call sites spot-
 checked across controls/runs/scenarios/users all logged correctly; **not**
 verified as an exhaustive per-route coverage matrix — flagged as a known
 gap, not a finding of an actual miss.
+The operator CLI `python -m idraa auth reset-mfa` (§3) writes its `user.mfa_admin_reset` and
+`user.sessions_revoked` rows with `user_id` and `ip_address` NULL and `"via": "cli"`: those rows show
+that an operator acted, not which one.
 
 **Detection hardening (C1/C2, 2026-08-09).** Two blind spots closed:
 - **C2** — every failed password attempt by a known, unlocked user now writes
@@ -794,8 +889,15 @@ claim (`rowcount==0`) — i.e. a concurrent request burned it first. This is the
 forensic signal of the exact double-redemption the B6 fix defends against.
 **Write-amplification bound:** it fires ONLY on a hash-match, so it requires
 possession of a valid recovery code (random guesses never match — 2⁴⁰ space);
-per burst it is bounded by `argon2_max_threads` (4) and the per-source
-`LoginAttempt` throttle; and it is self-limiting — once the code is burned, the
+per burst it is bounded by `argon2_max_threads` (4) and by the route's attempt
+limits, which differ. `/login/mfa` consults the per-source `LoginAttempt`
+throttle before verifying (when a client-IP trust strategy is configured), bounces
+a locked account, and counts every miss, a lost claim included, against the
+per-account lockout and the source (`routes/auth.py:281-323`). The step-up
+code/password route has no per-source throttle and is bounded by the per-account
+lockout alone: it bounces a locked account before verifying, with no audit row,
+and counts each miss (`routes/step_up.py:138-148`; §3). It is also self-limiting —
+once the code is burned, the
 `used_at IS NULL` SELECT filters it, yielding a clean `None` with NO further
 `claim_lost` row (regression-pinned by
 `tests/services/test_recovery_code_atomicity.py::test_already_consumed_code_rejects_cleanly`).
@@ -835,12 +937,12 @@ watching:
 
 1. Org-scoping discipline (§7) is **gate-enforced as of 2026-08-05**
    (`scripts/lint_org_scoped_lookups.py`) for its one specific shape (bare
-   `.get(Model, id)`); still convention-only for any other shape a future
-   lookup might take, and for keeping the checker's model allowlist current.
+   `.get(Model, id)`), with a function-wide org-check search not bound to the flagged call (#151, open); still convention-only for any other shape a future
+   lookup might take. Allowlist currency is gate-enforced since 2026-10-01 by the parity test cited in §7.
 2. Audit-logging coverage (§11) is spot-checked, not exhaustively matrixed.
 3. ~~`CLAUDE.md`'s role list (§6) and VM-envelope figures (§10) are stale~~ —
    **CLOSED 2026-08-05**: both corrected in CLAUDE.md the same day, each with
-   an inline "Corrected 2026-08-05" note recording the stale value (the VM
+   an inline "Corrected 2026-08-05" note (both notes since removed from the now operator-local file) recording the stale value (the VM
    note dates the drift to ~5 weeks; the role note records the duration as
    unknown). See §10's and §6's resolved drift flags. Note the first closure
    attempt carried the pre-audit VIEWER undercount ("2 routes") into
@@ -849,9 +951,9 @@ watching:
 4. `fly.toml:4`'s `uat-deploy.yml` comment (§2) references a workflow file
    that doesn't exist — cosmetic, low severity. Still open (re-confirmed by
    the 2026-08-05 re-audit).
-5. `REVIEWER` (§6) functions almost entirely as a read-only allowlist member
-   rather than a fully distinct write-permission tier — confirm this matches
-   intended RBAC design; not treated as a defect here.
+5. ~~`REVIEWER` (§6) functions almost entirely as a read-only allowlist member~~
+   — **CLOSED 2026-10-23**: the owner kept the reviewer role read-only by design;
+   promotion stays analyst/admin (#51; help copy #285). Not a defect.
 6. The `uat_basic_auth` boundary (§2a) was **entirely absent** from this
    document's first version — found only by the 2026-08-05 full re-audit, not
    by any per-PR review. Nothing automated enumerates the middleware stack
@@ -862,7 +964,7 @@ watching:
    leaves no request-level trace carrying user identity. A proper fix is a
    request-access-log middleware (bounded, authenticated-only, to avoid
    amplifying anonymous asset 404s), out of scope for the C1/C2 cheap-win batch
-   because it changes the middleware stack. Tracked as a follow-up.
+   because it changes the middleware stack. Tracked in GHSA-46jj-823j-mjj9's open checklist (C1).
 8. ~~**Non-atomic per-account lockout counter**~~ — **CLOSED 2026-08-15.**
    `register_failed_login` (`services/auth.py:393-434`) was a plain
    read-modify-write (`user.failed_login_count += 1`) that lost increments under
@@ -900,18 +1002,29 @@ watching:
     nothing. The clerk reads the
     API key only from the OS keyring (macOS Keychain; on Linux the secret service); the checker
     from the Keychain or, off macOS, from a per-command environment variable. CI never
-    holds the key, and neither tool is a boundary of the running application. Listed so the
+    holds the key (pinned by `tests/arch/test_workflows_no_secrets.py` since 2026-10-23), and neither tool is a boundary of the running application. Listed so the
     quarterly re-audit knows the flows exist.
+12. **Merge-gate integrity (#277, open).** Every test this document names as a pin
+    blocks a merge only through `ci-success`, which fails only when a needed job's
+    result is `failure` or `cancelled` (`.github/workflows/ci.yml:214-216`). A needed
+    job that gains `if:` or `continue-on-error`, or a step ending in `|| true`,
+    reports `skipped`/`success` and silently stops gating — including §13's
+    citation-freshness test (in the `gate` job) and, since 2026-10-23 (#158), `dast`.
+13. **WebAuthn login: an inactive user's passkey use advances the counter with no
+    audit row (C3 in GHSA-46jj-823j-mjj9, open).** `login_passkey_verify` writes
+    `sign_count`/`last_used_at` before its active-user check, and the inactive
+    branch returns without an `AuditWriter` call (`routes/auth.py:434-440`); the
+    request-end commit persists the counter. Low: the account is already inactive.
 
 ## 13. Keeping this document current
 
 This is a living document, kept current three ways.
 
 **Reactive (per-PR).** `CLAUDE.md` → Review ceremony → Security-auditor
-persona requires the security-auditor role to check, at every milestone
+persona (operator-local, as is the `security-auditor` skill it loads) requires the security-auditor role to check, at every milestone
 PR-gate and whenever a PR touches a boundary listed in §2–§11, whether this
 document needs updating — and to include that update in the same PR rather
-than deferring it. A boundary section whose file:line citations no longer
+than deferring it; since #262 every design spec's Risk-assessment table names the boundaries it changes, checked at the plan-gate. A boundary section whose file:line citations no longer
 match the code is itself a finding.
 
 **Periodic (full re-audit).** The reactive pass alone is provably
@@ -937,6 +1050,14 @@ mechanism still correct" (they usually are) but "did an unrelated edit to a
 cited file shift the line numbers." Insertions early in a long file
 invalidate every later citation into it silently and en masse.
 
+**Second full re-audit (2026-10-23).** Run by the method above, in the same split: three parallel
+reviewers over §1–§5 / §6–§8 / §9–§13, each opening every cited file:line and re-deriving every
+counting claim from the tree. Cited ranges checked: 81 + 60 + 87 (HOLDS 75 / 58 / 85, DRIFTED 1 / 0 / 0,
+WRONG 5 / 2 / 2, DEAD 0 / 0 / 0). The findings were applied as one consolidated pass (#263). The two
+highest-yield classes this time were counting claims gone stale after later PRs, and mechanisms with
+no entry at all (the `reset-mfa` factor reset in B2, the σ and SME-row caps in B10; both now documented).
+Last full re-audit: 2026-10-23; the next is due 2027-01-23.
+
 **Automated (citation freshness, 2026-10).** The backticked `file:line` citations in this
 document and in `docs/reference/fair-departures-register.md` are compiled by
 `scripts/clerk_manifests.py` into `.clerk/manifests/citations.json`, one entry per cited
@@ -950,7 +1071,7 @@ correct re-cite whose new anchor line held another citation's anchor); and it re
 citation of the same site within one document, so each site is cited once per document and later
 mentions refer back to it in prose. What this pins: the first anchor line of every cited range.
 What it does not: lines inserted, deleted or edited after the anchor inside a range, and where a
-range ends; which occurrence an anchor means when its line recurs in the same file (44 do today;
+range ends; which occurrence an anchor means when its line recurs in the same file (45 do today;
 `--verbose` lists them), so a sibling block inserted, deleted or reordered above such an anchor
 can leave a stale citation green; cited lines swapped or rotated in the code under unchanged
 citations; a stale citation offset by a newly added citation on the moved text (one new citation

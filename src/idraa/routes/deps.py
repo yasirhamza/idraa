@@ -96,7 +96,7 @@ def _trusted_client_ip(request: Request) -> str | None:
     their own post-processing (throttle normalizes IPv6 /64, audit records
     verbatim). ``None`` = no configured strategy positively identified the
     client — NEVER silently substitutes ``request.client.host`` here, because
-    behind the prod edge that is the spoofable leftmost X-Forwarded-For.
+    behind the prod edge that is the proxy hop, not the client (and attacker-chosen under ``*``).
     """
     s = get_settings()
     if s.trusted_client_ip_header:  # shape 1: dedicated OVERWRITE-protected header
@@ -122,7 +122,7 @@ def resolve_throttle_source(request: Request, *, surface: str) -> str | None:
 
     Returns ``None`` (throttle no-ops) when no configured strategy positively
     yields a client IP. NEVER falls back to ``request.client.host`` — behind the
-    prod edge that is the spoofable leftmost X-Forwarded-For, not the client.
+    prod edge that is the proxy hop (attacker-chosen only under ``*``), not the client.
     """
     ip = _trusted_client_ip(request)
     if ip is None:

@@ -2,8 +2,8 @@
 
 Runs INSIDE CSRFMiddleware on the wire (order set in ``app.py``):
 
-    request  -> SecurityHeaders -> CSRF -> Session -> route
-    response <- SecurityHeaders <- CSRF <- Session <- route
+    request  -> CSRF -> Session -> EnrollmentGuard -> MaintenanceBadgeCount -> route
+    response <- (reverse); outside CSRF: RequestFraming, uat_basic_auth, setup_guard, SecurityHeaders
 
 Rationale: session lookup hits the DB, so CSRF should reject forgeries
 BEFORE we burn a DB round trip.

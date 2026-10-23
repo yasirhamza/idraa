@@ -45,9 +45,9 @@ def linkify_https(text: str) -> Markup:
     for m in _HTTPS_URL_RE.finditer(text):
         url = m.group(0).rstrip(_TRAILING_PUNCT)
         end = m.start() + len(url)
-        split = urlsplit(url)
+        href = safe_https_href(url)
         parts.append(str(escape(text[last : m.start()])))
-        if split.scheme == "https" and split.netloc:
+        if href is not None:
             parts.append(
                 f'<a href="{escape(url)}" class="link" target="_blank" '
                 f'rel="noopener noreferrer">{escape(url)}</a>'

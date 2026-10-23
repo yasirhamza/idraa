@@ -61,6 +61,14 @@ def test_linkify_https_data_scheme_stays_inert():
     assert "<a" not in out and "&lt;h1&gt;" in out
 
 
+def test_linkify_https_malformed_url_is_total_and_inert():
+    # ``urlsplit("https://[")`` raises ValueError ("Invalid IPv6 URL"); the
+    # linkifier must degrade to inert escaped text rather than raise.
+    out = str(linkify_https("see https://[ x"))
+    assert out == "see https://[ x"
+    assert "<a" not in out
+
+
 @pytest.mark.parametrize(
     "bad", ["https://[", "https://x]", "javascript:alert(1)", "http://example.com", "", None, 42]
 )

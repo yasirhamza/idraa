@@ -43,7 +43,7 @@ _FAIR_CAM_VALIDATOR = FAIRCAMValidator()
 
 # Sec-I2 upper bound for lognormal sigma: sigma=10 already spans ~17 orders of
 # magnitude p5->p95, beyond any defensible cyber-loss range. An extreme-but-finite
-# sigma is a user-controllable OOM/DoS path to the engine sampler at the 100k cap.
+# sigma is a user-controllable OOM/DoS path to the engine sampler at the iteration cap.
 _SIGMA_MAX: float = 10.0
 
 # Canonical 95th-percentile standard-normal z-score, used by the D19
@@ -117,7 +117,7 @@ def _validate_finite(field_name: str, dist: dict[str, Any]) -> list[str]:
     bounded below); sigma must be finite AND 0 < sigma <= 10 (an unbounded right
     tail makes a non-finite mean or non-positive sigma catastrophic; an
     extreme-but-finite sigma is a user-controllable OOM/DoS path to the engine
-    sampler at the 100k cap — Sec-I2. sigma=10 already spans ~17 orders of
+    sampler at the iteration cap — Sec-I2. sigma=10 already spans ~17 orders of
     magnitude p5->p95, beyond any defensible cyber-loss range).
     lognormal_mixture: same per-component finiteness + magnitude + sigma bound
     as lognormal, PLUS weight > 0 per component, weights summing to 1 (±1e-9),
@@ -508,12 +508,12 @@ def validate_fair_distributions(
     lognormal_mixture ``primary_loss``/``secondary_loss`` MUST carry a
     ``max`` key (see ``_validate_loss_max_required``) -- a presence check,
     additive to (not a replacement of) the ``_validate_capacity_floor``
-    magnitude check below. Default False. Only the scenario-write and
-    scenario-import call sites opt in (verified caller census):
-    ``services/scenarios.py`` lines 162/507/605 (create / update /
-    re-estimate) and ``services/scenario_import.py`` line 427 (CSV/JSON
-    import apply). ``services/library_bundle_import.py`` line 278 and
-    ``services/scenario_library.py`` line 375 (override writes) stay on
+    magnitude check below. Default False. Only the scenario-write, scenario-import and
+    loss-pinning call sites opt in (verified caller census): ``services/scenarios.py``
+    lines 204/589/701 (create / update / re-estimate), ``services/scenario_import.py``
+    line 537 (CSV/JSON import apply) and ``services/loss_pinning.py`` lines 230/535
+    (pin / refresh). ``services/library_bundle_import.py`` line 335 and
+    ``services/scenario_library.py`` line 429 (override writes) stay on
     the default False (D14) -- those callers author org-agnostic
     templates/overrides that carry no ``max``, and flipping them would
     reject every existing library/override write.

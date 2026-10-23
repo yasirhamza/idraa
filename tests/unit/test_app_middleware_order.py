@@ -78,3 +78,9 @@ def test_middleware_wire_order() -> None:
         EnrollmentGuardMiddleware,
         MaintenanceBadgeCountMiddleware,
     ], classes
+    # The two function-style middlewares share ``BaseHTTPMiddleware`` as their
+    # class, so the class list above cannot tell them apart: pin them by their
+    # dispatch function name as well, so swapping or replacing either one fails.
+    assert [getattr(m.kwargs.get("dispatch"), "__name__", None) for m in app.user_middleware][
+        1:3
+    ] == ["uat_basic_auth", "setup_guard"]

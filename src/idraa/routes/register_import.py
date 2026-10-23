@@ -249,7 +249,7 @@ async def register_import_post(
     file: UploadFile = File(...),
 ) -> Response:
     # Sec-I3 layer 1/3: forgeable Content-Length pre-check, BEFORE the body
-    # is read at all (mirrors routes/scenario_import.py:88-97).
+    # is read at all (mirrors routes/scenario_import.py:124-133).
     content_length = request.headers.get("content-length")
     if (
         content_length is not None

@@ -140,7 +140,7 @@ class RunService:
             )
         effective_iterations = mc_iterations_override
         # Issue #259: the upper bound is the Settings.mc_iterations_max OOM cap
-        # (default 100_000, tunable via MC_ITERATIONS_MAX), NOT a hardcoded 1M
+        # (default 1_000_000, tunable via MC_ITERATIONS_MAX), NOT a hardcoded
         # ceiling. Enforcing it here at the service boundary means every dispatch
         # path — POST /analyses and the legacy POST /scenarios/{id}/run adapter —
         # shares one gate, closing the legacy bypass that could OOM the worker.
