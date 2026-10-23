@@ -13,9 +13,12 @@ alternative — a RATCHET against ``scripts/mypy_tests_baseline.json``:
 * otherwise PASS. A file that dropped below its baseline prints a one-line note
   suggesting ``--write-baseline`` so the ratchet tightens (never auto-rewritten).
 
-``--write-baseline`` regenerates the file. It refuses (exit 1) when the new
-``_total`` is HIGHER than the committed one unless ``--allow-increase`` is
-passed, so the ratchet only loosens on purpose (state the reason in the commit).
+``--write-baseline`` regenerates the file. It refuses (exit 1) when ANY file's count
+would rise above its committed value, when a file absent from the committed baseline
+has any error (a rename counts), or when the new ``_total`` is higher, unless
+``--allow-increase`` is passed — so the ratchet only loosens on purpose (state the
+reason in the commit). A committed baseline that cannot be read is replaced only with
+``--allow-increase`` (or by deleting the file first).
 
 Exit codes (fail closed, same convention as ``scripts/sca_gate.py``):
 0 = PASS, 1 = FAIL (or a refused baseline increase), 2 = tool error (mypy not
@@ -23,7 +26,9 @@ installed or crashed, output that does not parse, a corrupt baseline, or a basel
 whose recorded ``_generated_with`` flags differ from the ones this script runs mypy with).
 
 mypy runs with ``--platform linux --python-version 3.11`` so the count is the same on a
-macOS dev machine and on the Linux CI runner; the baseline records those flags.
+macOS dev machine and on the Linux CI runner; the baseline records those flags. It also
+keeps its OWN cache dir (``.mypy_cache/ratchet``): the gate's "mypy" step runs under the
+host platform, and two option sets sharing one cache invalidate each other on every run.
 
 Stdlib only; mypy itself runs via ``sys.executable -m mypy`` so the venv that
 runs the gate is the venv that runs the tool.
@@ -51,11 +56,16 @@ TEST_TREES: tuple[str, ...] = ("tests", str(PurePath("fair_cam") / "tests"))
 # platform-conditional stubs would otherwise shift per-file counts between them).
 PLATFORM_FLAGS: tuple[str, ...] = ("--platform", "linux", "--python-version", "3.11")
 PLATFORM_FLAGS_TEXT = " ".join(PLATFORM_FLAGS)
+# A cache dir of its own (under the gitignored .mypy_cache/): the gate's "mypy" step runs with
+# the host platform and mypy keys cache entries on the options, so sharing one dir made the two
+# steps rewrite each other's entries on every macOS push (A1, ~10 s each way).
+CACHE_DIR = str(PurePath(".mypy_cache") / "ratchet")
 MYPY_ARGV: tuple[str, ...] = (
     "-m",
     "mypy",
     "--config-file=pyproject.toml",
     *PLATFORM_FLAGS,
+    f"--cache-dir={CACHE_DIR}",
     *TEST_TREES,
     "--no-error-summary",
     "--show-error-codes",
@@ -65,6 +75,9 @@ TOTAL_KEY = "_total"
 GENERATED_WITH_KEY = "_generated_with"
 RESERVED_KEYS = frozenset({TOTAL_KEY, GENERATED_WITH_KEY})
 WRITE_HINT = "python -m scripts.mypy_ratchet --write-baseline"
+REPLACE_HINT = (
+    f"replace it with `{WRITE_HINT} --allow-increase`, or delete the file and run `{WRITE_HINT}`"
+)
 
 # `path:line:col: error: msg`, `path:line: error: msg` or `path: error: msg`.
 # Non-greedy path so a Windows drive letter ("C:\\x.py") backtracks correctly.
@@ -140,31 +153,36 @@ def parse_mypy_output(text: str) -> dict[str, int]:
     return counts
 
 
+def _bad_baseline(why: str) -> ToolError:
+    """A baseline that cannot be read: say how to replace it (the plain regenerate is refused)."""
+    return ToolError(f"{why} — {REPLACE_HINT}")
+
+
 def load_baseline(path: Path) -> Baseline:
     """Read and validate the committed baseline; any inconsistency raises ``ToolError``."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise ToolError(f"cannot read baseline {path.name}: {exc}") from exc
+        raise _bad_baseline(f"cannot read baseline {path.name}: {exc}") from exc
     if not isinstance(raw, dict):
-        raise ToolError(f"baseline {path.name} is not a JSON object")
+        raise _bad_baseline(f"baseline {path.name} is not a JSON object")
     total = raw.get(TOTAL_KEY)
     if not isinstance(total, int) or isinstance(total, bool) or total < 0:
-        raise ToolError(f"baseline {path.name}: {TOTAL_KEY} missing or not a non-negative int")
+        raise _bad_baseline(f"baseline {path.name}: {TOTAL_KEY} missing or not a non-negative int")
     generated_with = raw.get(GENERATED_WITH_KEY)
     if generated_with is not None and not isinstance(generated_with, str):
-        raise ToolError(f"baseline {path.name}: {GENERATED_WITH_KEY} is not a string")
+        raise _bad_baseline(f"baseline {path.name}: {GENERATED_WITH_KEY} is not a string")
     counts: dict[str, int] = {}
     for key, value in raw.items():
         if key in RESERVED_KEYS:
             continue
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-            raise ToolError(f"baseline {path.name}: {key!r} is not a positive int count")
+            raise _bad_baseline(f"baseline {path.name}: {key!r} is not a positive int count")
         counts[key] = value
     if sum(counts.values()) != total:
-        raise ToolError(
+        raise _bad_baseline(
             f"baseline {path.name}: {TOTAL_KEY}={total} != sum of per-file counts"
-            f" ({sum(counts.values())}) — hand-edited? regenerate with {WRITE_HINT}"
+            f" ({sum(counts.values())}) (hand-edited?)",
         )
     return Baseline(counts=counts, total=total, generated_with=generated_with)
 
@@ -181,7 +199,7 @@ def baseline_mypy_version(baseline: Baseline) -> str:
         raise ToolError(
             f"baseline {GENERATED_WITH_KEY} {baseline.generated_with!r} does not record"
             f" the flags this ratchet runs mypy with ({PLATFORM_FLAGS_TEXT!r})"
-            f" — regenerate with {WRITE_HINT} (--allow-increase if the total rose)"
+            f" — regenerate with {WRITE_HINT} (--allow-increase if any count rose)"
         )
     return match.group("version")
 
@@ -205,14 +223,19 @@ def compare(current: dict[str, int], baseline: Baseline) -> Comparison:
     return result
 
 
-def format_report(result: Comparison, *, baseline_version: str | None, version: str) -> list[str]:
-    """Report lines: offenders, the one-line verdict, then notes."""
+def _offender_lines(result: Comparison) -> list[str]:
     lines: list[str] = []
     for path, new, old in result.offenders[:_MAX_LISTED]:
         base = "not in baseline" if old is None else f"baseline {old}"
         lines.append(f"  {path}: {new} errors ({base})")
     if len(result.offenders) > _MAX_LISTED:
         lines.append(f"  ... and {len(result.offenders) - _MAX_LISTED} more offending files")
+    return lines
+
+
+def format_report(result: Comparison, *, baseline_version: str | None, version: str) -> list[str]:
+    """Report lines: offenders, the one-line verdict, then notes."""
+    lines = _offender_lines(result)
     verdict = "PASS" if result.passed else "FAIL"
     lines.append(
         f"mypy ratchet: {result.total} errors in {result.files} files"
@@ -225,17 +248,28 @@ def format_report(result: Comparison, *, baseline_version: str | None, version: 
             "  fix the new errors (python -m mypy --config-file=pyproject.toml <file>);"
             " do not raise the baseline without a stated reason"
         )
+        if any(old is None for _, _, old in result.offenders):
+            lines.append(
+                "  new or renamed test file: fix its errors, or run --write-baseline"
+                " (refused if any count rose; a rename needs --allow-increase)"
+            )
         if baseline_version is not None and baseline_version != version:
             lines.append(
                 f"  note: baseline was generated with {baseline_version}, running {version}"
                 " — a mypy upgrade can shift counts; regenerate deliberately if so"
             )
-    if result.passed and result.improved:
-        lines.append(
-            f"mypy ratchet: {len(result.improved)} file(s) dropped below baseline"
-            f" (total {result.total} < {result.baseline_total}); run `{WRITE_HINT}`"
-            " to lock in the gain"
-        )
+    if result.improved:
+        if result.passed:
+            lines.append(
+                f"mypy ratchet: {len(result.improved)} file(s) dropped below baseline"
+                f" (total {result.total} < {result.baseline_total}); run `{WRITE_HINT}`"
+                " to lock in the gain"
+            )
+        else:
+            lines.append(
+                f"mypy ratchet: {len(result.improved)} file(s) dropped below baseline;"
+                f" once the failures above are fixed, run `{WRITE_HINT}` to lock in the gain"
+            )
     return lines
 
 
@@ -275,17 +309,35 @@ def collect_counts(run: MypyRun) -> dict[str, int]:
 def write_baseline(
     counts: dict[str, int], version: str, path: Path, *, allow_increase: bool
 ) -> int:
-    """Regenerate the baseline; refuse a higher ``_total`` unless ``allow_increase``."""
+    """Regenerate the baseline; without ``allow_increase`` nothing may loosen.
+
+    Refused (exit 1) when any file's count would rise above its committed value, a file
+    absent from the committed baseline has any error, or the total would rise — checked
+    per file, not only on ``_total``, because the tightening nudge is print-only and the
+    committed baseline routinely carries slack that a total-only check would let absorb
+    a new or grown file. A committed baseline that cannot be read is replaced only with
+    ``allow_increase`` (there is nothing to compare against).
+    """
     new_total = sum(counts.values())
     if path.exists():
-        committed = load_baseline(path)
-        if new_total > committed.total and not allow_increase:
-            print(
-                f"mypy ratchet: refusing to write — new total {new_total} > committed"
-                f" {committed.total}; fix the new errors, or pass --allow-increase"
-                " and state the reason in the commit"
-            )
-            return 1
+        try:
+            committed = load_baseline(path)
+        except ToolError as exc:
+            if not allow_increase:
+                raise
+            print(f"mypy ratchet: replacing an unreadable committed baseline ({exc})")
+        else:
+            result = compare(counts, committed)
+            if not allow_increase and not result.passed:
+                for line in _offender_lines(result):
+                    print(line)
+                print(
+                    f"mypy ratchet: refusing to write — {len(result.offenders)} file(s) above"
+                    f" the committed baseline (new total {new_total}, committed"
+                    f" {committed.total}); fix the new errors, or pass --allow-increase"
+                    " and state the reason in the commit"
+                )
+                return 1
     payload: dict[str, object] = {
         GENERATED_WITH_KEY: f"{version} {PLATFORM_FLAGS_TEXT}",
         TOTAL_KEY: new_total,
@@ -311,12 +363,13 @@ def main(
     parser.add_argument(
         "--write-baseline",
         action="store_true",
-        help="regenerate the baseline from a fresh mypy run (refuses a higher total)",
+        help="regenerate the baseline from a fresh mypy run (refuses any per-file or total rise)",
     )
     parser.add_argument(
         "--allow-increase",
         action="store_true",
-        help="with --write-baseline: permit a higher _total (state the reason in the commit)",
+        help="with --write-baseline: permit any rise, a new file or an unreadable baseline"
+        " (state the reason in the commit)",
     )
     args = parser.parse_args(argv)
     if args.allow_increase and not args.write_baseline:

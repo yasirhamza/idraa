@@ -405,6 +405,15 @@ def test_mypy_argv_covers_both_test_trees_with_the_pyproject_config() -> None:
     assert "tests" in argv and str(Path("fair_cam") / "tests") in argv
 
 
+def test_mypy_argv_gives_the_ratchet_its_own_cache_dir() -> None:
+    # The gate's "mypy" step (host platform) and this step (--platform linux) must not share
+    # one mypy cache: mypy keys entries on the options, so they would rewrite each other's
+    # entries on every macOS push. Under .mypy_cache/ so the existing ignore rules cover it.
+    cache_args = [a for a in mypy_ratchet.MYPY_ARGV if a.startswith("--cache-dir=")]
+    assert cache_args == [f"--cache-dir={Path('.mypy_cache') / 'ratchet'}"]
+    assert Path(cache_args[0].split("=", 1)[1]).parts[0] == ".mypy_cache"
+
+
 def test_mypy_argv_pins_platform_and_python_version() -> None:
     # Host-independent counts: macOS dev machines and the Linux CI runner must agree.
     argv = list(mypy_ratchet.MYPY_ARGV)
@@ -474,3 +483,144 @@ def test_report_version_drift_note_uses_the_recorded_mypy_version(
     rc = main([], runner=_runner(_errors({"tests/a.py": 3})), baseline_path=base)
     assert rc == 1
     assert "baseline was generated with mypy 1.0.0, running mypy 9.9.9" in capsys.readouterr().out
+
+
+# --- strict --write-baseline: nothing loosens without --allow-increase ---------------------------------
+
+
+def test_write_baseline_refuses_a_per_file_increase_hidden_by_a_slack_total(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Committed total 11; the new run totals 8 (<= 11) but b.py rose 1 -> 5 while a.py fell.
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 10, "tests/b.py": 1})
+    before = base.read_bytes()
+    out = _errors({"tests/a.py": 3, "tests/b.py": 5})
+    rc = main(["--write-baseline"], runner=_runner(out), baseline_path=base)
+    printed = capsys.readouterr().out
+    assert rc == 1
+    assert "tests/b.py: 5 errors (baseline 1)" in printed and "--allow-increase" in printed
+    assert base.read_bytes() == before
+
+
+def test_write_baseline_refuses_a_new_file_hidden_by_a_slack_total(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 10})
+    before = base.read_bytes()
+    out = _errors({"tests/a.py": 3, "tests/new.py": 4})  # total 7 < committed 10
+    rc = main(["--write-baseline"], runner=_runner(out), baseline_path=base)
+    printed = capsys.readouterr().out
+    assert rc == 1
+    assert "tests/new.py: 4 errors (not in baseline)" in printed
+    assert base.read_bytes() == before
+
+
+def test_write_baseline_refuses_a_rename_without_the_flag(tmp_path: Path) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/old_name.py": 3})
+    rc = main(
+        ["--write-baseline"],
+        runner=_runner(_errors({"tests/new_name.py": 3})),
+        baseline_path=base,
+    )
+    assert rc == 1
+    rc = main(
+        ["--write-baseline", "--allow-increase"],
+        runner=_runner(_errors({"tests/new_name.py": 3})),
+        baseline_path=base,
+    )
+    assert rc == 0
+    assert load_baseline(base).counts == {"tests/new_name.py": 3}
+
+
+def test_write_baseline_allow_increase_writes_per_file_and_new_file_rises(tmp_path: Path) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 10, "tests/b.py": 1})
+    out = _errors({"tests/a.py": 3, "tests/b.py": 5, "tests/new.py": 2})
+    rc = main(["--write-baseline", "--allow-increase"], runner=_runner(out), baseline_path=base)
+    assert rc == 0
+    assert load_baseline(base).counts == {"tests/a.py": 3, "tests/b.py": 5, "tests/new.py": 2}
+
+
+def test_write_baseline_accepts_pure_drops_and_removals(tmp_path: Path) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 10, "tests/b.py": 1, "tests/c.py": 2})
+    # a drops, b is fixed entirely (absent from the output), c is unchanged.
+    out = _errors({"tests/a.py": 4, "tests/c.py": 2})
+    assert main(["--write-baseline"], runner=_runner(out), baseline_path=base) == 0
+    assert load_baseline(base).counts == {"tests/a.py": 4, "tests/c.py": 2}
+
+
+def test_write_baseline_accepts_equal_counts(tmp_path: Path) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 2})
+    out = _errors({"tests/a.py": 2})
+    assert main(["--write-baseline"], runner=_runner(out), baseline_path=base) == 0
+
+
+# --- unreadable baseline: a remedy that actually runs ------------------------------------------------------
+
+
+def test_unreadable_baseline_message_names_a_runnable_remedy(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "baseline.json"
+    base.write_text(json.dumps({"_total": 99, "tests/a.py": 1}), encoding="utf-8")  # sum mismatch
+    rc = main([], runner=_runner(_errors({"tests/a.py": 1})), baseline_path=base)
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "--write-baseline --allow-increase" in out and "delete the file" in out
+
+
+def test_write_baseline_over_an_unreadable_baseline_needs_the_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "baseline.json"
+    base.write_text("{not json", encoding="utf-8")
+    runner = _runner(_errors({"tests/a.py": 2}))
+    assert main(["--write-baseline"], runner=runner, baseline_path=base) == 2
+    assert "--allow-increase" in capsys.readouterr().out
+    assert base.read_text(encoding="utf-8") == "{not json"  # untouched
+    assert main(["--write-baseline", "--allow-increase"], runner=runner, baseline_path=base) == 0
+    assert load_baseline(base).counts == {"tests/a.py": 2}
+    assert main([], runner=runner, baseline_path=base) == 0
+
+
+# --- report messages --------------------------------------------------------------------------------------------
+
+
+def test_report_not_in_baseline_adds_one_rename_hint() -> None:
+    current = {"tests/new_a.py": 1, "tests/new_b.py": 2}
+    lines = format_report(compare(current, _baseline({})), baseline_version=None, version=VERSION)
+    hints = [line for line in lines if "new or renamed test file" in line]
+    assert len(hints) == 1  # one hint, however many files
+    assert "run --write-baseline" in hints[0] and "refused if any count rose" in hints[0]
+
+
+def test_report_rename_hint_absent_when_every_offender_is_in_the_baseline() -> None:
+    result = compare({"tests/a.py": 3}, _baseline({"tests/a.py": 2}))
+    lines = format_report(result, baseline_version=None, version=VERSION)
+    assert not any("new or renamed" in line for line in lines)
+
+
+def test_report_fail_also_prints_the_tightening_note_when_a_file_dropped() -> None:
+    result = compare(
+        {"tests/a.py": 1, "tests/b.py": 5}, _baseline({"tests/a.py": 4, "tests/b.py": 2})
+    )
+    lines = format_report(result, baseline_version=None, version=VERSION)
+    assert any("— FAIL" in line for line in lines)
+    notes = [line for line in lines if "dropped below baseline" in line]
+    assert len(notes) == 1 and "--write-baseline" in notes[0]
+
+
+def test_main_fail_run_with_a_drop_prints_the_tightening_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "baseline.json"
+    _write_baseline(base, {"tests/a.py": 4, "tests/b.py": 2})
+    rc = main([], runner=_runner(_errors({"tests/a.py": 1, "tests/b.py": 5})), baseline_path=base)
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "1 file(s) dropped below baseline" in out

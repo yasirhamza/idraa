@@ -22,7 +22,8 @@ venv that runs the tools):
 4. mypy src/idraa (pyproject-configured, strict)
 4b. mypy ratchet (tests) — scripts/mypy_ratchet.py (#28): mypy over ``tests`` +
    ``fair_cam/tests``, per-file error counts held at or below
-   scripts/mypy_tests_baseline.json; exit 2 on tool error. ~12s warm, ~17s cold.
+   scripts/mypy_tests_baseline.json; exit 2 on tool error. Own cache dir
+   (.mypy_cache/ratchet): ~10s cold, ~0.3s warm, and it no longer evicts step 4's cache.
 5. css staleness — ``python -m idraa.tasks.build_css --check`` (fails if
    the committed ``tailwind.css`` output is stale relative to its inputs)
 6. pytest fast suite (default addopts markers: not e2e / not slow /
@@ -80,7 +81,7 @@ no surfaces run). Runs before the ruff/mypy/pytest steps: it takes seconds and
 its findings are the cheapest to act on. It runs the ``uv`` binary with GIT_*
 and VIRTUAL_ENV removed, so like ``uv lock --check`` it sits outside GATE_STEPS.
 
-Runtime: steps 1-4b ~45s; step 5 ~1s; step 6 (pytest) runs under
+Runtime: steps 1-4b ~1s warm, ~20s with empty mypy caches; step 5 ~1s; step 6 (pytest) runs under
 ``pytest-xdist -n auto`` — wall-clock scales with core count (the ~5.9k-test
 merge-path suite was the serial bottleneck; parallel it is a few minutes on a
 multi-core machine and ~a quarter of that on CI's 4-core runner).
