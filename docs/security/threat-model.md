@@ -22,21 +22,21 @@ citation, per the project's own "point-in-time observation" convention.
 ## 1. System overview
 
 ```
-Internet
-   │  TLS terminated at Fly edge
-   ▼
-Fly.io edge/proxy  ──(B1)──  trusted client-IP header (Fly secret) or XFF hop-count
-   │  HTTP, port 8000 only — no other port published
+Internet ──TLS (ends at the Fly edge)──▶ Fly.io edge/proxy ──(B1)── trusted client-IP header (Fly secret) or XFF hop-count
+   │  HTTP, port 8000 only — no other port published (operators reach the VM over Fly's private ssh: §3 factor reset)
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │  Middleware is LIFO-registered; wire order below is outermost-first
-   │  (app.py:1173-1237) — B0 and B3 run BEFORE B2 (session lookup hits the
-   │  DB, so CSRF/basic-auth reject cheaply before paying that cost).
+   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1173-1237), then
+   │  per-route dependencies (step-up resolves before role on every gated route); [ ] = no letter.
+   │  B0/B3 reject before B2's session lookup; [setup_guard] still reads the user count first.
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
    ├─ uat_basic_auth (UAT-hosted only) ──(B0)── no credential ↔ shared HTTP Basic credential
+   ├─ [setup_guard] — no user yet → 307 /setup, the first-run admin claim (§3; allowlist §6)
+   ├─ [SecurityHeadersMiddleware] — CSP, X-Frame-Options, nosniff, HSTS (prod) on responses from below
    ├─ CSRFMiddleware ──(B3)── state-changing request ↔ verified-origin request
    ├─ SessionMiddleware (ASGI-wide, before routing) ──(B2)── unauth ↔ authenticated
    ├─ EnrollmentGuardMiddleware ──(B4)── authenticated ↔ MFA-enrolled
+   ├─ [MaintenanceBadgeCountMiddleware] (innermost) — navbar count only, no access decision
    ├─ require_step_up dependency ──(B5)── authenticated ↔ freshly-reauthenticated
    ├─ require_role dependency ──(B6)── role tier (viewer/analyst/reviewer/admin)
    ├─ organization_id scoping ──(B7)── org boundary (single-org today, schema-ready)
@@ -57,11 +57,11 @@ covered by another boundary's row."
 
 ## 2. B1 — Public internet ↔ Fly edge
 
-- **S**: `request.client.host` is spoofable behind Fly's edge and is **never**
-  trusted directly (`routes/deps.py:62-69,98-99`). Two opt-in trust
-  strategies: a dedicated Fly-secret header (`trusted_client_ip_header`,
-  `fly.toml:27-31`) or an N-hop XFF walk (`trusted_proxy_count`,
-  `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
+- **S**: `request.client.host` is **never** trusted for a security decision
+  (`routes/deps.py:62-69,98-99`): behind the edge it is the proxy hop unless
+  `FORWARDED_ALLOW_IPS` is set (a `*` makes it an attacker-chosen XFF entry). Two opt-in
+  strategies: a Fly-secret header (`trusted_client_ip_header`, `fly.toml:27-31`) or an N-hop XFF
+  walk (`trusted_proxy_count`, `config.py:390-397`). Both unset → the per-IP throttle no-ops rather than
   trusting a spoofable value (`routes/deps.py:120-130`); audit logging falls back to
   best-effort `request.client` instead (`routes/deps.py:133-154`) — a deliberate
   forensic-vs-security-critical asymmetry.
@@ -71,9 +71,9 @@ covered by another boundary's row."
   two shapes it accepted — a body on GET/HEAD/OPTIONS and
   `Transfer-Encoding` on HTTP/1.0 — are gadgets only if the Fly edge frames
   them differently, which cannot be tested locally. The outermost
-  `RequestFramingMiddleware` (`middleware/request_framing.py:33-50`) refuses
+  `RequestFramingMiddleware` (`middleware/request_framing.py:33-49`) refuses
   both with 400 and any method outside GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS
-  with 405 + `Allow`, always with `Connection: close`, before any other layer reads the
+  with 405 + `Allow`, always with `Connection: close` (`middleware/request_framing.py:78-82`), before any other layer reads the
   request. Live uvicorn probe: GET+body with a pipelined second request →
   one 400, connection closed, the pipelined request never runs; pinned by
   `tests/unit/test_request_framing.py`.
@@ -88,7 +88,7 @@ covered by another boundary's row."
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
   `.github/workflows/` (only `ci.yml`, `dependency-review.yml`). Deploys
   actually run through `./scripts/fly` per project convention; the comment is
-  stale. Low severity (comment, not behavior) — worth a follow-up cleanup.
+  stale, as is line 5's "bootstrap workflow". Low severity (comment, not behavior) — worth a follow-up cleanup.
 
 ## 2a. B0 — UAT basic-auth pre-gate (hosted UAT only)
 
@@ -97,7 +97,7 @@ full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
 (`middleware/uat_basic_auth.py`, wired at `app.py:1231`; confirmed order
 `app.py:1173-1237`) — outside even `setup_guard` (which carries no boundary
-letter of its own; see §6), B3's CSRF, and B2's session auth. A single
+letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
 the edge credential does not equal compromising the app, per the module
@@ -126,14 +126,14 @@ docstring).
   assigned to locals and AND-ed at the end rather than short-circuited
   (`uat_basic_auth.py:135-137`) — the docstring explains the short-circuit
   form would leak "wrong user" vs. "wrong password" via response timing.
-- **Residual risk**: single shared credential (not per-user), by design for
-  a UAT gate — compromise of that one credential exposes the whole hosted
-  instance to the inner (still-intact) session-auth boundary, not to a
-  specific account. The middleware's *presence and position* ARE pinned by
+- **Residual risk**: single shared credential (not per-user), by design for a UAT gate —
+  compromise exposes the instance only to the inner (still-intact) session auth. Guesses are not
+  throttled and leave only uvicorn's access line, so the strength is C6's 16-character floor.
+  Its *presence* and coarse *position* are pinned by
   `tests/unit/test_app_middleware_order.py::test_middleware_wire_order`,
-  which asserts the exact 8-element `app.user_middleware` list with the
-  request-framing guard outermost and `uat_basic_auth` next — removing or
-  reordering either fails that test.
+  which asserts the 8-element `app.user_middleware` class list (framing guard
+  outermost); but `uat_basic_auth` and `setup_guard` are both `BaseHTTPMiddleware`,
+  so swapping those two (or replacing either function) still passes that test.
   What nothing checks is whether THIS DOCUMENT still enumerates the real
   middleware stack (see §12 item 6).
 
@@ -152,10 +152,10 @@ docstring).
   `SessionMiddleware` never re-issues it. A future sliding re-sign or rotation
   would invalidate every open page's forms (one 403 + reload each) — design it
   with that in mind.
-- **S** (credential stuffing): Argon2 password hashing with a precomputed
-  dummy-hash timing-safe check for nonexistent/inactive users
-  (`_DUMMY_PW_HASH`/`verify_user_password`, `services/auth.py:75-89`) — prevents a
-  login-existence oracle via response timing. **A3 (2026-08-15):** the Argon2
+- **S** (credential stuffing): Argon2 password hashing with a precomputed dummy hash, so
+  a nonexistent/inactive user pays the same single verify (`_DUMMY_PW_HASH`/`verify_user_password`,
+  `services/auth.py:75-89`); a known user's miss also writes the lockout UPDATE and C2 audit row
+  (unmeasured timing gap; ≤5 samples per lockout window by default). **A3 (2026-08-15):** the Argon2
   verify — BOTH the real and the dummy branch — now runs via `_hash_offload` on
   a DEDICATED, config-sized `ThreadPoolExecutor` (`_get_hash_pool`,
   `services/auth.py:39-59`; `Settings.argon2_max_threads`, `config.py:367`), isolated
@@ -163,11 +163,11 @@ docstring).
   keeps the single event loop non-blocking (was a measured 13.7× head-of-line
   block) while preserving the timing-equal anti-enumeration property (both
   branches offloaded identically, exactly one verify each).
-- **D/brute-force**: two independent DB-backed throttles, both fail-open on
-  store errors — per-account lockout (5 attempts/900s, `config.py:355-356`;
-  `services/auth.py:384-434`) and per-source `LoginAttempt` throttle (20/900s/900s,
-  `config.py:401-403`; `services/login_throttle.py`), applied to both
-  `/login` and step-up re-verification (`routes/step_up.py:217,245`).
+- **D/brute-force**: two independent DB-backed throttles — per-account lockout (5 attempts/900s,
+  `config.py:355-356`; `services/auth.py:384-434`; a store error fails the request) and per-source
+  `LoginAttempt` (20/900s/900s, `config.py:401-403`; fail-open, `services/login_throttle.py`).
+  `/login` and `/login/mfa` apply both, passkey login only per-source; step-up code/password verify
+  only per-account (`routes/step_up.py:124`), step-up passkey only per-source (`routes/step_up.py:217,245`).
   **Both counters are now atomic (2026-08-15).** The per-account counter
   (`register_failed_login`) was a non-atomic read-modify-write that lost
   increments under concurrency (~1 of 5 retained); it now does a guarded
@@ -201,15 +201,46 @@ docstring).
   (`services/mfa_enrollment.py:18-29`) accepts either.
   `EnrollmentGuardMiddleware` (`middleware/enrollment_guard.py:36-54`)
   force-redirects unenrolled users to `/account/security` when the effective
-  MFA policy is `required`. **Recovery-code single-use (B6, 2026-08-15):** a
+  MFA policy is `required`. **Recovery-code single-use (finding B6, 2026-08-15):** a
   matched recovery code is burned by an atomic guarded UPDATE
   (`_claim_recovery_code`, `UPDATE ... WHERE used_at IS NULL` + `rowcount==1`,
-  `services/second_factor.py:47-78`), mirroring the TOTP step claim — replacing
+  `services/second_factor.py:47-79`), mirroring the TOTP step claim — replacing
   a plain attribute set that let two concurrent redemptions of one code both
   mint a session. The recovery-loop Argon2 (`_match_recovery_code`) is offloaded
   to the same dedicated pool. A lost claim audits `user.recovery_code_claim_lost`
   (§11) and rejects; the caller additionally audits `user.login_mfa_failed` /
   `user.step_up_failed`, so a lost claim emits TWO rows by design.
+- **S/E (first-run bootstrap)**: while no user exists, `setup_guard` (§6) sends every
+  non-allowlisted request to `/setup`, and `POST /setup` creates the organization, the first
+  ADMIN and a logged-in session for whoever submits it first; no credential is checked, by
+  design. Residual: from first boot
+  until the operator completes `/setup`, any client that reaches the port can claim the
+  instance. The hosted UAT closes that window with B0 (`/setup` is not in `EXEMPT_PATHS`); a
+  self-hosted install without the pre-gate must finish `/setup` before exposing the port.
+- **E/R (factor reset: admin UI and operator CLI, idraa#256)**: both paths run `reset_user_mfa`
+  (`services/mfa_enrollment.py:61-84`: deletes the user's passkeys, TOTP and recovery codes and
+  clears `mfa_enrolled_at`), then `revoke_user_sessions` (`services/auth.py:472-482`: deletes
+  every `AuthSession` row of the user, so the next request is anonymous), and write
+  `user.mfa_admin_reset` and `user.sessions_revoked` rows; neither path sets or reveals a
+  credential. (1) `POST /users/{user_id}/reset-mfa` (`routes/users.py:512-553`): ADMIN role,
+  ADMIN step-up (§5), CSRF, a `confirm` field and an org-scoped `get_user` (cross-org 404); the
+  rows name the admin. (2) `python -m idraa auth reset-mfa <email>` (`__main__.py:22-61`), the
+  backstop for a locked-out sole admin, has no HTTP entry point and no in-app gate (no session,
+  role, step-up or CSRF): whoever can run a process with the app's environment and database runs
+  it (on Fly, a `scripts/fly ssh console` shell behind Fly org authentication). That access can
+  already write the database directly, so the command adds nothing to host access. It looks the
+  email up across every org (`services/auth.py:464-469`, `.first()`; one org today) and writes
+  its rows with `user_id` and `ip_address` NULL and `"via": "cli"`: the trail shows that an
+  operator acted, not which one. The `idraa` console script is the task runner; only
+  `python -m idraa` reaches this command. Deactivating a user runs the same revoke
+  (`routes/users.py:349-351`, and the set-active toggle); logout deletes its own row (§6).
+  **Residual (both paths):** a reset leaves a password-only account until it re-enrolls. A
+  password login then mints a full session (`routes/auth.py:246-252`), the enrollment guard
+  (policy `required`) holds it on `/account/security`, and step-up accepts the password from an
+  account with no factor (§5), so whoever signs in next with the password enrolls the next
+  factor. Invite passwords are chosen by the admin and there is no self-service password change,
+  so an admin who resets a user's factors can sign in as that user before they re-enroll; the
+  reset row names that admin. Coordinate each reset with its user.
 
 ## 4. B3 — CSRF (state-changing request ↔ verified-origin request)
 
@@ -259,7 +290,7 @@ docstring).
   `TypeError` (not a clean non-match) when either operand carries a
   non-ASCII character, so an attacker-crafted non-ASCII token used to escape
   as an unhandled 500 rather than the intended 403. Both `compare_digest`
-  call sites now guard with `.isascii()` first, rejecting as a normal
+  call sites in this middleware now guard with `.isascii()` first, rejecting as a normal
   verification failure instead: `verify_csrf_token`'s `sig_hex` check
   (`csrf.py:233-239`) covers the cookie-signature compare — this one closes
   an **unauthenticated 500-on-every-request** class, since `verify_csrf_token`
@@ -280,7 +311,7 @@ docstring).
   unauthenticated 50 MB `POST /login` grew RSS ~50 MB before its guaranteed
   403. Not attacker-authenticated; a single-machine availability hardening.
 
-## 5. B4/B5 — Step-up & elevated-action freshness
+## 5. B5 — Step-up & elevated-action freshness (B4, the enrollment guard: §3 E)
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
@@ -288,20 +319,20 @@ docstring).
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
   `services/security_settings.py:146-188`). **43** real call sites (37 as of
-  the 2026-08-05 re-derivation; +6 from B2 on 2026-08-09; the first-ever sweep
+  the 2026-08-05 re-derivation; +6 from finding B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
   `routes/deps.py:236` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
-  destructive deletes, **14** admin/user-mgmt (7 in
+  destructive (7 deletes, overlay deactivate, run sample purge), **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,256,376,467,510,557`, 1 in
-  `routes/settings.py:176`, and the **6 B2 additions** — `POST /organization`,
+  `routes/settings.py:176`, and the **6 finding-B2 additions** — `POST /organization`,
   `POST /fx-rates`, and the four admin-only SME-directory mutations
   new/edit/archive/unarchive), 6 credential changes
   (`routes/mfa.py:96,136,190,232,259,337`). Re-verification
-  (`routes/step_up.py:90-332`) has its own throttle and stamps
-  `reauthenticated_at`; login itself counts as a re-auth (`create_session`,
-  `services/auth.py:308`).
-- **B1 — the settings write is never disarmed (2026-09).** The global
+  (`routes/step_up.py:90-332`) is throttled per route (§3 D/brute-force; five failed attempts there
+  also lock `/login`, which the passkey route avoids on purpose) and stamps `reauthenticated_at`;
+  login itself counts as a re-auth (`create_session`, `services/auth.py:308`).
+- **Finding B1 — the settings write is never disarmed (2026-09).** The global
   kill-switch (window ≤ 0) and the per-category ADMIN override both live in the
   settings that `POST /settings/security` writes. `step_up_required()` honours
   them, so one fresh write could previously switch step-up off for good —
@@ -316,23 +347,23 @@ docstring).
   `routes/settings.py::_parse_window`), which also keeps `is_step_up_fresh`
   clear of a `timedelta` overflow. Switched-off categories stay off everywhere
   else. Pinned by `tests/integration/test_step_up_categories.py::test_b1_*`.
-- **B6/A3 inheritance (2026-08-15):** step-up re-verify shares
+- **Findings B6/A3, inherited (2026-08-15):** step-up re-verify shares
   `verify_totp_or_recovery` and `verify_user_password` with login
   (`routes/step_up.py:148,150`), so it inherits both the atomic recovery-code
   burn (§3 E) and the dedicated-pool Argon2 offload (§3 S) with no step-up-
   specific code.
-- **B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
+- **Finding B2 (2026-08-09)**: `POST /organization` and `POST /fx-rates` mutate inputs
   that feed org-wide FAIR/financial computation (industry, risk_appetite,
   security_maturity, preferred_currency; the FX rates behind every ALE), so a
   stale admin session could previously change them freely while being bounced
   from `/settings/security`. All six are now `StepUpCategory.ADMIN`-gated. The
   count-regression tripwire (`tests/unit/test_step_up_call_sites.py`, now 43)
   is joined by a COMPLETENESS guard (`tests/unit/test_step_up_completeness.py`):
-  it introspects the live route table and fails if any admin-only
-  state-changing route is neither step-up-gated nor on an explicit exemption
+  it introspects the live route table and fails if any state-changing route gated by
+  `require_role(ADMIN)` alone is neither step-up-gated nor on an explicit exemption
   allowlist (the routine reference-data / multi-step-import surface) — so a NEW
-  admin route can no longer ship ungated unnoticed, the exact hole a count
-  cannot see.
+  admin-only route can no longer ship ungated unnoticed, the exact hole a count cannot
+  see (a broader role list or an in-handler role check is outside its scope, by its docstring).
 
 ## 6. B6 — RBAC (role tier)
 
