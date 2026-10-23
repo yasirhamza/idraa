@@ -11,18 +11,18 @@ Security-critical validators (post-paranoid-review preamble fold-ins):
   smuggling. Without it, a malicious POST body could include
   ``organization_id`` or ``version`` and have it model_dump'ed onto the
   ORM row alongside the legitimate fields.
-- ``frequency_multiplier`` / ``magnitude_multiplier`` reject
-  non-finite values (``inf``/``-inf``/``nan``) and values above a
-  ``1e6`` sanity cap. ``Field(gt=0)`` alone would let ``float('inf')``
-  through and then the FAIR multiplicative compose would NaN/overflow
-  silently downstream.
+- ``frequency_multiplier`` / ``magnitude_multiplier`` reject non-finite values
+  (``inf``/``-inf``/``nan``) and values above a ``1e6`` sanity cap. ``Field(gt=0)`` alone
+  would let ``float('inf')`` through; the wizard's ``apply_overlay_multipliers`` would then
+  scale a zero row to ``0 * inf = nan``, which ``_clamp`` turns into the NEGATIVE bound,
+  and every other row to the positive bound.
 - ``methodology`` is required to be at least 20 chars after stripping —
   matches the DB CHECK constraint
   ``length(trim(methodology)) >= 20`` so a service that bypasses the
   form (e.g. Alembic seed) cannot insert a row that the form would
   later reject on edit.
 - ``tag`` is locked to snake_case starting with a lowercase letter so
-  that pinned-revision lookups remain stable across catalogs.
+  it stays a stable per-org identifier (the CSV import upsert key).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from idraa.models._methodology import METHODOLOGY_MIN_LENGTH
 _TAG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 # Sanity cap on multipliers. Anything above this is operator error;
-# legitimate overlay multipliers live in the 1.0-10.0 range.
+# typical overlay multipliers are 0.5-10 (below 1 lowers the value).
 _MULTIPLIER_MAX = 1e6
 
 

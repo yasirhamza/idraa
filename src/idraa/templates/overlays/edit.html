@@ -68,13 +68,13 @@
     {{ form_field(name="frequency_multiplier", label="Frequency multiplier",
                   input_type="number", value=form.frequency_multiplier,
                   required=True,
-                  help="Applied to LEF; typical 0.5–10",
+                  help="Scales Threat Event Frequency (TEF) when the overlay pre-fills the wizard; typical 0.5–10",
                   error=errors_dict.get('frequency_multiplier')) }}
 
     {{ form_field(name="magnitude_multiplier", label="Magnitude multiplier",
                   input_type="number", value=form.magnitude_multiplier,
                   required=True,
-                  help="Applied to LM; typical 0.5–10",
+                  help="Scales Primary and Secondary Loss when the overlay pre-fills the wizard; typical 0.5–10",
                   error=errors_dict.get('magnitude_multiplier')) }}
   </fieldset>
 

@@ -76,25 +76,6 @@ def subfunction_to_domain(subfn: FairCamSubFunction) -> ControlDomain:
     raise ValueError(f"Unknown sub-function domain prefix for {subfn.value!r}")
 
 
-class ControlFunction(Enum):
-    """Granular control functions within each domain"""
-
-    # Loss Event Control Functions
-    THREAT_PREVENTION = "threat_prevention"  # Block threat actors
-    VULNERABILITY_REDUCTION = "vulnerability_reduction"  # Reduce attack surface
-    IMPACT_MITIGATION = "impact_mitigation"  # Limit damage when events occur
-
-    # Variance Management Control Functions
-    PERFORMANCE_MONITORING = "performance_monitoring"  # Monitor control effectiveness
-    CONFIGURATION_MANAGEMENT = "configuration_management"  # Maintain control settings
-    MAINTENANCE_SCHEDULING = "maintenance_scheduling"  # Ensure controls stay operational
-
-    # Decision Support Control Functions
-    RISK_VISIBILITY = "risk_visibility"  # Provide risk awareness
-    COMPLIANCE_REPORTING = "compliance_reporting"  # Support regulatory decisions
-    STRATEGIC_PLANNING = "strategic_planning"  # Enable risk-informed planning
-
-
 class ControlType(Enum):
     """Control implementation types"""
 
@@ -308,16 +289,11 @@ class Control:
     # Traditional control classifications
     control_type: ControlType = ControlType.TECHNICAL
 
-    # Financial and operational data (moved before deprecated fields for clarity)
+    # Financial and operational data
     cost_model: CostModel = field(default_factory=CostModel)
 
     # Per-assignment effectiveness (spec §4.3 + §4.4)
     assignments: list[FairCamControlFunctionAssignment] = field(default_factory=list)
-
-    # DEPRECATED -- Overview-era 9-value enum; v3 deleted analog in T14 (PR iota);
-    # PR mu removes once Layer 3 refactor lands. Default to None to allow construction
-    # without specifying a value.
-    control_function: ControlFunction | None = None
 
     # Framework mappings
     nist_mappings: list[str] = field(default_factory=list)
@@ -458,45 +434,6 @@ class Control:
             "CIS": self.cis_mappings,
             "ISO27001": self.iso27001_mappings,
         }
-
-    def get_fair_cam_classification(self) -> dict[str, str]:
-        """Get FAIR-CAM domain classification"""
-        cf = self.control_function
-        return {
-            "domain": self.domain.value,
-            "domain_description": self._get_domain_description(),
-            "function": cf.value if cf is not None else "",
-            "function_description": self._get_function_description() if cf is not None else "",
-        }
-
-    def _get_domain_description(self) -> str:
-        """Get human-readable domain description"""
-        descriptions = {
-            ControlDomain.LOSS_EVENT: "Loss Event Controls (LEC) - Directly reduce threat event frequency or impact magnitude",
-            ControlDomain.VARIANCE_MANAGEMENT: "Variance Management Controls (VMC) - Ensure reliable performance of other controls",
-            ControlDomain.DECISION_SUPPORT: "Decision Support Controls (DSC) - Improve management decision-making capabilities",
-        }
-        return descriptions.get(self.domain, "Unknown domain")
-
-    def _get_function_description(self) -> str:
-        """Get human-readable function description"""
-        descriptions = {
-            # Loss Event Control Functions
-            ControlFunction.THREAT_PREVENTION: "Blocks or deters threat actors from initiating attacks",
-            ControlFunction.VULNERABILITY_REDUCTION: "Reduces attack surface and exploitable weaknesses",
-            ControlFunction.IMPACT_MITIGATION: "Limits damage and consequences when loss events occur",
-            # Variance Management Control Functions
-            ControlFunction.PERFORMANCE_MONITORING: "Monitors effectiveness and performance of other controls",
-            ControlFunction.CONFIGURATION_MANAGEMENT: "Maintains proper configuration of security controls",
-            ControlFunction.MAINTENANCE_SCHEDULING: "Ensures controls remain operational and effective",
-            # Decision Support Control Functions
-            ControlFunction.RISK_VISIBILITY: "Provides risk awareness and visibility to management",
-            ControlFunction.COMPLIANCE_REPORTING: "Supports regulatory compliance and reporting decisions",
-            ControlFunction.STRATEGIC_PLANNING: "Enables risk-informed strategic planning and investment",
-        }
-        if self.control_function is None:
-            return "Unknown function"
-        return descriptions.get(self.control_function, "Unknown function")
 
     def add_dependency(self, dependency: ControlDependency) -> None:
         """Add a control dependency"""
@@ -911,12 +848,6 @@ class ControlRegistry:
             control_ids = self._framework_index[framework][control_ref]
             return [self._controls[cid] for cid in control_ids if cid in self._controls]
         return []
-
-    def get_controls_by_function(self, function: ControlFunction) -> list[Control]:
-        """Get all controls with a specific function"""
-        return [
-            control for control in self._controls.values() if control.control_function == function
-        ]
 
     def get_domain_distribution(self) -> dict[str, int]:
         """Get distribution of controls across FAIR-CAM domains"""

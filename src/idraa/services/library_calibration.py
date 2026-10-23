@@ -13,79 +13,24 @@ influences risk via controls at Monte-Carlo time, not a loss pre-multiplier.
 (override fall-through preserved) and returns ``None`` calibration metadata, so
 no "calibrated for your org" banner is shown.
 
-``CalibrationAnchor`` is retained as the canonical validator for the
-``calibration_anchor`` industry/revenue_tier provenance shape (still stored on
-every entry). ``revenue_tier`` is now vestigial for calibration — kept as
-provenance metadata; removing it from the schema is a separate data migration.
+The ``calibration_anchor`` industry/revenue_tier provenance shape is still
+stored on every entry and is validated at load time by
+``LibraryEntrySeed._validate_calibration_anchor`` in
+``services/seed_library_loader.py``. ``revenue_tier`` is now vestigial for
+calibration — kept as provenance metadata; removing it from the schema is a
+separate data migration. (The never-instantiated ``CalibrationAnchor`` Pydantic
+model that once shadowed that validator was removed in #242.)
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from idraa.services.industry_mapping import V3_TO_FAIR_CAM_INDUSTRY
-
 if TYPE_CHECKING:
     from idraa.models.scenario_library import (
         ScenarioLibraryEntry,
         ScenarioLibraryOverride,
     )
-
-# Allowed revenue tier slugs — mirrors _REVENUE_TIER_THRESHOLDS in
-# services/calibration.py and IRIS revenue-tier keys in fair_cam.data.iris_2025.
-_REVENUE_TIER_SLUGS = frozenset(
-    {
-        "less_than_10m",
-        "10m_to_100m",
-        "100m_to_1b",
-        "1b_to_10b",
-        "10b_to_100b",
-        "more_than_100b",
-    }
-)
-
-# Allowed industry slugs (frozen at import time via V3_TO_FAIR_CAM_INDUSTRY).
-_INDUSTRY_SLUGS: frozenset[str] = frozenset(V3_TO_FAIR_CAM_INDUSTRY.keys())
-
-
-class CalibrationAnchor(BaseModel):
-    """Pydantic-validated shape for ScenarioLibraryEntry.calibration_anchor.
-
-    Validates that ``industry`` is a recognized v3 industry slug and
-    ``revenue_tier`` is one of the six IRIS revenue tier slugs. ``loss_anchor``
-    and ``vuln_posture`` are optional provenance fields. ``extra="forbid"`` is a
-    typo guard; those two explicit optional fields are the ONLY extras permitted
-    beyond ``industry`` and ``revenue_tier``.
-
-    NOTE: ``revenue_tier`` no longer drives any loss scaling (removed 2026-07-07);
-    it is retained as provenance metadata only.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    industry: str = Field(...)
-    revenue_tier: str = Field(...)
-    # C-iii-a provenance keys (optional — absent on pre-curation entries).
-    loss_anchor: str | None = None
-    vuln_posture: str | None = None
-
-    @field_validator("industry")
-    @classmethod
-    def _validate_industry(cls, v: str) -> str:
-        if v not in _INDUSTRY_SLUGS:
-            raise ValueError(f"industry must be one of {sorted(_INDUSTRY_SLUGS)} (got: {v!r})")
-        return v
-
-    @field_validator("revenue_tier")
-    @classmethod
-    def _validate_revenue_tier(cls, v: str) -> str:
-        if v not in _REVENUE_TIER_SLUGS:
-            raise ValueError(
-                f"revenue_tier must be one of {sorted(_REVENUE_TIER_SLUGS)} (got: {v!r})"
-            )
-        return v
 
 
 def library_calibrated_pre_fill(

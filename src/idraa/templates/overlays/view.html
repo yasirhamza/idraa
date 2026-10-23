@@ -52,16 +52,16 @@
   {# Multiplier KPI cards #}
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
     {{ kpi_card(
-        label="Frequency multiplier (LEF)",
+        label="Frequency multiplier (TEF)",
         value=overlay.frequency_multiplier,
         format="ratio",
-        footer="Applied to loss event frequency"
+        footer="Scales Threat Event Frequency at wizard pre-fill"
     ) }}
     {{ kpi_card(
-        label="Magnitude multiplier (LM)",
+        label="Magnitude multiplier",
         value=overlay.magnitude_multiplier,
         format="ratio",
-        footer="Applied to loss magnitude"
+        footer="Scales Primary and Secondary Loss at wizard pre-fill"
     ) }}
   </div>
 

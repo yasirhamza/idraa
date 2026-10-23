@@ -1,10 +1,10 @@
 """F5: page-scoped HTMX prefill + apply-overlay (likelihood/impact).
 
 The 2026-05-28 step-3 split gives both HTMX endpoints a ``page`` form param.
-Each endpoint mutates ONLY that page's fieldsets (Likelihood: TEF+Vuln scaled
-by frequency_multiplier; Impact: PL+SL scaled by magnitude_multiplier) and
-re-renders the shared ``_fair_params_form_inner.html`` partial scoped to that
-page. No-op overlays (relevant multiplier == 1.0) are filtered from the page's
+Each endpoint mutates ONLY that page's fieldsets (Likelihood: TEF scaled by
+frequency_multiplier, Vuln passed through unchanged; Impact: PL+SL scaled by
+magnitude_multiplier) and re-renders the shared ``_fair_params_form_inner.html`` partial
+scoped to that page. No-op overlays (relevant multiplier == 1.0) are filtered from the page's
 button list. A garbage ``page`` value 422s (plan-gate S-I2).
 
 Fixtures: reuse the project's ``authed_analyst`` + ``csrf_post`` + the
