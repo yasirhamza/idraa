@@ -11,11 +11,11 @@ Security-critical validators (post-paranoid-review preamble fold-ins):
   smuggling. Without it, a malicious POST body could include
   ``organization_id`` or ``version`` and have it model_dump'ed onto the
   ORM row alongside the legitimate fields.
-- ``frequency_multiplier`` / ``magnitude_multiplier`` reject
-  non-finite values (``inf``/``-inf``/``nan``) and values above a
-  ``1e6`` sanity cap. ``Field(gt=0)`` alone would let ``float('inf')``
-  through, and the wizard's ``apply_overlay_multipliers`` would scale draft
-  rows by a non-finite factor that ``_clamp`` can only squash to a bound.
+- ``frequency_multiplier`` / ``magnitude_multiplier`` reject non-finite values
+  (``inf``/``-inf``/``nan``) and values above a ``1e6`` sanity cap. ``Field(gt=0)`` alone
+  would let ``float('inf')`` through; the wizard's ``apply_overlay_multipliers`` would then
+  scale a zero row to ``0 * inf = nan``, which ``_clamp`` turns into the NEGATIVE bound,
+  and every other row to the positive bound.
 - ``methodology`` is required to be at least 20 chars after stripping —
   matches the DB CHECK constraint
   ``length(trim(methodology)) >= 20`` so a service that bypasses the

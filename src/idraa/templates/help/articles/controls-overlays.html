@@ -18,7 +18,10 @@
   <strong>multipliers to Threat Event Frequency (TEF), Vulnerability and loss
   magnitude</strong> (response controls act on Primary and Secondary Loss)
   inside the Monte Carlo simulation — each iteration of the simulation draws from
-  distributions shaped by those multipliers.
+  distributions shaped by those multipliers. Two rules change how response controls
+  are credited (a detection dependency, and currency-valued loss reductions); they
+  are set out in
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#the-control-model">the control model</a>.
 </p>
 <p class="text-body text-ink-2 mb-3">
   This means controls <strong>reduce modelled risk</strong> in the simulation
@@ -57,11 +60,13 @@
   An <strong>overlay</strong> is a named, organisation-wide preset that you
   apply to a scenario draft in the scenario wizard. Overlays carry two
   multipliers — <strong>frequency multiplier</strong> and
-  <strong>magnitude multiplier</strong>. In the Likelihood and Impact steps, open
-  <strong>Prefill options</strong> and choose an overlay: the frequency multiplier
-  scales the draft&rsquo;s Threat Event Frequency (TEF) rows, and the magnitude
-  multiplier scales its Primary and Secondary Loss rows by the same factor.
-  Vulnerability is never scaled.
+  <strong>magnitude multiplier</strong> — and each wizard step applies only its own.
+  On the <strong>Likelihood</strong> step, choosing an overlay under
+  <strong>Prefill options</strong> scales the draft&rsquo;s Threat Event Frequency (TEF)
+  rows by the frequency multiplier. On the <strong>Impact</strong> step, it scales the
+  Primary and Secondary Loss rows by the magnitude multiplier (the same factor for
+  both). To get both effects, apply the overlay on both steps. Vulnerability is never
+  scaled. A step offers an overlay only when that step&rsquo;s multiplier is not 1.0.
 </p>
 <p class="text-body text-ink-2 mb-3">
   Typical use-cases include:
@@ -69,12 +74,13 @@
 <ul class="list-disc list-inside text-body text-ink-2 mb-6 space-y-1">
   <li>A macro threat-environment adjustment (e.g., elevated nation-state activity this quarter).</li>
   <li>An organisation-wide adjustment to loss magnitude, such as a sector with unusually high incident costs.</li>
-  <li>An uplift for a high-risk period such as a merger or system migration (the values stay in the draft you apply it to, so revisit them afterwards).</li>
+  <li>An uplift for a high-risk period such as a merger or system migration (the scaled values stay in the scenario, so re-estimate it when the period ends).</li>
 </ul>
 <p class="text-body text-ink-2 mb-3">
   Applying an overlay <em>edits the values in your draft</em>; it does not link the
   scenario to the overlay, and the values you end up with are yours to edit.
-  Applying an overlay again compounds, because the rows are scaled again. Nothing
+  Choosing the same overlay again on the same step compounds, because that
+  step&rsquo;s rows are scaled again. Nothing
   multiplies at run time: a run uses the scenario&rsquo;s stored distributions, and
   runs do not record overlays. Controls are applied separately, inside the
   simulation, to whatever values the scenario stores.

@@ -136,6 +136,16 @@ def test_overlay_help_article_describes_wizard_prefill_not_run_time_application(
     )
     text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
     assert "Prefill options" in text
+    # Each wizard step applies only its own multiplier; both effects need both steps.
+    assert "each wizard step applies only its own" in text
+    assert "On the Likelihood step" in text
+    assert "On the Impact step" in text
+    assert "apply the overlay on both steps" in text
+    assert "again on the same step compounds" in text
+    assert "Applying an overlay again compounds" not in text
+    # The controls summary points at the article that states the detection-dependency
+    # and currency loss-reduction rules rather than restating them.
+    assert 'href="/help/where-idraa-departs-from-fair#the-control-model"' in html
     assert "Nothing multiplies at run time" in text
     assert "runs do not record overlays" in text
     assert "in each Monte Carlo iteration" not in text
