@@ -266,7 +266,7 @@ The current adapter (`src/idraa/services/run_executor.py:70-82`) silently drops 
 The `Control` dataclass is defined at `fair_cam/models/control.py:238`. Its fields are
 (snapshot of the pre-PR-κ dataclass as audited; the live shape differs — the flat
 strength/coverage/reliability scalars and `degradation_rate` went in PR κ, and
-`fair_cam_mappings` in #177 — so treat the listing and the line citations in this
+`fair_cam_mappings` in #177, `control_function` in #184 — so treat the listing and the line citations in this
 section as historical):
 
 ```python
@@ -274,7 +274,7 @@ control_id: str
 name: str
 description: str
 domain: ControlDomain           # LOSS_EVENT / VARIANCE_MANAGEMENT / DECISION_SUPPORT
-control_function: ControlFunction  # Overview-era 9-value enum
+control_function: ControlFunction  # Overview-era 9-value enum; removed 2026-10 (#184)
 fair_cam_mappings: List[FairCamMapping]   # removed 2026-09 (#177)
 control_type: ControlType       # conflated enum (see §5.2)
 control_strength: float
@@ -315,7 +315,7 @@ tags: List[str]
 | `control_id` | str (UUID) | Standard-orthogonal | — | Persistence identifier |
 | `name`, `description` | str | Standard-orthogonal | — | Valid auxiliary |
 | `domain` | ControlDomain enum | **Standard-conformant** | §2.2, page 5 | Correct three-domain ontology. BUT: string values are `"loss_event"` / `"variance"` / `"decision"` — the truncated "variance" and "decision" diverge from v3's `"variance_management"` / `"decision_support"`, requiring the explicit `_DOMAIN_MAP` in the adapter. |
-| `control_function` | ControlFunction enum (9 values) | **Standard-deviant** | §3.1-3.3, §4.1-4.3, §5.1-5.3 | THREAT_PREVENTION / VULNERABILITY_REDUCTION / IMPACT_MITIGATION (LEC); PERFORMANCE_MONITORING / CONFIGURATION_MANAGEMENT / MAINTENANCE_SCHEDULING (VMC); RISK_VISIBILITY / COMPLIANCE_REPORTING / STRATEGIC_PLANNING (DSC). These are Overview-era domain summaries, not Standard sub-functions. Three values per domain is a 3:9+ mismatch with the Standard's taxonomy. |
+| `control_function` (removed 2026-10, #184) | ControlFunction enum (9 values) | **Standard-deviant** | §3.1-3.3, §4.1-4.3, §5.1-5.3 | THREAT_PREVENTION / VULNERABILITY_REDUCTION / IMPACT_MITIGATION (LEC); PERFORMANCE_MONITORING / CONFIGURATION_MANAGEMENT / MAINTENANCE_SCHEDULING (VMC); RISK_VISIBILITY / COMPLIANCE_REPORTING / STRATEGIC_PLANNING (DSC). These are Overview-era domain summaries, not Standard sub-functions. Three values per domain is a 3:9+ mismatch with the Standard's taxonomy. |
 | `fair_cam_mappings` (removed 2026-09, #177) | List[FairCamMapping] | **Standard-deviant** | §3, §4, §5 throughout | FairCamMapping enum contains FAIR-axis concepts (CONTACT_FREQUENCY, PROBABILITY_OF_ACTION, etc.) rather than Standard sub-function identifiers. Partially overlaps Standard intent but uses a different vocabulary. |
 | `control_type` | ControlType enum | **Standard-deviant** | — | Conflates classical action types (PREVENTIVE/DETECTIVE/CORRECTIVE) with implementation types (ADMINISTRATIVE/TECHNICAL/PHYSICAL) into one enum. The Standard uses neither; this enum has six values and mixes two orthogonal taxonomies. |
 | `control_strength` | float | **Standard-deviant** | §2.4, page 6 | Same Deviation α as v3: single flat scalar for "strength" cannot represent sub-function-specific Capability. |

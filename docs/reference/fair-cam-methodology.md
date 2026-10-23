@@ -294,3 +294,12 @@ threat attribute, not a control-adjustable node) and double-counted frequency
 via a separate Loss Event Frequency multiplier. Zero callers in the entire
 repository history — no stored run was ever computed with it. Register entry:
 C4.
+
+**Surface deleted in #184 (2026-10):** the Overview-era `ControlFunction` enum
+(nine values: threat prevention, vulnerability reduction, impact mitigation, and
+the VMC/DSC analogues), the `Control.control_function` field,
+`Control.get_fair_cam_classification` with its `_get_domain_description` /
+`_get_function_description` helpers, and `ControlRegistry.get_controls_by_function`
+(`fair_cam/models/control.py`). The taxonomy deviated from the Standard (alignment
+audit §5.2), carried no effect in the engine, and had zero callers; per-sub-function
+effectiveness lives on `Control.assignments` (`FairCamSubFunction`).
