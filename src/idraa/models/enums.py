@@ -225,17 +225,18 @@ class IndustrySubSector(StrEnum):
 
     Values:
     - The first 8 are the original OT/energy slice (PR η). The sub-sector
-      calibration overlay layer they once keyed (IRIS multipliers for
-      CHEMICAL_MANUFACTURING, ELECTRIC_UTILITY, OIL_AND_GAS, PIPELINE and
-      WATER_UTILITY) was retired in PR π and fair_cam no longer carries an
-      ``IndustrySubSector``; this enum is standalone.
+      calibration layer they once keyed (vendor-sourced lifts applied over the
+      IRIS NAICS-2 baseline for CHEMICAL_MANUFACTURING, ELECTRIC_UTILITY,
+      OIL_AND_GAS, PIPELINE and WATER_UTILITY) was retired in PR π and fair_cam
+      no longer carries an ``IndustrySubSector``; this enum is standalone.
     - The remaining 31 (#241) exist so the library's sub-sector filter spans
       every ``applicable_sub_sectors`` value the seed entries use. All 39
       members are facets only: none changes a calibration or any FAIR input
       (calibration keys on industry and revenue tier alone).
-    - The comment groups below name each added facet's natural parent industry
-      as documentation only; the seed data uses sub-sectors across several
-      industries, so no parent mapping is enforced.
+    - The comment groups below are for reading only: each added facet sits
+      under the industry the seed entries most often pair it with, not under a
+      NAICS parent. The seed data uses sub-sectors across several industries,
+      so no parent mapping is enforced.
 
     The column carries a named CHECK constraint (``industry_sub_sector_enum``);
     adding a member requires an Alembic migration that widens it.
@@ -252,7 +253,9 @@ class IndustrySubSector(StrEnum):
     PROCESS_MANUFACTURING = "process_manufacturing"
     WATER_UTILITY = "water_utility"
 
-    # --- Library-filter facets (#241): fall through to the industry baseline. ---
+    # --- Library-filter facets (#241): no calibration effect, same as the original 8. ---
+    # Grouped by the industry the seed entries most often pair them with, for
+    # reading only -- not a NAICS parent mapping.
     # Healthcare
     HEALTH_PLAN = "health_plan"
     HEALTH_SYSTEM = "health_system"

@@ -118,6 +118,25 @@ def test_stray_applicable_sub_sectors_item_is_rejected_with_value_and_allowed_se
     assert f"allowed: {_ALLOWED_SUB_SECTORS}" in msg
 
 
+@pytest.mark.parametrize(
+    ("field", "kind"),
+    [
+        ("applicable_sub_sectors", "IndustrySubSector"),
+        ("applicable_industries", "IndustryType"),
+    ],
+)
+def test_rejected_list_item_echo_is_bounded_to_64_chars(field: str, kind: str) -> None:
+    # The message is reflected into the bundle-import preview, whose per-element cap runs
+    # only after model_validate, so the echo must bound the rejected value itself.
+    data = _base()
+    data[field] = ["x" * 200]
+    with pytest.raises(ValidationError) as exc:
+        LibraryEntrySeed.model_validate(data)
+    msg = str(exc.value)
+    assert f"{field} item '{'x' * 64}' is not an {kind} value" in msg
+    assert "x" * 65 not in msg
+
+
 def test_applicable_sub_sectors_none_validates_unchanged() -> None:
     data = _base()
     data["applicable_sub_sectors"] = None

@@ -175,7 +175,7 @@ class LibraryEntrySeed(BaseModel):
         for item in v:
             if item not in _INDUSTRY_TYPE_VALUES:
                 raise ValueError(
-                    f"applicable_industries item {item!r} is not an IndustryType value; "
+                    f"applicable_industries item {item[:64]!r} is not an IndustryType value; "
                     f"allowed: {sorted(_INDUSTRY_TYPE_VALUES)}"
                 )
         return v
@@ -192,7 +192,7 @@ class LibraryEntrySeed(BaseModel):
         for item in v:
             if item not in _INDUSTRY_SUB_SECTOR_VALUES:
                 raise ValueError(
-                    f"applicable_sub_sectors item {item!r} is not an IndustrySubSector value; "
+                    f"applicable_sub_sectors item {item[:64]!r} is not an IndustrySubSector value; "
                     f"allowed: {sorted(_INDUSTRY_SUB_SECTOR_VALUES)}"
                 )
         return v
