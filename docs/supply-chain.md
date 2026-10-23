@@ -22,8 +22,8 @@ independently-maintained copy of the same rules.
 
 **Enforcement keystone (branch protection, armed 2026-07-19):** merging to
 `main` requires three status checks — `ci-success` (an aggregator over the
-deterministic core: `gate`, `secrets`, `sast`), `secrets (gitleaks, full
-history)`, and `dependency-review`. `docker-build` (image build exercised on
+deterministic core: `gate`, `secrets`, `sast`, `dast`), `secrets (gitleaks,
+full history)`, and `dependency-review`. `docker-build` (image build exercised on
 every PR against the digest-pinned base) and `notebook-smoke` run
 visible-but-advisory so a flaky job can never wedge merges; the advisory
 Playwright e2e job and the Windows matrix job were retired 2026-07-19

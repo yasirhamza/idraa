@@ -62,15 +62,13 @@ jobs:
       - name: zizmor (GitHub-workflow SAST; locked dev dep)
         run: uv run zizmor .github/workflows/
 
-  # Advisory-first: schemathesis-based DAST fuzzing against an ephemeral
-  # local uvicorn (throwaway migrated/seeded SQLite — never a deployed
-  # target, see security/dast/README.md). Deliberately NOT in ci-success's
-  # `needs` below — this job is new and needs a burn-in period to prove it
-  # doesn't flake before it can block merges. Promotion into ci-success is a
-  # tracked follow-up PR once burn-in is clean (docs/security/2026-08-14-ci-dast-design.md
-  # "Out of scope (Phase 2+, tracked)").
+  # Schemathesis-based DAST fuzzing against an ephemeral local uvicorn
+  # (throwaway migrated/seeded SQLite — never a deployed target, see
+  # security/dast/README.md). Merge-blocking: promoted into ci-success's
+  # `needs` below on 2026-10-23 (#158) after the burn-in came back clean
+  # (docs/security/2026-08-14-ci-dast-design.md §8).
   dast:
-    name: dast (schemathesis, advisory)
+    name: dast (schemathesis)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -161,7 +159,7 @@ jobs:
           name: idraa-sbom-${{ github.sha }}
           path: idraa-sbom.cdx.json
 
-  # Aggregator over the DETERMINISTIC core only (gate, secrets, sast).
+  # Aggregator over the DETERMINISTIC core only (gate, secrets, sast, dast).
   # docker-build / notebook-smoke stay visible-but-advisory so a flaky
   # kernel can never wedge merges (plan-gate A-I5). The advisory Playwright
   # e2e job was REMOVED 2026-07-19 (owner call): its only failures were a
@@ -176,7 +174,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [gate, secrets, sast]
+    needs: [gate, secrets, sast, dast]
     runs-on: ubuntu-latest
     steps:
       # Expression-based check: the original grep idiom NEVER failed

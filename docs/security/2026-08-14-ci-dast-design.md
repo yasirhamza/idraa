@@ -105,6 +105,8 @@ idraa is server-rendered HTML, so **`not_a_server_error` is the SOLE gating chec
 
 The `dast` job runs on every PR and shows a visible pass/fail check, but is **NOT in `ci-success` `needs`** — a failure does not block merge. After a burn-in of consecutive green runs across CI runners proves determinism, a **follow-up PR** promotes `dast` into `ci-success` (merge-blocking). This mirrors the repo's own lesson (Playwright e2e was removed for a login-bootstrap flake that red-X'd otherwise-green runs).
 
+> **Update 2026-10-23 (#158):** the burn-in condition above was met (25/25 green `dast` runs on `main`, after the post-login commit-race fix in PR #160), and `dast` was promoted into `ci-success`'s `needs` in `.github/workflows/ci.yml`: a `dast` failure now blocks merge. The job's display name dropped the "advisory" suffix (`dast (schemathesis)`). The advisory-first text above is the Phase-1 rollout history and is left as written.
+
 ## 9. Determinism / reproducibility
 
 `--generation-deterministic` + `--seed 0` fix Hypothesis's draw (deterministic mode implies no example DB — do **not** also pass `--generation-database none`; schemathesis 4.24.3 rejects the combination as a hard error); **`PYTHONHASHSEED=0` is set in the `dast` job `env` and the tasks runner** (the repo pins it only in the prod image/`fly.toml`, so it must be set here explicitly) to neutralize hash-seed-dependent set ordering in schema→strategy construction. The gating check (`not_a_server_error`) is order-independent, so pass/fail is stable regardless; the pin additionally stabilizes *which* examples run. Verified by two **separate-process** runs (not two calls in one process).
