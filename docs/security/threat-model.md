@@ -12,12 +12,13 @@ Threat/Asset/Method/Effect scenario taxonomy). That's a product feature, not
 an app-security artifact, and isn't covered here.
 
 **Status.** Drafted 2026-08-05 from a live code sweep (not carried forward
-from an earlier doc — none existed). **Fully re-audited 2026-08-05** — every
-file:line citation re-opened and every counting claim re-derived against the
-tree by three parallel reviewers; findings applied in one consolidated pass
-(see §13 for what that caught and why the periodic pass exists). Every claim
-below cites a file:line as of that re-audit; re-verify before trusting an old
-citation, per the project's own "point-in-time observation" convention.
+from an earlier doc — none existed). **First full re-audit 2026-08-05, second
+2026-10-23** — each time every file:line citation was re-opened and every
+counting claim re-derived against the tree by three parallel reviewers, with
+findings applied in one consolidated pass (see §13 for what the first caught
+and why the periodic pass exists). Every claim below cites a file:line as of
+the latest re-audit; re-verify before trusting an old citation, per the
+project's own "point-in-time observation" convention.
 
 ## 1. System overview
 
@@ -879,8 +880,15 @@ claim (`rowcount==0`) — i.e. a concurrent request burned it first. This is the
 forensic signal of the exact double-redemption the B6 fix defends against.
 **Write-amplification bound:** it fires ONLY on a hash-match, so it requires
 possession of a valid recovery code (random guesses never match — 2⁴⁰ space);
-per burst it is bounded by `argon2_max_threads` (4) and the per-source
-`LoginAttempt` throttle; and it is self-limiting — once the code is burned, the
+per burst it is bounded by `argon2_max_threads` (4) and by the route's attempt
+limits, which differ. `/login/mfa` consults the per-source `LoginAttempt`
+throttle before verifying (when a client-IP trust strategy is configured), bounces
+a locked account, and counts every miss, a lost claim included, against the
+per-account lockout and the source (`routes/auth.py:281-323`). The step-up
+code/password route has no per-source throttle and is bounded by the per-account
+lockout alone: it bounces a locked account before verifying, with no audit row,
+and counts each miss (`routes/step_up.py:138-148`; §3). It is also self-limiting —
+once the code is burned, the
 `used_at IS NULL` SELECT filters it, yielding a clean `None` with NO further
 `claim_lost` row (regression-pinned by
 `tests/services/test_recovery_code_atomicity.py::test_already_consumed_code_rejects_cleanly`).

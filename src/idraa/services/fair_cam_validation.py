@@ -508,11 +508,11 @@ def validate_fair_distributions(
     lognormal_mixture ``primary_loss``/``secondary_loss`` MUST carry a
     ``max`` key (see ``_validate_loss_max_required``) -- a presence check,
     additive to (not a replacement of) the ``_validate_capacity_floor``
-    magnitude check below. Default False. Only the scenario-write and
-    scenario-import call sites opt in (verified caller census):
-    ``services/scenarios.py`` lines 204/589/701 (create / update /
-    re-estimate) and ``services/scenario_import.py`` line 537 (CSV/JSON
-    import apply). ``services/library_bundle_import.py`` line 335 and
+    magnitude check below. Default False. Only the scenario-write, scenario-import and
+    loss-pinning call sites opt in (verified caller census): ``services/scenarios.py``
+    lines 204/589/701 (create / update / re-estimate), ``services/scenario_import.py``
+    line 537 (CSV/JSON import apply) and ``services/loss_pinning.py`` lines 230/535
+    (pin / refresh). ``services/library_bundle_import.py`` line 335 and
     ``services/scenario_library.py`` line 429 (override writes) stay on
     the default False (D14) -- those callers author org-agnostic
     templates/overrides that carry no ``max``, and flipping them would
