@@ -374,15 +374,15 @@ docstring).
   `deps.py:180-186`) so privilege-probing leaves a trace (C1, 2026-08-09; a
   WARNING not a DB `AuditLog` row, to keep it bounded by log rotation rather
   than an attacker-driven write amplifier). Gating is 100% per-route (no
-  `APIRouter(dependencies=...)` blanket gate found) — every
-  `POST/PUT/PATCH/DELETE` handler across `routes/*.py` was diffed against
-  presence of an auth dependency; the only unguarded hits are the
-  pre-authentication login routes (`routes/auth.py:114,129,274,360,368`) plus
-  `POST /logout` (`routes/auth.py:459-460`, takes `user: User | None =
+  `APIRouter(dependencies=...)` blanket gate found) — all 80 state-changing
+  handlers across `routes/*.py` (every one a POST: no PUT/PATCH/DELETE route exists;
+  re-derived 2026-10-23) were diffed against an auth dependency; the 6 unguarded are the
+  pre-authentication login POSTs (`routes/auth.py:129,274,360,368`) plus
+  `POST /logout` (`routes/auth.py:459-463`, takes `user: User | None =
   Depends(current_user)` — no-op on an already-logged-out session, correct
-  by design) and `/setup` (`routes/setup.py:58`, gated instead by the
-  outer `setup_guard` DB-count middleware plus its own `_has_any_user` check,
-  `app.py:1190-1224`).
+  by design) and `/setup` (`routes/setup.py:58`), gated ONLY by its own `_has_any_user`
+  re-check (`routes/setup.py:77-78`): the outer `setup_guard`
+  (`app.py:1190-1224`) allowlists `/setup` (`app.py:826-829`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for
@@ -396,19 +396,29 @@ docstring).
   dependency `routes/threat_communities.py:44`). Separately, `scenario_export_routes.py:51` deliberately
   uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
   admins and analysts, per its inline comment. Never a security defect, only
-  a doc-accuracy one; CLAUDE.md now names all four roles with an inline
-  "Corrected 2026-08-05" note.
+  a doc-accuracy one; CLAUDE.md (local, untracked) now names all four roles — its
+  "Corrected 2026-08-05" note was dropped in a later consolidation (re-checked 2026-10-23).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
   (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
   UserRole.ADMIN)` (`routes/scenarios.py:1542`) — REVIEWER and VIEWER get 403. It is the
   dedicated confirm path; edit-form and wizard saves also resolve it (§11).
+- **Role assignment and the last-admin invariant (added by the 2026-10-23 re-audit):** only
+  an ADMIN with a fresh ADMIN step-up can change a role or deactivate a user (`/users/{id}/edit`
+  and `/set-active`, §5). An admin cannot demote or deactivate themselves
+  (`routes/users.py:280-287`), and disarming the last active admin is refused inside the
+  write itself — `guarded_admin_disarm`'s UPDATE re-checks that another active admin
+  remains (`routes/users.py:321-344`, `services/users.py:159-194`, idraa#83). The role is
+  re-read from the `users` row on every request (`middleware/session.py:58-60`), so a
+  demotion takes effect on the next request; deactivation also revokes live sessions
+  (cited in §3). Measured 2026-10-23: REVIEWER is named only in the same six
+  four-role allowlists as VIEWER (the 9 GET routes above), so its reach equals VIEWER's.
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
-- **I/E**: enforcement is consistent, not incidental. Repos expose only
-  `*_for_org(organization_id, ...)` methods
-  (`repositories/scenario_repo.py:65-82`, `repositories/run_repo.py:27-41`);
+- **I/E**: repository reads of org-scoped tables take `organization_id` (`repositories/scenario_repo.py:65-82`,
+  `repositories/run_repo.py:27-41`), except the zero-caller, unscoped `get_override_by_version`
+  (`repositories/scenario_library_repo.py:361-377`, invisible to the checker below);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
@@ -417,24 +427,24 @@ docstring).
   transitively safe because `control` was org-verified earlier in the same handler
   (`routes/controls.py:692-693`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
-  client id (issue #268):** the control form's link is a top-level field
-  (`corrects_misaligned_decisions_from`, not a `ControlForm` field) carrying an
-  eligible sub-function slug, and the server resolves it to the row of the SAME,
-  already org-verified control that carries that sub-function — so the link can
-  never name another control's or another org's assignment. Any client-supplied
-  `assignments[N][derived_from_assignment_id]` is stripped from the parsed form
-  before validation and, if it survives, refused; a submitted
-  `dsc_corr_misaligned` assignment row is refused; an unknown slug is refused.
-  All refusals happen in a pure check that runs before any mutation (no row
-  written, no audit entry) and render a 422 whose messages are fixed text or
-  enum values only — the client string is never echoed.
+  client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
+  parsed to a sub-function slug (`routes/controls.py:958-973`); the server resolves it to the
+  row of the SAME, already org-verified control by an explicit control + org select
+  (`services/controls.py:189-207`), so it can never name another control's or org's row.
+  A client `assignments[N][derived_from_assignment_id]` is dropped before validation
+  (`routes/controls.py:76-83`); one that survives, a submitted `dsc_corr_misaligned` row and
+  an ineligible or absent source are refused by a pure check that runs first in create and
+  update (`services/controls.py:136-186`), and an unknown slug by the route parse — all before
+  any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
+  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:309`;
+  breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
   bare `<expr>.get(Model, id)` on an org-scoped model with no
   `organization_id` check (or `*_for_org*` delegated-safety call) anywhere
   in the enclosing function. Its first real run found exactly one live gap
-  and ten correct-but-undocumented exemptions:
+  and ten correct-but-undocumented exemptions (eleven suppressions today, listed below):
   - **Fixed**: `services/controls.py`'s `get_control()` — the concrete
     example this section used to cite as "no org check at all at that
     line, safe only by caller discipline" — is now `get_control_for_org(db,
@@ -448,8 +458,8 @@ docstring).
     `routes/step_up.py:103,313`); 3 sites resolving a user id from a
     source that's already unforgeable — a server-signed pending-MFA
     cookie (`routes/auth.py:301`) and an already-verified WebAuthn
-    credential's owner (`routes/auth.py:422,437` — login and the B5 replay-audit
-    lookup); 2 sites in
+    credential's owner (`routes/auth.py:422,437` — the B5 replay-audit lookup
+    and login); 2 sites in
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
     per-request handler with an attacker-suppliable id).
@@ -472,14 +482,21 @@ docstring).
   ordinary shape, so this is the more exploitable gap versus the allowlist-
   staleness one below — tracked as issue #151 (bind the check to the
   specific assigned variable / the flagged call's id argument, not just
-  "some check exists in this function"). Additionally: a new PK lookup
-  that skips both the `get_for_org` pattern AND ends up naming its model
-  outside the checker's maintained `ORG_SCOPED_MODELS` allowlist (new
-  model, allowlist not updated) would slip through silently, and a
-  suppression comment's *reason* is human-asserted, never verified — the
-  security-auditor persona (`CLAUDE.md` → Review ceremony) is the actual
-  backstop for both: keeping the allowlist current and reading each
-  suppression's reason for whether it's really true, not just present.
+  "some check exists in this function"). Additionally, the checker parses only the
+  `<expr>.get(Model, id)` shape on a bare model name: a `select(Model).where(Model.id == x)`
+  with no org predicate (the dead method above; `services/reports.py:1709-1735`'s legacy
+  fallback), an aliased or attribute-qualified model, and the two org-child tables in
+  `NON_ORG_COLUMN_MODELS` are never flagged; allowlist staleness is closed by the parity
+  test below (2026-10-01). A suppression's *reason* is human-asserted, never verified — the
+  security-auditor persona (`CLAUDE.md` → Review ceremony) is the backstop for both: reading
+  new lookups of those shapes and each suppression's reason for whether it is really true.
+- **Org scoping has two sources; one is single-org-only (re-audit 2026-10-23):** 44
+  `require_sole_org(db)` call sites in 11 route modules (controls 15, overlays 9, reports 4,
+  runs 3, users 3, six more with 1–2 each) scope by `select(Organization).first()` — the
+  first org row, no ORDER BY (`services/org.py:25-33`) — not by the caller's
+  `user.organization_id`. Correct only while exactly one org exists (the sole constructor is
+  `/setup`, `routes/setup.py:106`); all of them pass the checker. Any
+  multi-tenancy work must replace them, and the legacy fallback above, first.
 - **Threat Agent Library canonical catalog is deliberately NOT org-scoped
   (2026-10-01):** `ThreatCommunity` (`models/threat_community.py`) has no
   `organization_id` column — P1 ships a single canonical, shared catalog
@@ -507,9 +524,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   (`app.py:97-100`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
-  confirmed total — every file under `src/idraa/templates/` is `.html` (zero
-  non-html templates exist), so autoescape covers 100% of rendered output,
-  not a subset. **Alpine `x-data` is the sharp edge**: an attribute the browser
+  confirmed total — all 146 tracked templates are `.html`, so autoescape covers every
+  one; the two `| safe` bypasses emit app-built markup only (`app.py:152`'s `csrf_field()`
+  Markup, the segno TOTP SVG at `templates/account/_totp.html:12`). **Alpine `x-data` is the sharp edge**: an attribute the browser
   HTML-decodes before Alpine evaluates it as a JS expression, so autoescape is
   no defense there — the value must be JSON-encoded via `| tojson` inside a
   single-quoted attribute. The money-field / loss-readout `x-data` sites do
@@ -525,7 +542,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   pattern makes it cross-user). Now fixed: all three adopt the single-quoted +
   `| tojson` idiom, `data_table.html`'s `page_size` x-data gets a defensive
   `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
-  fails if any dist selector regresses to the raw shape.
+  fails if any dist selector regresses to the raw shape; #268's link select reflects its slug the same way (§7).
 - **URL-context injection (href)** — a third class, distinct from both:
   autoescape escapes `&<>"'` in an `href` value, preventing attribute
   breakout, but does not validate the URL scheme, so `javascript:` survives
@@ -546,7 +563,8 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   explicitly reject `javascript:` — regression-tested in
   `tests/unit/test_formatting_linkify.py`
   (`test_linkify_https_javascript_scheme_stays_inert`,
-  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`)
+  `test_safe_https_href_rejects` parametrized with `"javascript:alert(1)"`;
+  `test_linkify_https_malformed_url_is_total_and_inert` for totality on `https://[`)
   plus a route-level end-to-end check that a stored `javascript:` citation
   URL actually renders as inert text on a real response body
   (`tests/routes/test_threat_community_pages.py:128`,
@@ -559,12 +577,12 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   The only textual hit is an explanatory comment in `app.py:102-107` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
-  one. Every `TemplateResponse` call site uses a literal path string, with
-  one exception (`routes/scenarios.py:2373-2375`, the wizard step template
-  construction, consumed by the `TemplateResponse` call at `routes/scenarios.py:2538`) that
-  indexes a **fixed 6-element literal list** by an integer bounds-checked to
-  `1..6` (`routes/scenarios.py:2365`) — not attacker-controlled text, so it's path
-  *selection* among a fixed set, not path or template *construction*.
+  one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template
+  (`routes/scenarios.py:2373-2375`, consumed at `routes/scenarios.py:2538`) indexes a **fixed
+  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2365`), and
+  two more pick one of two literals by a flag (`routes/scenarios.py:2985-2987`, `routes/help.py:134`);
+  one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
+  slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
 - **Invariant to protect**: no future code may call
   `Environment.from_string()` / `jinja2.Template()` /
   `render_template_string()` with any request-derived string (a "custom
@@ -981,7 +999,7 @@ correct re-cite whose new anchor line held another citation's anchor); and it re
 citation of the same site within one document, so each site is cited once per document and later
 mentions refer back to it in prose. What this pins: the first anchor line of every cited range.
 What it does not: lines inserted, deleted or edited after the anchor inside a range, and where a
-range ends; which occurrence an anchor means when its line recurs in the same file (44 do today;
+range ends; which occurrence an anchor means when its line recurs in the same file (45 do today;
 `--verbose` lists them), so a sibling block inserted, deleted or reordered above such an anchor
 can leave a stale citation green; cited lines swapped or rotated in the code under unchanged
 citations; a stale citation offset by a newly added citation on the moved text (one new citation
