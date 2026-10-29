@@ -3,6 +3,8 @@ snapshot field exist with the documented defaults."""
 
 from typing import Any
 
+import sqlalchemy as sa
+
 from idraa.models.control import Control
 from idraa.models.risk_analysis_run import RiskAnalysisRun
 from idraa.schemas.control import ControlForm
@@ -43,3 +45,27 @@ def test_snapshot_v3_inherited_variant_of_is_optional_and_version_stays_3():
     assert snap.inherited_variant_of is None
     assert snap.snapshot_version == 3
     assert "inherited_variant_of" in snap.model_dump(mode="json")
+
+
+def test_inherited_column_stores_explicit_python_none_as_sql_null():
+    """The pre-feature marker is SQL NULL under BOTH write paths. Plain ``JSON`` would
+    persist an explicitly assigned ``None`` as the text ``'null'`` (``IS NULL`` false),
+    giving the marker two encodings; the migration downgrade tests ``IS NOT NULL``."""
+    col_type = RiskAnalysisRun.__table__.c.inherited_control_ids_per_scenario.type
+    assert isinstance(col_type, sa.JSON)
+    assert col_type.none_as_null is True
+
+    probe = sa.Table(
+        "probe",
+        sa.MetaData(),
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("v", col_type, nullable=True),
+    )
+    engine = sa.create_engine("sqlite://")
+    probe.create(engine)
+    with engine.begin() as conn:
+        conn.execute(probe.insert().values(id=1, v=None))
+        conn.execute(probe.insert().values(id=2))  # attribute never set
+        conn.execute(probe.insert().values(id=3, v={}))
+        rows: dict[int, int] = dict(conn.execute(sa.text("SELECT id, v IS NULL FROM probe")).all())
+    assert rows == {1: 1, 2: 1, 3: 0}
