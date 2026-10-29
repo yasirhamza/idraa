@@ -13,6 +13,7 @@
     "src/idraa/services/qualitative_bands.py",
     "src/idraa/services/qualitative_converter.py",
     "src/idraa/services/run_executor.py",
+    "src/idraa/services/inherited_controls.py",
     "src/idraa/services/shapley.py",
     "src/idraa/services/threat_community_summary.py",
     "src/idraa/services/verification_workbook.py",

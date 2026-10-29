@@ -61,6 +61,7 @@ async def test_repo_filter_matches_predicate(
             name=f"c{i}",
             type=ControlType.TECHNICAL,
             implementation_stage=stage,
+            org_wide_meta=True,
         )
         made.append(c)
     db_session.add_all(made)
@@ -69,3 +70,8 @@ async def test_repo_filter_matches_predicate(
     picker_ids = {c.id for c in await ControlRepo(db_session).list_for_org(organization.id)}
     predicate_ids = {c.id for c in made if c.implementation_stage.contributes_to_composition}
     assert picker_ids == predicate_ids
+
+    repo = ControlRepo(db_session)
+    org_wide_ids = {c.id for c in await repo.list_org_wide_meta(organization.id)}
+    assert org_wide_ids == predicate_ids  # #299: same stage predicate as list_for_org
+    assert await repo.count_org_wide_meta(organization.id) == len(predicate_ids)

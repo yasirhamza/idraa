@@ -42,6 +42,7 @@ subjects = [
 "src/idraa/services/loss_pinning.py" = "calibration"
 "data/**" = "calibration"
 "src/idraa/services/run_executor.py" = "derivation"
+"src/idraa/services/inherited_controls.py" = "derivation"  # #299 org-wide meta inheritance (plan-gate r2 Arch-I6)
 "src/idraa/services/shapley.py" = "derivation"
 "src/idraa/services/weight_robustness.py" = "derivation"
 "src/idraa/services/loss_forms.py" = "derivation"

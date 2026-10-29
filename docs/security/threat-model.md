@@ -433,11 +433,11 @@ docstring).
   client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
   parsed to a sub-function slug (`routes/controls.py:963-978`); the server resolves it to the
   row of the SAME, already org-verified control by an explicit control + org select
-  (`services/controls.py:189-207`), so it can never name another control's or org's row.
+  (`services/controls.py:247-265`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
   (`routes/controls.py:76-83`); one that survives, a submitted `dsc_corr_misaligned` row and
   an ineligible or absent source are refused by a pure check that runs first in create and
-  update (`services/controls.py:136-186`), and an unknown slug by the route parse — all before
+  update (`services/controls.py:194-244`), and an unknown slug by the route parse — all before
   any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
   slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:309`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).

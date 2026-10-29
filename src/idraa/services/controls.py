@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -61,6 +62,7 @@ from idraa.models.control_library import ControlLibraryEntryAssignment
 from idraa.models.enums import (
     DSC_CORR_LINK_SOURCES,
     ControlDomain,
+    ControlImplementationStage,
     ControlSource,
     EntityStatus,
     FairCamSubFunction,
@@ -68,10 +70,66 @@ from idraa.models.enums import (
 )
 from idraa.schemas.control import ControlForm
 from idraa.services.audit import AuditWriter
+from idraa.services.inherited_controls import inherits_assignment
 
 logger = logging.getLogger(__name__)
 
 _DSC_CORR = FairCamSubFunction.DSC_CORR_MISALIGNED
+
+
+class OrgWideMetaIneligible(ValueError):  # noqa: N818 -- name fixed across the plan; errors.py:204 precedent
+    """org_wide_meta=True requires at least one inheritable VMC/DSC assignment (#299)."""
+
+
+def has_meta_assignment(sub_functions: Iterable[str]) -> bool:
+    """True when any NON-derived slug is inheritable per the shared predicate
+    (#299). Equivalent to ``meta_assignments()`` being non-empty: a derived
+    row is inheritable only when its source is meta, and that source is itself
+    one of these slugs."""
+    return any(inherits_assignment(sf) for sf in sub_functions)
+
+
+def _check_org_wide_eligible(form: ControlForm) -> None:
+    if form.org_wide_meta and not has_meta_assignment(
+        a.sub_function.value for a in form.assignments
+    ):
+        raise OrgWideMetaIneligible(
+            "Organization-wide requires at least one Variance Management or "
+            "Decision Support function on the control."
+        )
+
+
+def _org_wide_effective(control: Control) -> bool:
+    """The ONE predicate for "this control is inherited right now" (spec §3.1)."""
+    return (
+        bool(control.org_wide_meta)
+        and control.status is EntityStatus.ACTIVE
+        and control.implementation_stage is ControlImplementationStage.ACTIVE
+    )
+
+
+async def _org_wide_sweep(
+    db: AsyncSession,
+    control: Control,
+    *,
+    trigger: str,
+    user_id: uuid.UUID | None,
+    ip_address: str | None,
+) -> int:
+    """flag_runs_stale_for_org + its audit row (spec D9 / §6)."""
+    from idraa.services.control_library import flag_runs_stale_for_org
+
+    flagged = await flag_runs_stale_for_org(db, organization_id=control.organization_id)
+    await AuditWriter(db).log(
+        organization_id=control.organization_id,
+        entity_type="control",
+        entity_id=control.id,
+        action="control.org_wide_sweep",
+        changes={"runs_flagged_stale": [None, flagged], "trigger": [None, trigger]},
+        user_id=user_id,
+        ip_address=ip_address,
+    )
+    return flagged
 
 
 async def list_controls(
@@ -405,8 +463,11 @@ async def create_control(
 
     ``dsc_corr_source`` (#268) names the submitted sub-function the derived
     Correcting Misaligned Decisions row is linked to (``DSC_CORR_LINK_SOURCES``);
-    None = no derived row. ``ValueError`` (nothing written) on an invalid request.
+    None = no derived row. ``ValueError`` (nothing written) on an invalid request;
+    ``OrgWideMetaIneligible`` when ``org_wide_meta`` is set without an inheritable
+    VMC/DSC assignment (#299).
     """
+    _check_org_wide_eligible(form)
     validate_dsc_corr_link([a.model_dump() for a in form.assignments], dsc_corr_source)
     # M5: explicit unpack — never **form.model_dump() on Control constructor
     form_data: dict[str, Any] = form.model_dump()
@@ -470,6 +531,9 @@ async def create_control(
             now=now,
         )
 
+    create_changes: dict[str, list[object]] = {"name": [None, control.name]}
+    if control.org_wide_meta:
+        create_changes["org_wide_meta"] = [None, True]
     await audit.log(
         organization_id=org_id,
         entity_type="control",
@@ -480,10 +544,12 @@ async def create_control(
         # sense at the Control level. Assignment-level audit rows
         # (control_function_assignment.{create,update,delete,confirm})
         # remain the source of truth for domain shifts.
-        changes={"name": [None, control.name]},
+        changes=create_changes,
         user_id=user_id,
         ip_address=ip_address,
     )
+    if _org_wide_effective(control):
+        await _org_wide_sweep(db, control, trigger="create", user_id=user_id, ip_address=ip_address)
     return control
 
 
@@ -515,13 +581,22 @@ async def update_control(
     BEFORE the merge when it must go (link cleared, or its source row is leaving the
     submission), then ``_sync_derived_row`` creates / re-points / keeps it AFTER the
     merge (and confirms it: save = confirm). ``ValueError`` — raised before any
-    mutation — on an invalid request.
+    mutation — on an invalid request (``OrgWideMetaIneligible`` when ``org_wide_meta``
+    is set without an inheritable VMC/DSC assignment, #299).
+
+    #299: a change to the EFFECTIVE org-wide set (flag, status or stage flip, or an
+    assignment / Correcting-Misaligned-link edit on an effective org-wide control)
+    flags every COMPLETED run in the org stale, with one ``control.org_wide_sweep``
+    audit row. A save that only re-stamps ``.confirm`` rows changes nothing and
+    sweeps nothing.
     """
+    _check_org_wide_eligible(form)
     validate_dsc_corr_link([a.model_dump() for a in form.assignments], dsc_corr_source)
     form_data: dict[str, Any] = form.model_dump()
     assignments_data: list[dict[str, Any]] = form_data.pop("assignments")
 
     # Diff control-level fields
+    was_effective = _org_wide_effective(control)
     changes: dict[str, list[object]] = {}
     for k, v in form_data.items():
         prev = getattr(control, k)
@@ -558,9 +633,12 @@ async def update_control(
     # source row is leaving the submission — before the merge deletes any other row
     # (primary-key-sorted DELETEs + FK SET NULL vs ck_cfa_virtual_requires_derived).
     # A source that stays is handled by _sync_derived_row (keep / re-point).
+    assignments_changed = False
+    link_before: FairCamSubFunction | None = None
     current_derived = await _row_by_sub_function(db, control.id, control.organization_id, _DSC_CORR)
     if current_derived is not None:
         current_source = await _source_sub_function(db, current_derived)
+        link_before = current_source
         submitted_sfs = {a.sub_function for a in form.assignments}
         if dsc_corr_source is None or current_source not in submitted_sfs:
             await _delete_derived_rows_first(
@@ -571,6 +649,7 @@ async def update_control(
                 user_id=user_id,
                 ip_address=ip_address,
             )
+            assignments_changed = True
 
     for ad in assignments_data:
         subfn_val: str = (
@@ -589,6 +668,7 @@ async def update_control(
                     assign_changes[field] = [old_v, new_v]
                     setattr(existing, field, new_v)
             if assign_changes:
+                assignments_changed = True
                 # Issue #129 T6: distinguish the non-NULL -> NULL transition on
                 # capability_value with a dedicated `.clear` action verb. NULL
                 # engages the model-midpoint fallback (opeff = 0.5 by
@@ -659,6 +739,7 @@ async def update_control(
             )
             db.add(new_assignment)
             await db.flush()
+            assignments_changed = True
             await audit.log(
                 organization_id=control.organization_id,
                 entity_type="control_function_assignment",
@@ -681,6 +762,7 @@ async def update_control(
     # soft_delete_control above.
     for subfn_val, existing in existing_by_subfn.items():
         if subfn_val not in incoming_subfns:
+            assignments_changed = True
             await audit.log(
                 organization_id=control.organization_id,
                 entity_type="control_function_assignment",
@@ -707,6 +789,27 @@ async def update_control(
             user_id=user_id,
             ip_address=ip_address,
             now=now,
+        )
+    # The helper above creates / re-points the derived row itself and returns nothing
+    # the merge can see, so a link-only change is detected by comparing the link
+    # captured before the merge with the one now requested.
+    assignments_changed = assignments_changed or (link_before != dsc_corr_source)
+
+    # Effective org-wide set changed (flag / status / stage flipped, or an inheritable
+    # row edited on a control that is org-wide now): every scenario's composition in
+    # the org changes, not just the linked ones -> sweep the whole org's runs.
+    now_effective = _org_wide_effective(control)
+    if was_effective != now_effective or (now_effective and assignments_changed):
+        if "org_wide_meta" in changes:
+            sweep_trigger = "flag"
+        elif "status" in changes:
+            sweep_trigger = "status"
+        elif "implementation_stage" in changes:
+            sweep_trigger = "stage"
+        else:
+            sweep_trigger = "assignments"
+        await _org_wide_sweep(
+            db, control, trigger=sweep_trigger, user_id=user_id, ip_address=ip_address
         )
 
     return control
@@ -756,6 +859,10 @@ async def duplicate_control(
     # Override per clone semantics
     base_kwargs["name"] = f"{control.name} (copy)"
     base_kwargs["status"] = EntityStatus.DRAFT
+    # The clone is a new authoring act: the analyst opts it into org-wide via edit
+    # (spec D9). Copying the flag would let a second copy OR-compose the same meta
+    # rows org-wide the moment it is published.
+    base_kwargs["org_wide_meta"] = False
     base_kwargs["created_by"] = user_id
     # JSON dict / list columns: deep-copy to avoid alias mutation
     for k in ("compliance_mappings", "library_pin", "adopted_snapshot"):
@@ -1008,6 +1115,7 @@ async def soft_delete_control(
 ) -> None:
     """Soft-delete: set status=DELETED. Assignment rows cascade via FK ON DELETE CASCADE."""
     prev = control.status.value
+    was_effective = _org_wide_effective(control)
     control.status = EntityStatus.DELETED
     await AuditWriter(db).log(
         organization_id=control.organization_id,
@@ -1018,6 +1126,8 @@ async def soft_delete_control(
         user_id=user_id,
         ip_address=ip_address,
     )
+    if was_effective:
+        await _org_wide_sweep(db, control, trigger="delete", user_id=user_id, ip_address=ip_address)
 
 
 async def count_unconfirmed_assignments(db: AsyncSession, *, control_id: uuid.UUID) -> int:

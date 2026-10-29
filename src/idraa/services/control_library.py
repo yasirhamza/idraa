@@ -104,6 +104,34 @@ async def flag_runs_stale_for_control(
     return count
 
 
+async def flag_runs_stale_for_org(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+) -> int:
+    """Set ``is_stale=True`` on EVERY COMPLETED, non-stale run in the org.
+
+    Issue #299: any change to the EFFECTIVE org-wide set (flag, status, stage,
+    delete, assignment edit, resync) changes the composition of every scenario
+    in the org, not just the scenarios that linked the control — so the
+    per-control sweep is the wrong scope. Idempotent; org-scoped; loads only
+    the id/status/is_stale columns (never the results blob)."""
+    stmt = (
+        select(RiskAnalysisRun)
+        .where(
+            RiskAnalysisRun.organization_id == organization_id,
+            RiskAnalysisRun.status == RunStatus.COMPLETED,
+            RiskAnalysisRun.is_stale == False,  # noqa: E712 — SQLAlchemy == False is intentional
+        )
+        .options(load_only(RiskAnalysisRun.id, RiskAnalysisRun.status, RiskAnalysisRun.is_stale))
+    )
+    runs = (await session.execute(stmt)).scalars().all()
+    for run in runs:
+        run.is_stale = True
+    if runs:
+        await session.flush()
+    return len(runs)
+
+
 @dataclass
 class ControlLibraryBrowseFilters:
     sub_functions: list[FairCamSubFunction] = field(default_factory=list)
