@@ -28,9 +28,9 @@ from fair_cam.models.control import (
     FairCamControlFunctionAssignment,
     subfunction_to_domain,
 )
-from fair_cam.models.sub_function import FairCamSubFunction as SF  # noqa: N814
+from fair_cam.models.sub_function import FairCamSubFunction as FcSF
 from fair_cam.risk_engine.control_aware import _group_comp_to_node_multipliers
-from fair_cam.risk_engine.group_composition import compose_groups
+from fair_cam.risk_engine.group_composition import GroupComposition, compose_groups
 
 REL = 1e-12
 E_META = 0.476
@@ -40,7 +40,7 @@ VULN_MULT = 0.5728096
 E_LEC_PREV_FULL_HYBRID = 0.9474656
 
 
-def _ctrl(cid: str, rows: list[tuple[SF, float, float, float]]) -> Control:
+def _ctrl(cid: str, rows: list[tuple[FcSF, float, float, float]]) -> Control:
     asg = [
         FairCamControlFunctionAssignment(
             sub_function=sf, capability_value=cap, coverage=cov, reliability=rel
@@ -58,16 +58,19 @@ def _ctrl(cid: str, rows: list[tuple[SF, float, float, float]]) -> Control:
     )
 
 
-EDR = _ctrl("edr", [(SF.LEC_PREV_RESISTANCE, 0.7, 0.8, 0.8)])
-VARIANT = _ctrl("pm:meta", [(SF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85)])
-TWIN = _ctrl("twin", [(SF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85)])
+EDR = _ctrl("edr", [(FcSF.LEC_PREV_RESISTANCE, 0.7, 0.8, 0.8)])
+VARIANT = _ctrl("pm:meta", [(FcSF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85)])
+TWIN = _ctrl("twin", [(FcSF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85)])
 PM_FULL = _ctrl(
     "pm",
-    [(SF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85), (SF.LEC_PREV_RESISTANCE, 0.9, 1.0, 1.0)],
+    [
+        (FcSF.VMC_PREV_REDUCE_VARIANCE_PROB, 0.7, 0.8, 0.85),
+        (FcSF.LEC_PREV_RESISTANCE, 0.9, 1.0, 1.0),
+    ],
 )
 
 
-def _mults(comp):
+def _mults(comp: GroupComposition) -> dict[str, float]:
     return _group_comp_to_node_multipliers(comp)
 
 
@@ -94,6 +97,8 @@ def test_variant_is_bit_identical_to_explicit_twin():
 def test_lec_row_of_hybrid_acts_only_when_fully_linked():
     inherited = compose_groups([EDR, VARIANT]).group_effectiveness[BooleanGroup.LEC_PREVENTION]
     linked = compose_groups([EDR, PM_FULL]).group_effectiveness[BooleanGroup.LEC_PREVENTION]
+    assert inherited is not None
+    assert linked is not None
     assert inherited == pytest.approx(E_LEC_PREV, rel=REL)
     assert linked == pytest.approx(E_LEC_PREV_FULL_HYBRID, rel=REL)
     assert linked > inherited
