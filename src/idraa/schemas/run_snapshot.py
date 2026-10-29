@@ -142,6 +142,10 @@ class ControlSnapshotV3(BaseModel):
     domains: list[str]
     type: str
     assignments: list[ControlFunctionAssignmentSnapshotDTO]
+    # Issue #299: set on the META-FILTERED variant row the executor writes for
+    # an inherited org-wide control (control_id "<cid>:meta"); the value is the
+    # plain id of the control it was derived from. None on ordinary rows.
+    inherited_variant_of: str | None = None
 
 
 def _snapshot_version_discriminator(data: Any) -> int:

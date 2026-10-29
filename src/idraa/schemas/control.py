@@ -208,6 +208,10 @@ class ControlForm(BaseModel):
     applicable_org_sizes: list[str] = Field(default_factory=list)
     status: EntityStatus = EntityStatus.ACTIVE
     implementation_stage: ControlImplementationStage = ControlImplementationStage.ACTIVE
+    # Issue #299: org-wide META inheritance flag. Eligibility (>=1 inheritable
+    # assignment) is enforced by services/controls.py, not here — the form
+    # may legitimately post the flag with a mixed assignment list.
+    org_wide_meta: bool = False
     version: str = "1.0"
 
     @field_validator(

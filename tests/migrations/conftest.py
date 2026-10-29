@@ -59,3 +59,38 @@ def alembic_engine(alembic_config: Config) -> sa.Engine:
     with engine.connect() as conn:
         conn.execute(sa.text("PRAGMA foreign_keys = ON"))
     return engine
+
+
+# Columns the CURRENT ORM writes on INSERT that a database frozen at an OLD revision
+# does not have yet. A migration test that seeds rows through the real ORM after
+# ``migrate_up_to(PRE)`` would otherwise die with "table X has no column named Y".
+# One static DDL statement per column (no f-string SQL). ADD-only: append an entry
+# whenever a new migration adds an ORM-written column.
+_ORM_COLUMNS_ADDED_LATER: tuple[tuple[str, str, str], ...] = (
+    # (table, column, ALTER statement)
+    (
+        "controls",
+        "org_wide_meta",  # a7c2e9f14b63 (#299)
+        "ALTER TABLE controls ADD COLUMN org_wide_meta BOOLEAN NOT NULL DEFAULT 0",
+    ),
+    (
+        "risk_analysis_runs",
+        "inherited_control_ids_per_scenario",  # a7c2e9f14b63 (#299)
+        "ALTER TABLE risk_analysis_runs ADD COLUMN inherited_control_ids_per_scenario JSON",
+    ),
+)
+
+
+def add_orm_columns_missing_at_old_revision(engine: sa.Engine) -> None:
+    """Forward-compat shim for tests that seed through the REAL ORM at an old revision.
+
+    Call it right after ``alembic_runner.migrate_up_to(PRE)`` and before the ORM seed.
+    Idempotent. ONLY valid for a test that never migrates past the revision that adds
+    the column (the migration itself would then collide on a duplicate column) -- every
+    caller migrates up to its own REV, which precedes the columns listed above.
+    """
+    inspector = sa.inspect(engine)
+    with engine.begin() as conn:
+        for table, column, ddl in _ORM_COLUMNS_ADDED_LATER:
+            if column not in {c["name"] for c in inspector.get_columns(table)}:
+                conn.exec_driver_sql(ddl)

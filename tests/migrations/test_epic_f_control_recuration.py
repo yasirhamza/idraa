@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import idraa
 from idraa.schemas.control_library import ControlLibraryAssignmentSeed, ControlLibraryEntrySeed
+from tests.migrations.conftest import add_orm_columns_missing_at_old_revision
 
 _ROOT = Path(idraa.__file__).resolve().parent.parent.parent
 _VERSIONS = _ROOT / "alembic" / "versions"
@@ -708,6 +709,7 @@ def test_adopted_control_survives_upgrade_unchanged_and_goes_resync_stale(
     alembic_config: Config,
 ) -> None:
     alembic_runner.migrate_up_to(PRE)
+    add_orm_columns_missing_at_old_revision(alembic_engine)  # the adopt below writes them
     entry_id, pre_version = _latest_version(alembic_engine, "security-information-event-management")
     async_url = alembic_config.get_main_option("sqlalchemy.url")
     assert async_url is not None

@@ -130,6 +130,16 @@ class RiskAnalysisRun(IdMixin, TimestampMixin, OrgMixin, Base):
         nullable=True,
     )
 
+    # Issue #299: org-wide meta inheritance frozen at run-create time.
+    # dict[scenario_id -> [control_id, ...]] of PLAIN control ids inherited
+    # (org-wide AND not explicitly linked) by that scenario. Used for SINGLE
+    # too (one key). NULL = run predates the feature; {} = feature active,
+    # nothing inherited. The executor derives the "<cid>:meta" variant ids
+    # from this column; they never land in a UUID column.
+    inherited_control_ids_per_scenario: Mapped[dict[str, list[str]] | None] = mapped_column(
+        JSON, nullable=True
+    )
+
     @validates("aggregate_control_ids_per_scenario")
     def _validate_aggregate_control_ids_per_scenario(
         self, key: str, value: dict[str, list[str]] | None

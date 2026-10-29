@@ -425,13 +425,13 @@ docstring).
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
-  `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:702`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified earlier in the same handler
-  (`routes/controls.py:692-693`).
+  (`routes/controls.py:697-698`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
   client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
-  parsed to a sub-function slug (`routes/controls.py:958-973`); the server resolves it to the
+  parsed to a sub-function slug (`routes/controls.py:963-978`); the server resolves it to the
   row of the SAME, already org-verified control by an explicit control + org select
   (`services/controls.py:189-207`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
@@ -611,7 +611,7 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 Guards: 5 MB upload cap via a forgeable
 `Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
 `routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
-`library_import.py:80-89`, `routes/controls.py:492-501`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
+`library_import.py:80-89`, `routes/controls.py:497-506`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the

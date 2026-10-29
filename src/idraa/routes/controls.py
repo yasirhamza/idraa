@@ -148,6 +148,11 @@ async def _parse_control_form_dict(request: Request) -> dict[str, object]:
         if annual_cost_str:
             out["annual_cost"] = annual_cost_str
 
+    # Issue #299: an unchecked toggle is absent from the form; the form_field
+    # toggle branch posts value="true". Coerce to a real bool so Pydantic never
+    # sees a free-text value here.
+    out["org_wide_meta"] = str(out.get("org_wide_meta", "")).lower() in {"on", "true", "1"}
+
     return out
 
 

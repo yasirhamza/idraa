@@ -15,6 +15,11 @@
       "optional": false,
       "type": "list[str]"
     },
+    "inherited_variant_of": {
+      "has_default": true,
+      "optional": true,
+      "type": "str | None"
+    },
     "name": {
       "has_default": false,
       "optional": false,
