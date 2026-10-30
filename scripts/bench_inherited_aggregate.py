@@ -17,8 +17,10 @@ run-wide evaluation budget, ensemble draws), so run them with --allow-degraded.
 
 Run against a SCRATCH DB only (Settings.database_url has no env prefix, so the
 variable is DATABASE_URL; the script refuses any URL that does not contain
-``bench299``). Settings refuses to boot with the default SESSION_SECRET, so
-set one for both commands:
+``bench299``; there is no override, because against a real DB the bench would add
+a second Organization and sole-org resolution takes whichever row comes first).
+Settings refuses to boot with the default SESSION_SECRET, so set one for both
+commands:
 
     export SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
     export DATABASE_URL=sqlite+aiosqlite:////path/to/scratch/bench299.db
@@ -40,7 +42,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
 import time
 import uuid
@@ -200,7 +201,7 @@ async def main(argv: Sequence[str] | None = None) -> int:
     cache_cap = run_executor.MAX_COMPOSITION_CACHE_ENTRIES
 
     url = get_settings().database_url
-    if "bench299" not in url and os.environ.get("BENCH299_ALLOW_ANY_DB") != "1":
+    if "bench299" not in url:  # no override: a real DB would gain a second Organization
         print(
             f"refusing to run against {url!r}; point DATABASE_URL at a scratch bench299 DB",
             file=sys.stderr,
