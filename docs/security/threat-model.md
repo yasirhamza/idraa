@@ -728,10 +728,10 @@ new export format must re-implement, not assume is "someone else's problem."
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2237`; `del calculator, fc_controls`
-  at `services/run_executor.py:2405` and again at `services/run_executor.py:2591`; `del per_scenario_inputs` at `services/run_executor.py:2592`;
-  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2258`; `del calculator, fc_controls`
+  at `services/run_executor.py:2426` and again at `services/run_executor.py:2612`; `del per_scenario_inputs` at `services/run_executor.py:2613`;
+  `del aggregate` at `services/run_executor.py:2440`; `del results_payload` at `services/run_executor.py:2645`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2441`, `services/run_executor.py:2631`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -742,7 +742,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1857`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1878`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the

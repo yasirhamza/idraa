@@ -68,6 +68,7 @@ from idraa.schemas.run_snapshot import (
 from idraa.services.aggregate_run_view_model import displayed_control_order
 from idraa.services.audit import AuditWriter
 from idraa.services.fx_rates import FxRateService
+from idraa.services.inherited_controls import INHERITED_NAME_SUFFIX, meta_assignments, variant_id
 from idraa.services.run_reaper import register_active_run, unregister_active_run
 from idraa.services.sample_codec import encode_sample_arrays_streaming
 from idraa.services.simulation_payload import (
@@ -268,7 +269,7 @@ def _scenario_availability_self_detects(scenario: Scenario) -> bool:
     return scenario.effect == ScenarioEffect.AVAILABILITY
 
 
-def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
+def _v3_to_fair_cam_control(v3_ctrl: Control, *, meta_only: bool = False) -> FairCamControl:
     """Map a v3 Control + its assignments to a fair_cam.FairCamControl.
 
     Iterates ALL assignments (not just assignments[0] — the κ silent-data-loss fix,
@@ -277,16 +278,23 @@ def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
     on empty assignments, a dangling link or out-of-[0, 1] coverage/reliability (defense
     in depth, spec §8.3). ELAPSED_TIME / CURRENCY assignments pass through unchanged:
     fair_cam filters by unit type at composition time (κ T9).
+
+    ``meta_only=True`` (#299) builds the org-wide INHERITED VARIANT: only the rows
+    ``meta_assignments`` keeps (VMC/DSC, plus a derived row whose source is META),
+    registered under ``variant_id(control_id)`` / ``"<name> (org-wide)"`` so fair_cam
+    composes it as an ordinary separate control. ``control_ref`` and the cost model
+    stay the base control's (the full annual cost; counted once per base id).
     """
-    if not v3_ctrl.assignments:
+    source_rows = meta_assignments(v3_ctrl) if meta_only else list(v3_ctrl.assignments)
+    if not source_rows:
         raise ValueError(
             f"Control {v3_ctrl.id} has no assignments; ControlForm enforces "
             f"min_length=1 — defense in depth"
         )
     # Issue #268: a derived row stores only a link id to one of THIS control's rows.
-    sf_by_id = {a.id: a.sub_function for a in v3_ctrl.assignments}
+    sf_by_id = {a.id: a.sub_function for a in source_rows}
     rows: list[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]] = []
-    for a in v3_ctrl.assignments:
+    for a in source_rows:
         # Issue #209: a NULL capability_value passes through; fair_cam anchors it at
         # opeff(median)=0.5 (#131 Arch3-N1), as the clear-capability modal promises.
         # Defense-in-depth bounds — match existing branch-(d)
@@ -330,13 +338,13 @@ def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
     # (its math iterates assignments). The empty guard above keeps this safe — DO NOT
     # remove it (plan-gate fix CR-I1); every derived row has a non-derived source (#268).
     asn0 = next(  # adapter-iter: ok — issue #90 rep-domain scalar, derived rows skipped
-        a for a in v3_ctrl.assignments if a.derived_from_assignment_id is None
+        a for a in source_rows if a.derived_from_assignment_id is None
     )
     representative_domain = subfunction_to_domain(asn0.sub_function)
     fair_cam_domain = _DOMAIN_MAP[representative_domain]
     return FairCamControl(
-        control_id=str(v3_ctrl.id),
-        name=v3_ctrl.name,
+        control_id=variant_id(str(v3_ctrl.id)) if meta_only else str(v3_ctrl.id),
+        name=f"{v3_ctrl.name}{INHERITED_NAME_SUFFIX}" if meta_only else v3_ctrl.name,
         # CRITICAL: domain via _DOMAIN_MAP — v3's ControlDomain != fair_cam's FairCamControlDomain
         domain=fair_cam_domain,
         control_type=FairCamControlType(v3_ctrl.type.value),
@@ -390,7 +398,7 @@ def _snapshot_control_v2(c: Control) -> ControlSnapshotV2:
     )
 
 
-def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
+def _snapshot_control_v3(c: Control, *, meta_only: bool = False) -> ControlSnapshotV3:
     """Capture a Control's run-time state as a ControlSnapshotV3 Pydantic model.
 
     Written by new runs from issue #131 T6.5 onward. Returns a
@@ -415,14 +423,26 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
     interpretation.
 
     Issue #131 T6.5; Arch-B3 / Sec-B3 plan-gate.
+
+    ``meta_only=True`` (#299) snapshots the org-wide INHERITED VARIANT exactly as
+    ``_v3_to_fair_cam_control(meta_only=True)`` composed it: only the
+    ``meta_assignments`` rows, ``control_id=variant_id(...)``, ``"<name> (org-wide)"``,
+    ``domains`` from the kept rows and ``inherited_variant_of`` = the base control id.
+    Plain mode is unchanged (``domains`` stays ``Control.domains``).
     """
-    sf_by_id = {a.id: a.sub_function for a in c.assignments}  # #268: derived link -> source
+    rows = meta_assignments(c) if meta_only else list(c.assignments)
+    sf_by_id = {a.id: a.sub_function for a in rows}  # #268: derived link -> source
     return ControlSnapshotV3(
         snapshot_version=3,
-        control_id=str(c.id),
-        name=c.name,
-        # Issue #90: emit the derived domain SET (sorted list[str]).
-        domains=sorted(d.value for d in c.domains),
+        control_id=variant_id(str(c.id)) if meta_only else str(c.id),
+        name=f"{c.name}{INHERITED_NAME_SUFFIX}" if meta_only else c.name,
+        # Issue #90: emit the derived domain SET (sorted list[str]). The variant's set
+        # comes from its kept rows (it composes only those); plain mode is unchanged.
+        domains=(
+            sorted({subfunction_to_domain(a.sub_function).value for a in rows})
+            if meta_only
+            else sorted(d.value for d in c.domains)
+        ),
         type=c.type.value,
         assignments=[
             ControlFunctionAssignmentSnapshotDTO(
@@ -443,8 +463,9 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
                 if a.derived_from_assignment_id is not None
                 else None,
             )
-            for a in c.assignments
+            for a in rows
         ],
+        inherited_variant_of=str(c.id) if meta_only else None,
     )
 
 
