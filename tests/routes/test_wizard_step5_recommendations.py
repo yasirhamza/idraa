@@ -312,6 +312,15 @@ async def test_step5_marks_org_wide_controls_and_lists_inherited(
     assert 'data-org-wide="true"' in r.text  # picker badge (MFA and SAT are both org-wide)
     assert "Inherited organization-wide" in r.text
     assert "Only their VMC/DSC functions apply here" in r.text
+    assert (
+        "act only by raising the reliability of the scenario's linked Loss-Event controls" in r.text
+    )
+    # The list sits under a live picker, so the heading makes no promise about later checks.
+    assert "unless you link it above" in r.text
+    # The badge tooltip must not call a checkable control "already inherited" and must not
+    # presuppose Loss-Event functions the control may not have.
+    assert "Already inherited" not in r.text
+    assert "including any Loss-Event functions" in r.text
     inherited_block = r.text.split("Inherited organization-wide", 1)[1].split("</ul>", 1)[0]
     assert "SAT" in inherited_block  # org-wide, not recommended, not picked -> inherited
     assert (

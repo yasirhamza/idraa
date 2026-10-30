@@ -601,8 +601,8 @@
     {% set inherited = inherited_controls | default([]) %}
     {% if inherited %}
       <div class="max-w-md mt-4">
-        <h3 class="text-h4 text-ink-1 mb-1">Inherited organization-wide</h3>
-        <p class="text-meta text-ink-2 mb-2">Only their VMC/DSC functions apply here. Link a control explicitly to credit its Loss-Event functions on this scenario.</p>
+        <h3 class="text-h4 text-ink-1 mb-1">Inherited organization-wide <span class="text-meta text-ink-3 font-normal">(unless you link it above)</span></h3>
+        <p class="text-meta text-ink-2 mb-2">Only their VMC/DSC functions apply here. Link a control explicitly to credit its Loss-Event functions on this scenario. Inherited controls have no standalone reduction: they act only by raising the reliability of the scenario's linked Loss-Event controls.</p>
         <ul class="list-disc list-inside space-y-1">
           {% for c in inherited %}
             <li><a class="link" href="/controls/{{ c.id }}">{{ c.name }}</a>

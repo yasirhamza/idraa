@@ -717,7 +717,7 @@ new export format must re-implement, not assume is "someone else's problem."
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
   routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1240-1251`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1284`) relies on the service gate alone — and the HTML form's `max=`
-  attribute (`templates/analyses/new.html:171`) is explicitly documented
+  attribute (`templates/analyses/new.html:173`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
   shared across all orgs on one VM (`config.py:253-295`): high-fidelity

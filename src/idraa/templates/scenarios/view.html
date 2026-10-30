@@ -291,11 +291,13 @@
     {% else %}
       <p class="text-body text-ink-2">
         {% if inherited_controls %}
-        No mitigating controls configured. Apart from the organization-wide
-        controls listed below, analyses on this scenario apply
-        <strong>no controls</strong> (not your org's full control set —
-        controls are coupled to the scenarios they're attached to, since #89)
-        until you wire some up via
+        No mitigating controls configured, so analyses on this scenario apply
+        <strong>no Loss-Event controls</strong> (not your org's full control set —
+        controls are coupled to the scenarios they're attached to, since #89).
+        The organization-wide controls listed below are inherited, but with no
+        linked controls they have nothing to act on and reduce nothing here:
+        they act only by raising the reliability of the scenario's linked
+        Loss-Event controls. Wire controls up via
         <a class="link" href="/scenarios/{{ scenario.id }}/edit">Edit</a>.
         {% else %}
         No mitigating controls configured. Analyses on this scenario apply
@@ -309,7 +311,7 @@
     {# #299: effective org-wide controls this scenario does not link explicitly. #}
     {% if inherited_controls %}
       <h3 class="text-h4 text-ink-1 mt-4 mb-1">Inherited organization-wide</h3>
-      <p class="text-meta text-ink-2 mb-2">Only their VMC/DSC functions apply here. Link a control explicitly to credit its Loss-Event functions on this scenario.</p>
+      <p class="text-meta text-ink-2 mb-2">Only their VMC/DSC functions apply here. Link a control explicitly to credit its Loss-Event functions on this scenario. Inherited controls have no standalone reduction: they act only by raising the reliability of the scenario's linked Loss-Event controls.</p>
       <ul class="list-disc list-inside space-y-1">
         {% for c in inherited_controls %}
           <li><a class="link" href="/controls/{{ c.id }}">{{ c.name }}</a>

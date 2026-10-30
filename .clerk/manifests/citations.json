@@ -273,7 +273,7 @@
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/webauthn_service.py", "line": 66, "pattern": "def verify_registration(", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/wizard_finalize.py", "line": 759, "pattern": "\"low\": row[\"low\"],", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/account/_totp.html", "line": 12, "pattern": "<div class=\"bg-white inline-block p-2\">{{ qr_svg | safe }}</div>", "regex": false},
-  {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/analyses/new.html", "line": 171, "pattern": "min=\"100\" max=\"{{ max_mc_iterations }}\"", "regex": false},
+  {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/analyses/new.html", "line": 173, "pattern": "min=\"100\" max=\"{{ max_mc_iterations }}\"", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/base.html", "line": 7, "pattern": "<meta name=\"csrf-token\" content=\"{{ csrf_token }}\">", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/controls/form.html", "line": 344, "pattern": "selected: {{ cur_link | tojson }},", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/templates/help/_article.html", "line": 28, "pattern": "{% include \"help/articles/\" ~ article.slug ~ \".html\" %}", "regex": false},

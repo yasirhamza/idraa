@@ -106,7 +106,9 @@
       Each scenario uses the controls configured on its own scenario record.
       To change, edit the scenario.
       {% if inherited_name_by_id %}Organization-wide controls a scenario does not link
-      are inherited on top; only their VMC/DSC functions apply.{% endif %}
+      are inherited: only their VMC/DSC functions apply, and they act only by raising
+      the reliability of the scenario's linked Loss-Event controls (no standalone
+      reduction).{% endif %}
     </p>
 
     <template x-if="selectedScenarios.length === 0">
