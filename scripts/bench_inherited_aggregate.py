@@ -1,26 +1,50 @@
 # scripts/bench_inherited_aggregate.py
-"""#299 operational check (spec O1): time ONE AGGREGATE run of 10 scenarios
-with 5 inherited org-wide meta controls + 3 linked LEC controls each, through
-the real create_and_dispatch -> execute_run path at the executor's production
-attribution constants (MAX_ATTRIBUTION_CONTROLS / MAX_ATTRIBUTION_TOTAL_EVALS
-are module constants — nothing to configure). Prints wall-clock and peak RSS.
+"""#299 operational check (spec O1): time ONE AGGREGATE run with org-wide
+(inherited) meta controls plus explicitly linked LEC controls per scenario,
+through the real create_and_dispatch -> execute_run path at the executor's
+production attribution constants (MAX_ATTRIBUTION_CONTROLS /
+MAX_ATTRIBUTION_TOTAL_EVALS / MAX_COMPOSITION_CACHE_ENTRIES are module
+constants). It MEASURES the persisted run rather than echoing its inputs: the
+inherited ids and ``:meta`` adjustment rows actually present per scenario,
+players per scenario, how many Shapley values are non-null, and the ensemble
+state and draw count. It prints wall-clock and peak RSS and exits non-zero if
+inheritance is missing or (unless --allow-degraded) attribution or the ensemble
+degraded.
+
+The default run is the plan's point: 10 scenarios x (5 inherited + 3 linked).
+Heavier O1 points degrade by design (sampled Shapley above 12 players,
+run-wide evaluation budget, ensemble draws), so run them with --allow-degraded.
 
 Run against a SCRATCH DB only (Settings.database_url has no env prefix, so the
 variable is DATABASE_URL; the script refuses any URL that does not contain
-``bench299``):
+``bench299``). Settings refuses to boot with the default SESSION_SECRET, so
+set one for both commands:
 
+    export SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
     export DATABASE_URL=sqlite+aiosqlite:////path/to/scratch/bench299.db
     uv run alembic upgrade head
     uv run python scripts/bench_inherited_aggregate.py
+    # 13 players per scenario (sampled Shapley, ensemble degrades):
+    uv run python scripts/bench_inherited_aggregate.py --linked 8 --allow-degraded
+    # production-scale shape; --cache-cap none = unbounded composition caches
+    # (before/after comparison only):
+    uv run python scripts/bench_inherited_aggregate.py --scenarios 400 --linked 7 \
+        --allow-degraded [--cache-cap none]
+
+``elapsed_s`` is wall-clock around ``execute_run``. Run-row timestamps are not a
+substitute: ``completed_at`` is stamped before attribution, so a Fly timing must
+come from this wall-clock, not from the run row.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import sys
 import time
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import ModuleType
@@ -41,15 +65,12 @@ from idraa.models.enums import (
     ThreatCategory,
 )
 from idraa.models.organization import Organization
-from idraa.models.risk_analysis_run import RunStatus
+from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
 from idraa.models.threat_community import canonical_threat_community_id
-from idraa.services.run_executor import (
-    MAX_ATTRIBUTION_CONTROLS,
-    MAX_ATTRIBUTION_TOTAL_EVALS,
-    execute_run,
-)
+from idraa.services import run_executor
+from idraa.services.run_executor import MAX_ATTRIBUTION_CONTROLS, MAX_ATTRIBUTION_TOTAL_EVALS
 from idraa.services.runs import RunService
 
 resource: ModuleType | None
@@ -58,9 +79,10 @@ try:
 except ImportError:  # pragma: no cover — POSIX-only
     resource = None
 
-N_SCENARIOS = 10
-N_INHERITED = 5
-N_LEC_PER_SCENARIO = 3
+# Defaults = the plan's point: 10 scenarios x (5 inherited + 3 linked) = 8 players.
+DEFAULT_SCENARIOS = 10
+DEFAULT_INHERITED = 5
+DEFAULT_LINKED = 3
 META_SFS = [
     FairCamSubFunction.VMC_PREV_REDUCE_VARIANCE_PROB,
     FairCamSubFunction.VMC_ID_CONTROL_MONITORING,
@@ -124,7 +146,59 @@ def _scenario(org_id: uuid.UUID, name: str) -> Scenario:
     )
 
 
-async def main() -> int:
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0] if __doc__ else None)
+    ap.add_argument(
+        "--scenarios", type=int, default=DEFAULT_SCENARIOS, help="AGGREGATE size (>= 2)"
+    )
+    ap.add_argument(
+        "--inherited",
+        type=int,
+        default=DEFAULT_INHERITED,
+        help=f"org-wide META controls inherited by every scenario (0..{len(META_SFS)})",
+    )
+    ap.add_argument(
+        "--linked",
+        type=int,
+        default=DEFAULT_LINKED,
+        help="explicitly linked LEC controls per scenario, distinct per scenario",
+    )
+    ap.add_argument(
+        "--iterations", type=int, default=None, help="default: Settings.mc_iterations_default"
+    )
+    ap.add_argument(
+        "--cache-cap",
+        default="default",
+        help="composition-cache entry cap: 'default' (the executor constant), 'none' "
+        "(unbounded; before/after comparison only) or an integer",
+    )
+    ap.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="report, do not fail on, unavailable attribution or a degraded ensemble",
+    )
+    args = ap.parse_args(argv)
+    if args.scenarios < 2:
+        ap.error("--scenarios must be >= 2 (a single scenario is a SINGLE run, not AGGREGATE)")
+    if not 0 <= args.inherited <= len(META_SFS):
+        ap.error(f"--inherited must be in 0..{len(META_SFS)}")
+    if args.linked < 1:
+        ap.error("--linked must be >= 1")
+    if args.cache_cap not in ("default", "none") and not args.cache_cap.isdigit():
+        ap.error("--cache-cap must be 'default', 'none' or a non-negative integer")
+    return args
+
+
+async def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    n_scenarios, n_inherited, n_linked = args.scenarios, args.inherited, args.linked
+    iterations = args.iterations or get_settings().mc_iterations_default
+    if args.cache_cap == "none":
+        run_executor.MAX_COMPOSITION_CACHE_ENTRIES = None
+    elif args.cache_cap != "default":
+        run_executor.MAX_COMPOSITION_CACHE_ENTRIES = int(args.cache_cap)
+    cache_cap = run_executor.MAX_COMPOSITION_CACHE_ENTRIES
+
     url = get_settings().database_url
     if "bench299" not in url and os.environ.get("BENCH299_ALLOW_ANY_DB") != "1":
         print(
@@ -141,53 +215,94 @@ async def main() -> int:
         )
         session.add(org)
         await session.flush()
-        for i, sf in enumerate(META_SFS[:N_INHERITED]):
+        for i, sf in enumerate(META_SFS[:n_inherited]):
             c, a = _control(org.id, f"meta-{i}", sf, org_wide=True)
             session.add_all([c, a])
         scenario_ids: list[uuid.UUID] = []
-        for s_i in range(N_SCENARIOS):
+        for s_i in range(n_scenarios):
             s = _scenario(org.id, f"bench-{s_i}")
             session.add(s)
-            await session.flush()
-            scenario_ids.append(s.id)
-            for l_i in range(N_LEC_PER_SCENARIO):
+            linked: list[Control] = []
+            for l_i in range(n_linked):
                 c, a = _control(
                     org.id, f"lec-{s_i}-{l_i}", LEC_SFS[l_i % len(LEC_SFS)], org_wide=False
                 )
                 session.add_all([c, a])
-                # ScenarioControl has no relationship() to Control, so the unit of work
-                # does not order its INSERT after the control's: flush the control first.
-                await session.flush()
-                session.add(ScenarioControl(scenario_id=s.id, control_id=c.id))
+                linked.append(c)
+            # ScenarioControl has no relationship() to Scenario/Control, so the unit of
+            # work does not order its INSERT after theirs: flush them first.
+            await session.flush()
+            scenario_ids.append(s.id)
+            session.add_all([ScenarioControl(scenario_id=s.id, control_id=c.id) for c in linked])
         await session.commit()
 
         run = await RunService(session).create_and_dispatch(
             organization_id=org.id,
             scenario_ids=scenario_ids,
-            mc_iterations_override=get_settings().mc_iterations_default,
+            mc_iterations_override=iterations,
             created_by=None,  # type: ignore[arg-type]  # nullable column; no user in a scratch DB
             background_tasks=BackgroundTasks(),  # never executed -> run stays QUEUED
         )
         run_id = run.id
 
     t0 = time.perf_counter()
-    await execute_run(run_id)
+    await run_executor.execute_run(run_id)
     elapsed = time.perf_counter() - t0
 
+    # Everything below is read back from the persisted run, not from the inputs above.
     async with sessionmaker() as session:
-        from idraa.models.risk_analysis_run import RiskAnalysisRun
-
         run = await session.get(RiskAnalysisRun, run_id)
         if run is None:
             print(f"run {run_id} vanished after execute_run", file=sys.stderr)
             return 1
         status = run.status
+        inherited_map = run.inherited_control_ids_per_scenario or {}
         per_scenario = (run.simulation_results or {}).get("per_scenario", [])
-        unavailable = sum(
-            1
-            for ps in per_scenario
-            if any(a.get("shapley_value") is None for a in ps.get("control_adjustments", []))
+        ensemble = run.weight_robustness or {}
+        sids = list(run.aggregate_scenario_ids or [])
+    inherited_counts = {len(inherited_map.get(sid, [])) for sid in sids}
+    meta_rows, players = set(), set()
+    adjustments = non_null = unavailable = 0
+    for ps in per_scenario:
+        adj = ps.get("control_adjustments", [])
+        meta_rows.add(sum(1 for a in adj if str(a.get("control_id", "")).endswith(":meta")))
+        players.add(len(adj))
+        values = [a.get("shapley_value") for a in adj]
+        adjustments += len(values)
+        non_null += sum(v is not None for v in values)
+        unavailable += any(v is None for v in values)
+    draws_used = ensemble.get("draws_used")
+    draws_configured = (ensemble.get("band") or {}).get("draws")
+    ensemble_state = ensemble.get("state")
+
+    failures: list[str] = []
+    if status != RunStatus.COMPLETED:
+        failures.append(f"run status is {status!r}, not completed")
+    if len(sids) != n_scenarios or len(per_scenario) != n_scenarios:
+        failures.append(
+            f"expected {n_scenarios} scenarios, run has {len(sids)}/{len(per_scenario)}"
         )
+    if inherited_counts != {n_inherited}:
+        failures.append(
+            f"inheritance missing: inherited ids per scenario {sorted(inherited_counts)}, "
+            f"expected [{n_inherited}]"
+        )
+    if meta_rows != {n_inherited}:
+        failures.append(
+            f":meta adjustment rows per scenario {sorted(meta_rows)}, expected [{n_inherited}]"
+        )
+    if players != {n_inherited + n_linked}:
+        failures.append(
+            f"players per scenario {sorted(players)}, expected [{n_inherited + n_linked}]"
+        )
+    if not args.allow_degraded:
+        if unavailable:
+            failures.append(f"attribution unavailable for {unavailable} scenario(s)")
+        if ensemble_state != "ok" or ensemble.get("degraded") or draws_used != draws_configured:
+            failures.append(
+                f"ensemble degraded: state={ensemble_state!r} draws={draws_used}/{draws_configured}"
+            )
+
     rss_mb = (
         resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         / (1024 * 1024 if sys.platform == "darwin" else 1024)
@@ -196,14 +311,19 @@ async def main() -> int:
     )
     print(
         f"status={status.value if isinstance(status, RunStatus) else status} "
-        f"scenarios={N_SCENARIOS} inherited={N_INHERITED} lec_per_scenario={N_LEC_PER_SCENARIO} "
-        f"mc_iterations={get_settings().mc_iterations_default} "
+        f"scenarios={len(sids)} mc_iterations={iterations} "
+        f"inherited_ids_per_scenario={sorted(inherited_counts)} "
+        f"meta_rows_per_scenario={sorted(meta_rows)} players_per_scenario={sorted(players)} "
+        f"shapley_non_null={non_null}/{adjustments} "
+        f"scenarios_with_attribution_unavailable={unavailable} "
+        f"ensemble_state={ensemble_state} ensemble_draws={draws_used}/{draws_configured} "
         f"max_attribution_controls={MAX_ATTRIBUTION_CONTROLS} "
-        f"total_eval_budget={MAX_ATTRIBUTION_TOTAL_EVALS} "
-        f"elapsed_s={elapsed:.1f} peak_rss_mb={rss_mb:.0f} "
-        f"scenarios_with_attribution_unavailable={unavailable}"
+        f"total_eval_budget={MAX_ATTRIBUTION_TOTAL_EVALS} composition_cache_cap={cache_cap} "
+        f"elapsed_s={elapsed:.2f} peak_rss_mb={rss_mb:.0f}"
     )
-    return 0 if status == RunStatus.COMPLETED else 1
+    for failure in failures:
+        print(f"FAIL: {failure}", file=sys.stderr)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
