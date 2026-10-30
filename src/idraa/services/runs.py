@@ -296,8 +296,9 @@ class RunService:
         # any(map.values()), never with the truthiness of the map.
         # Defence in depth (Sec-I3): an org-wide control with no inheritable row
         # would make the executor's meta_assignments() raise for EVERY run in the
-        # org - refuse here, before enqueue. This task PERSISTS the map only:
-        # control_ids / control_ids_used are untouched.
+        # org - refuse here, before enqueue. The inherited plain ids are then
+        # appended to control_ids (below) so control_ids_used lists every control
+        # the executor must fetch.
         org_wide = await ControlRepo(self._db).list_org_wide_meta(organization_id)
         for c in org_wide:
             if not has_meta_assignment(
@@ -318,6 +319,17 @@ class RunService:
             inherited_by_scenario[str(s.id)] = sorted(
                 str(c.id) for c in org_wide if c.id not in explicit
             )
+
+        # Inherited ids join the fetch universe (spec §3.2) so the executor can
+        # build variants; they are NOT in any scenario's explicit list.
+        # SINGLE has no `seen`; AGGREGATE's `seen` is exactly set(control_ids) here.
+        seen_ids: set[uuid.UUID] = set(control_ids)
+        for ids in inherited_by_scenario.values():
+            for cid_str in ids:
+                cid = uuid.UUID(cid_str)
+                if cid not in seen_ids:
+                    seen_ids.add(cid)
+                    control_ids.append(cid)
 
         if is_single:
             # Mapped[str] attributes on Scenario satisfy ScenarioLike's str

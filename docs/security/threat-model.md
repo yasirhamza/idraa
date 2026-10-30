@@ -728,10 +728,10 @@ new export format must re-implement, not assume is "someone else's problem."
   are sub-second / few-MB and self-limiting, and gating them would put the
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2258`; `del calculator, fc_controls`
-  at `services/run_executor.py:2426` and again at `services/run_executor.py:2612`; `del per_scenario_inputs` at `services/run_executor.py:2613`;
-  `del aggregate` at `services/run_executor.py:2440`; `del results_payload` at `services/run_executor.py:2645`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2441`, `services/run_executor.py:2631`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2403`; `del calculator, fc_controls`
+  at `services/run_executor.py:2581` and again at `services/run_executor.py:2767`; `del per_scenario_inputs` at `services/run_executor.py:2768`;
+  `del aggregate` at `services/run_executor.py:2596`; `del results_payload` at `services/run_executor.py:2801`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2597`, `services/run_executor.py:2787`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -742,7 +742,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1878`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1973`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -821,8 +821,8 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-request-driven run lifecycle — create (`services/runs.py:402`), cancel (`services/runs.py:456`),
-delete (`services/runs.py:516`), sample-purge (`services/runs.py:549`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:414`), cancel (`services/runs.py:468`),
+delete (`services/runs.py:528`), sample-purge (`services/runs.py:561`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a

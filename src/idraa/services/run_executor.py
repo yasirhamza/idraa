@@ -13,6 +13,7 @@ import logging
 import math
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -68,7 +69,12 @@ from idraa.schemas.run_snapshot import (
 from idraa.services.aggregate_run_view_model import displayed_control_order
 from idraa.services.audit import AuditWriter
 from idraa.services.fx_rates import FxRateService
-from idraa.services.inherited_controls import INHERITED_NAME_SUFFIX, meta_assignments, variant_id
+from idraa.services.inherited_controls import (
+    INHERITED_NAME_SUFFIX,
+    base_control_id,
+    meta_assignments,
+    variant_id,
+)
 from idraa.services.run_reaper import register_active_run, unregister_active_run
 from idraa.services.sample_codec import encode_sample_arrays_streaming
 from idraa.services.simulation_payload import (
@@ -469,6 +475,89 @@ def _snapshot_control_v3(c: Control, *, meta_only: bool = False) -> ControlSnaps
     )
 
 
+@dataclass(frozen=True)
+class _ActiveControlPlan:
+    """Issue #299: the executor's view of which control ids are active where.
+    Variant ids (``variant_id(cid)``) stand for the META-FILTERED inherited
+    copy of an org-wide control; they exist only in this process and in JSON
+    payloads (snapshot / results). ``explicit_ids`` keeps FETCH ORDER so a run
+    without inheritance produces today's lists bit-for-bit (Meth-I3)."""
+
+    explicit_ids: list[str]
+    universe_ids: list[str]
+    names: dict[str, str]
+    per_scenario_ids: dict[str, list[str]]
+    has_inheritance: bool
+    plain_snapshots: list[ControlSnapshotV3]
+    variant_dtos: list[FairCamControl]
+    variant_snapshots: list[ControlSnapshotV3]
+
+
+def _build_active_control_plan(run: RiskAnalysisRun, controls: list[Control]) -> _ActiveControlPlan:
+    by_id = {str(c.id): c for c in controls}
+    inherited = run.inherited_control_ids_per_scenario or {}  # NULL (legacy) == nothing inherited
+    fetched_ids = [str(c.id) for c in controls]
+    if run.run_type == RunType.SINGLE:
+        sid = str(run.scenario_id)
+        inherited_sid = set(inherited.get(sid, []))
+        explicit_by_scenario = {sid: [cid for cid in fetched_ids if cid not in inherited_sid]}
+    else:
+        per_scen = run.aggregate_control_ids_per_scenario
+        if per_scen is None:  # pre-#89 legacy row: full universe everywhere
+            explicit_by_scenario = {}
+        else:
+            explicit_by_scenario = {s: list(ids) for s, ids in per_scen.items()}
+    explicit_set = (
+        {cid for ids in explicit_by_scenario.values() for cid in ids}
+        if explicit_by_scenario
+        else set(fetched_ids)
+    )
+    explicit_ids = [cid for cid in fetched_ids if cid in explicit_set]
+    variant_cids = sorted({cid for ids in inherited.values() for cid in ids})
+    missing = [cid for cid in variant_cids if cid not in by_id]
+    if missing:
+        raise RuntimeError(f"inherited control ids {missing} are not in the loaded universe")
+    variant_dtos = [_v3_to_fair_cam_control(by_id[cid], meta_only=True) for cid in variant_cids]
+    variant_snapshots = [_snapshot_control_v3(by_id[cid], meta_only=True) for cid in variant_cids]
+    plain_snapshots = [_snapshot_control_v3(by_id[cid]) for cid in explicit_ids]
+    scenario_keys = list(explicit_by_scenario) + [
+        s for s in inherited if s not in explicit_by_scenario
+    ]
+    # Explicit entries keep the STORED per-scenario order (today's engine call
+    # passes run.aggregate_control_ids_per_scenario verbatim); the fetch-order
+    # filter applies to explicit_ids / universe_ids only, which today is
+    # [str(c.id) for c in controls]. SINGLE's one list IS fetch order.
+    per_scenario_ids = {
+        s: list(explicit_by_scenario.get(s, [])) + [variant_id(cid) for cid in inherited.get(s, [])]
+        for s in scenario_keys
+    }
+    names = {
+        s.control_id: s.name for s in plain_snapshots + variant_snapshots
+    }  # SC-N2: from the snapshot
+    return _ActiveControlPlan(
+        explicit_ids=explicit_ids,
+        universe_ids=explicit_ids + [d.control_id for d in variant_dtos],
+        names=names,
+        per_scenario_ids=per_scenario_ids,
+        has_inheritance=bool(variant_cids),
+        plain_snapshots=plain_snapshots,
+        variant_dtos=variant_dtos,
+        variant_snapshots=variant_snapshots,
+    )
+
+
+def _stale_per_scenario_ids(
+    per_scenario_dict: dict[str, list[str]], loaded_universe: set[str]
+) -> dict[str, list[str]]:
+    """M5 race check (#89) with #299 variant ids reduced to their base id."""
+    out: dict[str, list[str]] = {}
+    for sid, sublist in per_scenario_dict.items():
+        stale = sorted({base_control_id(x) for x in sublist} - loaded_universe)
+        if stale:
+            out[sid] = stale
+    return out
+
+
 def _build_scenario_inputs_snapshot(scenarios: list[Scenario]) -> dict[str, Any]:
     """T2 (#351): capture scenario FAIR distribution inputs at execution time.
 
@@ -590,7 +679,11 @@ def _build_aggregate_results_payload(aggregate: AggregateEnhancedRisk) -> dict[s
             cid = str(adj.control_id) if hasattr(adj, "control_id") else None
             if cid is None:
                 continue
-            unique_costs_by_control[cid] = float(getattr(adj, "control_cost", 0.0) or 0.0)
+            # #299 spec D7: a control linked on one scenario and inherited on another
+            # is one control, one annual cost - key by the BASE id, not the variant id.
+            unique_costs_by_control[base_control_id(cid)] = float(
+                getattr(adj, "control_cost", 0.0) or 0.0
+            )
     aggregate_total_cost = sum(unique_costs_by_control.values())
     aggregate_risk_reduction = float(
         getattr(aggregate.aggregate_without_controls, "annualized_loss_expectancy", 0.0) or 0.0
@@ -1143,7 +1236,8 @@ def _aggregate_clean(by_scenario: dict[str, dict[str, float]]) -> dict[str, floa
 def _build_weight_robustness(
     *,
     calculator: Any,
-    controls: list[Control],
+    universe: list[str],
+    control_names: dict[str, str],
     per_scenario_inputs: list[tuple[str, str, FAIRParameters]],
     per_scenario_dict: dict[str, list[str]] | None,
     canonical_values: dict[str, float],
@@ -1170,7 +1264,10 @@ def _build_weight_robustness(
     Args:
         calculator: the LIVE NativeControlAwareRiskCalculator (reused — no second
             construction, memory envelope unchanged).
-        controls: v3 Control rows (id universe + display names).
+        universe: the full control-id universe (explicit plain ids + #299 variant
+            ids; ``_ActiveControlPlan.universe_ids``).
+        control_names: id -> display name for every id in ``universe``
+            (``_ActiveControlPlan.names``, from the snapshot rows).
         per_scenario_inputs: [(scenario_id, name, FAIRParameters)] (one element for
             SINGLE; N for AGGREGATE).
         per_scenario_dict: per-scenario active control-id subsets, or None (legacy /
@@ -1190,8 +1287,6 @@ def _build_weight_robustness(
         ``canonical_value`` keys.
     """
     settings = get_settings()
-    universe = [str(c.id) for c in controls]  # full control-id universe (Arch-N-Universe1)
-    control_names = {str(c.id): c.name for c in controls}
 
     # Band: read back from the persisted snapshot on re-run; else derive from live
     # settings + the run's seed (explicit null handling -> 0).
@@ -1961,7 +2056,43 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
         # captured at write time). V2 stays read-only via the discriminated
         # union; V2 reads surface the post-#131 re-interpretation banner +
         # ``snapshot_v2_read`` structured log on the run-detail route.
-        run.controls_snapshot = [_snapshot_control_v3(c).model_dump(mode="json") for c in controls]
+        try:
+            plan = _build_active_control_plan(run, controls)
+        except (ValueError, RuntimeError) as exc:
+            # #299 (Arch-I8): phase 1 sits outside the FAILED-flip try below. A
+            # variant that cannot be built (meta rows removed at the DB level since
+            # the freeze; inherited id missing from the universe) must fail LOUD
+            # (spec §5.2), not strand the row QUEUED for the orphan reaper. The row
+            # is still QUEUED here (no RUNNING flip yet), so a plain attribute write
+            # in this transaction is the whole flip.
+            #
+            # Arch-I12 / #82: error_message is rendered VERBATIM in
+            # templates/runs/_status_poll.html, so it carries the fixed generic
+            # _RUN_FAILURE_MESSAGE, never str(exc) - the ValueError text names a
+            # control UUID and "eligibility invariant violated upstream", the
+            # RuntimeError names id lists. The cause stays server-side: error_class
+            # in the audit row + logger.exception below.
+            run.status = RunStatus.FAILED
+            run.error_message = _RUN_FAILURE_MESSAGE
+            run.completed_at = now_utc()
+            await AuditWriter(session).log(
+                organization_id=run.organization_id,
+                user_id=run.created_by,
+                action="risk_analysis_run.fail",
+                entity_type="risk_analysis_run",
+                entity_id=run.id,
+                changes={
+                    "status": [RunStatus.QUEUED.value, RunStatus.FAILED.value],
+                    "error_class": type(exc).__name__,
+                    "stage": "inherited_control_plan",  # fixed discriminator, not exception text
+                },
+            )
+            await session.commit()
+            logger.exception("Run %s: inherited control plan failed", run_id)
+            return
+        run.controls_snapshot = [
+            s.model_dump(mode="json") for s in plan.plain_snapshots + plan.variant_snapshots
+        ]
         run.status = RunStatus.RUNNING
         run.started_at = now_utc()
         await AuditWriter(session).log(
@@ -2133,7 +2264,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # therefore removed. Any ValueError that still escapes the adapter
             # (e.g. coverage/reliability bounds, empty assignments) propagates to
             # execute_run's outer except, which flips the run to FAILED.
-            fc_controls = [_v3_to_fair_cam_control(v3_ctrl) for v3_ctrl in controls]
+            # #299: plain DTOs only for explicitly linked ids; inherited controls enter as
+            # their meta-filtered variants (the plain id is not in the engine universe).
+            _explicit_set = set(plan.explicit_ids)
+            fc_controls = [
+                _v3_to_fair_cam_control(v3_ctrl)
+                for v3_ctrl in controls
+                if str(v3_ctrl.id) in _explicit_set
+            ] + list(plan.variant_dtos)
 
             # ---- engine call branches by run_type ----
             # Native cut: NativeControlAwareRiskCalculator samples FAIRParameters
@@ -2158,13 +2296,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # fmt: on
                 # A1 / #508: hold NO pooled connection across the MC compute.
                 # Every post-release read below is a loaded scalar on a detached
-                # instance: controls[].id (loaded UUID) and scenario.effect (loaded
-                # Enum, read by _scenario_availability_self_detects) — both safe.
+                # instance or a plain str list from the active-control plan:
+                # run.scenario_id (loaded UUID) and scenario.effect (loaded Enum,
+                # read by _scenario_availability_self_detects) — all safe.
                 await _release_conn_for_compute(session)
                 enhanced = await asyncio.to_thread(
                     calculator.calculate_control_enhanced_risk,
                     risk_params=fair_params,  # FAIRParameters directly — no bridge
-                    active_control_ids=[str(c.id) for c in controls],
+                    active_control_ids=plan.per_scenario_ids[str(run.scenario_id)],
                     scenario_name=_single_scenario_name,
                     availability_self_detection=_scenario_availability_self_detects(scenario),
                 )
@@ -2176,45 +2315,51 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # AGGREGATE row (pre-issue-89) => None passed to fair_cam =>
                 # back-compat path (unified active_control_ids applied to all
                 # scenarios). New runs always populate the column.
-                per_scenario_dict = run.aggregate_control_ids_per_scenario
+                # #299: the plan's dict (stored explicit order + inherited variant ids);
+                # the legacy NULL fallback is kept.
+                per_scenario_dict = (
+                    plan.per_scenario_ids
+                    if run.aggregate_control_ids_per_scenario is not None
+                    else None
+                )
                 if per_scenario_dict is not None:
                     # M5 (plan-gate): fail-loud race check. scenarios'
                     # mitigating_controls may have changed since run-create.
                     # If any per-scenario cid is missing from the loaded universe,
                     # the run cannot proceed soundly — fail with audit row.
                     loaded_universe = {str(c.id) for c in controls}
-                    for _sid, _sublist in per_scenario_dict.items():
-                        _stale = set(_sublist) - loaded_universe
-                        if _stale:
-                            await AuditWriter(session).log(
-                                organization_id=run.organization_id,
-                                user_id=run.created_by,
-                                action="run.stale_per_scenario_control_ids",
-                                entity_type="risk_analysis_run",
-                                entity_id=run.id,
-                                changes={
-                                    "scenario_id": [None, _sid],
-                                    "stale_ids": [None, sorted(_stale)],
-                                },
-                            )
-                            await session.commit()
-                            raise RuntimeError(
-                                f"per-scenario control ids {sorted(_stale)} for "
-                                f"scenario {_sid} are not in the loaded snapshot "
-                                f"universe — race against scenario edit?"
-                            )
+                    for _sid, _stale in _stale_per_scenario_ids(
+                        per_scenario_dict, loaded_universe
+                    ).items():
+                        await AuditWriter(session).log(
+                            organization_id=run.organization_id,
+                            user_id=run.created_by,
+                            action="run.stale_per_scenario_control_ids",
+                            entity_type="risk_analysis_run",
+                            entity_id=run.id,
+                            changes={
+                                "scenario_id": [None, _sid],
+                                "stale_ids": [None, _stale],
+                            },
+                        )
+                        await session.commit()
+                        raise RuntimeError(
+                            f"per-scenario control ids {_stale} for "
+                            f"scenario {_sid} are not in the loaded snapshot "
+                            f"universe — race against scenario edit?"
+                        )
                 per_scenario_availability = {
                     str(sc.id): _scenario_availability_self_detects(sc) for sc in scenarios
                 }
                 # A1 / #508: hold NO pooled connection across the MC compute.
                 # per_scenario_availability + per_scenario_dict are already-built
-                # locals; the only inline post-release ORM read is controls[].id
-                # (loaded UUID scalar on the detached instances) — safe.
+                # locals and plan.universe_ids is a plain str list - no inline
+                # post-release ORM read remains.
                 await _release_conn_for_compute(session)
                 aggregate = await asyncio.to_thread(
                     calculator.calculate_aggregate_enhanced_risk,
                     per_scenario_risk_params=per_scenario_inputs,
-                    active_control_ids=[str(c.id) for c in controls],
+                    active_control_ids=plan.universe_ids,
                     per_scenario_active_control_ids=per_scenario_dict,
                     per_scenario_availability=per_scenario_availability,
                 )
@@ -2260,7 +2405,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # #419 weight-robustness (SINGLE — RANGES ONLY, Arch-B3/Meth-B6):
                 # SINGLE has no Shapley pass / clean_shapley, so derive the canonical
                 # via ONE _compute_shapley_by_scenario over a one-element
-                # per_scenario_inputs (full-universe fallback, per_scenario_dict=None),
+                # per_scenario_inputs (full-universe fallback, per_scenario_dict=None
+                # unless #299 inheritance is present),
                 # then run the ensemble with compute_rank_stability=False — the
                 # displayed SINGLE order is effectiveness-sorted, NOT the Shapley basis
                 # the ensemble ranks, so only the basis-agnostic dollar ranges +
@@ -2274,6 +2420,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 _single_availability = {
                     str(run.scenario_id): _scenario_availability_self_detects(scenario)
                 }
+                # #299: the per-scenario dict only when something is inherited; without
+                # inheritance this stays None (today's full-universe fallback path).
+                _single_sid = str(run.scenario_id)
+                _single_dict = (
+                    {_single_sid: plan.per_scenario_ids[_single_sid]}
+                    if plan.has_inheritance
+                    else None
+                )
 
                 def _single_weight_robustness() -> tuple[
                     dict[str, Any], dict[str, dict[str, float]], dict[str, list[Any]]
@@ -2284,8 +2438,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _by, _sk = _compute_shapley_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         node_mapping=None,
                         total_eval_budget=MAX_ATTRIBUTION_TOTAL_EVALS,
                         per_scenario_availability=_single_availability,
@@ -2299,8 +2453,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _by_mean, _sk_mean = _compute_shapley_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         node_mapping=None,
                         total_eval_budget=MAX_ATTRIBUTION_TOTAL_EVALS,
                         per_scenario_availability=_single_availability,
@@ -2314,8 +2468,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _loo_by, _loo_sk = _compute_loo_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         per_scenario_availability=_single_availability,
                         composition_cache=_canon_comp_cache,
                     )
@@ -2331,8 +2485,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _loo_mean_by, _loo_mean_sk = _compute_loo_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         per_scenario_availability=_single_availability,
                         composition_cache=_canon_comp_cache,
                         statistic="mean",
@@ -2364,9 +2518,10 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     return (
                         _build_weight_robustness(
                             calculator=calculator,
-                            controls=controls,
+                            universe=plan.universe_ids,
+                            control_names=plan.names,
                             per_scenario_inputs=_single_per_scenario_inputs,
-                            per_scenario_dict=None,
+                            per_scenario_dict=_single_dict,
                             canonical_values=_canon_vals,
                             canonical_values_typical=_aggregate_clean(_by),
                             persisted=run.weight_robustness,
@@ -2381,9 +2536,9 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # Arch-N5: the WHOLE ensemble (canonical pass + K draws) runs under
                 # ONE outer to_thread (GIL-bound, responsiveness-only).
                 # A1 / #508: release before the ensemble. The closure reads only
-                # loaded scalars on detached instances (controls[].id/.name,
-                # run.scenario_id/.weight_robustness/.random_seed) — safe in the
-                # worker thread.
+                # plan strings (plan.universe_ids/.names) and loaded scalars on the
+                # detached run (run.scenario_id/.weight_robustness/.random_seed) —
+                # safe in the worker thread.
                 await _release_conn_for_compute(session)
                 _robustness_local, _single_loo, _single_degradations = await asyncio.to_thread(
                     _single_weight_robustness
@@ -2424,6 +2579,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # MOVED here (was before the ensemble): SINGLE needs the engine
                 # objects for the ensemble, so free them only now (Arch-I-Single-Del1).
                 del calculator, fc_controls
+                del plan  # small lists + DTOs only; released with the engine objects
             else:
                 # Each per-scenario ControlEnhancedRisk carries its scenario_id
                 # (set on the aggregate path) and its spawn_key. Capture the
@@ -2453,19 +2609,17 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # every leave-one-out subset anyway, so LOO afterwards is ~free.
                 _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
                 # A1 / #508: release before the Shapley/LOO compute block. The only
-                # post-release ORM read across these four to_threads is
-                # [str(c.id) for c in controls] (loaded UUID scalars, evaluated on
-                # the loop as a to_thread arg). Subsequent releases in this block are
-                # idempotent no-ops (no DB op runs between them).
+                # post-release read across these four to_threads is plan.universe_ids
+                # (a plain str list, evaluated on the loop as a to_thread arg).
+                # Subsequent releases in this block are idempotent no-ops (no DB op
+                # runs between them).
                 await _release_conn_for_compute(session)
                 shapley_raw, shapley_skipped = await asyncio.to_thread(
                     _compute_shapley_by_scenario,
                     calculator,
                     per_scenario_inputs,
                     per_scenario_dict,
-                    [
-                        str(c.id) for c in controls
-                    ],  # validated universe (matches active_control_ids)
+                    plan.universe_ids,  # validated universe (matches active_control_ids)
                     per_scenario_availability=per_scenario_availability,
                     composition_cache=_canon_comp_cache,
                 )
@@ -2485,7 +2639,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     calculator,
                     per_scenario_inputs,
                     per_scenario_dict,
-                    [str(c.id) for c in controls],
+                    plan.universe_ids,
                     per_scenario_availability=per_scenario_availability,
                     composition_cache=_canon_comp_cache,
                     statistic="mean",
@@ -2503,7 +2657,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     calculator,
                     per_scenario_inputs,
                     per_scenario_dict,
-                    [str(c.id) for c in controls],
+                    plan.universe_ids,
                     per_scenario_availability=per_scenario_availability,
                     composition_cache=_canon_comp_cache,
                 )
@@ -2521,7 +2675,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     calculator,
                     per_scenario_inputs,
                     per_scenario_dict,
-                    [str(c.id) for c in controls],
+                    plan.universe_ids,
                     per_scenario_availability=per_scenario_availability,
                     composition_cache=_canon_comp_cache,
                     statistic="mean",
@@ -2592,13 +2746,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # A1 / #508: release before the ensemble to_thread. The to_thread
                 # args run.weight_robustness (JSON) + run.random_seed (Int) are
                 # loaded scalars on the detached run; inside the thread
-                # _build_weight_robustness reads only controls[].id/.name (loaded
-                # scalars) — all safe post-detach.
+                # _build_weight_robustness reads only the plan's universe/names
+                # strings - all safe post-detach.
                 await _release_conn_for_compute(session)
                 _robustness_local = await asyncio.to_thread(
                     _build_weight_robustness,
                     calculator=calculator,
-                    controls=controls,
+                    universe=plan.universe_ids,
+                    control_names=plan.names,
                     per_scenario_inputs=per_scenario_inputs,
                     per_scenario_dict=per_scenario_dict,
                     canonical_values=_canon_vals_agg,
@@ -2611,6 +2766,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
 
                 del calculator, fc_controls  # now safe — Shapley + ensemble done
                 del per_scenario_inputs  # AGGREGATE always binds it
+                del plan  # small lists + DTOs only; released with the engine objects
                 if not await _check_cancelled_or_continue(session, run_id):
                     return
                 # A1 / #508 accepted NICE-TO-HAVE (Arch-N/Rel-N5): everything from

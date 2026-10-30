@@ -88,6 +88,10 @@ async def test_aggregate_freeze_inherits_org_wide_minus_explicit_and_audits(
         )
     ).scalar_one()
     assert row.changes["inherited_control_ids_per_scenario"] == inh
+    # Inherited plain ids join the fetch universe so the executor can build the
+    # variants (spec §3.2); each appears once, and never as a ":meta" id.
+    assert set(run.control_ids_used) == {str(edr.id), str(pm.id), str(sat.id)}
+    assert len(run.control_ids_used) == 3
 
 
 @pytest.mark.asyncio
@@ -281,8 +285,10 @@ async def test_freeze_keeps_all_n_inherited_controls_sorted_without_duplicates(
     for ids in (expected_a, expected_b):
         assert len(set(ids)) == len(ids)
     assert agg.control_ids_used is not None
-    assert set(agg.control_ids_used) == {str(edr.id), str(linked.id)}  # plain ids, no variants
+    # explicit ids first (fetch order), then every inherited plain id once; no variants
+    assert set(agg.control_ids_used) == {str(edr.id)} | {str(c.id) for c in ow}
+    assert len(agg.control_ids_used) == 5 and len(set(agg.control_ids_used)) == 5
 
     single = await _create(db_session, seed_organization, seed_user, [s_b.id])
     assert single.inherited_control_ids_per_scenario == {str(s_b.id): expected_b}
-    assert single.control_ids_used == [str(edr.id)]
+    assert single.control_ids_used == [str(edr.id), *expected_b]
