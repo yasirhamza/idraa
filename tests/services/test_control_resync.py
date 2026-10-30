@@ -582,6 +582,18 @@ async def test_resync_refuses_to_strip_last_meta_row_from_org_wide_control_befor
 
     with pytest.raises(OrgWideMetaIneligible):
         await apply_resync(db_session, control, user_id=user.id)
+
+    # BEFORE the rollback: the refusal ran ahead of every mutation. The rollback below
+    # would erase a flushed delete / audit row or a dirty attribute whatever the order of
+    # the code, so a check moved after the field loop or the row replacement is visible
+    # only here. (`_cfa_rows` / `_audits` query -> autoflush, hence dirty is asserted first.)
+    assert not (db_session.new or db_session.dirty or db_session.deleted)
+    assert control.library_pin == pin_before
+    assert control.annual_cost == cost_before
+    assert set(await _cfa_rows(db_session, control.id)) == before
+    assert await _audits(db_session, "control_function_assignment.delete", _DER_299) == []
+    assert await _audits(db_session, "control.resync_from_library", control.id) == []
+
     await db_session.rollback()
 
     await db_session.refresh(control)  # rollback expired every attribute, assignments included

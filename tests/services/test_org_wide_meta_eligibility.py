@@ -9,11 +9,12 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.audit_log import AuditLog
 from idraa.models.control import Control
+from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.enums import (
     ControlDomain,
     ControlImplementationStage,
@@ -36,15 +37,22 @@ from idraa.services.controls import (
 from idraa.services.inherited_controls import inherits_assignment
 
 
-def _form(*sub_fns: str, org_wide: bool, name: str = "C", **kw: Any) -> ControlForm:
+def _form(
+    *sub_fns: str,
+    org_wide: bool,
+    name: str = "C",
+    coverage: float = 0.8,
+    capability_value: float | None = 0.5,
+    **kw: Any,
+) -> ControlForm:
     return ControlForm(
         name=name,
         type=ControlType.TECHNICAL,
         assignments=[
             ControlFunctionAssignmentDTO(
                 sub_function=FairCamSubFunction(sf),
-                capability_value=0.5,
-                coverage=0.8,
+                capability_value=capability_value,
+                coverage=coverage,
                 reliability=0.8,
             )
             for sf in sub_fns
@@ -92,6 +100,31 @@ async def _is_stale(db: AsyncSession, run: RiskAnalysisRun) -> bool:
     return bool(run.is_stale)
 
 
+async def _write_footprint(db: AsyncSession, org_id: uuid.UUID) -> tuple[int, int, int]:
+    """(controls, assignments, audit rows) in the org, counted inside the open transaction."""
+
+    async def _count(model: Any) -> int:
+        stmt = select(func.count()).select_from(model).where(model.organization_id == org_id)
+        return int((await db.execute(stmt)).scalar_one())
+
+    return (
+        await _count(Control),
+        await _count(ControlFunctionAssignment),
+        await _count(AuditLog),
+    )
+
+
+async def _assert_refusal_wrote_nothing(
+    db: AsyncSession, org_id: uuid.UUID, before: tuple[int, int, int]
+) -> None:
+    """Call right after ``pytest.raises`` and BEFORE any rollback. The rollback the
+    caller does next would erase a write that happened ahead of the raise, so a
+    refusal moved below a mutation or a flush could only be seen here: nothing
+    pending in the session, and no flushed control / assignment / audit row."""
+    assert not (db.new or db.dirty or db.deleted)
+    assert await _write_footprint(db, org_id) == before
+
+
 def test_inherits_assignment_is_the_single_predicate() -> None:
     assert inherits_assignment("vmc_prev_reduce_variance_prob")
     assert inherits_assignment("vmc_corr_treatment_selection")  # label-only still META
@@ -112,6 +145,7 @@ def test_has_meta_assignment_uses_fair_cam_export() -> None:
 async def test_create_rejects_org_wide_without_meta_assignment(
     db_session: AsyncSession, seed_organization: Any, seed_user: Any
 ) -> None:
+    before = await _write_footprint(db_session, seed_organization.id)
     with pytest.raises(OrgWideMetaIneligible):
         await create_control(
             db_session,
@@ -119,6 +153,7 @@ async def test_create_rejects_org_wide_without_meta_assignment(
             user_id=seed_user.id,
             form=_form("lec_prev_resistance", org_wide=True),
         )
+    await _assert_refusal_wrote_nothing(db_session, seed_organization.id, before)
 
 
 @pytest.mark.asyncio
@@ -127,7 +162,10 @@ async def test_create_rejects_lec_sourced_derived_row_as_only_dsc(
 ) -> None:
     """Review-focus #4 / D6: LEC rows + a derived dsc_corr_misaligned row sourced
     from lec_resp_resilience is NOT inheritable -> ineligible, not run-failing."""
-    with pytest.raises(OrgWideMetaIneligible):
+    before = await _write_footprint(db_session, seed_organization.id)
+    # The message must not tell the analyst a Decision Support function is enough: the
+    # derived link counts only when it is sourced from a Variance Management function.
+    with pytest.raises(OrgWideMetaIneligible, match="Correcting Misaligned Decisions link"):
         await create_control(
             db_session,
             org_id=seed_organization.id,
@@ -135,6 +173,7 @@ async def test_create_rejects_lec_sourced_derived_row_as_only_dsc(
             form=_form("lec_prev_resistance", "lec_resp_resilience", org_wide=True),
             dsc_corr_source=FairCamSubFunction.LEC_RESP_RESILIENCE,
         )
+    await _assert_refusal_wrote_nothing(db_session, seed_organization.id, before)
 
 
 @pytest.mark.asyncio
@@ -169,13 +208,19 @@ async def test_update_rejects_removing_last_meta_assignment_while_org_wide(
     )
     await db_session.commit()
     await _loaded(db_session, c)
+    before = await _write_footprint(db_session, seed_organization.id)
     with pytest.raises(OrgWideMetaIneligible):
         await update_control(
             db_session,
             control=c,
             user_id=seed_user.id,
-            form=_form("lec_prev_resistance", org_wide=True),
+            # The rename makes a check that ran after the control-level diff loop visible
+            # as a dirty attribute on `c` (the assignment drop alone would not touch it).
+            form=_form("lec_prev_resistance", org_wide=True, name="C renamed"),
         )
+    await _assert_refusal_wrote_nothing(db_session, seed_organization.id, before)
+    assert c.name == "C"
+    assert await _audits(db_session, "control.update", c.id) == []
     await db_session.rollback()
     await db_session.refresh(c)
     assert c.org_wide_meta is True
@@ -277,6 +322,82 @@ async def test_update_assignment_edit_on_org_wide_sweeps_but_lec_only_control_ed
     assert await _is_stale(db_session, done) is True
     assert await _sweep_triggers(db_session, ow.id) == ["create", "assignments"]
     assert await _sweep_triggers(db_session, plain.id) == []  # never org-wide
+
+
+@pytest.mark.parametrize(
+    ("edited_fns", "form_kw", "cfa_action"),
+    [
+        pytest.param(
+            ("vmc_corr_implementation", "dsc_prev_communication"),
+            {"coverage": 0.4},
+            "control_function_assignment.update",
+            id="update",
+        ),
+        pytest.param(
+            ("vmc_corr_implementation", "dsc_prev_communication"),
+            {"capability_value": None},
+            "control_function_assignment.clear",
+            id="clear",
+        ),
+        pytest.param(
+            ("vmc_corr_implementation",),
+            {},
+            "control_function_assignment.delete",
+            id="delete",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_update_each_assignment_edit_kind_on_org_wide_control_sweeps_with_assignments_trigger(
+    db_session: AsyncSession,
+    seed_organization: Any,
+    seed_user: Any,
+    seed_run_factory: Any,
+    edited_fns: tuple[str, ...],
+    form_kw: dict[str, Any],
+    cfa_action: str,
+) -> None:
+    """Spec D9: an assignment `.update`, a `.clear` (capability non-NULL -> NULL) and the
+    delete of a removed row each change the inherited variant of an effective org-wide
+    control, so each flags the org's COMPLETED runs stale with one "assignments" sweep row
+    (the insert kind is pinned by the test above). Nothing else on the control changes
+    (name / flag / status / stage identical), so only the assignment branch can fire."""
+    c = await create_control(
+        db_session,
+        org_id=seed_organization.id,
+        user_id=seed_user.id,
+        form=_form("vmc_corr_implementation", "dsc_prev_communication", org_wide=True),
+    )
+    await db_session.commit()
+    await _loaded(db_session, c)
+    done = await seed_run_factory(status=RunStatus.COMPLETED)
+
+    await update_control(
+        db_session,
+        control=c,
+        user_id=seed_user.id,
+        form=_form(*edited_fns, org_wide=True, **form_kw),
+    )
+    await db_session.commit()
+
+    # The CFA audit verb proves the intended branch ran (and not another one).
+    cfa_rows = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == cfa_action,
+                    AuditLog.organization_id == seed_organization.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert cfa_rows
+    assert await _is_stale(db_session, done) is True
+    assert await _sweep_triggers(db_session, c.id) == ["create", "assignments"]
+    sweep = (await _audits(db_session, "control.org_wide_sweep", c.id))[-1]
+    assert sweep.changes["runs_flagged_stale"] == [None, 1]  # `done` post-dates the create sweep
 
 
 @pytest.mark.asyncio

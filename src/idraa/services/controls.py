@@ -95,7 +95,9 @@ def _check_org_wide_eligible(form: ControlForm) -> None:
     ):
         raise OrgWideMetaIneligible(
             "Organization-wide requires at least one Variance Management or "
-            "Decision Support function on the control."
+            "Decision Support function on the control. A Correcting Misaligned Decisions "
+            "link does not count on its own: it counts only when its source is a "
+            "Variance Management function."
         )
 
 
