@@ -217,7 +217,7 @@
       <div class="max-w-md space-y-1"
            x-data='{ metaSlugs: {{ meta_slugs | tojson }}, eligible: false, isOrgWide: {{ cur_org_wide | tojson }},
                      sync() { const picks = document.querySelectorAll("#assignments select");
-                              this.eligible = Array.from(picks).some(s => this.metaSlugs.includes(s.value)); } }'
+                              this.eligible = Array.from(picks).filter(s => s.name.endsWith("[sub_function]")).some(s => this.metaSlugs.includes(s.value)); } }'
            x-init='sync(); new MutationObserver(() => sync()).observe(document.getElementById("assignments"), { childList: true, subtree: true })'
            @change.window="sync()">
         <label for="org_wide_meta" class="text-meta text-ink-2">Organization-wide</label>
@@ -228,7 +228,8 @@
                  class="toggle toggle-primary">
           <span class="text-body text-ink-1">Its Variance Management / Decision Support functions apply to every scenario</span>
         </label>
-        <p class="text-micro text-ink-3">Loss-Event functions still need an explicit scenario link. Requires at least one VMC/DSC function. Identification-only or Treatment-Selection-only functions are score-neutral on their own (register C8): the control will be inherited but contribute 0 until an Implementation function is added.</p>
+        <p class="text-micro text-ink-3">Loss-Event functions still need an explicit scenario link. Requires at least one VMC/DSC function. A Correcting Misaligned Decisions link counts only when its source is a Variance Management function.</p>
+        <p class="text-micro text-ink-3">Identification and Implementation functions score only as a pair: a scenario gets the uplift only when both halves are present across its active controls, inherited ones included, so a control holding one half can still contribute alongside another control that supplies the other. Treatment Selection is score-neutral (register C8). Inherited functions act only by raising the reliability of the scenario's other controls, not as a standalone reduction.</p>
         <p class="text-micro text-status-warning" x-show="!eligible && isOrgWide" x-cloak>This control is organization-wide but no row is a VMC/DSC function any more — saving will be refused until you add one back or clear the flag.</p>
         {% if errors_dict.get("org_wide_meta") %}<p class="text-micro text-status-error">{{ errors_dict.get("org_wide_meta") }}</p>{% endif %}
       </div>

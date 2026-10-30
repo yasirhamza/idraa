@@ -47,7 +47,60 @@ async def test_new_form_renders_toggle_and_meta_slugs(
     body = (await client.get("/controls/new")).text
     assert 'name="org_wide_meta"' in body
     assert "vmc_prev_reduce_variance_prob" in body  # Alpine meta-slug list for the disabled state
-    assert "score-neutral" in body  # identification/treatment-only functions contribute 0 alone
+    assert "score-neutral" in body  # Treatment Selection is label-only
+
+
+def _hint_text(body: str) -> str:
+    """The toggle's explanatory paragraphs (``text-ink-3``), tags stripped."""
+    start = body.index("Loss-Event functions still need")
+    end = body.index("</div>", start)
+    return re.sub(r"<[^>]+>", " ", body[start:end])
+
+
+@pytest.mark.asyncio
+async def test_toggle_hint_states_the_pair_rule_and_scopes_score_neutral_to_treatment_selection(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """The hint must describe how the VMC/DSC pairs compose (an Identification function and
+    an Implementation function score only as a pair, across the scenario's active controls,
+    inherited ones included), say the uplift is a reliability coupling and not a standalone
+    reduction, carry the Correcting Misaligned Decisions rule, and call ONLY Treatment
+    Selection score-neutral, with the register reference attached to that clause alone."""
+    client, _ = authed_admin
+    body = (await client.get("/controls/new")).text
+    hint = " ".join(_hint_text(body).split())
+    # the retired, wrong claims
+    assert "contribute 0 until" not in body
+    assert "until an Implementation function is added" not in body
+    assert "Identification-only" not in body
+    # "score-neutral" only ever next to Treatment Selection, with the register reference
+    assert body.count("score-neutral") == 1
+    assert "Treatment Selection is score-neutral (register C8)" in hint
+    assert hint.count("register C8") == 1
+    # the pair rule, scenario-wide and inherited-inclusive
+    assert "score only as a pair" in hint
+    assert "both halves are present across its active controls, inherited ones included" in hint
+    assert "alongside another control that supplies the other" in hint
+    # reliability coupling, not a direct reduction
+    assert "raising the reliability of the scenario's other controls" in hint
+    assert "not as a standalone reduction" in hint
+    # client-side statement of the derived-link eligibility rule
+    assert (
+        "A Correcting Misaligned Decisions link counts only when its source is a "
+        "Variance Management function" in hint
+    )
+
+
+@pytest.mark.asyncio
+async def test_eligibility_scan_reads_only_sub_function_selects(
+    authed_admin: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """The Alpine eligibility scan filters on the ``[sub_function]`` name suffix (the
+    selector the Correcting Misaligned Decisions block uses), so a future per-row select
+    cannot make the toggle look eligible."""
+    client, _ = authed_admin
+    body = (await client.get("/controls/new")).text
+    assert 'filter(s => s.name.endsWith("[sub_function]")).some(' in body
 
 
 @pytest.mark.asyncio
@@ -82,6 +135,71 @@ async def test_unflagged_control_shows_no_org_wide_badge(
     assert c is not None and c.org_wide_meta is False
     assert "Org-wide" not in (await client.get("/controls")).text
     assert "Org-wide" not in (await client.get(f"/controls/{c.id}")).text
+
+
+INHERITED_TIP = 'title="Inherited by every scenario (VMC/DSC functions only)"'
+NOT_INHERITED_TIP = "Flagged organization-wide; not inherited until the control"
+
+
+@pytest.mark.asyncio
+async def test_badge_tooltip_follows_the_effective_predicate(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """Displays use the effective status (flag set AND status Active AND stage Active). A
+    flagged control that is not yet Active keeps its badge but never claims inheritance on
+    the list or the detail page; an effective one says it is inherited."""
+    client, _ = authed_admin
+    planned = _data("vmc_prev_reduce_variance_prob", org_wide=True, name="Flagged Planned")
+    planned["implementation_stage"] = "planned"
+    r = await csrf_post(client, "/controls/new", data=planned)
+    assert r.status_code in (200, 303)
+    active = _data("vmc_prev_reduce_variance_prob", org_wide=True, name="Flagged Active")
+    r = await csrf_post(client, "/controls/new", data=active)
+    assert r.status_code in (200, 303)
+    c_planned = await _one(db_session, "Flagged Planned")
+    c_active = await _one(db_session, "Flagged Active")
+    assert c_planned is not None and c_planned.org_wide_meta is True
+    assert c_active is not None and c_active.org_wide_meta is True
+
+    detail = (await client.get(f"/controls/{c_planned.id}")).text
+    assert "Org-wide" in detail  # the badge stays for a flagged control
+    assert NOT_INHERITED_TIP in detail
+    assert "Inherited by every scenario" not in detail
+
+    detail = (await client.get(f"/controls/{c_active.id}")).text
+    assert INHERITED_TIP in detail
+    assert NOT_INHERITED_TIP not in detail
+
+    listing = (await client.get("/controls")).text
+    # The list renders each row's name cell once per layout (table + mobile card), so compare
+    # counts instead of pinning 1: one effective control and one planned control must match.
+    inherited = listing.count(INHERITED_TIP)
+    not_inherited = listing.count(NOT_INHERITED_TIP)
+    assert inherited >= 1
+    assert inherited == not_inherited
+    assert listing.count("Org-wide</span>") == inherited + not_inherited  # no unlabeled badge
+
+
+@pytest.mark.asyncio
+async def test_badge_tooltip_for_inactive_status_is_not_inherited(
+    authed_admin: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """The other half of the effective predicate: stage Active but status DRAFT/DEPRECATED."""
+    client, _ = authed_admin
+    r = await csrf_post(
+        client,
+        "/controls/new",
+        data={
+            **_data("vmc_prev_reduce_variance_prob", org_wide=True, name="Flagged Draft"),
+            "status": "draft",
+        },
+    )
+    assert r.status_code in (200, 303)
+    c = await _one(db_session, "Flagged Draft")
+    assert c is not None and c.org_wide_meta is True
+    detail = (await client.get(f"/controls/{c.id}")).text
+    assert NOT_INHERITED_TIP in detail
+    assert "Inherited by every scenario" not in detail
 
 
 @pytest.mark.asyncio

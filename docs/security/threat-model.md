@@ -439,7 +439,7 @@ docstring).
   an ineligible or absent source are refused by a pure check that runs first in create and
   update (`services/controls.py:196-246`), and an unknown slug by the route parse — all before
   any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
-  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:343`;
+  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:344`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs

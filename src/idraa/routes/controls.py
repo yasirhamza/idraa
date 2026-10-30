@@ -1193,3 +1193,6 @@ from idraa.services._view_model_helpers import (  # noqa: E402
 )
 
 templates.env.globals["assignment_display_rows"] = assignment_display_rows
+# The Org-wide badge on the list and detail pages reads the SAME predicate the freeze and the
+# stale sweeps use (flag set, status Active, stage Active), never a template copy of it (#299).
+templates.env.globals["org_wide_effective"] = svc._org_wide_effective
