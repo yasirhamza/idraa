@@ -415,7 +415,7 @@ def _build_per_scenario_control_matrix(
 
     Returns:
         {
-            "controls": list[{control_id, control_name, total_reduction}],
+            "controls": list[{control_id, control_name, inherited, total_reduction}],
                 # total_reduction: float (sum of non-None cells) OR None (absent-only).
                 # column order: valued columns desc by total_reduction, then absent-only
                 # columns, tie-break by control_name asc within each group.
@@ -518,10 +518,18 @@ def _build_per_scenario_control_matrix(
         key=lambda cid: names.get(cid, ""),
     )
     col_order = [*valued_order, *absent_order]
+    # Function-local import: this module is on pdf_report's import chain (via
+    # services/reports.py), and inherited_controls imports fair_cam — a
+    # module-level import would break the PDF renderer's fair_cam-free purity
+    # boundary (tests/unit/test_pdf_report.py purity test).
+    from idraa.services.inherited_controls import is_variant_id
+
     controls: list[dict[str, Any]] = [
         {
             "control_id": cid,
             "control_name": names[cid],
+            # #299: an organization-wide inherited variant ("<id>:meta") column.
+            "inherited": is_variant_id(str(cid)),
             "total_reduction": totals_converted[cid],
             # Paired typical-basis column total (CSV export only, Task 6).
             "total_reduction_typical": totals_typical_converted.get(cid),

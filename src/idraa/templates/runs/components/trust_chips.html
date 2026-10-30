@@ -5,10 +5,15 @@
 
 {% macro trust_chips(dr, run, caveats) -%}
 {%- set ns = namespace(n_conf=0, n_total=0, max_sv=1) -%}
+{#- #299: count a variant row's confirmations only when the snapshot has no plain
+    row for the same control (a hybrid linked on A and inherited on B is counted
+    once, via its plain row); an inherited-only control is counted via its
+    variant row. -#}
+{%- set _plain_ids = (run.controls_snapshot or []) | rejectattr('inherited_variant_of') | map(attribute='control_id') | list -%}
 {%- for c in run.controls_snapshot or [] -%}
   {%- set _sv = c.get('snapshot_version', 1) -%}
   {%- if _sv > ns.max_sv %}{% set ns.max_sv = _sv %}{% endif -%}
-  {%- if _sv in (2, 3) and c.assignments -%}
+  {%- if _sv in (2, 3) and c.assignments and not (c.get('inherited_variant_of') and c.get('inherited_variant_of') in _plain_ids) -%}
     {%- set ns.n_conf = ns.n_conf + (c.assignments | selectattr('confirmed_by_user_at') | list | length) -%}
     {%- set ns.n_total = ns.n_total + (c.assignments | list | length) -%}
   {%- endif -%}

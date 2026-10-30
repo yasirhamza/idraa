@@ -179,6 +179,14 @@
   </div>
   {% endif %}
 
+  {#- #299: a run created before organization-wide controls existed cannot show
+      what they would have changed; the note appears only while the org has one now. -#}
+  {% if run_predates_inheritance %}
+    <div class="alert alert-info text-meta my-2" role="status">
+      This run predates organization-wide controls; {{ org_wide_count }} org-wide control{{ '' if org_wide_count == 1 else 's' }} now exist{{ 's' if org_wide_count == 1 else '' }} that were not applied here. Re-run to apply {{ 'it' if org_wide_count == 1 else 'them' }}.
+    </div>
+  {% endif %}
+
   {# T7d: condensed controls snapshot component (spec §controls_snapshot).
      Verbatim v1/v2/v3 expansion body + v2-reinterpret banner + overridden
      badge, moved into the shared macro (single-source). #}

@@ -63,6 +63,7 @@ from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
+from idraa.repositories.control_repo import ControlRepo
 from idraa.repositories.run_repo import RunRepo
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
@@ -77,6 +78,7 @@ from idraa.services.audit import log_bulk_export
 from idraa.services.dashboard_view_model import appetite_strip
 from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService
+from idraa.services.inherited_controls import is_variant_id
 from idraa.services.org import require_sole_org
 from idraa.services.reporting_currency import resolve_reporting_currency
 from idraa.services.retention import maybe_sweep_opportunistic
@@ -597,6 +599,22 @@ def _build_display_context(
     return {"display_results": display_results, "converted_cost_summary": converted_cost}
 
 
+async def _legacy_org_wide_count(
+    run: RiskAnalysisRun, db: AsyncSession, organization_id: uuid.UUID
+) -> int:
+    """How many org-wide controls the org has NOW, for a run that predates them.
+
+    A pre-feature run has ``inherited_control_ids_per_scenario IS NULL``; a run
+    created since then always carries a map (``{}`` when nothing was inherited).
+    The count is therefore only taken on the legacy branch: one COUNT query, no
+    relationship load, nothing at all on a feature-era run. Shared by the detail
+    page and the status-poll fragment so both render the same note.
+    """
+    if run.inherited_control_ids_per_scenario is not None:
+        return 0
+    return await ControlRepo(db).count_org_wide_meta(organization_id)
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def get_run_detail(
     run_id: uuid.UUID,
@@ -640,7 +658,13 @@ async def get_run_detail(
         )
         if scenario is None:
             raise HTTPException(status_code=404)
-        snapshot_ids = sorted(str(c["control_id"]) for c in run.controls_snapshot)
+        # Inherited org-wide variant rows are not scenario-linked controls, so
+        # they never count toward the "overridden from scenario default" check.
+        snapshot_ids = sorted(
+            str(c["control_id"])
+            for c in run.controls_snapshot
+            if not is_variant_id(str(c["control_id"]))
+        )
         scenario_ids = sorted(str(c.id) for c in scenario.mitigating_controls)
         controls_overridden = snapshot_ids != scenario_ids
         scenarios = None
@@ -652,6 +676,11 @@ async def get_run_detail(
         )
         scenario = None
         controls_overridden = False
+
+    # #299: a run that predates org-wide controls shows a re-run note, but only
+    # while the org actually has an org-wide control now.
+    org_wide_count = await _legacy_org_wide_count(run, db, user.organization_id)
+    run_predates_inheritance = org_wide_count > 0
 
     # Anti-drift (plan-gate Arch-I1): the display view-model + converted cost
     # summary are built by the shared helper so the status-poll fragment renders
@@ -700,6 +729,8 @@ async def get_run_detail(
             "scenarios": scenarios,
             "display_results": display_results,
             "controls_overridden": controls_overridden,
+            "run_predates_inheritance": run_predates_inheritance,
+            "org_wide_count": org_wide_count,
             "has_reinterpreted_v2_snapshot": has_reinterpreted_v2_snapshot,
             "converted_cost_summary": converted_cost,
             "creator_label": creator_label,
@@ -758,6 +789,10 @@ async def get_run_status_fragment(
         display_results = _ctx["display_results"]
         converted_cost = _ctx["converted_cost_summary"]
 
+    # #299: same legacy-note inputs as get_run_detail, so a poll-completion
+    # render agrees with a fresh page load.
+    org_wide_count = await _legacy_org_wide_count(run, db, user.organization_id)
+
     return templates.TemplateResponse(
         request,
         "runs/_status_poll.html",
@@ -766,6 +801,8 @@ async def get_run_status_fragment(
             "run": run,
             "display_results": display_results,
             "converted_cost_summary": converted_cost,
+            "run_predates_inheritance": org_wide_count > 0,
+            "org_wide_count": org_wide_count,
         },
     )
 

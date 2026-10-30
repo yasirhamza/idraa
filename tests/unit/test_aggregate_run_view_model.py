@@ -409,6 +409,54 @@ def test_per_scenario_control_matrix_tie_break_determinism() -> None:
     assert [c["control_name"] for c in m2["controls"]] == ["Alpha", "Zebra"]
 
 
+def test_per_scenario_control_matrix_flags_inherited_variant_columns() -> None:
+    """#299: a ``<cid>:meta`` variant column carries ``inherited=True``; its plain
+    column (a hybrid control linked elsewhere) and ordinary controls do not."""
+    payload = {
+        "per_scenario": [
+            {
+                "scenario_id": "s1",
+                "scenario_name": "S1",
+                "base_risk": {"annualized_loss_expectancy": 1000.0},
+                "residual_risk": {"annualized_loss_expectancy": 500.0},
+                "control_adjustments": [
+                    {"control_id": "edr", "control_name": "EDR", "shapley_value": 300.0},
+                    {"control_id": "pm", "control_name": "Patch Mgmt", "shapley_value": 100.0},
+                ],
+            },
+            {
+                "scenario_id": "s2",
+                "scenario_name": "S2",
+                "base_risk": {"annualized_loss_expectancy": 900.0},
+                "residual_risk": {"annualized_loss_expectancy": 500.0},
+                "control_adjustments": [
+                    {"control_id": "edr", "control_name": "EDR", "shapley_value": 200.0},
+                    {
+                        "control_id": "pm:meta",
+                        "control_name": "Patch Mgmt (org-wide)",
+                        "shapley_value": 50.0,
+                    },
+                ],
+            },
+        ],
+        "aggregate_with_controls": {"simulation_results": []},
+        "aggregate_without_controls": {"simulation_results": []},
+        "control_value": {"dollars": 0, "percent": 0},
+        "confidence_intervals": {},
+        "n_scenarios": 2,
+        "n_simulations": 1,
+    }
+    result = build_aggregate_display_results(_aggregate_run(simulation_results=payload))
+    assert result is not None
+    matrix = result["per_scenario_control_matrix"]
+    assert {c["control_id"]: c["inherited"] for c in matrix["controls"]} == {
+        "edr": False,
+        "pm": False,
+        "pm:meta": True,
+    }
+    assert len(matrix["controls"]) == 3, "the variant is its own column, not merged into pm"
+
+
 def test_per_scenario_control_matrix_full_coverage_shape() -> None:
     """AGGREGATE where every scenario has every control: all cells must be populated.
 

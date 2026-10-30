@@ -60,7 +60,7 @@
                   Arch-I2/Meth-I4). Never re-sum cells in Jinja. -#}
               {%- set _cell = _wr.per_control.get(c.control_id) if _wr and _wr.per_control else none -%}
               <tr class="hover:bg-surface-2">
-                <td class="font-sans text-ink-1">{{ c.control_name }}</td>
+                <td class="font-sans text-ink-1">{{ c.control_name }}{% if c.inherited %} <span class="badge badge-ghost badge-xs" data-inherited="true" title="Inherited organization-wide (VMC/DSC functions only)">org-wide</span>{% endif %}</td>
                 {% if _cell and _cell.zero_reason and c.total_reduction is none %}
                   <td class="text-left font-sans text-micro text-ink-3 italic" colspan="2">
                     {{ _cell.zero_reason }}{{ cvm.cv("structural-zeros", caveats.numbers) }}

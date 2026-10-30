@@ -716,7 +716,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1223-1234`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1267`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
@@ -794,7 +794,7 @@ new export format must re-implement, not assume is "someone else's problem."
   reservation: it stops sequential accumulation, not a concurrent burst nor one run
   whose samples outgrow the space left. This is the disk guard §11's C1 note means.
 - **D (export and report compute).** The raw-samples export runs one at a time
-  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:399`; a concurrent request
+  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:401`; a concurrent request
   gets 429), and the verification workbook builds its in-Excel Monte Carlo for at
   most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
   (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and

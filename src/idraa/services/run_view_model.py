@@ -287,13 +287,24 @@ def _build_control_effectiveness_rows(
     A control_id present in adjustments but absent from snapshot (data
     drift) renders with name "(unknown)" — visible defect signal, not a
     silent drop.
+
+    ``inherited`` (#299) marks an organization-wide inherited variant (its
+    control_id carries the ``:meta`` suffix) so the page can badge it.
     """
+    # Function-local import: services/reports.py imports this module at module
+    # level and services/pdf_report.py imports reports.py, so a module-level
+    # import of inherited_controls (which imports fair_cam) would put fair_cam in
+    # sys.modules on a bare ``import idraa.services.pdf_report`` and break that
+    # module's test-enforced purity boundary.
+    from idraa.services.inherited_controls import is_variant_id
+
     name_by_id = {c["control_id"]: c["name"] for c in snapshot}
     rows = [
         {
             "control_id": adj["control_id"],
             "name": name_by_id.get(adj["control_id"], "(unknown)"),
             "effectiveness": adj.get("effectiveness", 0.0),
+            "inherited": is_variant_id(str(adj["control_id"])),
         }
         for adj in adjustments
     ]
