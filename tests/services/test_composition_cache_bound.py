@@ -1,12 +1,15 @@
-"""#299: the attribution ComposedParts caches are bounded, and bounding them changes
-speed only.
+"""#299: the attribution caches are bounded, and bounding them changes speed only.
 
-ComposedParts is a pure function of the control subset, so a full cache recomputes
-on a miss and does not store. These tests pin (a) the cap is honoured at every
-cache creation site, (b) Shapley / leave-one-out / ensemble outputs under a tiny
-cap are EXACTLY (`==`, same process) those of an unbounded cache, and (c) the
-constant keeps a worst-case cache under 1 GiB (the arithmetic is in the constant's
-comment in services/run_executor.py).
+ComposedParts is a pure function of the control subset - its controls are composed
+in SORTED id order, so the last-ulp fold order of ``or_compose`` cannot follow a
+frozenset's iteration order - hence a full cache recomputes on a miss exactly the
+value a hit would have returned. These tests pin (a) the cap is honoured at every
+cache creation site, found by structure rather than by variable name, (b) Shapley /
+leave-one-out / ensemble outputs under a tiny cap are `==` (same process) to an
+unbounded cache on an ORDER-SENSITIVE fixture, where unsorted composition differs,
+(c) the constant keeps a worst-case cache under 1 GiB (the arithmetic is in the
+constant's comment in services/run_executor.py), and (d) the ensemble's draw-vector
+cache holds one scenario at a time.
 """
 
 from __future__ import annotations
@@ -92,35 +95,133 @@ def test_cap_constant_keeps_worst_case_cache_under_one_gib() -> None:
     assert cap * _WORST_BYTES_PER_ENTRY < 1024**3
 
 
-_CACHE_NAMES = {"_comp_cache", "_canon_comp_cache"}
+def _src_tree() -> ast.Module:
+    return ast.parse(Path(rex.__file__).read_text(encoding="utf-8"))
 
 
-def test_every_cache_creation_site_uses_the_bounded_factory() -> None:
-    """No `{}` literal may create (or default) an attribution composition cache."""
-    tree = ast.parse(Path(rex.__file__).read_text(encoding="utf-8"))
-    sites = 0
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            name, value = node.target.id, node.value
-        elif (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
+def _called_names(node: ast.AST) -> set[str]:
+    return {
+        n.func.id
+        for n in ast.walk(node)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+
+
+def _has_empty_dict(node: ast.AST) -> bool:
+    for n in ast.walk(node):
+        if isinstance(n, ast.Dict) and not n.keys:
+            return True
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "dict"
+            and not n.args
+            and not n.keywords
         ):
-            name, value = node.targets[0].id, node.value
-        else:
-            continue
-        if name not in _CACHE_NAMES or value is None:
+            return True
+    return False
+
+
+def _bound_names(tree: ast.Module, callee: str) -> set[str]:
+    """Every name (any spelling) assigned a value that calls ``callee``."""
+    out: set[str] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign) and callee in _called_names(n.value):
+            out.update(t.id for t in n.targets if isinstance(t, ast.Name))
+        elif (
+            isinstance(n, ast.AnnAssign)
+            and n.value is not None
+            and isinstance(n.target, ast.Name)
+            and callee in _called_names(n.value)
+        ):
+            out.add(n.target.id)
+    return out
+
+
+def test_every_composition_cache_creation_site_uses_the_bounded_factory() -> None:
+    """Structural, not name-based: whatever a future memo is called, no `{}` may create
+    or default a ComposedParts cache, and every dict that `precompose_parts` results
+    are written into must come from `_new_composition_cache()` or be a parameter."""
+    tree = _src_tree()
+
+    # (1) the factory is used exactly at the five known creation sites
+    factory_calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "_new_composition_cache"
+    ]
+    # shapley default, LOO default, ensemble, SINGLE canonical, AGGREGATE canonical,
+    # plus the factory's own definition is a FunctionDef, not a Call
+    assert len(factory_calls) == 5
+
+    # (2) no empty-dict creation of anything typed as a ComposedParts cache, no
+    # `composition_cache={}` argument, no non-None default for that parameter
+    for n in ast.walk(tree):
+        if isinstance(n, ast.AnnAssign) and n.value is not None:
+            annotated = {x.id for x in ast.walk(n.annotation) if isinstance(x, ast.Name)}
+            if "ComposedParts" in annotated:
+                assert not _has_empty_dict(n.value), n.lineno
+        if isinstance(n, ast.keyword) and n.arg == "composition_cache":
+            assert not _has_empty_dict(n.value)
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef):
+            pos = n.args.posonlyargs + n.args.args
+            defaults = [None] * (len(pos) - len(n.args.defaults)) + list(n.args.defaults)
+            pairs = list(zip(pos, defaults, strict=True)) + list(
+                zip(n.args.kwonlyargs, n.args.kw_defaults, strict=True)
+            )
+            for arg, default in pairs:
+                if arg.arg == "composition_cache" and default is not None:
+                    assert isinstance(default, ast.Constant) and default.value is None, n.lineno
+
+    # (3) data flow: each `X[...] = <precompose_parts result>` writes into a dict that
+    # is a parameter of an enclosing function or was built by the bounded factory
+    good = _bound_names(tree, "_new_composition_cache")
+    parents: dict[ast.AST, ast.AST] = {
+        c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)
+    }
+
+    def enclosing_functions(node: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+        chain = []
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                chain.append(node)
+        return chain
+
+    sites = 0
+    for call in ast.walk(tree):
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "precompose_parts"
+        ):
             continue
         sites += 1
-        calls = {
-            n.func.id
-            for n in ast.walk(value)
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        assign = parents[call]
+        assert isinstance(assign, ast.Assign) and isinstance(assign.targets[0], ast.Name)
+        parts_var = assign.targets[0].id
+        chain = enclosing_functions(call)
+        params = {
+            a.arg for fn in chain for a in fn.args.posonlyargs + fn.args.args + fn.args.kwonlyargs
         }
-        assert "_new_composition_cache" in calls, (name, node.lineno)
-    # shapley default, LOO default, ensemble, SINGLE canonical, AGGREGATE canonical
-    assert sites == 5
+        writes = [
+            w
+            for w in ast.walk(chain[0])
+            if isinstance(w, ast.Assign)
+            and isinstance(w.value, ast.Name)
+            and w.value.id == parts_var
+            and isinstance(w.targets[0], ast.Subscript)
+            and isinstance(w.targets[0].value, ast.Name)
+        ]
+        assert writes, f"precompose_parts at line {call.lineno} has no recognizable memo write"
+        for w in writes:
+            target = w.targets[0]
+            assert isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+            assert target.value.id in good | params, (target.value.id, w.lineno)
+    # value fn + ensemble _coalition_vec; a third composition path must update this guard
+    assert sites == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -139,19 +240,25 @@ def _params() -> FAIRParameters:
     )
 
 
-# (id, sub_function, unit, capability, coverage, reliability). Two LEC resistance
-# controls and two VMC variance controls share a sub-function, so OR-composition
-# across controls (order-sensitive in the last ulp) is exercised by every subset
-# that holds both; the capabilities are deliberately non-round.
+# (id, sub_function, unit, capability, coverage, reliability). ORDER-SENSITIVE on
+# purpose: four controls share lec_prev_resistance, three share lec_det_visibility and
+# three share vmc_prev_reduce_variance_prob, with non-round parameters, so
+# OR-composition over THREE or more operands is exercised. A two-operand
+# 1 - (1-a)(1-b) is commutative in IEEE-754; three or more operands are not, so
+# without the sorted composition order different frozenset instances of one subset
+# fold to different last-ulp values (and different tie order among inert controls).
 _SPEC = [
     ("lec_a", "lec_prev_resistance", "probability", 0.371, 0.83, 0.79),
     ("lec_b", "lec_prev_resistance", "probability", 0.529, 0.71, 0.88),
-    ("lec_c", "lec_det_visibility", "probability", 0.417, 0.92, 0.81),
-    ("lec_d", "lec_resp_resilience", "probability", 0.633, 0.64, 0.93),
+    ("lec_c", "lec_prev_resistance", "probability", 0.613, 0.77, 0.69),
+    ("lec_d", "lec_prev_resistance", "probability", 0.447, 0.93, 0.74),
+    ("lec_e", "lec_det_visibility", "probability", 0.417, 0.92, 0.81),
+    ("lec_f", "lec_det_visibility", "probability", 0.283, 0.66, 0.93),
+    ("lec_g", "lec_det_visibility", "probability", 0.571, 0.74, 0.84),
+    ("lec_h", "lec_resp_resilience", "probability", 0.633, 0.64, 0.93),
     ("vmc_a", "vmc_prev_reduce_variance_prob", "percent_reduction", 0.331, 0.77, 0.86),
     ("vmc_b", "vmc_prev_reduce_variance_prob", "percent_reduction", 0.468, 0.69, 0.74),
-    ("vmc_c", "vmc_id_control_monitoring", "probability", 0.552, 0.88, 0.82),
-    ("vmc_d", "vmc_id_threat_intelligence", "probability", 0.297, 0.73, 0.91),
+    ("vmc_c", "vmc_prev_reduce_variance_prob", "percent_reduction", 0.297, 0.88, 0.91),
     ("dsc_a", "dsc_prev_defined_expectations", "probability", 0.61, 0.81, 0.77),
 ]
 
@@ -186,10 +293,14 @@ def _battery(
     monkeypatch.setattr(rex, "_new_composition_cache", spy)
 
     calculator, universe = _calculator()
-    # s1 holds all nine controls (512 subsets); s2 an overlapping seven, so the
-    # subset-keyed cache is hit across scenarios when it can store them.
+    # s1 holds all twelve controls (4096 subsets, exact Shapley); s2 an overlapping
+    # eight in a different order, so the subset-keyed cache is hit across scenarios
+    # when it can store them and frozensets of one subset are built several ways.
     per_scenario_inputs = [("s1", "one", _params()), ("s2", "two", _params())]
-    per_scenario_dict = {"s1": universe, "s2": universe[:3] + universe[4:8]}
+    per_scenario_dict = {
+        "s1": universe,
+        "s2": universe[3:5] + universe[9:] + universe[:2] + universe[7:9],
+    }
     avail = {"s1": False, "s2": True}
 
     out: dict[str, Any] = {}
@@ -271,8 +382,113 @@ def test_attribution_under_tiny_cap_is_bit_identical_to_unbounded(
     )
     # non-vacuous: real attribution values were compared
     shap_s1 = capped["shapley_typical"][0]["s1"]
-    assert len(shap_s1) == 9 and any(v != 0.0 for v in shap_s1.values())
+    assert len(shap_s1) == 12 and any(v != 0.0 for v in shap_s1.values())
     assert capped["ensemble"]["state"] == "ok" and capped["ensemble"]["draws_used"] == 12
+
+
+def test_controls_are_composed_in_sorted_order_at_both_composition_sites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The deterministic half of the order-sensitivity guard. `precompose_parts` folds
+    `or_compose` in list order, so both sites must hand it the controls sorted by id
+    whatever the frozenset's iteration order is. Records every call made by the scalar
+    value fn AND the ensemble's `_coalition_vec` (both run in the battery)."""
+    import fair_cam.risk_engine.group_composition as gcomp
+
+    seen: list[list[str]] = []
+    real = gcomp.precompose_parts
+
+    def spy(controls: list[Any]) -> ComposedParts:
+        seen.append([c.control_id for c in controls])
+        return real(controls)
+
+    monkeypatch.setattr(gcomp, "precompose_parts", spy)
+    _battery(TINY_CAP, monkeypatch)
+
+    assert len(seen) > 1000 and any(len(ids) >= 3 for ids in seen)  # non-vacuous
+    assert all(ids == sorted(ids) for ids in seen)
+
+
+# --------------------------------------------------------------------------- #
+# the ensemble's draw-vector cache holds one scenario at a time                #
+# --------------------------------------------------------------------------- #
+def test_scenario_vector_cache_clears_when_the_scenario_changes() -> None:
+    import numpy as np
+
+    cache = rex._ScenarioVectorCache()
+    a, b = frozenset({"x"}), frozenset({"x", "y"})
+    vec = np.zeros(3)
+    cache.put("s1", a, vec)
+    cache.put("s1", b, vec)
+    assert cache.get("s1", a) is vec and cache.get("s1", b) is vec
+    assert cache.get("s2", a) is None  # entering s2 dropped s1's entries
+    cache.put("s2", a, vec)
+    assert cache.get("s1", b) is None and cache.get("s1", a) is None
+    assert len(cache._vecs) == 0  # the last call entered s1 and found nothing
+
+
+def test_ensemble_walk_clears_the_draw_vector_cache_per_scenario(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guard that the executor's ensemble really scopes its cache: across the two
+    scenarios of the battery the cache is entered once per scenario, is EMPTY at each
+    entry (s1's vectors are gone when s2 starts), and never holds more than one
+    scenario's subsets (<= 2^12)."""
+    instances: list[Any] = []
+
+    class _Spy(rex._ScenarioVectorCache):
+        def __init__(self) -> None:
+            super().__init__()
+            self.entered: list[str] = []
+            self.live_after_entry: list[int] = []
+            self.max_live = 0
+            instances.append(self)
+
+        def _enter(self, sid: str) -> None:
+            changed = sid != self._sid
+            super()._enter(sid)
+            if changed:
+                self.entered.append(sid)
+                self.live_after_entry.append(len(self._vecs))
+
+        def put(self, sid: str, subset: frozenset[str], vec: Any) -> None:
+            super().put(sid, subset, vec)
+            self.max_live = max(self.max_live, len(self._vecs))
+
+    monkeypatch.setattr(rex, "_ScenarioVectorCache", _Spy)
+    _battery(None, monkeypatch)
+
+    assert instances, "the ensemble never built its draw-vector cache"
+    for inst in instances:
+        assert inst.entered == ["s1", "s2"]  # each scenario visited once, in order
+        assert inst.live_after_entry == [0, 0]  # nothing from the previous scenario survives
+        assert 0 < inst.max_live <= 2**12
+
+
+def test_ensemble_is_identical_with_and_without_the_per_scenario_clear(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clearing changes memory only: the ensemble blob equals the one produced by the
+    pre-fix cache, which kept every (scenario, subset) vector for the whole walk."""
+
+    class _Unscoped(rex._ScenarioVectorCache):
+        def __init__(self) -> None:
+            super().__init__()
+            self._all: dict[tuple[str, frozenset[str]], Any] = {}
+
+        def get(self, sid: str, subset: frozenset[str]) -> Any:
+            return self._all.get((sid, subset))
+
+        def put(self, sid: str, subset: frozenset[str], vec: Any) -> None:
+            self._all[(sid, subset)] = vec
+
+    scoped, _ = _battery(None, monkeypatch)
+    monkeypatch.setattr(rex, "_ScenarioVectorCache", _Unscoped)
+    unscoped, _ = _battery(None, monkeypatch)
+    assert json.dumps(scoped["ensemble"], sort_keys=True) == json.dumps(
+        unscoped["ensemble"], sort_keys=True
+    )
+    assert scoped["ensemble"]["state"] == "ok"
 
 
 # --------------------------------------------------------------------------- #

@@ -8,11 +8,13 @@ helper because F4's tests need it.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gc
 import logging
 import math
 import uuid
-from collections.abc import Callable
+import weakref
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -754,8 +756,10 @@ MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
 # k org-wide controls multiplied the cache 2^k: a 400-scenario x (7 linked + 5
 # inherited) aggregate held 1.63M entries and peaked at 5.4 GiB against the 4 GiB
 # Fly VM (fly.toml: performance, 2 CPU, 4096 MB, no swap). ComposedParts is a pure
-# function of the subset, so past the cap a miss recomputes and does not store:
-# values are unchanged, only speed. Sizing, measured with tracemalloc over
+# function of the subset (its controls are composed in sorted-id order, see
+# _make_subset_value_fn), so past the cap a miss recomputes exactly the value a hit
+# would have returned and does not store it: results are bit-identical, only speed
+# changes. Sizing, measured with tracemalloc over
 # key + ComposedParts for the production control shape (CPython 3.11, arm64):
 # ~2.8 KB/entry at 8 players, 3.1 KB at 12-13, 3.6 KB at 20, 4.2 KB at 25,
 # 7.4 KB at the 64-player cap (average subset 32). 75_000 entries is therefore
@@ -771,7 +775,11 @@ class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
 
     ``__setitem__`` skips the insert of a NEW key once the cache is full;
     existing keys keep hitting and may be overwritten. Callers recompute on a
-    miss and assign unconditionally, so a full cache degrades speed only. Only
+    miss and assign unconditionally. That degrades speed only because the value
+    is a pure function of the key: the callers compose a subset's controls in
+    sorted-id order, so a recompute equals the entry it would have hit (without
+    that, the last-ulp fold order of ``or_compose`` would follow the frozenset's
+    iteration order and a capped run could differ from an uncapped one). Only
     item assignment is bounded; the attribution code uses nothing else to
     populate a cache (no ``update`` / ``setdefault``).
     """
@@ -789,6 +797,82 @@ class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
 def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
     """A fresh attribution composition cache bounded by the module constant."""
     return _BoundedCompositionCache(MAX_COMPOSITION_CACHE_ENTRIES)
+
+
+# SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the
+# memory-heavy phase of a run and its footprint does NOT scale with iterations: the
+# composition caches are capped per run (MAX_COMPOSITION_CACHE_ENTRIES), but the
+# admission gate (services/runs.py) budgets only iterations x scenarios and allows
+# 8 standard runs at once, so N concurrent attributions multiplied the ceiling by N.
+# Attribution is single-core and holds the GIL, so running one at a time costs no
+# throughput and turns the per-run ceiling into a per-PROCESS one. Single-process
+# invariant, same as the run reaper and the samples-export guard in routes/runs.py.
+#
+# Why an asyncio.Lock and not that guard's threading.BoundedSemaphore: the guard
+# fails fast (429) and its holder is one synchronous generator. A run's attribution
+# spans SEVERAL awaited to_thread calls and must queue, not fail. A blocking
+# threading acquire would have to sit inside a worker thread, parking the loop's
+# default executor (min(32, cpus + 4) = 6 threads on the 2-vCPU VM) while the
+# holder needs another worker for its next phase - a starvation deadlock - and a
+# per-call acquire would not cover the canonical cache that lives between calls.
+# Waiters here are coroutines parked on the event loop, no thread is blocked.
+#
+# Deadlock rules for callers: (1) enter AFTER _release_conn_for_compute so a queued
+# run holds no pooled connection (A1 / #508); (2) await only CPU to_thread work and
+# idempotent releases inside the slot, never a DB op or anything that needs another
+# run to progress; (3) `async with` releases on every exit, exceptions and
+# cancellation included. If a task is cancelled its worker thread still runs to
+# completion (uninterruptible), so the slot can free a moment early at shutdown.
+# One lock per event loop: production has one loop; test suites create many, and an
+# asyncio.Lock that was contended on one loop cannot be reused on another.
+_ATTRIBUTION_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _attribution_lock_for_current_loop() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _ATTRIBUTION_LOCKS.get(loop)
+    if lock is None:
+        lock = _ATTRIBUTION_LOCKS[loop] = asyncio.Lock()
+    return lock
+
+
+@contextlib.asynccontextmanager
+async def _attribution_slot() -> AsyncIterator[None]:
+    """Hold the process-wide attribution slot (see the block comment above)."""
+    async with _attribution_lock_for_current_loop():
+        yield
+
+
+class _ScenarioVectorCache:
+    """``subset -> (K,)`` draw-vector memo for ONE scenario at a time.
+
+    The ensemble's batched walk visits scenarios one after another, so a finished
+    scenario's vectors are never read again: entering a new ``sid`` clears the
+    memo. Held across all scenarios (keyed by ``(sid, subset)``) it grew to one
+    entry per distinct (scenario, subset) walked - up to the 2M-eval budget, each
+    carrying its own frozenset key - and measured 3.0 GiB at 64 players x 6
+    scenarios. Scoped, it holds at most one scenario's subsets. Values are a pure
+    function of ``(sid, subset)``, so clearing changes memory only.
+    """
+
+    def __init__(self) -> None:
+        self._sid: str | None = None
+        self._vecs: dict[frozenset[str], np.ndarray] = {}
+
+    def _enter(self, sid: str) -> None:
+        if sid != self._sid:
+            self._vecs.clear()
+            self._sid = sid
+
+    def get(self, sid: str, subset: frozenset[str]) -> np.ndarray | None:
+        self._enter(sid)
+        return self._vecs.get(subset)
+
+    def put(self, sid: str, subset: frozenset[str], vec: np.ndarray) -> None:
+        self._enter(sid)
+        self._vecs[subset] = vec
 
 
 def _scenario_eval_cost(
@@ -854,10 +938,15 @@ def _make_subset_value_fn(
         # control subset's authored assignments (kappa- and weight-invariant;
         # scenario effect enters later at the multiplier mapping, which is NOT
         # cached), so identical subsets dedupe ACROSS scenarios in a run.
+        # The controls are composed in SORTED id order: precompose_parts folds
+        # or_compose over them in list order, which is order-sensitive in the last
+        # ulp, and a frozenset's iteration order depends on how it was built (and on
+        # PYTHONHASHSEED). Sorting makes ComposedParts a function of the subset alone,
+        # so a cache miss recomputes exactly what a hit would have returned.
         ckey = subset
         parts = comp_cache.get(ckey)
         if parts is None:  # κ- AND weight-invariant precomposition, cached across draws
-            ctrls = [registry.get_control(cid) for cid in subset]
+            ctrls = [registry.get_control(cid) for cid in sorted(subset)]
             if any(c is None for c in ctrls):  # universe-validated; defensive (B-Arch-N1)
                 raise ValueError("unknown control id in attribution subset")
             parts = precompose_parts(ctrls)
@@ -897,8 +986,9 @@ def _compute_shapley_by_scenario(
     efficiency redistributes the overlap the standalone cells double-count.
 
     Bounds (B-Sec-B1 / B-Sec-I1-r2): a scenario over `max_controls` is skipped;
-    once the cumulative estimated eval count would exceed `total_eval_budget`, all
-    remaining scenarios are skipped — so total compute is bounded irrespective of
+    a scenario whose estimated eval count would push the cumulative total past
+    `total_eval_budget` is skipped and the walk continues, so a later, cheaper
+    scenario can still fit — total compute is bounded irrespective of
     scenario count. Budget drop-selection is order-dependent (first-come consumes
     the budget), deterministic given stable input order, and fully audited.
     compose_groups is GIL-bound, so the caller runs this via asyncio.to_thread to
@@ -1375,9 +1465,9 @@ def _build_weight_robustness(
     # (K = draw count) at full precision. Keyed by subset alone (#432 item 2,
     # shipped): ComposedParts is a pure function of the subset's authored
     # assignments, so identical subsets dedup across scenarios in aggregates.
-    # #299: bounded (MAX_COMPOSITION_CACHE_ENTRIES). The per-(scenario, subset)
-    # draw-vector cache in _per_control_values_for already composes each pair at
-    # most once per call, so past the cap only the CROSS-scenario reuse is lost;
+    # #299: bounded (MAX_COMPOSITION_CACHE_ENTRIES). The per-scenario draw-vector
+    # cache in _per_control_values_for already composes each (scenario, subset)
+    # at most once per call, so past the cap only the CROSS-scenario reuse is lost;
     # the per-draw cost model below (compose once, then finalize) is unchanged.
     _comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
 
@@ -1443,21 +1533,21 @@ def _build_weight_robustness(
         node_weight_arrs = stack_node_weight_arrays(
             [nm if nm is not None else GROUP_NODE_MAPPING for (nm, _k) in draws]
         )
-        # Shared per-(scenario, coalition) (K,) value cache + per-scenario base
-        # ALE cache; _comp_cache (weight- AND κ-invariant parts) is reused.
-        bcache: dict[tuple[str, frozenset[str]], np.ndarray] = {}
+        # Per-scenario (K,) coalition-value cache (cleared when the walk moves to the
+        # next scenario) + per-scenario base ALE cache; _comp_cache (weight- AND
+        # κ-invariant parts) is reused across scenarios.
+        bcache = _ScenarioVectorCache()
         base_cache: dict[str, tuple[float, float, float, float, float]] = {}
 
         def _coalition_vec(subset: frozenset[str], sid: str, rp: FAIRParameters) -> np.ndarray:
-            key = (sid, subset)
-            vec = bcache.get(key)
+            vec = bcache.get(sid, subset)
             if vec is not None:
                 return vec
             parts = _comp_cache.get(subset)
             if (
                 parts is None
             ):  # κ- AND weight-invariant; validate universe (as _make_subset_value_fn)
-                ctrls = [registry.get_control(cid) for cid in subset]
+                ctrls = [registry.get_control(cid) for cid in sorted(subset)]
                 if any(c is None for c in ctrls):
                     raise ValueError("unknown control id in attribution subset")
                 parts = precompose_parts(ctrls)
@@ -1472,7 +1562,7 @@ def _build_weight_robustness(
             vec = finalize_reduce_batched(
                 parts, base, kappa_arr, node_weight_arrs, availability_self_detection=avail
             )
-            bcache[key] = vec
+            bcache.put(sid, subset, vec)
             return vec
 
         # Walk the Shapley combinatorics ONCE with the vector value fn (#419/
@@ -2587,9 +2677,12 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # detached run (run.scenario_id/.weight_robustness/.random_seed) —
                 # safe in the worker thread.
                 await _release_conn_for_compute(session)
-                _robustness_local, _single_loo, _single_degradations = await asyncio.to_thread(
-                    _single_weight_robustness
-                )
+                async with _attribution_slot():  # SEC-T12F1-I2: one run's attribution at a time
+                    (
+                        _robustness_local,
+                        _single_loo,
+                        _single_degradations,
+                    ) = await asyncio.to_thread(_single_weight_robustness)
                 # LOO-Meth-2: audit attribution degradations (first-class audit rule).
                 # Same no-separate-commit pattern as the AGGREGATE block — rides the
                 # terminal guarded-UPDATE transaction below.
@@ -2661,83 +2754,92 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # Subsequent releases in this block are idempotent no-ops (no DB op
                 # runs between them).
                 await _release_conn_for_compute(session)
-                shapley_raw, shapley_skipped = await asyncio.to_thread(
-                    _compute_shapley_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    plan.universe_ids,  # validated universe (matches active_control_ids)
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                )
-                clean_shapley, shapley_dropped = _sanitize_shapley(shapley_raw)
-                _inject_shapley(results_payload["per_scenario"], clean_shapley)
-
-                # MEAN-basis canonical Shapley (2026-07-04 side-by-side): same
-                # machinery, same subsets, statistic="mean" — shares
-                # _canon_comp_cache (composition is statistic-invariant), so this
-                # pass costs only the reduction arithmetic. Skip sets are
-                # structurally identical to the typical pass (cost/caps depend
-                # only on control counts); basis-specific non-finite drops are
-                # audited below via the set difference.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                shapley_mean_raw, shapley_mean_skipped = await asyncio.to_thread(
-                    _compute_shapley_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    plan.universe_ids,
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                    statistic="mean",
-                )
-                clean_shapley_mean, shapley_mean_dropped = _sanitize_shapley(shapley_mean_raw)
-                _inject_shapley(
-                    results_payload["per_scenario"], clean_shapley_mean, key="shapley_value_mean"
-                )
-
-                # "If removed" (leave-one-out): drop-cost counterfactual per control
-                # — linear in n, so it also covers over_cap scenarios Shapley skips.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                loo_raw, loo_skipped = await asyncio.to_thread(
-                    _compute_loo_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    plan.universe_ids,
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                )
-                clean_loo, loo_dropped = _sanitize_shapley(loo_raw)  # same shape/finite rule
-                if loo_skipped or loo_dropped:
-                    logger.warning(
-                        "leave-one-out degraded: skipped=%s dropped=%s", loo_skipped, loo_dropped
+                # SEC-T12F1-I2: one run's canonical attribution at a time, process-wide
+                # (see _attribution_slot). Entered AFTER the release above so a queued run
+                # holds no pooled connection; nothing inside awaits another run's progress.
+                # The canonical cache is freed (the `del` below) before the slot is released.
+                async with _attribution_slot():
+                    shapley_raw, shapley_skipped = await asyncio.to_thread(
+                        _compute_shapley_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,  # validated universe (matches active_control_ids)
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
                     )
-                _inject_loo(results_payload["per_scenario"], clean_loo)
+                    clean_shapley, shapley_dropped = _sanitize_shapley(shapley_raw)
+                    _inject_shapley(results_payload["per_scenario"], clean_shapley)
 
-                # MEAN-basis LOO (side-by-side "If removed"): shared cache, mean chain.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                loo_mean_raw, loo_mean_skipped = await asyncio.to_thread(
-                    _compute_loo_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    plan.universe_ids,
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                    statistic="mean",
-                )
-                clean_loo_mean, loo_mean_dropped = _sanitize_shapley(loo_mean_raw)
-                if loo_mean_skipped or loo_mean_dropped:
-                    logger.warning(
-                        "mean-basis leave-one-out degraded: skipped=%s dropped=%s",
-                        loo_mean_skipped,
-                        loo_mean_dropped,
+                    # MEAN-basis canonical Shapley (2026-07-04 side-by-side): same
+                    # machinery, same subsets, statistic="mean" — shares
+                    # _canon_comp_cache (composition is statistic-invariant), so this
+                    # pass costs only the reduction arithmetic. Skip sets are
+                    # structurally identical to the typical pass (cost/caps depend
+                    # only on control counts); basis-specific non-finite drops are
+                    # audited below via the set difference.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    shapley_mean_raw, shapley_mean_skipped = await asyncio.to_thread(
+                        _compute_shapley_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                        statistic="mean",
                     )
-                _inject_loo(
-                    results_payload["per_scenario"], clean_loo_mean, key="if_removed_value_mean"
-                )
-                del _canon_comp_cache
+                    clean_shapley_mean, shapley_mean_dropped = _sanitize_shapley(shapley_mean_raw)
+                    _inject_shapley(
+                        results_payload["per_scenario"],
+                        clean_shapley_mean,
+                        key="shapley_value_mean",
+                    )
+
+                    # "If removed" (leave-one-out): drop-cost counterfactual per control
+                    # — linear in n, so it also covers over_cap scenarios Shapley skips.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    loo_raw, loo_skipped = await asyncio.to_thread(
+                        _compute_loo_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                    )
+                    clean_loo, loo_dropped = _sanitize_shapley(loo_raw)  # same shape/finite rule
+                    if loo_skipped or loo_dropped:
+                        logger.warning(
+                            "leave-one-out degraded: skipped=%s dropped=%s",
+                            loo_skipped,
+                            loo_dropped,
+                        )
+                    _inject_loo(results_payload["per_scenario"], clean_loo)
+
+                    # MEAN-basis LOO (side-by-side "If removed"): shared cache, mean chain.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    loo_mean_raw, loo_mean_skipped = await asyncio.to_thread(
+                        _compute_loo_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                        statistic="mean",
+                    )
+                    clean_loo_mean, loo_mean_dropped = _sanitize_shapley(loo_mean_raw)
+                    if loo_mean_skipped or loo_mean_dropped:
+                        logger.warning(
+                            "mean-basis leave-one-out degraded: skipped=%s dropped=%s",
+                            loo_mean_skipped,
+                            loo_mean_dropped,
+                        )
+                    _inject_loo(
+                        results_payload["per_scenario"], clean_loo_mean, key="if_removed_value_mean"
+                    )
+                    del _canon_comp_cache
 
                 # Audit degraded scenarios. NO separate commit (B-Sec-N1): these log
                 # calls ride the terminal guarded-UPDATE transaction below so audit +
@@ -2796,20 +2898,21 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # _build_weight_robustness reads only the plan's universe/names
                 # strings - all safe post-detach.
                 await _release_conn_for_compute(session)
-                _robustness_local = await asyncio.to_thread(
-                    _build_weight_robustness,
-                    calculator=calculator,
-                    universe=plan.universe_ids,
-                    control_names=plan.names,
-                    per_scenario_inputs=per_scenario_inputs,
-                    per_scenario_dict=per_scenario_dict,
-                    canonical_values=_canon_vals_agg,
-                    canonical_values_typical=_aggregate_clean(clean_shapley),
-                    persisted=run.weight_robustness,
-                    random_seed=run.random_seed,
-                    compute_rank_stability=True,
-                    per_scenario_availability=per_scenario_availability,
-                )
+                async with _attribution_slot():  # SEC-T12F1-I2: the ensemble's own phase
+                    _robustness_local = await asyncio.to_thread(
+                        _build_weight_robustness,
+                        calculator=calculator,
+                        universe=plan.universe_ids,
+                        control_names=plan.names,
+                        per_scenario_inputs=per_scenario_inputs,
+                        per_scenario_dict=per_scenario_dict,
+                        canonical_values=_canon_vals_agg,
+                        canonical_values_typical=_aggregate_clean(clean_shapley),
+                        persisted=run.weight_robustness,
+                        random_seed=run.random_seed,
+                        compute_rank_stability=True,
+                        per_scenario_availability=per_scenario_availability,
+                    )
 
                 del calculator, fc_controls  # now safe — Shapley + ensemble done
                 del per_scenario_inputs  # AGGREGATE always binds it
