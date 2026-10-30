@@ -748,6 +748,47 @@ MAX_ATTRIBUTION_CONTROLS = 64
 # re-composing the meta side) but NOT free; see the _comp_cache note below and
 # issue #432.
 MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
+# #299: cap on ENTRIES in each attribution ComposedParts cache (the canonical
+# Shapley/LOO cache and the ensemble's cross-draw cache). The eval budget above
+# counts evaluations, not bytes, and a scenario's cached subsets grow as 2^n, so
+# k org-wide controls multiplied the cache 2^k: a 400-scenario x (7 linked + 5
+# inherited) aggregate held 1.63M entries and peaked at 5.4 GiB against the 4 GiB
+# Fly VM (fly.toml: performance, 2 CPU, 4096 MB, no swap). ComposedParts is a pure
+# function of the subset, so past the cap a miss recomputes and does not store:
+# values are unchanged, only speed. Sizing, measured with tracemalloc over
+# key + ComposedParts for the production control shape (CPython 3.11, arm64):
+# ~2.8 KB/entry at 8 players, 3.1 KB at 12-13, 3.6 KB at 20, 4.2 KB at 25,
+# 7.4 KB at the 64-player cap (average subset 32). 75_000 entries is therefore
+# ~315 MB at <=25 players and ~555 MB in the 64-player corner, well under
+# 1 GiB per cache and under a quarter of the VM, while still holding the
+# 50,801-entry no-inheritance 400 x 7 portfolio whole. None = unbounded (tests
+# and the bench's before/after comparison only; read when each cache is created).
+MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000
+
+
+class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
+    """``{subset: ComposedParts}`` memo that stops growing at ``max_entries``.
+
+    ``__setitem__`` skips the insert of a NEW key once the cache is full;
+    existing keys keep hitting and may be overwritten. Callers recompute on a
+    miss and assign unconditionally, so a full cache degrades speed only. Only
+    item assignment is bounded; the attribution code uses nothing else to
+    populate a cache (no ``update`` / ``setdefault``).
+    """
+
+    def __init__(self, max_entries: int | None) -> None:
+        super().__init__()
+        self._max_entries = max_entries
+
+    def __setitem__(self, key: frozenset[str], value: ComposedParts) -> None:
+        if self._max_entries is not None and len(self) >= self._max_entries and key not in self:
+            return
+        super().__setitem__(key, value)
+
+
+def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
+    """A fresh attribution composition cache bounded by the module constant."""
+    return _BoundedCompositionCache(MAX_COMPOSITION_CACHE_ENTRIES)
 
 
 def _scenario_eval_cost(
@@ -914,7 +955,7 @@ def _compute_shapley_by_scenario(
     out: dict[str, dict[str, float]] = {}
     skipped: list[tuple[str, str]] = []
     spent = 0
-    _comp_cache = composition_cache if composition_cache is not None else {}
+    _comp_cache = composition_cache if composition_cache is not None else _new_composition_cache()
     _base_cache: dict[str, tuple[float, float, float, float, float]] = {}
     # (The #543 ``subset_value_fn`` injection seam was removed once the ensemble
     # moved to `_compute_shapley_by_scenario_batched` — this scalar fn is now
@@ -1156,7 +1197,7 @@ def _compute_loo_by_scenario(
     out: dict[str, dict[str, float]] = {}
     skipped: list[tuple[str, str]] = []
     spent = 0
-    _comp_cache = composition_cache if composition_cache is not None else {}
+    _comp_cache = composition_cache if composition_cache is not None else _new_composition_cache()
     _base_cache: dict[str, tuple[float, float, float, float, float]] = {}
     _value_fn = _make_subset_value_fn(
         registry,
@@ -1334,7 +1375,11 @@ def _build_weight_robustness(
     # (K = draw count) at full precision. Keyed by subset alone (#432 item 2,
     # shipped): ComposedParts is a pure function of the subset's authored
     # assignments, so identical subsets dedup across scenarios in aggregates.
-    _comp_cache: dict[frozenset[str], ComposedParts] = {}
+    # #299: bounded (MAX_COMPOSITION_CACHE_ENTRIES). The per-(scenario, subset)
+    # draw-vector cache in _per_control_values_for already composes each pair at
+    # most once per call, so past the cap only the CROSS-scenario reuse is lost;
+    # the per-draw cost model below (compose once, then finalize) is unchanged.
+    _comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
 
     # Arch-I10: realized per-draw eval cost — replicates the exact skip-aware
     # accumulation _compute_shapley_by_scenario uses (over_cap dropped, cumulative
@@ -2434,7 +2479,9 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 ]:
                     # Shared cache: the canonical Shapley pass precomposes every
                     # subset (n ≤ 12), so the leave-one-out pass after it is ~free.
-                    _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
+                    _canon_comp_cache: dict[frozenset[str], ComposedParts] = (
+                        _new_composition_cache()
+                    )
                     _by, _sk = _compute_shapley_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
@@ -2607,7 +2654,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # One composition cache shared between the canonical Shapley pass
                 # and the leave-one-out pass: exact Shapley (n ≤ 12) evaluates
                 # every leave-one-out subset anyway, so LOO afterwards is ~free.
-                _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
+                _canon_comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
                 # A1 / #508: release before the Shapley/LOO compute block. The only
                 # post-release read across these four to_threads is plan.universe_ids
                 # (a plain str list, evaluated on the loop as a to_thread arg).
