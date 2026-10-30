@@ -294,7 +294,7 @@ def _battery(
 
     calculator, universe = _calculator()
     # s1 holds all twelve controls (4096 subsets, exact Shapley); s2 an overlapping
-    # eight in a different order, so the subset-keyed cache is hit across scenarios
+    # nine in a different order, so the subset-keyed cache is hit across scenarios
     # when it can store them and frozensets of one subset are built several ways.
     per_scenario_inputs = [("s1", "one", _params()), ("s2", "two", _params())]
     per_scenario_dict = {
@@ -620,3 +620,52 @@ async def test_execute_run_values_identical_with_tiny_cap(
     key = "shapley_value" if n_scenarios > 1 else "if_removed_value"
     assert all(a.get(key) is not None for a in adj)
     assert capped.weight_robustness is not None
+
+
+@pytest.mark.asyncio
+async def test_single_run_frees_the_canonical_cache_before_the_ensemble(
+    db_session: AsyncSession,
+    seed_organization: Any,
+    seed_user: Any,
+    seed_control_factory: Any,
+    seed_scenario_factory: Any,
+    wire_executor_to_test_db: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SINGLE used to keep its canonical composition cache alive under the ensemble,
+    which builds a second one of its own (1,773 MiB vs 1,207 MiB at 64 controls). Like
+    the AGGREGATE `del _canon_comp_cache`, it must be gone when the ensemble starts."""
+    import weakref
+
+    edr = await seed_control_factory(name="EDR", domain=ControlDomain.LOSS_EVENT)
+    fw = await seed_control_factory(name="FW", domain=ControlDomain.LOSS_EVENT)
+    s = await seed_scenario_factory(name="S0")
+    db_session.add_all(
+        [
+            ScenarioControl(scenario_id=s.id, control_id=edr.id),
+            ScenarioControl(scenario_id=s.id, control_id=fw.id),
+        ]
+    )
+    await db_session.commit()
+
+    created: list[weakref.ref[dict[frozenset[str], ComposedParts]]] = []
+
+    def spy_factory() -> dict[frozenset[str], ComposedParts]:
+        cache = _REAL_FACTORY()
+        created.append(weakref.ref(cache))
+        return cache
+
+    alive_when_ensemble_starts: list[int] = []
+    real_ensemble = rex._build_weight_robustness
+
+    def spy_ensemble(*args: Any, **kwargs: Any) -> Any:
+        alive_when_ensemble_starts.append(sum(ref() is not None for ref in created))
+        return real_ensemble(*args, **kwargs)
+
+    monkeypatch.setattr(rex, "_new_composition_cache", spy_factory)
+    monkeypatch.setattr(rex, "_build_weight_robustness", spy_ensemble)
+    run = await _run(db_session, seed_organization, seed_user, [s.id])
+
+    assert run.weight_robustness is not None
+    assert len(created) >= 1  # the canonical cache existed
+    assert alive_when_ensemble_starts == [0]  # ...and was already freed

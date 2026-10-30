@@ -729,9 +729,9 @@ new export format must re-implement, not assume is "someone else's problem."
   unindexed candidate-count query on the latency-sensitive inline path.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
   the run pipeline (`del enhanced` at `services/run_executor.py:2538`; `del calculator, fc_controls`
-  at `services/run_executor.py:2721` and again at `services/run_executor.py:2917`; `del per_scenario_inputs` at `services/run_executor.py:2918`;
-  `del aggregate` at `services/run_executor.py:2736`; `del results_payload` at `services/run_executor.py:2951`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2737`, `services/run_executor.py:2937`) — breaks numpy reference
+  at `services/run_executor.py:2726` and again at `services/run_executor.py:2922`; `del per_scenario_inputs` at `services/run_executor.py:2923`;
+  `del aggregate` at `services/run_executor.py:2741`; `del results_payload` at `services/run_executor.py:2956`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2742`, `services/run_executor.py:2942`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble

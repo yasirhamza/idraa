@@ -273,17 +273,17 @@ class Settings(BaseSettings):
     # standard runs so a burst can't exhaust the 15-connection pool + VM RAM.
     #
     # (a) SIZING — worst case is a standard run whose NxM sits JUST UNDER the
-    #     250k threshold, whose Monte-Carlo peak RSS is ~100 MB, attribution NOT
-    #     included (it is iteration-free; its term is in (b)). 8 x ~100 MB + 2 x
-    #     ~700 MB (the high-fidelity cap) ≈ 2.2 GB, + ~1.2 GB for (b)'s one attribution run
-    #     ≈ 3.4 GB < 4 GB VM (fly.toml:91-94 performance / 2 cpu / 4096 mb). Value 8 survives.
+    #     250k threshold, whose Monte-Carlo peak RSS is ~100 MB (attribution is
+    #     iteration-free and is NOT in that figure; see (b)). 8 x ~100 MB + 2 x ~700 MB
+    #     (the high-fidelity cap) ≈ 2.2 GB < 4 GB VM (fly.toml:91-94). Value 8 survives.
     # (b) GUARD INVARIANT — the two caps together must fit RAM:
     #       max_concurrent_standard_runs · RAM(threshold)
     #         + max_concurrent_high_fidelity_runs · RAM(max_iters x max_M)
-    #         + RAM(attribution, one run at a time) < VM_RAM
-    #     Attribution is iteration-free (~1.2 GB measured at the 64-control corner) and
-    #     serialized by run_executor._attribution_slot: one term, not N. A future
-    #     HIGH_FIDELITY_ITERATIONS_THRESHOLD bump raises RAM(threshold): re-derive both caps.
+    #         + RAM(attribution, one run at a time) < VM_RAM - RAM(app baseline)
+    #     RAM(attribution) is iteration-free; run_executor._attribution_slot makes it one term.
+    #     Whole-process peak RSS from the bench on macOS arm64 (NOT Fly), 64 controls: 1.16 GB
+    #     AGGREGATE (6 scenarios), 1.21 GB SINGLE. 2.2 + 1.2 = 3.4 GB BEFORE the app baseline
+    #     (uvicorn, imports, Argon2 transients). Re-derive on a THRESHOLD bump; re-measure on Fly.
     # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no
     #     durable queue exists), matching the high-fidelity cap. So a 9th
     #     concurrent standard run is REJECTED even when it is one org's analysts

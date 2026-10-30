@@ -12,6 +12,7 @@ inheritance is missing or (unless --allow-degraded) attribution or the ensemble
 degraded.
 
 The default run is the plan's point: 10 scenarios x (5 inherited + 3 linked).
+``--scenarios 1`` benches a SINGLE run instead (its own code path and cache lifetimes).
 Heavier O1 points degrade by design (sampled Shapley above 12 players,
 run-wide evaluation budget, ensemble draws), so run them with --allow-degraded.
 
@@ -66,7 +67,7 @@ from idraa.models.enums import (
     ThreatCategory,
 )
 from idraa.models.organization import Organization
-from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
+from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.scenario import Scenario
 from idraa.models.scenario_control import ScenarioControl
 from idraa.models.threat_community import canonical_threat_community_id
@@ -150,7 +151,10 @@ def _scenario(org_id: uuid.UUID, name: str) -> Scenario:
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0] if __doc__ else None)
     ap.add_argument(
-        "--scenarios", type=int, default=DEFAULT_SCENARIOS, help="AGGREGATE size (>= 2)"
+        "--scenarios",
+        type=int,
+        default=DEFAULT_SCENARIOS,
+        help="AGGREGATE size; 1 benches a SINGLE run (its attribution is if-removed + ranges)",
     )
     ap.add_argument(
         "--inherited",
@@ -179,8 +183,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="report, do not fail on, unavailable attribution or a degraded ensemble",
     )
     args = ap.parse_args(argv)
-    if args.scenarios < 2:
-        ap.error("--scenarios must be >= 2 (a single scenario is a SINGLE run, not AGGREGATE)")
+    if args.scenarios < 1:
+        ap.error("--scenarios must be >= 1 (1 = a SINGLE run, >= 2 = AGGREGATE)")
     if not 0 <= args.inherited <= len(META_SFS):
         ap.error(f"--inherited must be in 0..{len(META_SFS)}")
     if args.linked < 1:
@@ -258,9 +262,17 @@ async def main(argv: Sequence[str] | None = None) -> int:
             return 1
         status = run.status
         inherited_map = run.inherited_control_ids_per_scenario or {}
-        per_scenario = (run.simulation_results or {}).get("per_scenario", [])
+        single = run.run_type == RunType.SINGLE
+        # SINGLE keeps one flat payload and carries "if removed" on each adjustment (its
+        # Shapley lives in weight_robustness); AGGREGATE has one entry per scenario.
+        per_scenario = (
+            [run.simulation_results or {}]
+            if single
+            else (run.simulation_results or {}).get("per_scenario", [])
+        )
+        value_key = "if_removed_value" if single else "shapley_value"
         ensemble = run.weight_robustness or {}
-        sids = list(run.aggregate_scenario_ids or [])
+        sids = [str(run.scenario_id)] if single else list(run.aggregate_scenario_ids or [])
     inherited_counts = {len(inherited_map.get(sid, [])) for sid in sids}
     meta_rows, players = set(), set()
     adjustments = non_null = unavailable = 0
@@ -268,7 +280,7 @@ async def main(argv: Sequence[str] | None = None) -> int:
         adj = ps.get("control_adjustments", [])
         meta_rows.add(sum(1 for a in adj if str(a.get("control_id", "")).endswith(":meta")))
         players.add(len(adj))
-        values = [a.get("shapley_value") for a in adj]
+        values = [a.get(value_key) for a in adj]
         adjustments += len(values)
         non_null += sum(v is not None for v in values)
         unavailable += any(v is None for v in values)
@@ -315,7 +327,7 @@ async def main(argv: Sequence[str] | None = None) -> int:
         f"scenarios={len(sids)} mc_iterations={iterations} "
         f"inherited_ids_per_scenario={sorted(inherited_counts)} "
         f"meta_rows_per_scenario={sorted(meta_rows)} players_per_scenario={sorted(players)} "
-        f"shapley_non_null={non_null}/{adjustments} "
+        f"{value_key.removesuffix('_value')}_non_null={non_null}/{adjustments} "
         f"scenarios_with_attribution_unavailable={unavailable} "
         f"ensemble_state={ensemble_state} ensemble_draws={draws_used}/{draws_configured} "
         f"max_attribution_controls={MAX_ATTRIBUTION_CONTROLS} "

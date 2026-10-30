@@ -2652,6 +2652,11 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         ),
                         "loo_dropped_mean_only": sorted(set(_loo_mean_dropped) - set(_loo_dropped)),
                     }
+                    # METH-T12F2-I1: free the canonical cache BEFORE the ensemble builds its
+                    # own (mirrors the AGGREGATE `del _canon_comp_cache`); the ensemble
+                    # never reads it. Left alive it doubled SINGLE's composition cache: bench
+                    # peak RSS at 64 controls (K = 73 draws) 1,773 MiB -> 1,207 MiB with the del.
+                    del _canon_comp_cache
                     return (
                         _build_weight_robustness(
                             calculator=calculator,
