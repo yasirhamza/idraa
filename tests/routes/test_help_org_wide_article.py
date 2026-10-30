@@ -56,6 +56,64 @@ async def test_article_renders(authed_analyst: tuple[AsyncClient, object]) -> No
 
 
 @pytest.mark.asyncio
+async def test_article_attribution_limits_match_the_code(
+    authed_analyst: tuple[AsyncClient, object],
+) -> None:
+    """Section 4 quotes the limits users actually hit. Each figure is read from the
+    code constant or default it describes, so a retuned limit fails here instead of
+    leaving the article stale."""
+    from idraa.config import Settings
+    from idraa.services.run_executor import (
+        MAX_ATTRIBUTION_CONTROLS,
+        MAX_ATTRIBUTION_TOTAL_EVALS,
+        _scenario_eval_cost,
+    )
+
+    client, _ = authed_analyst
+    r = await client.get(f"/help/{_SLUG}", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    text = " ".join(r.text.split())
+    fields = Settings.model_fields
+    for figure in (
+        f"more than {MAX_ATTRIBUTION_CONTROLS} controls",
+        f"budget of {MAX_ATTRIBUTION_TOTAL_EVALS:,} calculations",
+        f"up to {fields['weight_ensemble_draws'].default} draws",
+        f"budget of {fields['weight_ensemble_eval_budget'].default:,} calculations",
+        f"below {fields['weight_ensemble_min_draws'].default} the check is skipped",
+        # scenarios that fit the run-wide budget at 12 and 13 controls (rounded in the text)
+        f"about {round(MAX_ATTRIBUTION_TOTAL_EVALS / _scenario_eval_cost(12), -1):.0f} scenarios",
+        f"about {MAX_ATTRIBUTION_TOTAL_EVALS // _scenario_eval_cost(13)}.",
+    ):
+        assert figure in text, figure
+    # "about 4,600 per control" is the Maleki sample count (4,612) per control
+    assert _scenario_eval_cost(13) // 13 == 4612
+
+    # The three ensemble examples. Draw count K under the cache-credited cost model:
+    # draw 1 costs ceil(realized * (1 + r)), each later draw ceil(realized * r), within
+    # the band's eval budget (the same arithmetic as services/run_executor.py).
+    import math
+
+    from idraa.services import weight_robustness
+
+    budget = fields["weight_ensemble_eval_budget"].default
+
+    def draws(players: int, scenarios: int) -> int:
+        realized = scenarios * _scenario_eval_cost(players)
+        assert realized <= MAX_ATTRIBUTION_TOTAL_EVALS  # nothing skipped by the run budget
+        r = weight_robustness.FINALIZE_TO_COMPOSE_COST_RATIO
+        first = math.ceil(realized * (1.0 + r))
+        per = math.ceil(realized * r)
+        return int(min(fields["weight_ensemble_draws"].default, 1 + (budget - first) // per))
+
+    min_draws = fields["weight_ensemble_min_draws"].default
+    assert (draws(13, 10), draws(20, 10), draws(12, 400)) == (34, 21, 11)
+    assert draws(13, 10) >= min_draws  # 34 >= 32: ran, not skipped
+    assert draws(20, 10) < min_draws and draws(12, 400) < min_draws  # skipped
+    for example in ("ran 34 draws", "ran 21", "ran 11"):
+        assert example in text, example
+
+
+@pytest.mark.asyncio
 async def test_article_does_not_carry_the_retired_pairing_wording(
     authed_analyst: tuple[AsyncClient, object],
 ) -> None:

@@ -65,12 +65,31 @@
   On older runs, and for the muted &ldquo;typical&rdquo; figures beside the average on newer runs, that modelled reduction is a typical-case figure and will not match the headline mean ALE change.
   On the average basis of newer runs it is on the same basis as the headline but is still the closed-form reduction, not the simulated base-minus-residual difference, so do not expect the two to agree to the dollar.
 </p>
-<p class="text-body text-ink-2 mb-6">
-  Inherited rows count toward the per-scenario attribution limit (currently 64 controls). With many
-  organization-wide controls, every scenario can pass that limit at once and attribution can come
-  back unavailable on every scenario: the run page then says per-control attribution isn't
-  available for the run.
+<p class="text-body text-ink-2 mb-3">
+  Inherited rows count as controls toward the attribution limits, and every organization-wide
+  control adds one to every scenario at once. Three limits apply, and the second and third are
+  reached long before the first:
 </p>
+<ul class="list-disc pl-5 mt-2 mb-6 space-y-2 text-body text-ink-2">
+  <li>
+    <strong>Per scenario.</strong> A scenario with more than 64 controls, inherited ones included,
+    gets no fair-share figures. Its if-removed figures are still computed.
+  </li>
+  <li>
+    <strong>Per run.</strong> Fair shares cost 2<sup>n</sup> calculations for a scenario with n
+    controls up to 12, and about 4,600 per control above that, against a budget of 2,000,000
+    calculations for the whole run. Scenarios are taken in stored order, and once the budget is
+    spent attribution is unavailable for the rest. At 12 controls per scenario about 490 scenarios
+    fit; at 13, about 33.
+  </li>
+  <li>
+    <strong>Ranking stability.</strong> The weight-uncertainty check runs up to 256 draws under its
+    own budget of 10,000,000 calculations. A larger run gets fewer draws, and below 32 the check is
+    skipped (&ldquo;too few simulation draws&rdquo;). Ten
+    scenarios of 13 controls ran 34 draws; ten of 20 controls ran 21 and skipped the check; 400
+    scenarios of 12 controls ran 11 and skipped it.
+  </li>
+</ul>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="authoring-reliability">Authoring reliability</h2>
 <p class="text-body text-ink-2 mb-3">
