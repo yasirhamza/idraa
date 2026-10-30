@@ -33,8 +33,14 @@ def build_inputs_hash(
     control_ids: list[uuid.UUID],
     mc_iterations: int,
     random_seed: int = 42,
+    *,
+    inherited_control_ids: list[str] | None = None,
 ) -> str:
-    """Return SHA-256 hex of the canonical JSON payload."""
+    """Return SHA-256 hex of the canonical JSON payload.
+
+    ``inherited_control_ids`` (#299): plain ids this scenario inherits from
+    org-wide meta controls. Always serialised (``[]`` when None) so a changed
+    org-wide set never collides with an older hash."""
     payload = {
         "threat_event_frequency": scenario.threat_event_frequency,
         "vulnerability": scenario.vulnerability,
@@ -43,6 +49,7 @@ def build_inputs_hash(
         "control_ids": sorted(str(cid) for cid in control_ids),
         "mc_iterations": mc_iterations,
         "random_seed": random_seed,
+        "inherited_control_ids": sorted(inherited_control_ids or []),
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -53,12 +60,31 @@ def build_aggregate_inputs_hash(
     control_ids: list[uuid.UUID],
     mc_iterations: int,
     random_seed: int = 42,
+    *,
+    inherited_by_scenario: dict[str, list[str]] | None = None,
 ) -> str:
     """Stable hash for AGGREGATE runs. Order-independent across scenario_ids
     and control_ids; same scenarios in different submission orders -> same hash.
+
+    ``inherited_by_scenario`` (#299): ``str(scenario.id)`` -> plain ids that
+    scenario inherits from org-wide meta controls. ``scenario.id`` is read only
+    when a map is given, so ``ScenarioLike`` stubs without an ``id`` keep working.
     """
+
+    def _inherited(s: ScenarioLike) -> list[str]:
+        if inherited_by_scenario is None:
+            return []
+        # Protocol has no id; only read when a map is given (Arch-N3).
+        return inherited_by_scenario.get(str(getattr(s, "id")), [])  # noqa: B009
+
     per_scenario_hashes = sorted(
-        build_inputs_hash(scenario, control_ids, mc_iterations, random_seed=random_seed)
+        build_inputs_hash(
+            scenario,
+            control_ids,
+            mc_iterations,
+            random_seed=random_seed,
+            inherited_control_ids=_inherited(scenario),
+        )
         for scenario in scenarios
     )
     payload = json.dumps(

@@ -716,7 +716,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:142-151`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:149`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
@@ -788,7 +788,7 @@ new export format must re-implement, not assume is "someone else's problem."
   itself reject a non-finite `high` (#141, open).
 - **D (disk).** A dispatch is refused while the DB volume has less than
   `min_free_disk_bytes` free (`config.py:241`, default 300 MB;
-  `services/runs.py:153-166`), the 2026-06-29 full-disk outage class; per-iteration
+  `services/runs.py:155-168`), the 2026-06-29 full-disk outage class; per-iteration
   samples are reclaimed by the operator-set retention purge
   (`retention_sample_purge_days`, off by default). Check-then-dispatch with no byte
   reservation: it stops sequential accumulation, not a concurrent burst nor one run
@@ -821,8 +821,8 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-request-driven run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
-delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:395`), cancel (`services/runs.py:449`),
+delete (`services/runs.py:509`), sample-purge (`services/runs.py:542`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
