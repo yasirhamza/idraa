@@ -281,8 +281,8 @@ class Settings(BaseSettings):
     #         + max_concurrent_high_fidelity_runs · RAM(max_iters x max_M)
     #         + RAM(attribution, one run at a time) < VM_RAM - RAM(app baseline)
     #     RAM(attribution) is iteration-free; run_executor._attribution_slot makes it one term.
-    #     Whole-process peak RSS from the bench on macOS arm64 (NOT Fly), 64 controls: 1.16 GB
-    #     AGGREGATE (6 scenarios), 1.21 GB SINGLE. 2.2 + 1.2 = 3.4 GB BEFORE the app baseline
+    #     Whole-process peak RSS from the bench, 64 controls: 1,158 MiB AGGREGATE (6 scenarios) /
+    #     1,207 MiB SINGLE (macOS bench peaks, not Fly). 2.2 + 1.2 = 3.4 GB BEFORE the app baseline
     #     (uvicorn, imports, Argon2 transients). Re-derive on a THRESHOLD bump; re-measure on Fly.
     # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no
     #     durable queue exists), matching the high-fidelity cap. So a 9th

@@ -436,11 +436,29 @@ docstring).
   (`services/controls.py:249-267`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
   (`routes/controls.py:82-89`); one that survives, a submitted `dsc_corr_misaligned` row and
-  an ineligible or absent source are refused by a pure check that runs first in create and
-  update (`services/controls.py:196-246`), and an unknown slug by the route parse — all before
-  any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
+  an ineligible or absent source are refused by a pure check (`services/controls.py:196-246`),
+  and an unknown slug by the route parse. That check and the org-wide eligibility check in the
+  next bullet are both pure and both run before any mutation in create and update, so a
+  refusal leaves no row and no audit entry. The 422 messages are fixed text or enum values (the
+  org-wide refusal is fixed text too); the
   slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:344`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
+- **Org-wide controls (issue #299):** the run-create freeze and every inherited-controls
+  display read org-wide controls through `ControlRepo.list_org_wide_meta`
+  (`repositories/control_repo.py:68`) and `ControlRepo.count_org_wide_meta` (no line number of
+  its own), both filtered by `organization_id` plus the published-and-operating predicate, so
+  another org's flagged control is never inherited
+  (`tests/services/test_org_wide_meta_eligibility.py::test_list_and_count_org_wide_meta_filter_status_stage_and_org`,
+  `tests/services/test_run_service_inherited_controls.py::test_other_orgs_org_wide_controls_never_inherited`).
+  The flag is set only through the existing analyst/admin control form (§6, B6): the importer,
+  library adopt and duplicate never set it. `duplicate_control` resets it to False
+  (`services/controls.py:867`), and the importer's `Control(...)` constructor
+  (`services/controls_importer.py:313-323`) names no `org_wide_meta`, so the column default
+  False applies. A save that sets the flag without an inheritable Variance Management or
+  Decision Support assignment is refused with fixed text before any mutation, and run-create
+  independently refuses, again with fixed text, an org-wide control that has none (defence
+  in depth). Every change to the effective org-wide set flags the org's COMPLETED runs stale
+  and writes one `control.org_wide_sweep` audit row (§11).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
@@ -466,6 +484,15 @@ docstring).
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
     per-request handler with an attacker-suppliable id).
+  - **Walked, not predicate-checked (#299):** the two org-wide `ControlRepo` methods above
+    live under `repositories/`, which `--all` walks, and the lint run
+    (`uv run python scripts/lint_org_scoped_lookups.py --all`) exits 0 with them in place.
+    That is all it establishes. It flags only a bare `.get(Model, id)`; these are
+    `select(Control).where(...)` queries, the shape the residual-risk bullet below says it
+    never flags, and their own `organization_id` comparison would satisfy its function-wide
+    search for any `.get` added to them later. Their org predicate is held by the two
+    cross-org tests named above, and their published-and-operating filter by
+    `test_repo_filter_matches_predicate` in `tests/test_control_repo_active_stage.py`.
 - **Residual risk, narrowed but real (fact-checked 2026-08-05):** the
   checker's org-verification search is **function-wide, not bound to the
   flagged call** — it accepts *any* `organization_id` Compare or
@@ -724,9 +751,13 @@ new export format must re-implement, not assume is "someone else's problem."
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
   BACKGROUND runs to `max_concurrent_standard_runs` (default 8). A standard
-  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — such runs
-  are sub-second / few-MB and self-limiting, and gating them would put the
-  unindexed candidate-count query on the latency-sensitive inline path.
+  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — its engine
+  phase is still small and self-limiting (sub-second / few-MB), and gating such
+  runs would put the unindexed candidate-count query on the latency-sensitive
+  inline path. Since #299 an inline run is not sub-second end to end: it WAITS for
+  any attribution ahead of it (the one-at-a-time slot in the attribution-memory
+  bullet below), so the request can sit for minutes behind a background run's
+  attribution, holding no pooled connection while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
   the run pipeline (`del enhanced` at `services/run_executor.py:2538`; `del calculator, fc_controls`
   at `services/run_executor.py:2726` and again at `services/run_executor.py:2922`; `del per_scenario_inputs` at `services/run_executor.py:2923`;
@@ -799,6 +830,21 @@ new export format must re-implement, not assume is "someone else's problem."
   most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
   (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and
   the per-user export rate limit at the §11 bulk-export choke point.
+- **Attribution memory (issue #299):** attribution (Shapley, leave-one-out and the
+  weight-robustness ensemble) is the memory-heavy phase of a run and its footprint does not
+  scale with iterations, so it is bounded apart from the iteration caps above. (1) The
+  attribution composition caches are entry-capped at `MAX_COMPOSITION_CACHE_ENTRIES`
+  (`services/run_executor.py:770`, 75,000), per cache; past the cap a miss recomputes the
+  value instead of storing it, so results are bit-identical and only speed changes (the
+  in-code sizing is about 315 MB per cache at 25 players or fewer and about 555 MB at the
+  64-player cap). The ensemble's per-(scenario, subset) draw-vector cache is cleared on
+  entering each scenario, and a SINGLE run frees its canonical cache before the ensemble
+  starts. (2) One attribution phase runs at a time per process: a process-wide asyncio lock,
+  one per event loop (`services/run_executor.py:837`), that a run enters only after returning
+  its pooled connection, so a queued run holds none. Like the samples-export guard above,
+  this is a single-process invariant; running more than one machine would need a shared
+  limiter. (3) Inline runs (under 1000 iterations, ungated by the concurrency caps above)
+  therefore wait for any attribution ahead of them, as the first bullet of this section says.
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
@@ -926,6 +972,29 @@ are audited).
 writer, not request-reachable: migration `c4d2e8f1a6b9` writes one `run.flagged_stale`
 row per COMPLETED run it marks stale (`user_id` NULL; `changes.reason` names the engine
 change), bounded by the run count and idempotent (already-stale rows are skipped).
+
+**New action (#299, 2026-10): `control.org_wide_sweep`.** Written by `_org_wide_sweep`
+(`services/controls.py:129`) when a control create, update or soft delete changes the
+EFFECTIVE org-wide set (published, operating and flagged org-wide): a flag, status or stage
+flip, or an assignment or Correcting Misaligned Decisions link edit on a control that is
+effective now. Every COMPLETED run in the org is flagged stale, because an org-wide control
+changes every scenario's composition, not only the linked ones. `changes` carries
+`runs_flagged_stale` `[None, count]` and `trigger` `[None, name]`, the name one of
+`create`, `flag`, `status`, `stage`, `assignments` or `delete`. A library re-sync of an
+effective org-wide control sweeps the whole org inside its own `control.resync_from_library`
+row (its `runs_flagged_stale` count) and writes no separate sweep row; a save that only
+re-stamps confirmations changes nothing and writes nothing. Write amplification: it sits
+behind the existing control-write RBAC and CSRF, is at most one row per qualifying save, and
+the sweep is idempotent and org-scoped (already-stale runs are skipped; only id, status and
+`is_stale` are loaded).
+
+**Changed row (#299, 2026-10): `risk_analysis_run.create`.** `changes` now also carries
+`inherited_control_ids_per_scenario` (`services/runs.py:364`, the SINGLE `audit_changes` dict;
+the AGGREGATE dict carries the same key), the frozen org-wide inheritance map as plain
+hyphenated UUID strings, one key per scenario in the run. The run column is the source of
+truth and the audit row is its immutable echo; the list repeats per scenario by design, so it
+is bounded by the run's scenario and control counts. A run created before the feature has no
+such key in its audit row.
 
 ## 12. Known gaps / follow-ups
 
