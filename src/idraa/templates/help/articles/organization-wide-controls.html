@@ -5,8 +5,8 @@
   <em>every</em> scenario in the organization when an analysis runs, whether or not you link the
   control to that scenario. In run results the inherited copy is listed as
   &ldquo;Patch Management (org-wide)&rdquo; and carries an <strong>org-wide</strong> badge.
-  Only a control that is published and whose implementation stage is Active is inherited, as for
-  any control in a run.
+  A control is inherited only while it is published (status Active) and its implementation stage
+  is Active; an unpublished control is never inherited.
 </p>
 <p class="text-body text-ink-2 mb-6">
   Inherited functions have no standalone reduction. They act only by raising the reliability of
@@ -50,9 +50,9 @@
 <h2 class="text-h3 text-ink-1 mb-3" id="reading-the-numbers">Reading the numbers</h2>
 <p class="text-body text-ink-2 mb-3">
   An inherited row has no standalone reduction: considered on its own it changes no frequency,
-  vulnerability or loss multiplier, so its standalone reduction is <strong>$0</strong>. Its value
-  shows up in the fair share and if-removed figures, which credit it for the reliability it adds
-  to the scenario's other controls.
+  vulnerability or loss multiplier, so it reduces nothing by itself, which is also what the run
+  page's inherited-controls note says. Its value shows up in the fair share and if-removed
+  figures, which credit it for the reliability it adds to the scenario's other controls.
 </p>
 <p class="text-body text-ink-2 mb-3">
   A control linked on one scenario and inherited on another appears as two rows, the plain name and

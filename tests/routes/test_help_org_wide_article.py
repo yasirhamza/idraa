@@ -2,7 +2,7 @@
 
 Registry placement + content pins. The needles are the load-bearing wording: the
 Variance Management / Decision Support pairing rules, the absent-from-meta-uplift
-reliability convention (register C7), the $0-standalone reading, and the basis
+reliability convention (register C7), the no-standalone-reduction reading, and the basis
 sentence that stops a reader checking fair share against the Monte-Carlo headline.
 """
 
@@ -39,7 +39,7 @@ async def test_article_renders(authed_analyst: tuple[AsyncClient, object]) -> No
         "Decision Support",
         "explicitly",
         "absent",
-        "$0",
+        "no standalone reduction",
         "Correcting Misaligned Decisions",
         "unavailable",
         # The section-4 basis sentence (spec D8): the only guard that the
@@ -68,3 +68,23 @@ async def test_article_does_not_carry_the_retired_pairing_wording(
     assert r.status_code == 200
     assert "contributes 0 until" not in r.text
     assert "Identification and Implementation score as a pair" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_departures_page_mirrors_register_c7a(
+    authed_analyst: tuple[AsyncClient, object],
+) -> None:
+    """The departures page declares itself the plain-English mirror of the register; the
+    control-model section must carry the C7a applicability default (issue #299) so the two
+    cannot drift silently, and it must point readers at the new article."""
+    client, _ = authed_analyst
+    r = await client.get("/help/where-idraa-departs-from-fair", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    for needle in (
+        "applicability default",
+        "organization-wide",
+        "supersedes the inherited copy",
+        "at most 0.1",
+        'href="/help/organization-wide-controls"',
+    ):
+        assert needle in r.text, needle
