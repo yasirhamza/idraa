@@ -58,3 +58,17 @@ def test_legacy_runs_unchanged() -> None:
     )
     assert _ids(agg, snapshot, "A") == [EDR]
     assert _ids(single, snapshot, "S") == [EDR]
+
+
+def test_inherited_everywhere_linked_nowhere_is_exactly_the_variant_rows() -> None:
+    """METH-T7-N2 / review-focus #6: no scenario links anything, so every stored
+    per-scenario list is empty (a TRUTHY dict of empty lists -- the branch must
+    not read it as "no map"), and each scenario's subset is exactly its variants."""
+    dsc = "d" * 36
+    snapshot = _snap(variant_id(PM), variant_id(dsc))  # no plain rows at all
+    run = SimpleNamespace(
+        aggregate_control_ids_per_scenario={"A": [], "B": []},
+        inherited_control_ids_per_scenario={"A": [PM], "B": [PM, dsc]},
+    )
+    assert _ids(run, snapshot, "A") == [variant_id(PM)]
+    assert _ids(run, snapshot, "B") == [variant_id(PM), variant_id(dsc)]

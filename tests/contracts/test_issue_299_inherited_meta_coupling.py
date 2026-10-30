@@ -122,6 +122,13 @@ async def test_inherited_equals_explicit_meta_twin_same_scenario_same_seed(
     var = x.controls_snapshot[1]
     assert var["inherited_variant_of"] == str(pm.id)
     assert {a["sub_function"] for a in var["assignments"]} == {"vmc_prev_reduce_variance_prob"}
+    # METH-T7-I1: the workbook's SINGLE call site keys on str(run.scenario_id); a
+    # key miss against the frozen map would silently drop the variant row.
+    from idraa.services.verification_workbook import _per_scenario_controls_snapshot
+
+    assert str(x.scenario_id) == str(s.id)
+    wb_x = _per_scenario_controls_snapshot(x, x.controls_snapshot, str(x.scenario_id))
+    assert {c["control_id"] for c in wb_x} == {str(edr.id), variant_id(str(pm.id))}
 
     # Run Y: nothing org-wide, S links EDR + the meta-only twin
     pm.org_wide_meta = False
@@ -275,6 +282,16 @@ async def test_explicit_link_supersedes_inheritance_cost_once_two_attribution_ro
     assert phi_meta == pytest.approx(0.5 * (v_b - v_b_edr_only), rel=1e-9)
     assert phi_meta == pytest.approx(499.88, abs=0.01)
     assert phi_meta > 0.0
+    # METH-T7-I1: the verification workbook recomposes from the SAME per-scenario
+    # subset the executor composed. A scenario-key miss between the freeze
+    # (runs.py str(s.id)) and the workbook silently drops the ":meta" row, so pin
+    # the exact id sets through the real freeze + executor + workbook chain.
+    from idraa.services.verification_workbook import _per_scenario_controls_snapshot
+
+    wb_a = _per_scenario_controls_snapshot(run, run.controls_snapshot, str(s_a.id))
+    wb_b = _per_scenario_controls_snapshot(run, run.controls_snapshot, str(s_b.id))
+    assert {c["control_id"] for c in wb_a} == {str(edr.id), str(pm.id)}
+    assert {c["control_id"] for c in wb_b} == {str(edr.id), variant_id(str(pm.id))}
 
 
 @pytest.mark.asyncio
