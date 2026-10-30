@@ -626,7 +626,45 @@ Everything numeric in this section is therefore Idraa's.
   truth (cleanup tracked on issue #177).
 - **Evaluate.** `test_kappa_meta_reliability_pin`; the max-aggregation fix
   (riskflow#455) and the open attribution investigation (riskflow#434) are the live
-  evaluation record.
+  evaluation record. `C7a` carries the #299 inheritance evaluation.
+
+#### C7a. Organization-wide meta controls are an applicability default (issue #299)
+
+- **Standard.** §4 p. 21 scopes VMC to "the Operational Performance of other
+  controls" it governs; the Standard does not say which Loss Event Controls a given
+  meta control governs.
+- **Idraa.** A control flagged organization-wide contributes its VMC/DSC assignments
+  to **every** scenario as a meta-filtered variant (`<id>:meta`), composed by the
+  same within-sub-function OR as any linked control; an explicit scenario link
+  supersedes the variant (full control, no double count; cost counted once per base
+  control). The coupling form, κ and the C6/C8/C11/C12 operators are unchanged — the
+  inheritance decides only **which controls are co-present**, overriding the
+  analyst-led applicability default (controls act only where linked) by owner ruling
+  D1/D2 (spec 2026-10-29). The `r0` anchor convention ("reliability absent meta
+  uplift") therefore becomes the default case for every scenario in an organization
+  with org-wide controls. A variant composes exactly as an explicit link of the same
+  rows would: the VMC Identification × Correction pair (C8) forms across all
+  co-present controls, inherited or linked, so an Identification-only or
+  Implementation-only variant contributes only where a co-present control supplies
+  the other half; Treatment Selection stays label-only (C8).
+- **Class.** IMPLEMENTATION-DEFINED (applicability default).
+- **Bound.** A wrongly inherited meta control moves any LEC assignment's effective
+  reliability by at most `κ·(1−r0)·E_meta ≤ κ·(1−r0)` = 0.1 absolute at the
+  library's r0 = 0.8 (same bound family as C6/C8). The meta assignment's `coverage`
+  is the authored lever for how much of the organization's LEC population the
+  control governs.
+- **Where.** `src/idraa/services/inherited_controls.py` (`inherits_assignment`,
+  variant ids), `services/runs.py` (freeze), `run_executor.py`
+  (`_build_active_control_plan`, `_v3_to_fair_cam_control(meta_only=True)`).
+- **Evaluate.** `fair_cam/tests/risk_engine/test_inherited_meta_equivalence_pin.py`
+  (hand-math anchor: variant ≡ twin; LEC row acts only when linked),
+  `tests/contracts/test_inherited_variant_adapter.py`,
+  `tests/contracts/test_issue_299_inherited_meta_coupling.py` (same-scenario
+  same-seed bit-identity; two attribution players with Σφ = v(N) on the closed-form
+  typical-basis game —
+  `test_explicit_link_supersedes_inheritance_cost_once_two_attribution_rows`, v(N)
+  from `subset_reduction_closed_form`, two-player anchor φ_meta ≈ 499.88 at the
+  factory defaults; cost once).
 
 ### C8. VMC Correction is implementation-anchored; Treatment Selection is label-only; VMC Identification pair uses OR
 
@@ -644,7 +682,10 @@ Everything numeric in this section is therefore Idraa's.
   Idraa credits decision-support quality only
   additively, through `E_dsc` (C6, C7), when decision-support functions are
   authored; nothing here penalises poor selection. Identification pair → OR, since
-  the two members cover different variance sources.
+  the two members cover different variance sources. Org-wide inheritance (#299, C7a)
+  does not change this: an inherited variant composes like an explicit link —
+  Treatment Selection stays score-neutral, and the Identification × Correction pair
+  forms across all co-present controls, inherited or linked.
 - **Class.** DEPARTURE (AND retained in topology, not realised; riskflow#199 slice 1)
   and IMPLEMENTATION-DEFINED (the OR).
 - **Rationale.** Realising the product made the group non-monotone in membership:
@@ -787,6 +828,15 @@ Everything numeric in this section is therefore Idraa's.
   identifies for the DSC pair (a `vmc_id_*` row does not). Stored scalars on the
   derived row are sentinels (`NULL`, 0.0, 0.0), never inputs and never
   displayed; a consumer that ignores the link scores 0, not the 0.5 anchor.
+  Org-wide inheritance (#299, C7a): a derived Correcting-Misaligned-Decisions row is
+  inherited only when its source is itself a meta sub-function (today
+  `vmc_corr_implementation`). An LEC-sourced link (`lec_resp_event_termination` /
+  `lec_resp_resilience`) is **not** inherited: the process it credits is the carrying
+  control's Response process, which under the meta-only rule needs an explicit
+  scenario link — so the link is dropped together with its source rather than
+  resolved against a row the variant does not carry. One predicate
+  (`inherits_assignment`) decides eligibility and the variant filter, so a control
+  whose only DSC credit is an LEC-sourced derived row is ineligible for the flag.
 - **Class.** PRESCRIBED dependency (§5.3 p. 50: the function is fulfilled by
   correction/response controls) realised as IMPLEMENTATION-DEFINED (the derived
   row takes the source's operational effectiveness; the Standard gives no
@@ -875,6 +925,7 @@ Everything numeric in this section is therefore Idraa's.
   CSV import, which skips the virtual path); a library resync replaces all of a
   control's assignments and re-links the derived row when the entry still
   carries the source sub-function, else drops it, both audited.
+  `tests/contracts/test_inherited_variant_adapter.py::test_meta_assignments_drops_lec_sourced_derived_row_with_its_source`.
 
 ---
 

@@ -1,0 +1,108 @@
+<h2 class="text-h3 text-ink-1 mb-3" id="what-it-does">What it does</h2>
+<p class="text-body text-ink-2 mb-3">
+  <strong>Organization-wide</strong> is a flag on a control (the toggle on the control form).
+  A flagged control's Variance Management (VMC) and Decision Support (DSC) functions apply to
+  <em>every</em> scenario in the organization when an analysis runs, whether or not you link the
+  control to that scenario. In run results the inherited copy is listed as
+  &ldquo;Patch Management (org-wide)&rdquo; and carries an <strong>org-wide</strong> badge.
+  Only a control that is published and whose implementation stage is Active is inherited, as for
+  any control in a run.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Inherited functions have no standalone reduction. They act only by raising the reliability of
+  the Loss-Event functions on the scenario's other controls (register entry C7), so a scenario
+  that links no Loss-Event control gets nothing from them. Use the flag for a control that
+  governs the organization's controls as a whole, instead of linking it scenario by scenario.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="eligibility">Eligibility</h2>
+<p class="text-body text-ink-2 mb-3">
+  A control can be organization-wide only if it has at least one Variance Management or Decision
+  Support function; Loss-Event-only controls cannot be. The toggle stays disabled until one of the
+  control's function rows picks such a function.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Variance Management Identification and Implementation functions score as a pair across a scenario's active controls, inherited ones included: an Identification-only control contributes only where another control supplies Implementation, and the reverse. Decision Support's Identify-misalignment function pairs instead with a Correcting Misaligned Decisions link. Treatment Selection is label-only and score-neutral (register C8). The uplift raises the reliability of the Loss-Event functions on the scenario's other controls; it is not a standalone reduction.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="hybrid-controls">Hybrid controls</h2>
+<p class="text-body text-ink-2 mb-3">
+  A control can carry Loss-Event functions as well as Variance Management / Decision Support ones.
+  Only the Variance Management / Decision Support functions are inherited. To credit the control's
+  Loss-Event functions on a scenario, link the control to that scenario explicitly: the explicit
+  link then applies the full control, and the inherited copy is not generated for that scenario.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  A derived <strong>Correcting Misaligned Decisions</strong> row is inherited only when it is
+  fulfilled by the control's own Variance Correction (Implementation) function. One fulfilled by a
+  Loss-Event Response function (event termination or resilience) travels with that function and
+  needs the explicit link (register entry C12). A control whose only Variance Management / Decision
+  Support credit is such a Response-fulfilled link is therefore not eligible to be
+  organization-wide.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The rule that a Correcting Misaligned Decisions link counts only when its source is a Variance
+  Management function is about inheritance and eligibility. On a scenario that links the control
+  explicitly, a link sourced from a Loss-Event Response function still completes the Decision
+  Support pair (register entry C12).
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="reading-the-numbers">Reading the numbers</h2>
+<p class="text-body text-ink-2 mb-3">
+  An inherited row has no standalone reduction: considered on its own it changes no frequency,
+  vulnerability or loss multiplier, so its standalone reduction is <strong>$0</strong>. Its value
+  shows up in the fair share and if-removed figures, which credit it for the reliability it adds
+  to the scenario's other controls.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  A control linked on one scenario and inherited on another appears as two rows, the plain name and
+  the &ldquo;(org-wide)&rdquo; name. The rows are not merged and not double-counted, and the
+  control's annual cost is counted once.
+</p>
+<p class="text-body text-ink-2 mb-3">
+  The &ldquo;not double-counted&rdquo; identity holds on the attribution's own calculation, not on the headline.
+  Per scenario, the fair-share values add up to the modelled reduction the attribution uses, a closed-form figure computed from the controls' composed effect rather than a simulated one.
+  On older runs, and for the muted &ldquo;typical&rdquo; figures beside the average on newer runs, that modelled reduction is a typical-case figure and will not match the headline mean ALE change.
+  On the average basis of newer runs it is on the same basis as the headline but is still the closed-form reduction, not the simulated base-minus-residual difference, so do not expect the two to agree to the dollar.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  Inherited rows count toward the per-scenario attribution limit (currently 64 controls). With many
+  organization-wide controls, every scenario can pass that limit at once and attribution can come
+  back unavailable on every scenario: the run page then says per-control attribution isn't
+  available for the run.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="authoring-reliability">Authoring reliability</h2>
+<p class="text-body text-ink-2 mb-3">
+  A control's authored reliability is its expected reliability <strong>absent</strong> meta uplift
+  (register entry C7). With organization-wide controls that convention now applies by default to
+  every scenario. An estimate taken from observed, in-situ performance already includes that
+  environment, so the uplift counts it twice and the modelled reliability will read high.
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The meta assignment's <strong>coverage</strong> is the lever for how much of the organization's
+  Loss-Event controls the control actually governs: lowering it lowers the uplift every scenario
+  receives. The register (entry C7a) records the inheritance as an applicability default and bounds
+  its effect: a wrongly inherited control moves any Loss-Event assignment's effective reliability by
+  at most 0.1 absolute at the library's reliability of 0.8.
+</p>
+
+<h2 class="text-h3 text-ink-1 mb-3" id="re-runs">Re-runs</h2>
+<p class="text-body text-ink-2 mb-3">
+  Flagging or unflagging a control, publishing or deprecating it, changing its implementation stage
+  (for example demoting it), deleting it, or editing an organization-wide control's functions
+  (including adding or clearing its Correcting Misaligned Decisions link) marks every completed
+  analysis in the organization as needing a re-run, because every scenario's composition changed,
+  not just the scenarios that linked the control. A run created before organization-wide controls
+  existed says so on its page when the organization now has any, and shows what a re-run would
+  add.
+</p>
+<p class="text-body text-ink-2">
+  Clearing the flag is always an explicit act: the toggle stays enabled while it is on, and a save
+  that would leave an organization-wide control without any Variance Management / Decision Support
+  function is refused rather than silently un-flagging it.
+  See also <a class="text-brand hover:underline" href="/help/how-controls-change-the-numbers">FAIR-CAM sub-functions</a>,
+  <a class="text-brand hover:underline" href="/help/controls-overlays">Controls &amp; overlays</a> and
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#the-control-model">the control model</a>
+  for where Idraa departs from FAIR-CAM.
+</p>

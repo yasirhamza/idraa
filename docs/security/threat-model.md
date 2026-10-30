@@ -585,7 +585,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2385`), and
   two more pick one of two literals by a flag (`routes/scenarios.py:3020-3022`, `routes/help.py:134`);
   one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
-  slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
+  slugs are code constants, `help_content.py:169`). None takes attacker-controlled text.
 - **CSP is not an XSS backstop (2026-10-23)** — `SecurityHeadersMiddleware` (§1) sends a
   CSP whose `script-src` still carries `'unsafe-inline'` and `'unsafe-eval'`
   (`CSP_POLICY`, `middleware/security_headers.py:68-80`; the latter is Alpine's expression

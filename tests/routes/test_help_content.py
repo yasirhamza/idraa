@@ -13,10 +13,10 @@ _ARTICLES_DIR = (
 )
 
 
-def test_registry_has_thirteen_unique_slugs():
+def test_registry_has_fourteen_unique_slugs():
     slugs = [a.slug for a in HELP_ARTICLES]
-    assert len(slugs) == 13
-    assert len(set(slugs)) == 13  # unique
+    assert len(slugs) == 14
+    assert len(set(slugs)) == 14  # unique
     # Departures register (Jones & Freund p.42 "prepared to defend" rule).
     assert "where-idraa-departs-from-fair" in slugs
     # #419 plain-English explainer; slug renamed control-value-robustness ->
@@ -24,6 +24,7 @@ def test_registry_has_thirteen_unique_slugs():
     assert "why-values-are-ranges" in slugs
     assert "raw-samples-export" in slugs  # #109 raw sample export
     assert "threat-agent-library" in slugs
+    assert "organization-wide-controls" in slugs  # #299
 
 
 def test_by_slug_index_matches():

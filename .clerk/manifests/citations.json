@@ -36,7 +36,7 @@
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/config.py", "line": 502, "pattern": "def _check_uat_basic_auth_hardening(self) -> Settings:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/formatting.py", "line": 29, "pattern": "def linkify_https(text: str) -> Markup:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/formatting.py", "line": 62, "pattern": "def safe_https_href(url: object) -> str | None:", "regex": false},
-  {"doc": "docs/security/threat-model.md", "file": "src/idraa/help_content.py", "line": 160, "pattern": "HELP_BY_SLUG: dict[str, HelpArticle] = {a.slug: a for a in HELP_ARTICLES}", "regex": false},
+  {"doc": "docs/security/threat-model.md", "file": "src/idraa/help_content.py", "line": 169, "pattern": "HELP_BY_SLUG: dict[str, HelpArticle] = {a.slug: a for a in HELP_ARTICLES}", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/csrf.py", "line": 122, "pattern": "async def _read_body_capped(request: Request, cap: int) -> bytes | None:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/csrf.py", "line": 151, "pattern": "def derive_csrf_key(secret: str) -> bytes:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/middleware/csrf.py", "line": 172, "pattern": "def csrf_binding(request: Request, session_cookie_name: str) -> bytes:", "regex": false},
