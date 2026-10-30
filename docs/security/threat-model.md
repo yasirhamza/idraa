@@ -425,21 +425,21 @@ docstring).
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
-  `routes/qualitative_bands.py:224,262`). `routes/controls.py:702`'s check
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:710`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified earlier in the same handler
-  (`routes/controls.py:697-698`).
+  (`routes/controls.py:705-706`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
   client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
-  parsed to a sub-function slug (`routes/controls.py:963-978`); the server resolves it to the
+  parsed to a sub-function slug (`routes/controls.py:971-986`); the server resolves it to the
   row of the SAME, already org-verified control by an explicit control + org select
   (`services/controls.py:249-267`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
-  (`routes/controls.py:76-83`); one that survives, a submitted `dsc_corr_misaligned` row and
+  (`routes/controls.py:82-89`); one that survives, a submitted `dsc_corr_misaligned` row and
   an ineligible or absent source are refused by a pure check that runs first in create and
   update (`services/controls.py:196-246`), and an unknown slug by the route parse — all before
   any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
-  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:309`;
+  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:343`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
@@ -611,7 +611,7 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 Guards: 5 MB upload cap via a forgeable
 `Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
 `routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
-`library_import.py:80-89`, `routes/controls.py:497-506`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
+`library_import.py:80-89`, `routes/controls.py:505-514`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the

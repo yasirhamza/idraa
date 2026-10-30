@@ -23,6 +23,7 @@ import re
 import uuid
 from types import SimpleNamespace
 
+from fair_cam.risk_engine.group_composition import meta_sub_functions
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
@@ -69,6 +70,11 @@ router = APIRouter()
 
 # Form dropdown choices; the derived-only dsc_corr_misaligned has its own link select (#268).
 _FORM_SUB_FUNCTIONS = [sf for sf in FairCamSubFunction if sf.value != "dsc_corr_misaligned"]
+
+# VMC/DSC sub-function slugs, derived from fair_cam so the form's Alpine state can never
+# drift from the composition topology (#299). The org-wide toggle reads this to decide
+# whether any assignment row is eligible; the service re-checks authoritatively.
+_META_SLUGS = sorted(sf.value for sf in meta_sub_functions())
 
 # Server-set fields stripped from assignment rows before Pydantic validation: the service owns
 # them (user_id + now()), and derived_from_assignment_id is never client-supplied — the
@@ -215,6 +221,7 @@ def _render_form_with_errors(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
         status_code=status_code,
@@ -392,6 +399,7 @@ async def control_new_get(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
     )
@@ -1070,6 +1078,7 @@ async def control_edit_get(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
     )

@@ -70,6 +70,7 @@
           <span class="badge {{ 'badge-warning' if c.implementation_stage.value != 'active' else 'badge-ghost' }}">
             {{ c.implementation_stage.label }}
           </span>
+          {% if c.org_wide_meta %}<span class="badge badge-info badge-xs ml-1" title="Inherited by every scenario (VMC/DSC functions only)">Org-wide</span>{% endif %}
           {% if c.implementation_stage.value != 'active' %}
           <span class="text-micro text-ink-2 ml-1">— excluded from analyses until Active</span>
           {% endif %}

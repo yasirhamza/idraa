@@ -68,6 +68,7 @@
    data_table desktop link and its mobile card title. #}
 {%- set _name_cell -%}
   {{- c.name -}}{{- meta_tags(c.assignments | map(attribute="sub_function.value") | list) -}}
+  {%- if c.org_wide_meta -%}<span class="badge badge-info badge-xs ml-1" title="Inherited by every scenario (VMC/DSC functions only)">Org-wide</span>{%- endif -%}
 {%- endset -%}
 {%- set _ = rows.append({
   "id":           c.id | string,
