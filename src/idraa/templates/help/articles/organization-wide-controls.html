@@ -78,16 +78,19 @@
   <li>
     <strong>Per run.</strong> Fair shares cost 2<sup>n</sup> calculations for a scenario with n
     controls up to 12, and about 4,600 per control above that, against a budget of 2,000,000
-    calculations for the whole run. Scenarios are taken in stored order, and once the budget is
-    spent attribution is unavailable for the rest. At 12 controls per scenario about 490 scenarios
-    fit; at 13, about 33.
+    calculations for the whole run. Scenarios are taken in stored order. A scenario whose cost no
+    longer fits what is left of the budget gets no fair shares, which are then unavailable for it
+    and show &mdash; in the matrix, and a later, smaller scenario may still fit. At 12 controls
+    per scenario about 490 scenarios fit; at 13, about 33. If every scenario is skipped, the run
+    page says per-control attribution isn&rsquo;t available for the run.
   </li>
   <li>
     <strong>Ranking stability.</strong> The weight-uncertainty check runs up to 256 draws under its
-    own budget of 10,000,000 calculations. A larger run gets fewer draws, and below 32 the check is
-    skipped (&ldquo;too few simulation draws&rdquo;). Ten
-    scenarios of 13 controls ran 34 draws; ten of 20 controls ran 21 and skipped the check; 400
-    scenarios of 12 controls ran 11 and skipped it.
+    own budget of 10,000,000 calculations. A larger run can afford fewer draws. Below 32 the check
+    is not run: only three band-endpoint draws are evaluated, and the run page says
+    &ldquo;Ranking-stability check skipped &mdash; too few simulation draws&rdquo;. Ten scenarios
+    of 13 controls could afford 34 draws, so the check ran; ten of 20 controls could afford 21, and
+    400 scenarios of 12 controls could afford 11, so it was skipped.
   </li>
 </ul>
 

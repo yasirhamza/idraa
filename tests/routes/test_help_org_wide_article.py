@@ -79,7 +79,7 @@ async def test_article_attribution_limits_match_the_code(
         f"budget of {MAX_ATTRIBUTION_TOTAL_EVALS:,} calculations",
         f"up to {fields['weight_ensemble_draws'].default} draws",
         f"budget of {fields['weight_ensemble_eval_budget'].default:,} calculations",
-        f"below {fields['weight_ensemble_min_draws'].default} the check is skipped",
+        f"Below {fields['weight_ensemble_min_draws'].default} the check is not run",
         # scenarios that fit the run-wide budget at 12 and 13 controls (rounded in the text)
         f"about {round(MAX_ATTRIBUTION_TOTAL_EVALS / _scenario_eval_cost(12), -1):.0f} scenarios",
         f"about {MAX_ATTRIBUTION_TOTAL_EVALS // _scenario_eval_cost(13)}.",
@@ -109,7 +109,14 @@ async def test_article_attribution_limits_match_the_code(
     assert (draws(13, 10), draws(20, 10), draws(12, 400)) == (34, 21, 11)
     assert draws(13, 10) >= min_draws  # 34 >= 32: ran, not skipped
     assert draws(20, 10) < min_draws and draws(12, 400) < min_draws  # skipped
-    for example in ("ran 34 draws", "ran 21", "ran 11"):
+    for example in (
+        "could afford 34 draws, so the check ran",
+        "could afford 21",
+        "could afford 11, so it was skipped",
+        "only three band-endpoint draws are evaluated",
+        "too few simulation draws",
+        "a later, smaller scenario may still fit",
+    ):
         assert example in text, example
 
 
