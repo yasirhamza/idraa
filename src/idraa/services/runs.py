@@ -290,20 +290,27 @@ class RunService:
 
         # Issue #299: org-wide META inheritance. inherited(s) = effective org-wide
         # - explicitly linked. Plain ids only; the executor derives the ":meta"
-        # variant ids. {} when nothing inherited (NULL is reserved for pre-feature
-        # rows). Defence in depth (Sec-I3): an org-wide control with no inheritable
-        # row would make the executor's meta_assignments() raise for EVERY run in
-        # the org - refuse here, before enqueue, naming the control. This task
-        # PERSISTS the map only: control_ids / control_ids_used are untouched.
+        # variant ids. Shape: one key per scenario in the run, each holding a sorted
+        # list of plain ids, [] for a scenario that inherits nothing (NULL is
+        # reserved for pre-feature rows). Test "does anything inherit" with
+        # any(map.values()), never with the truthiness of the map.
+        # Defence in depth (Sec-I3): an org-wide control with no inheritable row
+        # would make the executor's meta_assignments() raise for EVERY run in the
+        # org - refuse here, before enqueue. This task PERSISTS the map only:
+        # control_ids / control_ids_used are untouched.
         org_wide = await ControlRepo(self._db).list_org_wide_meta(organization_id)
         for c in org_wide:
             if not has_meta_assignment(
                 a.sub_function.value for a in c.assignments if a.derived_from_assignment_id is None
             ):
+                # Fixed text that states the eligibility rule (the same one as
+                # services/controls.py has_meta_assignment); no per-control data.
                 raise RunValidationError(
-                    f"Control '{c.name}' is flagged organization-wide but has no "
-                    "Variance Management / Decision Support function; edit the "
-                    "control to clear the flag or add one before running."
+                    "An organization-wide control has no inheritable Variance Management "
+                    "or Decision Support function (a Correcting Misaligned Decisions link "
+                    "counts only when its source is a Variance Management function). "
+                    "Open Controls, find the control marked organization-wide, and clear "
+                    "the flag or add one before running."
                 )
         inherited_by_scenario: dict[str, list[str]] = {}
         for s in scenarios:

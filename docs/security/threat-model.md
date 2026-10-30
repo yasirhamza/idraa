@@ -821,8 +821,8 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-request-driven run lifecycle — create (`services/runs.py:395`), cancel (`services/runs.py:449`),
-delete (`services/runs.py:509`), sample-purge (`services/runs.py:542`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:402`), cancel (`services/runs.py:456`),
+delete (`services/runs.py:516`), sample-purge (`services/runs.py:549`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
