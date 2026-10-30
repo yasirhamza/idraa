@@ -428,6 +428,12 @@ def test_duplicate_control_excluded_set_covers_all_structural_columns():
             # clone in runs). Pinned by test_duplicate_carries_stage in
             # tests/test_controls_service_stage.py.
             "implementation_stage",
+            # #299 — organization-wide META inheritance flag. Decision: RESET, not
+            # copied. duplicate_control reflects the column like the others but then
+            # forces it to False (spec D9): the clone is a new authoring act and the
+            # analyst opts it in via edit. Pinned by test_duplicate_resets_org_wide_flag
+            # in tests/services/test_org_wide_meta_eligibility.py.
+            "org_wide_meta",
         }
     )
     actual_columns = {col.key for col in sa_inspect(Control).columns}
