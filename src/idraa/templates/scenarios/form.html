@@ -596,6 +596,22 @@
       </p>
     {% endif %}
 
+    {# #299: read-only list of the effective org-wide controls this scenario inherits
+       (edit mode only; none are linked above, and nothing here is submitted). #}
+    {% set inherited = inherited_controls | default([]) %}
+    {% if inherited %}
+      <div class="max-w-md mt-4">
+        <h3 class="text-h4 text-ink-1 mb-1">Inherited organization-wide</h3>
+        <p class="text-meta text-ink-2 mb-2">Only their VMC/DSC functions apply here. Link a control explicitly to credit its Loss-Event functions on this scenario.</p>
+        <ul class="list-disc list-inside space-y-1">
+          {% for c in inherited %}
+            <li><a class="link" href="/controls/{{ c.id }}">{{ c.name }}</a>
+              <span class="badge badge-info badge-xs ml-1">org-wide</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
     {# ── Inactive-but-linked controls (issue #217) ──
        Controls linked to this scenario that are no longer ACTIVE
        (DRAFT / DEPRECATED) have no checkbox above. Show them here as

@@ -1170,6 +1170,21 @@ async def get_new_analysis_form(
         for c in s.mitigating_controls:
             name_by_id[str(c.id)] = c.name
 
+    # #299: inherited (org-wide, not linked) controls per scenario for the preview.
+    # A separate name map, so an explicit chip never gets renamed "(org-wide)", built
+    # ONLY from ids some listed scenario inherits: a control linked on every listed
+    # scenario never appears under its "(org-wide)" name. Display only (id + name are
+    # read), so skip the assignment rows; this runs after the scenarios load above.
+    org_wide = await ControlRepo(db).list_org_wide_meta(org_id, with_assignments=False)
+    scenario_to_inherited: dict[str, list[str]] = {}
+    for s in scenarios:
+        linked_ids = {m.id for m in s.mitigating_controls}
+        scenario_to_inherited[str(s.id)] = [str(c.id) for c in org_wide if c.id not in linked_ids]
+    _inherited_anywhere = {cid for ids in scenario_to_inherited.values() for cid in ids}
+    inherited_name_by_id = {
+        str(c.id): f"{c.name} (org-wide)" for c in org_wide if str(c.id) in _inherited_anywhere
+    }
+
     # Auto-generate a default run name so the operator never has to type one.
     # User feedback (2026-05-09): "analysis run names should be generated."
     from datetime import datetime
@@ -1184,6 +1199,8 @@ async def get_new_analysis_form(
             "scenarios": scenarios,
             "scenario_to_mitigating": scenario_to_mitigating,
             "name_by_id": name_by_id,
+            "scenario_to_inherited": scenario_to_inherited,
+            "inherited_name_by_id": inherited_name_by_id,
             "prefill_scenario_ids": [str(prefill_scenario_id)] if prefill_scenario_id else [],
             "default_mc_iterations": get_settings().mc_iterations_default,
             "max_mc_iterations": get_settings().mc_iterations_max,

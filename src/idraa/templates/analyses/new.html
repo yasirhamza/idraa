@@ -32,6 +32,8 @@
         allScenarioIds: {{ scenarios | map(attribute="id") | map("string") | list | tojson }},
         scenarioToMitigating: {{ scenario_to_mitigating | tojson }},
         nameById: {{ name_by_id | tojson }},
+        scenarioToInherited: {{ scenario_to_inherited | tojson }},
+        inheritedNameById: {{ inherited_name_by_id | tojson }},
         mcIterations: {{ default_mc_iterations | tojson }},
         highFidelityThreshold: {{ high_fidelity_threshold | tojson }},
         onScenarioToggle(sid, checked) {
@@ -103,18 +105,31 @@
     <p class="text-micro text-ink-2">
       Each scenario uses the controls configured on its own scenario record.
       To change, edit the scenario.
+      {% if inherited_name_by_id %}Organization-wide controls a scenario does not link
+      are inherited on top; only their VMC/DSC functions apply.{% endif %}
     </p>
 
     <template x-if="selectedScenarios.length === 0">
       <p class="text-meta text-ink-2">Pick a scenario to see its mitigating controls.</p>
     </template>
     <template x-if="selectedScenarios.length === 1">
-      <div class="flex flex-wrap gap-1">
-        <template x-for="cid in (scenarioToMitigating[selectedScenarios[0]] || [])" :key="cid">
-          <span class="badge badge-sm" x-text="nameById[cid] || cid"></span>
-        </template>
-        <span x-show="(scenarioToMitigating[selectedScenarios[0]] || []).length === 0"
-              class="text-meta text-ink-2">No controls configured for this scenario.</span>
+      {# x-if takes ONE root element, so the explicit chips and the inherited row share a wrapper. #}
+      <div class="space-y-1">
+        <div class="flex flex-wrap gap-1">
+          <template x-for="cid in (scenarioToMitigating[selectedScenarios[0]] || [])" :key="cid">
+            <span class="badge badge-sm" x-text="nameById[cid] || cid"></span>
+          </template>
+          <span x-show="(scenarioToMitigating[selectedScenarios[0]] || []).length === 0"
+                class="text-meta text-ink-2">No controls configured for this scenario.</span>
+        </div>
+        {# #299: read-only row of the organization-wide controls this scenario inherits. #}
+        <div class="flex flex-wrap items-center gap-1"
+             x-show="(scenarioToInherited[selectedScenarios[0]] || []).length > 0">
+          <span class="text-micro text-ink-3">Inherited (org-wide)</span>
+          <template x-for="cid in (scenarioToInherited[selectedScenarios[0]] || [])" :key="cid">
+            <span class="badge badge-ghost badge-sm" x-text="inheritedNameById[cid] || cid"></span>
+          </template>
+        </div>
       </div>
     </template>
     <template x-if="selectedScenarios.length >= 2">
@@ -128,6 +143,13 @@
               </template>
               <span x-show="(scenarioToMitigating[sid] || []).length === 0"
                     class="text-micro text-ink-2">No controls configured.</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1 mt-1"
+                 x-show="(scenarioToInherited[sid] || []).length > 0">
+              <span class="text-micro text-ink-3">Inherited (org-wide)</span>
+              <template x-for="cid in (scenarioToInherited[sid] || [])" :key="cid">
+                <span class="badge badge-ghost badge-sm" x-text="inheritedNameById[cid] || cid"></span>
+              </template>
             </div>
           </div>
         </template>

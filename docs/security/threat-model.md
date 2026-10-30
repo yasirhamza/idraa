@@ -403,8 +403,8 @@ docstring).
   "Corrected 2026-08-05" note was dropped in a later consolidation (re-checked 2026-10-23).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
-  (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
-  UserRole.ADMIN)` (`routes/scenarios.py:1542`) — REVIEWER and VIEWER get 403. It is the
+  (`routes/scenarios.py:1556`) is gated `require_role(UserRole.ANALYST,
+  UserRole.ADMIN)` (`routes/scenarios.py:1562`) — REVIEWER and VIEWER get 403. It is the
   dedicated confirm path; edit-form and wizard saves also resolve it (§11).
 - **Role assignment and the last-admin invariant (added by the 2026-10-23 re-audit):** only
   an ADMIN with a fresh ADMIN step-up can change a role or deactivate a user (`/users/{id}/edit`
@@ -581,9 +581,9 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template
-  (`routes/scenarios.py:2373-2375`, consumed at `routes/scenarios.py:2538`) indexes a **fixed
-  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2365`), and
-  two more pick one of two literals by a flag (`routes/scenarios.py:2985-2987`, `routes/help.py:134`);
+  (`routes/scenarios.py:2393-2395`, consumed at `routes/scenarios.py:2573`) indexes a **fixed
+  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2385`), and
+  two more pick one of two literals by a flag (`routes/scenarios.py:3020-3022`, `routes/help.py:134`);
   one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
   slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
 - **CSP is not an XSS backstop (2026-10-23)** — `SecurityHeadersMiddleware` (§1) sends a
@@ -716,8 +716,8 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1223-1234`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1267`) relies on the service gate alone — and the HTML form's `max=`
-  attribute (`templates/analyses/new.html:149`) is explicitly documented
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1240-1251`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1284`) relies on the service gate alone — and the HTML form's `max=`
+  attribute (`templates/analyses/new.html:171`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
   shared across all orgs on one VM (`config.py:253-295`): high-fidelity
@@ -780,8 +780,8 @@ new export format must re-implement, not assume is "someone else's problem."
   `max_smes_per_fieldset` (`config.py:180-184`, default 20, env
   `MAX_SMES_PER_FIELDSET`) bounds the SME-estimate rows per fieldset through one
   shared validator (`schemas/wizard_step3.py:52-58`) that both fieldset models call;
-  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2672-2673`) and
-  again before finalize (`routes/scenarios.py:3220`). The finalize fit is further
+  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2707-2708`) and
+  again before finalize (`routes/scenarios.py:3255`). The finalize fit is further
   bounded per fit (`quantile_fit_maxiter` 200, `config.py:188`;
   `quantile_fit_wall_clock_ms` 500 ms, `config.py:193`) and per call
   (`finalize_wall_clock_ms` 5000 ms, `config.py:196`). The row schema does not

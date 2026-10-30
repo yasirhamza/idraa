@@ -782,6 +782,15 @@ async def _view_scenario_context(
     if scenario is None:
         return None
 
+    # #299: the org-wide controls this scenario inherits (effective ones it does
+    # not link explicitly). Display only: id + name are read, so skip the
+    # assignment rows.
+    org_wide = await ControlRepo(db).list_org_wide_meta(
+        user.organization_id, with_assignments=False
+    )
+    linked_ids = {c.id for c in scenario.mitigating_controls}
+    inherited_controls = [c for c in org_wide if c.id not in linked_ids]
+
     # P2c §6.3: nudge un-adopted recommended controls from the source library entry.
     # Custom scenarios (no library_pin) get an empty list → the panel renders nothing.
     recommendations: list[Any] = []
@@ -828,6 +837,7 @@ async def _view_scenario_context(
     return {
         "current_user": user,
         "scenario": scenario,
+        "inherited_controls": inherited_controls,
         "recommendations": recommendations,
         "can_adopt": user.role in (UserRole.ADMIN, UserRole.ANALYST),
         "reestimate_draft": reestimate_draft,
@@ -1003,6 +1013,15 @@ async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -
     inactive_linked_controls = [
         c for c in scenario.mitigating_controls if c.id not in available_ids
     ]
+    # #299: the org-wide controls this scenario inherits (effective ones it does
+    # not link explicitly). Display only: id + name are read, so skip the
+    # assignment rows. Runs after list_for_org so a row both lists share keeps
+    # its loaded assignments (see list_org_wide_meta on session stickiness).
+    org_wide = await ControlRepo(db).list_org_wide_meta(
+        user.organization_id, with_assignments=False
+    )
+    linked_ids = {c.id for c in scenario.mitigating_controls}
+    inherited_controls = [c for c in org_wide if c.id not in linked_ids]
     # Issue #475 T9: render the scenario's existing mappings as initial rows.
     attack_ctx = await load_attack_form_context(db, scenario=scenario)
     threat_community_groups = await ThreatCommunityService(
@@ -1039,6 +1058,7 @@ async def _edit_form_context(db: AsyncSession, user: User, scenario: Scenario) -
         "overlay_options": overlay_options,
         "available_controls": available_controls,
         "inactive_linked_controls": inactive_linked_controls,
+        "inherited_controls": inherited_controls,
         "threat_category_choices": THREAT_CATEGORY_CHOICES,
         "threat_community_groups": threat_community_groups,
         "asset_class_choices": ASSET_CLASS_CHOICES,
@@ -2504,6 +2524,21 @@ async def get_wizard_step(
                     if r.adopted and r.adopted_control_id is not None
                 }
         extra_ctx["tx"] = state.tx_id  # for the from_wizard_tx hidden field
+        # #299: org_controls is already the effective list (list_for_org applies the
+        # same status/stage predicate), so no second query. A control shown CHECKED
+        # in the picker (picked, or pre-checked from an adopted recommendation) is
+        # never ALSO listed as inherited.
+        extra_ctx["org_wide_ids"] = {
+            str(c.id) for c in extra_ctx["org_controls"] if c.org_wide_meta
+        }
+        _shown_checked = set(state.mitigating_control_ids or []) | {
+            str(x) for x in extra_ctx["precheck_control_ids"]
+        }
+        extra_ctx["inherited_controls"] = [
+            c
+            for c in extra_ctx["org_controls"]
+            if c.org_wide_meta and str(c.id) not in _shown_checked
+        ]
     if n == 6 and state.library_entry_id:
         # Resolve display name for the "Started from library: NAME vN" banner.
         repo = ScenarioLibraryRepo(db)
