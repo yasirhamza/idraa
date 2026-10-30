@@ -121,7 +121,7 @@
     {% set _inherited = run.controls_snapshot | selectattr('inherited_variant_of') | list %}
     {% if _inherited %}
       <h3 class="text-h4 text-ink-1 mt-4 mb-1">Inherited (organization-wide)</h3>
-      <p class="text-micro text-ink-3 mb-2">Only their Variance Management / Decision Support functions apply; link a control to a scenario to credit its Loss-Event functions there. Inherited rows show $0 standalone reduction — their value appears in fair share / if removed.</p>
+      <p class="text-micro text-ink-3 mb-2">Only their Variance Management / Decision Support functions apply, and they act only through that channel: an inherited control has no standalone reduction of its own. Link a control to a scenario to credit its Loss-Event functions there.</p>
       <ul class="list-disc list-inside space-y-1">
         {% for c in _inherited %}
           <li><a class="link" href="/controls/{{ c.inherited_variant_of }}">{{ c.name | e }}</a>

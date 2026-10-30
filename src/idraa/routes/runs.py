@@ -605,8 +605,8 @@ async def _legacy_org_wide_count(
     """How many org-wide controls the org has NOW, for a run that predates them.
 
     A pre-feature run has ``inherited_control_ids_per_scenario IS NULL``; a run
-    created since then always carries a map (``{}`` when nothing was inherited).
-    The count is therefore only taken on the legacy branch: one COUNT query, no
+    created since then always carries a map, one key per scenario (``{sid: []}``
+    when nothing was inherited). Only the legacy branch takes the count: one COUNT query, no
     relationship load, nothing at all on a feature-era run. Shared by the detail
     page and the status-poll fragment so both render the same note.
     """

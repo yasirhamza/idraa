@@ -179,11 +179,13 @@
   </div>
   {% endif %}
 
-  {#- #299: a run created before organization-wide controls existed cannot show
-      what they would have changed; the note appears only while the org has one now. -#}
+  {#- #299: a run created before organization-wide controls existed applied only the
+      controls linked to its scenarios. The note appears only while the org has an
+      organization-wide control now, and says what a re-run would add without claiming
+      the control was left out (it may have been linked explicitly). -#}
   {% if run_predates_inheritance %}
     <div class="alert alert-info text-meta my-2" role="status">
-      This run predates organization-wide controls; {{ org_wide_count }} org-wide control{{ '' if org_wide_count == 1 else 's' }} now exist{{ 's' if org_wide_count == 1 else '' }} that were not applied here. Re-run to apply {{ 'it' if org_wide_count == 1 else 'them' }}.
+      This run predates organization-wide controls. {{ org_wide_count }} control{{ ' is' if org_wide_count == 1 else 's are' }} now marked organization-wide; re-running applies {{ 'its' if org_wide_count == 1 else 'their' }} Variance Management / Decision Support functions to any scenario that does not link {{ 'it' if org_wide_count == 1 else 'them' }}.
     </div>
   {% endif %}
 
