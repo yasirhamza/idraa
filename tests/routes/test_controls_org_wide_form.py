@@ -61,11 +61,14 @@ def _hint_text(body: str) -> str:
 async def test_toggle_hint_states_the_pair_rule_and_scopes_score_neutral_to_treatment_selection(
     authed_admin: tuple[AsyncClient, uuid.UUID],
 ) -> None:
-    """The hint must describe how the VMC/DSC pairs compose (an Identification function and
-    an Implementation function score only as a pair, across the scenario's active controls,
-    inherited ones included), say the uplift is a reliability coupling and not a standalone
-    reduction, carry the Correcting Misaligned Decisions rule, and call ONLY Treatment
-    Selection score-neutral, with the register reference attached to that clause alone."""
+    """The hint must describe how the VMC/DSC pairs compose (Variance Management
+    identification and Implementation score only as a pair; Decision Support's Identify
+    misalignment pairs with a Correcting Misaligned Decisions link instead, never with
+    Implementation; both across the scenario's active controls, inherited ones included),
+    say the uplift is a reliability coupling of the Loss-Event functions and not a
+    standalone reduction, carry the Correcting Misaligned Decisions eligibility rule, and
+    call ONLY Treatment Selection score-neutral, with the register reference attached to
+    that clause alone."""
     client, _ = authed_admin
     body = (await client.get("/controls/new")).text
     hint = " ".join(_hint_text(body).split())
@@ -77,12 +80,25 @@ async def test_toggle_hint_states_the_pair_rule_and_scopes_score_neutral_to_trea
     assert body.count("score-neutral") == 1
     assert "Treatment Selection is score-neutral (register C8)" in hint
     assert hint.count("register C8") == 1
-    # the pair rule, scenario-wide and inherited-inclusive
-    assert "score only as a pair" in hint
+    # the pair rule is scoped: an unscoped "Identification and Implementation" pair would be
+    # false for Decision Support, whose identification pairs with the correcting link
+    assert "Identification and Implementation functions score only as a pair" not in hint
+    assert (
+        "Variance Management identification (Threat intelligence, Control monitoring) and "
+        "Implementation score only as a pair" in hint
+    )
+    assert (
+        "Decision Support's Identify misalignment pairs only with a Correcting Misaligned "
+        "Decisions link" in hint
+    )
+    # scenario-wide and inherited-inclusive
     assert "both halves are present across its active controls, inherited ones included" in hint
     assert "alongside another control that supplies the other" in hint
     # reliability coupling, not a direct reduction
-    assert "raising the reliability of the scenario's other controls" in hint
+    assert (
+        "raising the reliability of the Loss-Event functions on the scenario's other controls"
+        in hint
+    )
     assert "not as a standalone reduction" in hint
     # client-side statement of the derived-link eligibility rule
     assert (
