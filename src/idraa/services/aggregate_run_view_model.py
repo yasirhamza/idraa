@@ -340,6 +340,9 @@ def displayed_control_order(
     rank disagreement. ``_build_per_scenario_control_matrix`` passes
     primary-basis totals for exactly this reason.
 
+    The ensemble ranks every draw with a STABLE sort over this order, so equal values
+    are broken by the same key (display name) here and in each draw, never by control id.
+
     Absent-only controls (``total is None`` — every cell was
     skipped/over_cap/over_budget/error so they have no valued cell to rank) form a
     trailing None-class that is EXCLUDED from the returned order: the ensemble
