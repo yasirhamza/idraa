@@ -8,11 +8,14 @@ helper because F4's tests need it.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import gc
 import logging
 import math
 import uuid
-from collections.abc import Callable
+import weakref
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -68,6 +71,12 @@ from idraa.schemas.run_snapshot import (
 from idraa.services.aggregate_run_view_model import displayed_control_order
 from idraa.services.audit import AuditWriter
 from idraa.services.fx_rates import FxRateService
+from idraa.services.inherited_controls import (
+    INHERITED_NAME_SUFFIX,
+    base_control_id,
+    meta_assignments,
+    variant_id,
+)
 from idraa.services.run_reaper import register_active_run, unregister_active_run
 from idraa.services.sample_codec import encode_sample_arrays_streaming
 from idraa.services.simulation_payload import (
@@ -268,7 +277,7 @@ def _scenario_availability_self_detects(scenario: Scenario) -> bool:
     return scenario.effect == ScenarioEffect.AVAILABILITY
 
 
-def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
+def _v3_to_fair_cam_control(v3_ctrl: Control, *, meta_only: bool = False) -> FairCamControl:
     """Map a v3 Control + its assignments to a fair_cam.FairCamControl.
 
     Iterates ALL assignments (not just assignments[0] — the κ silent-data-loss fix,
@@ -277,16 +286,23 @@ def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
     on empty assignments, a dangling link or out-of-[0, 1] coverage/reliability (defense
     in depth, spec §8.3). ELAPSED_TIME / CURRENCY assignments pass through unchanged:
     fair_cam filters by unit type at composition time (κ T9).
+
+    ``meta_only=True`` (#299) builds the org-wide INHERITED VARIANT: only the rows
+    ``meta_assignments`` keeps (VMC/DSC, plus a derived row whose source is META),
+    registered under ``variant_id(control_id)`` / ``"<name> (org-wide)"`` so fair_cam
+    composes it as an ordinary separate control. ``control_ref`` and the cost model
+    stay the base control's (the full annual cost; counted once per base id).
     """
-    if not v3_ctrl.assignments:
+    source_rows = meta_assignments(v3_ctrl) if meta_only else list(v3_ctrl.assignments)
+    if not source_rows:
         raise ValueError(
             f"Control {v3_ctrl.id} has no assignments; ControlForm enforces "
             f"min_length=1 — defense in depth"
         )
     # Issue #268: a derived row stores only a link id to one of THIS control's rows.
-    sf_by_id = {a.id: a.sub_function for a in v3_ctrl.assignments}
+    sf_by_id = {a.id: a.sub_function for a in source_rows}
     rows: list[tuple[FairCamControlFunctionAssignment, FairCamSubFunction | None]] = []
-    for a in v3_ctrl.assignments:
+    for a in source_rows:
         # Issue #209: a NULL capability_value passes through; fair_cam anchors it at
         # opeff(median)=0.5 (#131 Arch3-N1), as the clear-capability modal promises.
         # Defense-in-depth bounds — match existing branch-(d)
@@ -330,13 +346,13 @@ def _v3_to_fair_cam_control(v3_ctrl: Control) -> FairCamControl:
     # (its math iterates assignments). The empty guard above keeps this safe — DO NOT
     # remove it (plan-gate fix CR-I1); every derived row has a non-derived source (#268).
     asn0 = next(  # adapter-iter: ok — issue #90 rep-domain scalar, derived rows skipped
-        a for a in v3_ctrl.assignments if a.derived_from_assignment_id is None
+        a for a in source_rows if a.derived_from_assignment_id is None
     )
     representative_domain = subfunction_to_domain(asn0.sub_function)
     fair_cam_domain = _DOMAIN_MAP[representative_domain]
     return FairCamControl(
-        control_id=str(v3_ctrl.id),
-        name=v3_ctrl.name,
+        control_id=variant_id(str(v3_ctrl.id)) if meta_only else str(v3_ctrl.id),
+        name=f"{v3_ctrl.name}{INHERITED_NAME_SUFFIX}" if meta_only else v3_ctrl.name,
         # CRITICAL: domain via _DOMAIN_MAP — v3's ControlDomain != fair_cam's FairCamControlDomain
         domain=fair_cam_domain,
         control_type=FairCamControlType(v3_ctrl.type.value),
@@ -390,7 +406,7 @@ def _snapshot_control_v2(c: Control) -> ControlSnapshotV2:
     )
 
 
-def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
+def _snapshot_control_v3(c: Control, *, meta_only: bool = False) -> ControlSnapshotV3:
     """Capture a Control's run-time state as a ControlSnapshotV3 Pydantic model.
 
     Written by new runs from issue #131 T6.5 onward. Returns a
@@ -415,14 +431,26 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
     interpretation.
 
     Issue #131 T6.5; Arch-B3 / Sec-B3 plan-gate.
+
+    ``meta_only=True`` (#299) snapshots the org-wide INHERITED VARIANT exactly as
+    ``_v3_to_fair_cam_control(meta_only=True)`` composed it: only the
+    ``meta_assignments`` rows, ``control_id=variant_id(...)``, ``"<name> (org-wide)"``,
+    ``domains`` from the kept rows and ``inherited_variant_of`` = the base control id.
+    Plain mode is unchanged (``domains`` stays ``Control.domains``).
     """
-    sf_by_id = {a.id: a.sub_function for a in c.assignments}  # #268: derived link -> source
+    rows = meta_assignments(c) if meta_only else list(c.assignments)
+    sf_by_id = {a.id: a.sub_function for a in rows}  # #268: derived link -> source
     return ControlSnapshotV3(
         snapshot_version=3,
-        control_id=str(c.id),
-        name=c.name,
-        # Issue #90: emit the derived domain SET (sorted list[str]).
-        domains=sorted(d.value for d in c.domains),
+        control_id=variant_id(str(c.id)) if meta_only else str(c.id),
+        name=f"{c.name}{INHERITED_NAME_SUFFIX}" if meta_only else c.name,
+        # Issue #90: emit the derived domain SET (sorted list[str]). The variant's set
+        # comes from its kept rows (it composes only those); plain mode is unchanged.
+        domains=(
+            sorted({subfunction_to_domain(a.sub_function).value for a in rows})
+            if meta_only
+            else sorted(d.value for d in c.domains)
+        ),
         type=c.type.value,
         assignments=[
             ControlFunctionAssignmentSnapshotDTO(
@@ -443,9 +471,98 @@ def _snapshot_control_v3(c: Control) -> ControlSnapshotV3:
                 if a.derived_from_assignment_id is not None
                 else None,
             )
-            for a in c.assignments
+            for a in rows
         ],
+        inherited_variant_of=str(c.id) if meta_only else None,
     )
+
+
+@dataclass(frozen=True)
+class _ActiveControlPlan:
+    """Issue #299: the executor's view of which control ids are active where.
+    Variant ids (``variant_id(cid)``) stand for the META-FILTERED inherited
+    copy of an org-wide control; they exist only in this process and in JSON
+    payloads (snapshot / results). ``explicit_ids`` keeps FETCH ORDER so a run
+    without inheritance produces today's lists bit-for-bit (Meth-I3)."""
+
+    explicit_ids: list[str]
+    universe_ids: list[str]
+    names: dict[str, str]
+    per_scenario_ids: dict[str, list[str]]
+    has_inheritance: bool
+    plain_snapshots: list[ControlSnapshotV3]
+    variant_dtos: list[FairCamControl]
+    variant_snapshots: list[ControlSnapshotV3]
+
+
+def _build_active_control_plan(run: RiskAnalysisRun, controls: list[Control]) -> _ActiveControlPlan:
+    by_id = {str(c.id): c for c in controls}
+    inherited = run.inherited_control_ids_per_scenario or {}  # NULL (legacy) == nothing inherited
+    fetched_ids = [str(c.id) for c in controls]
+    if run.run_type == RunType.SINGLE:
+        sid = str(run.scenario_id)
+        inherited_sid = set(inherited.get(sid, []))
+        explicit_by_scenario = {sid: [cid for cid in fetched_ids if cid not in inherited_sid]}
+    else:
+        per_scen = run.aggregate_control_ids_per_scenario
+        if per_scen is None:  # pre-#89 legacy row: full universe everywhere
+            if any(inherited.values()):
+                # Unreachable from the freeze (it always writes the per-scenario map for an
+                # AGGREGATE run). Without the map every fetched id, an inherited one included,
+                # would compose as a plain row AND as its variant: a silent double count.
+                raise RuntimeError("AGGREGATE run has inherited controls but no per-scenario map")
+            explicit_by_scenario = {}
+        else:
+            explicit_by_scenario = {s: list(ids) for s, ids in per_scen.items()}
+    explicit_set = (
+        {cid for ids in explicit_by_scenario.values() for cid in ids}
+        if explicit_by_scenario
+        else set(fetched_ids)
+    )
+    explicit_ids = [cid for cid in fetched_ids if cid in explicit_set]
+    variant_cids = sorted({cid for ids in inherited.values() for cid in ids})
+    missing = [cid for cid in variant_cids if cid not in by_id]
+    if missing:
+        raise RuntimeError(f"inherited control ids {missing} are not in the loaded universe")
+    variant_dtos = [_v3_to_fair_cam_control(by_id[cid], meta_only=True) for cid in variant_cids]
+    variant_snapshots = [_snapshot_control_v3(by_id[cid], meta_only=True) for cid in variant_cids]
+    plain_snapshots = [_snapshot_control_v3(by_id[cid]) for cid in explicit_ids]
+    scenario_keys = list(explicit_by_scenario) + [
+        s for s in inherited if s not in explicit_by_scenario
+    ]
+    # Explicit entries keep the STORED per-scenario order (today's engine call
+    # passes run.aggregate_control_ids_per_scenario verbatim); the fetch-order
+    # filter applies to explicit_ids / universe_ids only, which today is
+    # [str(c.id) for c in controls]. SINGLE's one list IS fetch order.
+    per_scenario_ids = {
+        s: list(explicit_by_scenario.get(s, [])) + [variant_id(cid) for cid in inherited.get(s, [])]
+        for s in scenario_keys
+    }
+    names = {
+        s.control_id: s.name for s in plain_snapshots + variant_snapshots
+    }  # SC-N2: from the snapshot
+    return _ActiveControlPlan(
+        explicit_ids=explicit_ids,
+        universe_ids=explicit_ids + [d.control_id for d in variant_dtos],
+        names=names,
+        per_scenario_ids=per_scenario_ids,
+        has_inheritance=bool(variant_cids),
+        plain_snapshots=plain_snapshots,
+        variant_dtos=variant_dtos,
+        variant_snapshots=variant_snapshots,
+    )
+
+
+def _stale_per_scenario_ids(
+    per_scenario_dict: dict[str, list[str]], loaded_universe: set[str]
+) -> dict[str, list[str]]:
+    """M5 race check (#89) with #299 variant ids reduced to their base id."""
+    out: dict[str, list[str]] = {}
+    for sid, sublist in per_scenario_dict.items():
+        stale = sorted({base_control_id(x) for x in sublist} - loaded_universe)
+        if stale:
+            out[sid] = stale
+    return out
 
 
 def _build_scenario_inputs_snapshot(scenarios: list[Scenario]) -> dict[str, Any]:
@@ -569,7 +686,11 @@ def _build_aggregate_results_payload(aggregate: AggregateEnhancedRisk) -> dict[s
             cid = str(adj.control_id) if hasattr(adj, "control_id") else None
             if cid is None:
                 continue
-            unique_costs_by_control[cid] = float(getattr(adj, "control_cost", 0.0) or 0.0)
+            # #299 spec D7: a control linked on one scenario and inherited on another
+            # is one control, one annual cost - key by the BASE id, not the variant id.
+            unique_costs_by_control[base_control_id(cid)] = float(
+                getattr(adj, "control_cost", 0.0) or 0.0
+            )
     aggregate_total_cost = sum(unique_costs_by_control.values())
     aggregate_risk_reduction = float(
         getattr(aggregate.aggregate_without_controls, "annualized_loss_expectancy", 0.0) or 0.0
@@ -634,6 +755,186 @@ MAX_ATTRIBUTION_CONTROLS = 64
 # re-composing the meta side) but NOT free; see the _comp_cache note below and
 # issue #432.
 MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
+# #299: bounds on each attribution ComposedParts cache (the canonical Shapley/LOO cache
+# and the ensemble's cross-draw cache). The eval budget above counts evaluations, not
+# bytes, and a scenario's cached subsets grow as 2^n, so k org-wide controls multiplied
+# the cache 2^k: a 400-scenario x (7 linked + 5 inherited) aggregate held 1.63M entries
+# and peaked at 5.4 GiB against the 4 GiB Fly VM (fly.toml: performance, 2 CPU, 4096 MB,
+# no swap). Three rules bound it, all enforced in _BoundedCompositionCache:
+#   1. no subset larger than MAX_ATTRIBUTION_CONTROLS is ever stored. Shapley and the
+#      ensemble skip scenarios above that size, but leave-one-out has no control cap and
+#      composes the full set and every N-minus-one subset of any scenario; those are
+#      near-full subsets that filled the cache to 1.3 GiB at 100 controls and 2.4 GiB at
+#      200 before this rule;
+#   2. the ESTIMATED bytes of the stored entries never pass MAX_COMPOSITION_CACHE_BYTES.
+#      An entry's size grows with the subset AND with each member control's LEC and
+#      currency assignments (ComposedParts.lec_items / currency_items), up to 9 per
+#      control, so an entry COUNT bounds nothing: 75,000 entries were ~1.0 GiB for one-assignment
+#      controls (14 KB each), 1.3 GiB for the seed library's mix and ~4.8 GiB for 9 assignments each
+#      (69 KB). _estimated_entry_bytes is an envelope fitted to tracemalloc over key + ComposedParts
+#      (324 measured shapes: 1-64 controls, 1-9 LEC assignments per control, 0-16 meta assignments,
+#      keys built by iterable, set difference and union; the estimate was 1.06x-2.0x the measured
+#      bytes, mean 1.27x, and up to 1.4% under on some other 20-21-control shapes);
+#   3. at most MAX_COMPOSITION_CACHE_ENTRIES entries, which still binds for the small
+#      entries of small subsets (it keeps the 50,801-entry no-inheritance 400 x 7
+#      portfolio whole at about 150 MiB).
+# ComposedParts is a pure function of the subset (its controls are composed in
+# sorted-id order, see _make_subset_value_fn), so a subset that is not stored is
+# recomputed to exactly the value a hit would have returned: results are bit-identical,
+# only speed changes. The estimate is a fitted envelope, not a strict bound, so one cache holds
+# about 512 MiB of traced allocations (tracemalloc; RSS up to ~1.08x that): a 64-control subset with
+# 9 LEC assignments per control is ~69 KB (est. 78 KB), so ~6,800 such entries fit, where 75,000
+# entries were ~4.8 GiB. Whole-run peaks measured with the bench (macOS arm64, 10k iterations, 5
+# inherited + 59 linked controls) are recorded in config.py's guard invariant.
+# None = unbounded (tests and the bench's before/after comparison only; read when each
+# cache is created).
+MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000
+MAX_COMPOSITION_CACHE_BYTES: int | None = 512 * 1024 * 1024
+
+# Estimated retained bytes of one cache entry (frozenset key + ComposedParts):
+#   _ENTRY_BYTES_BASE + _ENTRY_BYTES_PER_CONTROL * len(key) + _ENTRY_BYTES_PER_ITEM * W
+# with W = len(lec_items) + len(currency_items). Coefficients: a linear-programming fit of
+# the smallest covering envelope to the 324 tracemalloc shapes above (a=3,788,
+# b=124, c=108 bytes), rounded UP to 4,000 / 130 / 115 for allocator and platform
+# slack. The per-control term absorbs up to 16 meta assignments per control (~5 B each).
+_ENTRY_BYTES_BASE = 4_000
+_ENTRY_BYTES_PER_CONTROL = 130
+_ENTRY_BYTES_PER_ITEM = 115
+
+
+def _estimated_entry_bytes(key: frozenset[str], value: ComposedParts) -> int:
+    """Conservative estimate of the bytes a cache entry retains (see the constants above)."""
+    items = len(value.lec_items) + len(value.currency_items)
+    return _ENTRY_BYTES_BASE + _ENTRY_BYTES_PER_CONTROL * len(key) + _ENTRY_BYTES_PER_ITEM * items
+
+
+class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
+    """``{subset: ComposedParts}`` memo with three bounds: no subset of more than
+    ``max_subset`` controls, ``max_entries`` entries, and ``max_bytes`` of ESTIMATED entry
+    bytes (see MAX_COMPOSITION_CACHE_BYTES; ``None`` = unbounded).
+
+    ``__setitem__`` skips the insert of a NEW key that breaks any bound; existing keys
+    keep hitting and may be overwritten (the running total follows the new value).
+    Callers recompute on a miss and assign unconditionally. That degrades speed only
+    because the value is a pure function of the key: the callers compose a subset's
+    controls in sorted-id order, so a recompute equals the entry it would have hit
+    (without that, the last-ulp fold order of ``or_compose`` would follow the frozenset's
+    iteration order and a capped run could differ from an uncapped one). Only item
+    assignment is bounded; the attribution code uses nothing else to populate a cache
+    (no ``update`` / ``setdefault``).
+    """
+
+    def __init__(self, max_entries: int | None, max_subset: int, max_bytes: int | None) -> None:
+        super().__init__()
+        self._max_entries = max_entries
+        self._max_subset = max_subset
+        self._max_bytes = max_bytes
+        self._estimated_bytes = 0
+
+    @property
+    def estimated_bytes(self) -> int:
+        return self._estimated_bytes
+
+    def __setitem__(self, key: frozenset[str], value: ComposedParts) -> None:
+        if len(key) > self._max_subset:
+            return
+        old = self.get(key)
+        if old is None:
+            if self._max_entries is not None and len(self) >= self._max_entries:
+                return
+            cost = _estimated_entry_bytes(key, value)
+            if self._max_bytes is not None and self._estimated_bytes + cost > self._max_bytes:
+                return
+            self._estimated_bytes += cost
+        else:
+            delta = _estimated_entry_bytes(key, value) - _estimated_entry_bytes(key, old)
+            if self._max_bytes is not None and self._estimated_bytes + delta > self._max_bytes:
+                return
+            self._estimated_bytes += delta
+        super().__setitem__(key, value)
+
+
+def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
+    """A fresh attribution composition cache bounded by the module constants."""
+    return _BoundedCompositionCache(
+        MAX_COMPOSITION_CACHE_ENTRIES, MAX_ATTRIBUTION_CONTROLS, MAX_COMPOSITION_CACHE_BYTES
+    )
+
+
+# SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the memory-heavy phase of
+# a run and its footprint does NOT scale with iterations: the composition caches are bounded per run
+# (_new_composition_cache: subset size, entry count, estimated bytes), but the admission gate
+# (services/runs.py) budgets only iterations x scenarios and allows 8 standard runs at once, so N
+# concurrent attributions multiplied the ceiling by N.
+# Attribution is single-core and holds the GIL, so running one at a time costs no
+# throughput and turns the per-run ceiling into a per-PROCESS one. Single-process
+# invariant, same as the run reaper and the samples-export guard in routes/runs.py.
+#
+# Why an asyncio.Lock and not that guard's threading.BoundedSemaphore: the guard
+# fails fast (429) and its holder is one synchronous generator. A run's attribution
+# spans SEVERAL awaited to_thread calls and must queue, not fail. A blocking
+# threading acquire would have to sit inside a worker thread, parking the loop's
+# default executor (min(32, cpus + 4) = 6 threads on the 2-vCPU VM) while the
+# holder needs another worker for its next phase - a starvation deadlock - and a
+# per-call acquire would not cover the canonical cache that lives between calls.
+# Waiters here are coroutines parked on the event loop, no thread is blocked.
+#
+# Deadlock rules for callers: (1) enter AFTER _release_conn_for_compute so a queued
+# run holds no pooled connection (A1 / #508); (2) await only CPU to_thread work and
+# idempotent releases inside the slot, never a DB op or anything that needs another
+# run to progress; (3) `async with` releases on every exit, exceptions and
+# cancellation included. If a task is cancelled its worker thread still runs to
+# completion (uninterruptible), so the slot can free a moment early at shutdown.
+# One lock per event loop: production has one loop; test suites create many, and an
+# asyncio.Lock that was contended on one loop cannot be reused on another.
+_ATTRIBUTION_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _attribution_lock_for_current_loop() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _ATTRIBUTION_LOCKS.get(loop)
+    if lock is None:
+        lock = _ATTRIBUTION_LOCKS[loop] = asyncio.Lock()
+    return lock
+
+
+@contextlib.asynccontextmanager
+async def _attribution_slot() -> AsyncIterator[None]:
+    """Hold the process-wide attribution slot (see the block comment above)."""
+    async with _attribution_lock_for_current_loop():
+        yield
+
+
+class _ScenarioVectorCache:
+    """``subset -> (K,)`` draw-vector memo for ONE scenario at a time.
+
+    The ensemble's batched walk visits scenarios one after another, so a finished
+    scenario's vectors are never read again: entering a new ``sid`` clears the
+    memo. Held across all scenarios (keyed by ``(sid, subset)``) it grew to one
+    entry per distinct (scenario, subset) walked - up to the 2M-eval budget, each
+    carrying its own frozenset key - and measured 3.0 GiB at 64 players x 6
+    scenarios. Scoped, it holds at most one scenario's subsets. Values are a pure
+    function of ``(sid, subset)``, so clearing changes memory only.
+    """
+
+    def __init__(self) -> None:
+        self._sid: str | None = None
+        self._vecs: dict[frozenset[str], np.ndarray] = {}
+
+    def _enter(self, sid: str) -> None:
+        if sid != self._sid:
+            self._vecs.clear()
+            self._sid = sid
+
+    def get(self, sid: str, subset: frozenset[str]) -> np.ndarray | None:
+        self._enter(sid)
+        return self._vecs.get(subset)
+
+    def put(self, sid: str, subset: frozenset[str], vec: np.ndarray) -> None:
+        self._enter(sid)
+        self._vecs[subset] = vec
 
 
 def _scenario_eval_cost(
@@ -699,10 +1000,15 @@ def _make_subset_value_fn(
         # control subset's authored assignments (kappa- and weight-invariant;
         # scenario effect enters later at the multiplier mapping, which is NOT
         # cached), so identical subsets dedupe ACROSS scenarios in a run.
+        # The controls are composed in SORTED id order: precompose_parts folds
+        # or_compose over them in list order, which is order-sensitive in the last
+        # ulp, and a frozenset's iteration order depends on how it was built (and on
+        # PYTHONHASHSEED). Sorting makes ComposedParts a function of the subset alone,
+        # so a cache miss recomputes exactly what a hit would have returned.
         ckey = subset
         parts = comp_cache.get(ckey)
         if parts is None:  # κ- AND weight-invariant precomposition, cached across draws
-            ctrls = [registry.get_control(cid) for cid in subset]
+            ctrls = [registry.get_control(cid) for cid in sorted(subset)]
             if any(c is None for c in ctrls):  # universe-validated; defensive (B-Arch-N1)
                 raise ValueError("unknown control id in attribution subset")
             parts = precompose_parts(ctrls)
@@ -742,8 +1048,9 @@ def _compute_shapley_by_scenario(
     efficiency redistributes the overlap the standalone cells double-count.
 
     Bounds (B-Sec-B1 / B-Sec-I1-r2): a scenario over `max_controls` is skipped;
-    once the cumulative estimated eval count would exceed `total_eval_budget`, all
-    remaining scenarios are skipped — so total compute is bounded irrespective of
+    a scenario whose estimated eval count would push the cumulative total past
+    `total_eval_budget` is skipped and the walk continues, so a later, cheaper
+    scenario can still fit — total compute is bounded irrespective of
     scenario count. Budget drop-selection is order-dependent (first-come consumes
     the budget), deterministic given stable input order, and fully audited.
     compose_groups is GIL-bound, so the caller runs this via asyncio.to_thread to
@@ -800,7 +1107,7 @@ def _compute_shapley_by_scenario(
     out: dict[str, dict[str, float]] = {}
     skipped: list[tuple[str, str]] = []
     spent = 0
-    _comp_cache = composition_cache if composition_cache is not None else {}
+    _comp_cache = composition_cache if composition_cache is not None else _new_composition_cache()
     _base_cache: dict[str, tuple[float, float, float, float, float]] = {}
     # (The #543 ``subset_value_fn`` injection seam was removed once the ensemble
     # moved to `_compute_shapley_by_scenario_batched` — this scalar fn is now
@@ -1042,7 +1349,7 @@ def _compute_loo_by_scenario(
     out: dict[str, dict[str, float]] = {}
     skipped: list[tuple[str, str]] = []
     spent = 0
-    _comp_cache = composition_cache if composition_cache is not None else {}
+    _comp_cache = composition_cache if composition_cache is not None else _new_composition_cache()
     _base_cache: dict[str, tuple[float, float, float, float, float]] = {}
     _value_fn = _make_subset_value_fn(
         registry,
@@ -1122,7 +1429,8 @@ def _aggregate_clean(by_scenario: dict[str, dict[str, float]]) -> dict[str, floa
 def _build_weight_robustness(
     *,
     calculator: Any,
-    controls: list[Control],
+    universe: list[str],
+    control_names: dict[str, str],
     per_scenario_inputs: list[tuple[str, str, FAIRParameters]],
     per_scenario_dict: dict[str, list[str]] | None,
     canonical_values: dict[str, float],
@@ -1149,11 +1457,16 @@ def _build_weight_robustness(
     Args:
         calculator: the LIVE NativeControlAwareRiskCalculator (reused — no second
             construction, memory envelope unchanged).
-        controls: v3 Control rows (id universe + display names).
+        universe: the full control-id universe (explicit plain ids + #299 variant
+            ids; ``_ActiveControlPlan.universe_ids``).
+        control_names: id -> display name for every id in ``universe``
+            (``_ActiveControlPlan.names``, from the snapshot rows).
         per_scenario_inputs: [(scenario_id, name, FAIRParameters)] (one element for
             SINGLE; N for AGGREGATE).
-        per_scenario_dict: per-scenario active control-id subsets, or None (legacy /
-            SINGLE full-universe fallback).
+        per_scenario_dict: per-scenario active control-id subsets, or None (a legacy
+            AGGREGATE row with no stored map, or a SINGLE run that inherited nothing:
+            the full-universe path). A SINGLE run that inherited something passes a
+            one-key dict.
         canonical_values: the REUSED canonical _aggregate_clean(clean_shapley) for
             AGGREGATE (do NOT re-run a second canonical pass — Arch-B2); for SINGLE
             the one canonical pass result.
@@ -1169,8 +1482,6 @@ def _build_weight_robustness(
         ``canonical_value`` keys.
     """
     settings = get_settings()
-    universe = [str(c.id) for c in controls]  # full control-id universe (Arch-N-Universe1)
-    control_names = {str(c.id): c.name for c in controls}
 
     # Band: read back from the persisted snapshot on re-run; else derive from live
     # settings + the run's seed (explicit null handling -> 0).
@@ -1218,7 +1529,11 @@ def _build_weight_robustness(
     # (K = draw count) at full precision. Keyed by subset alone (#432 item 2,
     # shipped): ComposedParts is a pure function of the subset's authored
     # assignments, so identical subsets dedup across scenarios in aggregates.
-    _comp_cache: dict[frozenset[str], ComposedParts] = {}
+    # #299: bounded by _new_composition_cache (subset size, entry count, estimated bytes). The
+    # per-scenario draw-vector cache in _per_control_values_for already composes each (scenario,
+    # subset) at most once per call, so past a bound only the CROSS-scenario reuse is lost; the
+    # per-draw cost model below (compose once, then finalize) is unchanged.
+    _comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
 
     # Arch-I10: realized per-draw eval cost — replicates the exact skip-aware
     # accumulation _compute_shapley_by_scenario uses (over_cap dropped, cumulative
@@ -1282,21 +1597,21 @@ def _build_weight_robustness(
         node_weight_arrs = stack_node_weight_arrays(
             [nm if nm is not None else GROUP_NODE_MAPPING for (nm, _k) in draws]
         )
-        # Shared per-(scenario, coalition) (K,) value cache + per-scenario base
-        # ALE cache; _comp_cache (weight- AND κ-invariant parts) is reused.
-        bcache: dict[tuple[str, frozenset[str]], np.ndarray] = {}
+        # Per-scenario (K,) coalition-value cache (cleared when the walk moves to the
+        # next scenario) + per-scenario base ALE cache; _comp_cache (weight- AND
+        # κ-invariant parts) is reused across scenarios.
+        bcache = _ScenarioVectorCache()
         base_cache: dict[str, tuple[float, float, float, float, float]] = {}
 
         def _coalition_vec(subset: frozenset[str], sid: str, rp: FAIRParameters) -> np.ndarray:
-            key = (sid, subset)
-            vec = bcache.get(key)
+            vec = bcache.get(sid, subset)
             if vec is not None:
                 return vec
             parts = _comp_cache.get(subset)
             if (
                 parts is None
             ):  # κ- AND weight-invariant; validate universe (as _make_subset_value_fn)
-                ctrls = [registry.get_control(cid) for cid in subset]
+                ctrls = [registry.get_control(cid) for cid in sorted(subset)]
                 if any(c is None for c in ctrls):
                     raise ValueError("unknown control id in attribution subset")
                 parts = precompose_parts(ctrls)
@@ -1311,7 +1626,7 @@ def _build_weight_robustness(
             vec = finalize_reduce_batched(
                 parts, base, kappa_arr, node_weight_arrs, availability_self_detection=avail
             )
-            bcache[key] = vec
+            bcache.put(sid, subset, vec)
             return vec
 
         # Walk the Shapley combinatorics ONCE with the vector value fn (#419/
@@ -1940,7 +2255,43 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
         # captured at write time). V2 stays read-only via the discriminated
         # union; V2 reads surface the post-#131 re-interpretation banner +
         # ``snapshot_v2_read`` structured log on the run-detail route.
-        run.controls_snapshot = [_snapshot_control_v3(c).model_dump(mode="json") for c in controls]
+        try:
+            plan = _build_active_control_plan(run, controls)
+        except (ValueError, RuntimeError) as exc:
+            # #299 (Arch-I8): phase 1 sits outside the FAILED-flip try below. A
+            # variant that cannot be built (meta rows removed at the DB level since
+            # the freeze; inherited id missing from the universe) must fail LOUD
+            # (spec §5.2), not strand the row QUEUED for the orphan reaper. The row
+            # is still QUEUED here (no RUNNING flip yet), so a plain attribute write
+            # in this transaction is the whole flip.
+            #
+            # Arch-I12 / #82: error_message is rendered VERBATIM in
+            # templates/runs/_status_poll.html, so it carries the fixed generic
+            # _RUN_FAILURE_MESSAGE, never str(exc) - the ValueError text names a
+            # control UUID and "eligibility invariant violated upstream", the
+            # RuntimeError names id lists. The cause stays server-side: error_class
+            # in the audit row + logger.exception below.
+            run.status = RunStatus.FAILED
+            run.error_message = _RUN_FAILURE_MESSAGE
+            run.completed_at = now_utc()
+            await AuditWriter(session).log(
+                organization_id=run.organization_id,
+                user_id=run.created_by,
+                action="risk_analysis_run.fail",
+                entity_type="risk_analysis_run",
+                entity_id=run.id,
+                changes={
+                    "status": [RunStatus.QUEUED.value, RunStatus.FAILED.value],
+                    "error_class": type(exc).__name__,
+                    "stage": "inherited_control_plan",  # fixed discriminator, not exception text
+                },
+            )
+            await session.commit()
+            logger.exception("Run %s: inherited control plan failed", run_id)
+            return
+        run.controls_snapshot = [
+            s.model_dump(mode="json") for s in plan.plain_snapshots + plan.variant_snapshots
+        ]
         run.status = RunStatus.RUNNING
         run.started_at = now_utc()
         await AuditWriter(session).log(
@@ -2112,7 +2463,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
             # therefore removed. Any ValueError that still escapes the adapter
             # (e.g. coverage/reliability bounds, empty assignments) propagates to
             # execute_run's outer except, which flips the run to FAILED.
-            fc_controls = [_v3_to_fair_cam_control(v3_ctrl) for v3_ctrl in controls]
+            # #299: plain DTOs only for explicitly linked ids; inherited controls enter as
+            # their meta-filtered variants (the plain id is not in the engine universe).
+            _explicit_set = set(plan.explicit_ids)
+            fc_controls = [
+                _v3_to_fair_cam_control(v3_ctrl)
+                for v3_ctrl in controls
+                if str(v3_ctrl.id) in _explicit_set
+            ] + list(plan.variant_dtos)
 
             # ---- engine call branches by run_type ----
             # Native cut: NativeControlAwareRiskCalculator samples FAIRParameters
@@ -2137,13 +2495,14 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # fmt: on
                 # A1 / #508: hold NO pooled connection across the MC compute.
                 # Every post-release read below is a loaded scalar on a detached
-                # instance: controls[].id (loaded UUID) and scenario.effect (loaded
-                # Enum, read by _scenario_availability_self_detects) — both safe.
+                # instance or a plain str list from the active-control plan:
+                # run.scenario_id (loaded UUID) and scenario.effect (loaded Enum,
+                # read by _scenario_availability_self_detects) — all safe.
                 await _release_conn_for_compute(session)
                 enhanced = await asyncio.to_thread(
                     calculator.calculate_control_enhanced_risk,
                     risk_params=fair_params,  # FAIRParameters directly — no bridge
-                    active_control_ids=[str(c.id) for c in controls],
+                    active_control_ids=plan.per_scenario_ids[str(run.scenario_id)],
                     scenario_name=_single_scenario_name,
                     availability_self_detection=_scenario_availability_self_detects(scenario),
                 )
@@ -2155,45 +2514,51 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # AGGREGATE row (pre-issue-89) => None passed to fair_cam =>
                 # back-compat path (unified active_control_ids applied to all
                 # scenarios). New runs always populate the column.
-                per_scenario_dict = run.aggregate_control_ids_per_scenario
+                # #299: the plan's dict (stored explicit order + inherited variant ids);
+                # the legacy NULL fallback is kept.
+                per_scenario_dict = (
+                    plan.per_scenario_ids
+                    if run.aggregate_control_ids_per_scenario is not None
+                    else None
+                )
                 if per_scenario_dict is not None:
                     # M5 (plan-gate): fail-loud race check. scenarios'
                     # mitigating_controls may have changed since run-create.
                     # If any per-scenario cid is missing from the loaded universe,
                     # the run cannot proceed soundly — fail with audit row.
                     loaded_universe = {str(c.id) for c in controls}
-                    for _sid, _sublist in per_scenario_dict.items():
-                        _stale = set(_sublist) - loaded_universe
-                        if _stale:
-                            await AuditWriter(session).log(
-                                organization_id=run.organization_id,
-                                user_id=run.created_by,
-                                action="run.stale_per_scenario_control_ids",
-                                entity_type="risk_analysis_run",
-                                entity_id=run.id,
-                                changes={
-                                    "scenario_id": [None, _sid],
-                                    "stale_ids": [None, sorted(_stale)],
-                                },
-                            )
-                            await session.commit()
-                            raise RuntimeError(
-                                f"per-scenario control ids {sorted(_stale)} for "
-                                f"scenario {_sid} are not in the loaded snapshot "
-                                f"universe — race against scenario edit?"
-                            )
+                    for _sid, _stale in _stale_per_scenario_ids(
+                        per_scenario_dict, loaded_universe
+                    ).items():
+                        await AuditWriter(session).log(
+                            organization_id=run.organization_id,
+                            user_id=run.created_by,
+                            action="run.stale_per_scenario_control_ids",
+                            entity_type="risk_analysis_run",
+                            entity_id=run.id,
+                            changes={
+                                "scenario_id": [None, _sid],
+                                "stale_ids": [None, _stale],
+                            },
+                        )
+                        await session.commit()
+                        raise RuntimeError(
+                            f"per-scenario control ids {_stale} for "
+                            f"scenario {_sid} are not in the loaded snapshot "
+                            f"universe — race against scenario edit?"
+                        )
                 per_scenario_availability = {
                     str(sc.id): _scenario_availability_self_detects(sc) for sc in scenarios
                 }
                 # A1 / #508: hold NO pooled connection across the MC compute.
                 # per_scenario_availability + per_scenario_dict are already-built
-                # locals; the only inline post-release ORM read is controls[].id
-                # (loaded UUID scalar on the detached instances) — safe.
+                # locals and plan.universe_ids is a plain str list - no inline
+                # post-release ORM read remains.
                 await _release_conn_for_compute(session)
                 aggregate = await asyncio.to_thread(
                     calculator.calculate_aggregate_enhanced_risk,
                     per_scenario_risk_params=per_scenario_inputs,
-                    active_control_ids=[str(c.id) for c in controls],
+                    active_control_ids=plan.universe_ids,
                     per_scenario_active_control_ids=per_scenario_dict,
                     per_scenario_availability=per_scenario_availability,
                 )
@@ -2239,7 +2604,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # #419 weight-robustness (SINGLE — RANGES ONLY, Arch-B3/Meth-B6):
                 # SINGLE has no Shapley pass / clean_shapley, so derive the canonical
                 # via ONE _compute_shapley_by_scenario over a one-element
-                # per_scenario_inputs (full-universe fallback, per_scenario_dict=None),
+                # per_scenario_inputs (full-universe fallback, per_scenario_dict=None
+                # unless #299 inheritance is present),
                 # then run the ensemble with compute_rank_stability=False — the
                 # displayed SINGLE order is effectiveness-sorted, NOT the Shapley basis
                 # the ensemble ranks, so only the basis-agnostic dollar ranges +
@@ -2253,18 +2619,28 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 _single_availability = {
                     str(run.scenario_id): _scenario_availability_self_detects(scenario)
                 }
+                # #299: the per-scenario dict only when something is inherited; without
+                # inheritance this stays None (today's full-universe fallback path).
+                _single_sid = str(run.scenario_id)
+                _single_dict = (
+                    {_single_sid: plan.per_scenario_ids[_single_sid]}
+                    if plan.has_inheritance
+                    else None
+                )
 
                 def _single_weight_robustness() -> tuple[
                     dict[str, Any], dict[str, dict[str, float]], dict[str, list[Any]]
                 ]:
                     # Shared cache: the canonical Shapley pass precomposes every
                     # subset (n ≤ 12), so the leave-one-out pass after it is ~free.
-                    _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
+                    _canon_comp_cache: dict[frozenset[str], ComposedParts] = (
+                        _new_composition_cache()
+                    )
                     _by, _sk = _compute_shapley_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         node_mapping=None,
                         total_eval_budget=MAX_ATTRIBUTION_TOTAL_EVALS,
                         per_scenario_availability=_single_availability,
@@ -2278,8 +2654,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _by_mean, _sk_mean = _compute_shapley_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         node_mapping=None,
                         total_eval_budget=MAX_ATTRIBUTION_TOTAL_EVALS,
                         per_scenario_availability=_single_availability,
@@ -2293,8 +2669,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _loo_by, _loo_sk = _compute_loo_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         per_scenario_availability=_single_availability,
                         composition_cache=_canon_comp_cache,
                     )
@@ -2310,8 +2686,8 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                     _loo_mean_by, _loo_mean_sk = _compute_loo_by_scenario(
                         calculator,
                         _single_per_scenario_inputs,
-                        None,
-                        [str(c.id) for c in controls],
+                        _single_dict,
+                        plan.universe_ids,
                         per_scenario_availability=_single_availability,
                         composition_cache=_canon_comp_cache,
                         statistic="mean",
@@ -2340,12 +2716,18 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                         ),
                         "loo_dropped_mean_only": sorted(set(_loo_mean_dropped) - set(_loo_dropped)),
                     }
+                    # METH-T12F2-I1: free the canonical cache BEFORE the ensemble builds its
+                    # own (mirrors the AGGREGATE `del _canon_comp_cache`); the ensemble
+                    # never reads it. Left alive it doubled SINGLE's composition cache: bench
+                    # peak RSS at 64 controls (K = 73 draws) 1,773 MiB -> 1,207 MiB with the del.
+                    del _canon_comp_cache
                     return (
                         _build_weight_robustness(
                             calculator=calculator,
-                            controls=controls,
+                            universe=plan.universe_ids,
+                            control_names=plan.names,
                             per_scenario_inputs=_single_per_scenario_inputs,
-                            per_scenario_dict=None,
+                            per_scenario_dict=_single_dict,
                             canonical_values=_canon_vals,
                             canonical_values_typical=_aggregate_clean(_by),
                             persisted=run.weight_robustness,
@@ -2360,13 +2742,16 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # Arch-N5: the WHOLE ensemble (canonical pass + K draws) runs under
                 # ONE outer to_thread (GIL-bound, responsiveness-only).
                 # A1 / #508: release before the ensemble. The closure reads only
-                # loaded scalars on detached instances (controls[].id/.name,
-                # run.scenario_id/.weight_robustness/.random_seed) — safe in the
-                # worker thread.
+                # plan strings (plan.universe_ids/.names) and loaded scalars on the
+                # detached run (run.scenario_id/.weight_robustness/.random_seed) —
+                # safe in the worker thread.
                 await _release_conn_for_compute(session)
-                _robustness_local, _single_loo, _single_degradations = await asyncio.to_thread(
-                    _single_weight_robustness
-                )
+                async with _attribution_slot():  # SEC-T12F1-I2: one run's attribution at a time
+                    (
+                        _robustness_local,
+                        _single_loo,
+                        _single_degradations,
+                    ) = await asyncio.to_thread(_single_weight_robustness)
                 # LOO-Meth-2: audit attribution degradations (first-class audit rule).
                 # Same no-separate-commit pattern as the AGGREGATE block — rides the
                 # terminal guarded-UPDATE transaction below.
@@ -2403,6 +2788,7 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # MOVED here (was before the ensemble): SINGLE needs the engine
                 # objects for the ensemble, so free them only now (Arch-I-Single-Del1).
                 del calculator, fc_controls
+                del plan  # small lists + DTOs only; released with the engine objects
             else:
                 # Each per-scenario ControlEnhancedRisk carries its scenario_id
                 # (set on the aggregate path) and its spawn_key. Capture the
@@ -2430,92 +2816,99 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # One composition cache shared between the canonical Shapley pass
                 # and the leave-one-out pass: exact Shapley (n ≤ 12) evaluates
                 # every leave-one-out subset anyway, so LOO afterwards is ~free.
-                _canon_comp_cache: dict[frozenset[str], ComposedParts] = {}
+                _canon_comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
                 # A1 / #508: release before the Shapley/LOO compute block. The only
-                # post-release ORM read across these four to_threads is
-                # [str(c.id) for c in controls] (loaded UUID scalars, evaluated on
-                # the loop as a to_thread arg). Subsequent releases in this block are
-                # idempotent no-ops (no DB op runs between them).
+                # post-release read across these four to_threads is plan.universe_ids
+                # (a plain str list, evaluated on the loop as a to_thread arg).
+                # Subsequent releases in this block are idempotent no-ops (no DB op
+                # runs between them).
                 await _release_conn_for_compute(session)
-                shapley_raw, shapley_skipped = await asyncio.to_thread(
-                    _compute_shapley_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    [
-                        str(c.id) for c in controls
-                    ],  # validated universe (matches active_control_ids)
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                )
-                clean_shapley, shapley_dropped = _sanitize_shapley(shapley_raw)
-                _inject_shapley(results_payload["per_scenario"], clean_shapley)
-
-                # MEAN-basis canonical Shapley (2026-07-04 side-by-side): same
-                # machinery, same subsets, statistic="mean" — shares
-                # _canon_comp_cache (composition is statistic-invariant), so this
-                # pass costs only the reduction arithmetic. Skip sets are
-                # structurally identical to the typical pass (cost/caps depend
-                # only on control counts); basis-specific non-finite drops are
-                # audited below via the set difference.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                shapley_mean_raw, shapley_mean_skipped = await asyncio.to_thread(
-                    _compute_shapley_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    [str(c.id) for c in controls],
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                    statistic="mean",
-                )
-                clean_shapley_mean, shapley_mean_dropped = _sanitize_shapley(shapley_mean_raw)
-                _inject_shapley(
-                    results_payload["per_scenario"], clean_shapley_mean, key="shapley_value_mean"
-                )
-
-                # "If removed" (leave-one-out): drop-cost counterfactual per control
-                # — linear in n, so it also covers over_cap scenarios Shapley skips.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                loo_raw, loo_skipped = await asyncio.to_thread(
-                    _compute_loo_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    [str(c.id) for c in controls],
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                )
-                clean_loo, loo_dropped = _sanitize_shapley(loo_raw)  # same shape/finite rule
-                if loo_skipped or loo_dropped:
-                    logger.warning(
-                        "leave-one-out degraded: skipped=%s dropped=%s", loo_skipped, loo_dropped
+                # SEC-T12F1-I2: one run's canonical attribution at a time, process-wide
+                # (see _attribution_slot). Entered AFTER the release above so a queued run
+                # holds no pooled connection; nothing inside awaits another run's progress.
+                # The canonical cache is freed (the `del` below) before the slot is released.
+                async with _attribution_slot():
+                    shapley_raw, shapley_skipped = await asyncio.to_thread(
+                        _compute_shapley_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,  # validated universe (matches active_control_ids)
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
                     )
-                _inject_loo(results_payload["per_scenario"], clean_loo)
+                    clean_shapley, shapley_dropped = _sanitize_shapley(shapley_raw)
+                    _inject_shapley(results_payload["per_scenario"], clean_shapley)
 
-                # MEAN-basis LOO (side-by-side "If removed"): shared cache, mean chain.
-                await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
-                loo_mean_raw, loo_mean_skipped = await asyncio.to_thread(
-                    _compute_loo_by_scenario,
-                    calculator,
-                    per_scenario_inputs,
-                    per_scenario_dict,
-                    [str(c.id) for c in controls],
-                    per_scenario_availability=per_scenario_availability,
-                    composition_cache=_canon_comp_cache,
-                    statistic="mean",
-                )
-                clean_loo_mean, loo_mean_dropped = _sanitize_shapley(loo_mean_raw)
-                if loo_mean_skipped or loo_mean_dropped:
-                    logger.warning(
-                        "mean-basis leave-one-out degraded: skipped=%s dropped=%s",
-                        loo_mean_skipped,
-                        loo_mean_dropped,
+                    # MEAN-basis canonical Shapley (2026-07-04 side-by-side): same
+                    # machinery, same subsets, statistic="mean" — shares
+                    # _canon_comp_cache (composition is statistic-invariant), so this
+                    # pass costs only the reduction arithmetic. Skip sets are
+                    # structurally identical to the typical pass (cost/caps depend
+                    # only on control counts); basis-specific non-finite drops are
+                    # audited below via the set difference.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    shapley_mean_raw, shapley_mean_skipped = await asyncio.to_thread(
+                        _compute_shapley_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                        statistic="mean",
                     )
-                _inject_loo(
-                    results_payload["per_scenario"], clean_loo_mean, key="if_removed_value_mean"
-                )
-                del _canon_comp_cache
+                    clean_shapley_mean, shapley_mean_dropped = _sanitize_shapley(shapley_mean_raw)
+                    _inject_shapley(
+                        results_payload["per_scenario"],
+                        clean_shapley_mean,
+                        key="shapley_value_mean",
+                    )
+
+                    # "If removed" (leave-one-out): drop-cost counterfactual per control
+                    # — linear in n, so it also covers over_cap scenarios Shapley skips.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    loo_raw, loo_skipped = await asyncio.to_thread(
+                        _compute_loo_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                    )
+                    clean_loo, loo_dropped = _sanitize_shapley(loo_raw)  # same shape/finite rule
+                    if loo_skipped or loo_dropped:
+                        logger.warning(
+                            "leave-one-out degraded: skipped=%s dropped=%s",
+                            loo_skipped,
+                            loo_dropped,
+                        )
+                    _inject_loo(results_payload["per_scenario"], clean_loo)
+
+                    # MEAN-basis LOO (side-by-side "If removed"): shared cache, mean chain.
+                    await _release_conn_for_compute(session)  # A1 / #508 (idempotent)
+                    loo_mean_raw, loo_mean_skipped = await asyncio.to_thread(
+                        _compute_loo_by_scenario,
+                        calculator,
+                        per_scenario_inputs,
+                        per_scenario_dict,
+                        plan.universe_ids,
+                        per_scenario_availability=per_scenario_availability,
+                        composition_cache=_canon_comp_cache,
+                        statistic="mean",
+                    )
+                    clean_loo_mean, loo_mean_dropped = _sanitize_shapley(loo_mean_raw)
+                    if loo_mean_skipped or loo_mean_dropped:
+                        logger.warning(
+                            "mean-basis leave-one-out degraded: skipped=%s dropped=%s",
+                            loo_mean_skipped,
+                            loo_mean_dropped,
+                        )
+                    _inject_loo(
+                        results_payload["per_scenario"], clean_loo_mean, key="if_removed_value_mean"
+                    )
+                    del _canon_comp_cache
 
                 # Audit degraded scenarios. NO separate commit (B-Sec-N1): these log
                 # calls ride the terminal guarded-UPDATE transaction below so audit +
@@ -2571,25 +2964,28 @@ async def _execute_run_body(run_id: uuid.UUID) -> None:
                 # A1 / #508: release before the ensemble to_thread. The to_thread
                 # args run.weight_robustness (JSON) + run.random_seed (Int) are
                 # loaded scalars on the detached run; inside the thread
-                # _build_weight_robustness reads only controls[].id/.name (loaded
-                # scalars) — all safe post-detach.
+                # _build_weight_robustness reads only the plan's universe/names
+                # strings - all safe post-detach.
                 await _release_conn_for_compute(session)
-                _robustness_local = await asyncio.to_thread(
-                    _build_weight_robustness,
-                    calculator=calculator,
-                    controls=controls,
-                    per_scenario_inputs=per_scenario_inputs,
-                    per_scenario_dict=per_scenario_dict,
-                    canonical_values=_canon_vals_agg,
-                    canonical_values_typical=_aggregate_clean(clean_shapley),
-                    persisted=run.weight_robustness,
-                    random_seed=run.random_seed,
-                    compute_rank_stability=True,
-                    per_scenario_availability=per_scenario_availability,
-                )
+                async with _attribution_slot():  # SEC-T12F1-I2: the ensemble's own phase
+                    _robustness_local = await asyncio.to_thread(
+                        _build_weight_robustness,
+                        calculator=calculator,
+                        universe=plan.universe_ids,
+                        control_names=plan.names,
+                        per_scenario_inputs=per_scenario_inputs,
+                        per_scenario_dict=per_scenario_dict,
+                        canonical_values=_canon_vals_agg,
+                        canonical_values_typical=_aggregate_clean(clean_shapley),
+                        persisted=run.weight_robustness,
+                        random_seed=run.random_seed,
+                        compute_rank_stability=True,
+                        per_scenario_availability=per_scenario_availability,
+                    )
 
                 del calculator, fc_controls  # now safe — Shapley + ensemble done
                 del per_scenario_inputs  # AGGREGATE always binds it
+                del plan  # small lists + DTOs only; released with the engine objects
                 if not await _check_cancelled_or_continue(session, run_id):
                     return
                 # A1 / #508 accepted NICE-TO-HAVE (Arch-N/Rel-N5): everything from

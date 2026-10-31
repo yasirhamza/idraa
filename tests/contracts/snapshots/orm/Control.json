@@ -112,6 +112,14 @@
       "primary_key": false,
       "type": "JSON"
     },
+    "org_wide_meta": {
+      "foreign_key": false,
+      "has_default": true,
+      "indexed": false,
+      "nullable": false,
+      "primary_key": false,
+      "type": "BOOLEAN"
+    },
     "organization_id": {
       "foreign_key": true,
       "has_default": false,

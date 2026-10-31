@@ -124,8 +124,10 @@
        so the badge reads "not assessed". Name lookup from control_effectiveness_rows. #}
     {%- if _wr_single and _wr_single.per_control %}
       {%- set _names = {} -%}
+      {%- set _inh_by_id = {} -%}
       {%- for _r in (display_results.control_effectiveness_rows or []) -%}
         {%- set _ = _names.update({_r.control_id: _r.name}) -%}
+        {%- set _ = _inh_by_id.update({_r.control_id: _r.inherited}) -%}
       {%- endfor %}
       <h4 class="mt-6 text-base font-bold">Estimated value per control (range)</h4>
       <div class="overflow-x-auto mt-2">
@@ -135,7 +137,7 @@
             {% for _cid, _cell in _wr_single.per_control.items() %}
               {%- if _cell.range_str and _cell.range_str != "—" %}
               <tr>
-                <td>{{ _names.get(_cid, "(unknown)") }}</td>
+                <td>{{ _names.get(_cid, "(unknown)") }}{% if _inh_by_id.get(_cid) %} <span class="badge badge-ghost badge-xs" data-inherited="true" title="Inherited organization-wide (VMC/DSC functions only)">org-wide</span>{% endif %}</td>
                 <td class="font-mono">
                   {{- _cell.range_str -}}
                   {%- if _cell.typical_value is not none %}<br><span class="text-xs text-ink-3 font-sans">typical {{ _cell.typical_value | money(_code) }}</span>{%- endif %}
@@ -149,7 +151,7 @@
               </tr>
               {%- elif _cell.zero_reason %}
               <tr>
-                <td>{{ _names.get(_cid, "(unknown)") }}</td>
+                <td>{{ _names.get(_cid, "(unknown)") }}{% if _inh_by_id.get(_cid) %} <span class="badge badge-ghost badge-xs" data-inherited="true" title="Inherited organization-wide (VMC/DSC functions only)">org-wide</span>{% endif %}</td>
                 <td class="text-xs text-ink-3 italic">{{ _cell.zero_reason }}</td>
                 <td class="font-mono">
                   {{- _cell.if_removed | money(_code) -}}

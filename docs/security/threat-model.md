@@ -403,8 +403,8 @@ docstring).
   "Corrected 2026-08-05" note was dropped in a later consolidation (re-checked 2026-10-23).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
   /scenarios/{scenario_id}/confirm-threat-community`
-  (`routes/scenarios.py:1536`) is gated `require_role(UserRole.ANALYST,
-  UserRole.ADMIN)` (`routes/scenarios.py:1542`) — REVIEWER and VIEWER get 403. It is the
+  (`routes/scenarios.py:1556`) is gated `require_role(UserRole.ANALYST,
+  UserRole.ADMIN)` (`routes/scenarios.py:1562`) — REVIEWER and VIEWER get 403. It is the
   dedicated confirm path; edit-form and wizard saves also resolve it (§11).
 - **Role assignment and the last-admin invariant (added by the 2026-10-23 re-audit):** only
   an ADMIN with a fresh ADMIN step-up can change a role or deactivate a user (`/users/{id}/edit`
@@ -425,22 +425,43 @@ docstring).
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
   (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
-  `routes/qualitative_bands.py:224,262`). `routes/controls.py:697`'s check
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:710`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified earlier in the same handler
-  (`routes/controls.py:692-693`).
+  (`routes/controls.py:705-706`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
   client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
-  parsed to a sub-function slug (`routes/controls.py:958-973`); the server resolves it to the
+  parsed to a sub-function slug (`routes/controls.py:971-986`); the server resolves it to the
   row of the SAME, already org-verified control by an explicit control + org select
-  (`services/controls.py:189-207`), so it can never name another control's or org's row.
+  (`services/controls.py:249-267`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
-  (`routes/controls.py:76-83`); one that survives, a submitted `dsc_corr_misaligned` row and
-  an ineligible or absent source are refused by a pure check that runs first in create and
-  update (`services/controls.py:136-186`), and an unknown slug by the route parse — all before
-  any mutation (no row, no audit entry). The 422 messages are fixed text or enum values; the
-  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:309`;
+  (`routes/controls.py:82-89`); one that survives, a submitted `dsc_corr_misaligned` row and
+  an ineligible or absent source are refused by a pure check (`services/controls.py:196-246`),
+  and an unknown slug by the route parse, before the service is called. That check and the
+  org-wide eligibility check in the next bullet are both pure and both run before any mutation
+  in create and update, so a refusal leaves no row and no audit entry. The 422 messages are
+  fixed text or enum values (the org-wide refusal is fixed text too); the slug comes back only
+  as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:343`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
+- **Org-wide controls (issue #299):** the run-create freeze, the scenario detail and edit
+  pages and the run-create preview read org-wide controls through
+  `ControlRepo.list_org_wide_meta` (`repositories/control_repo.py:68`), and the run-detail
+  legacy note through `ControlRepo.count_org_wide_meta` (no line number of its own), both
+  filtered by `organization_id` plus the published-and-operating predicate, so another org's
+  flagged control is never inherited. The wizard's step-5 list uses neither method: it filters
+  the org-scoped `ControlRepo.list_for_org` result by the flag, which applies the same
+  predicate, so it shows only the caller's own effective org-wide controls too
+  (`tests/services/test_org_wide_meta_eligibility.py::test_list_and_count_org_wide_meta_filter_status_stage_and_org`,
+  `tests/services/test_run_service_inherited_controls.py::test_other_orgs_org_wide_controls_never_inherited`).
+  The flag is set only through the existing analyst/admin control form (§6, B6): the importer,
+  library adopt and duplicate never set it. `duplicate_control` resets it to False
+  (`services/controls.py:867`), and the importer's `Control(...)` constructor
+  (`services/controls_importer.py:313-323`) names no `org_wide_meta`, so the column default
+  False applies. A save that sets the flag without an inheritable Variance Management or
+  Decision Support assignment is refused with fixed text before any mutation, and run-create
+  independently refuses, again with fixed text, an org-wide control that has none (defence
+  in depth). Every change to the effective org-wide set flags the org's COMPLETED runs stale
+  and writes one `control.org_wide_sweep` audit row (§11).
 - **Gate-enforced, not just convention (2026-08-05):** `scripts/
   lint_org_scoped_lookups.py`, run in every local gate + CI `gate` job, ASTs
   every file under `src/idraa/{routes,services,repositories}` and flags any
@@ -466,6 +487,15 @@ docstring).
     `services/retention.py:195,237` that are a system-wide background
     sweep by design (iterates every org's rows on a schedule, not a
     per-request handler with an attacker-suppliable id).
+  - **Walked, not predicate-checked (#299):** the two org-wide `ControlRepo` methods above
+    live under `repositories/`, which `--all` walks, and the lint run
+    (`uv run python scripts/lint_org_scoped_lookups.py --all`) exits 0 with them in place.
+    That is all it establishes. It flags only a bare `.get(Model, id)`; these are
+    `select(Control).where(...)` queries, the shape the residual-risk bullet below says it
+    never flags, and their own `organization_id` comparison would satisfy its function-wide
+    search for any `.get` added to them later. Their org predicate is held by the two
+    cross-org tests named above, and their published-and-operating filter by
+    `test_repo_filter_matches_predicate` in `tests/test_control_repo_active_stage.py`.
 - **Residual risk, narrowed but real (fact-checked 2026-08-05):** the
   checker's org-verification search is **function-wide, not bound to the
   flagged call** — it accepts *any* `organization_id` Compare or
@@ -581,11 +611,11 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template
-  (`routes/scenarios.py:2373-2375`, consumed at `routes/scenarios.py:2538`) indexes a **fixed
-  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2365`), and
-  two more pick one of two literals by a flag (`routes/scenarios.py:2985-2987`, `routes/help.py:134`);
+  (`routes/scenarios.py:2393-2395`, consumed at `routes/scenarios.py:2573`) indexes a **fixed
+  6-element literal list** by an int bounds-checked to `1..6` (`routes/scenarios.py:2385`), and
+  two more pick one of two literals by a flag (`routes/scenarios.py:3020-3022`, `routes/help.py:134`);
   one `{% include %}` joins a registry slug into a path (`templates/help/_article.html:28`;
-  slugs are code constants, `help_content.py:160`). None takes attacker-controlled text.
+  slugs are code constants, `help_content.py:169`). None takes attacker-controlled text.
 - **CSP is not an XSS backstop (2026-10-23)** — `SecurityHeadersMiddleware` (§1) sends a
   CSP whose `script-src` still carries `'unsafe-inline'` and `'unsafe-eval'`
   (`CSP_POLICY`, `middleware/security_headers.py:68-80`; the latter is Alpine's expression
@@ -611,7 +641,7 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 Guards: 5 MB upload cap via a forgeable
 `Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
 `routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
-`library_import.py:80-89`, `routes/controls.py:492-501`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
+`library_import.py:80-89`, `routes/controls.py:505-514`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
@@ -716,22 +746,30 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:142-151`) — `POST /analyses` re-checks it (`routes/runs.py:1186-1197`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1230`) relies on the service gate alone — and the HTML form's `max=`
-  attribute (`templates/analyses/new.html:149`) is explicitly documented
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1237-1248`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1281`) relies on the service gate alone — and the HTML form's `max=`
+  attribute (`templates/analyses/new.html:173`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
   shared across all orgs on one VM (`config.py:253-295`): high-fidelity
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
   BACKGROUND runs to `max_concurrent_standard_runs` (default 8). A standard
-  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — such runs
-  are sub-second / few-MB and self-limiting, and gating them would put the
-  unindexed candidate-count query on the latency-sensitive inline path.
+  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED, because gating such
+  runs would put the unindexed candidate-count query on the latency-sensitive
+  inline path; an inline run of 250k or more effective iterations is high-fidelity
+  and IS gated. Its Monte Carlo phase is bounded by iterations × scenarios below 250k
+  (about 100 MB at the top, the sizing in `config.py`; an inline AGGREGATE can reach
+  it, so this is not a few-MB run). Its own attribution does not shrink with iterations:
+  it can take tens of seconds or minutes (a 64-control SINGLE run took 39 s in the
+  bench) and runs in the same one-at-a-time slot (the attribution-memory bullet
+  below). Since #299 the request also WAITS for any attribution ahead of it, so it can
+  sit for minutes behind a background run's attribution, holding no pooled connection
+  while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2237`; `del calculator, fc_controls`
-  at `services/run_executor.py:2405` and again at `services/run_executor.py:2591`; `del per_scenario_inputs` at `services/run_executor.py:2592`;
-  `del aggregate` at `services/run_executor.py:2419`; `del results_payload` at `services/run_executor.py:2624`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2420`, `services/run_executor.py:2610`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2602`; `del calculator, fc_controls`
+  at `services/run_executor.py:2790` and again at `services/run_executor.py:2986`; `del per_scenario_inputs` at `services/run_executor.py:2987`;
+  `del aggregate` at `services/run_executor.py:2805`; `del results_payload` at `services/run_executor.py:3020`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2806`, `services/run_executor.py:3006`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -742,7 +780,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:1857`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2172`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -780,25 +818,68 @@ new export format must re-implement, not assume is "someone else's problem."
   `max_smes_per_fieldset` (`config.py:180-184`, default 20, env
   `MAX_SMES_PER_FIELDSET`) bounds the SME-estimate rows per fieldset through one
   shared validator (`schemas/wizard_step3.py:52-58`) that both fieldset models call;
-  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2672-2673`) and
-  again before finalize (`routes/scenarios.py:3220`). The finalize fit is further
+  the wizard applies it on every step-3/4 POST (`routes/scenarios.py:2707-2708`) and
+  again before finalize (`routes/scenarios.py:3255`). The finalize fit is further
   bounded per fit (`quantile_fit_maxiter` 200, `config.py:188`;
   `quantile_fit_wall_clock_ms` 500 ms, `config.py:193`) and per call
   (`finalize_wall_clock_ms` 5000 ms, `config.py:196`). The row schema does not
   itself reject a non-finite `high` (#141, open).
 - **D (disk).** A dispatch is refused while the DB volume has less than
   `min_free_disk_bytes` free (`config.py:241`, default 300 MB;
-  `services/runs.py:153-166`), the 2026-06-29 full-disk outage class; per-iteration
+  `services/runs.py:155-168`), the 2026-06-29 full-disk outage class; per-iteration
   samples are reclaimed by the operator-set retention purge
   (`retention_sample_purge_days`, off by default). Check-then-dispatch with no byte
   reservation: it stops sequential accumulation, not a concurrent burst nor one run
   whose samples outgrow the space left. This is the disk guard §11's C1 note means.
 - **D (export and report compute).** The raw-samples export runs one at a time
-  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:399`; a concurrent request
+  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:401`; a concurrent request
   gets 429), and the verification workbook builds its in-Excel Monte Carlo for at
   most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
   (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and
   the per-user export rate limit at the §11 bulk-export choke point.
+- **Attribution memory (issue #299):** attribution (Shapley, leave-one-out and the
+  weight-robustness ensemble) is a memory-heavy phase of a run, and its footprint does not
+  scale with iterations, so the iteration caps above do not bound it. A "player" here is a
+  control in a scenario's attribution game: a scenario with n controls (explicit links plus
+  inherited org-wide controls) is an n-player game. Work is bounded per scenario by
+  `MAX_ATTRIBUTION_CONTROLS` (64; Shapley and the ensemble skip a scenario above it) and per
+  run by `MAX_ATTRIBUTION_TOTAL_EVALS` (2,000,000 evaluations per pass; a scenario whose
+  cost no longer fits the remainder is skipped). An evaluation's cost grows with its subset
+  and leave-one-out has no control cap, so its time per scenario grows as n² and the budget
+  bounds only the evaluation count. Memory is bounded by four rules. (1) Each composition
+  cache is bounded three ways: no subset of more than `MAX_ATTRIBUTION_CONTROLS` controls is
+  stored (leave-one-out has no control cap and used to fill the cache with near-full subsets,
+  1.3 GiB at 100 controls and 2.4 GiB at 200); at most 75,000 entries
+  (`MAX_COMPOSITION_CACHE_ENTRIES`); and at most `MAX_COMPOSITION_CACHE_BYTES`
+  (`services/run_executor.py:792`, 512 MiB) of ESTIMATED entry bytes. The byte bound is the
+  one that matters because an entry grows with its subset and with each member control's
+  Loss-Event and currency assignments, up to 9 per control: about 14 KB for 64 controls with
+  one assignment each and about 69 KB with nine, so 75,000 entries ranged from about 1.0 GiB
+  (75,000 x 14 KB) to about 4.8 GiB (75,000 x 69 KB). The estimate (`4,000 + 130 per control +
+  115 per assignment` bytes) is an envelope fitted to tracemalloc over 324 measured shapes (1.06
+  to 2.0 times the measured bytes there; up to 1.4% under on some 20- and 21-control shapes), so
+  one cache holds about 512 MiB of traced allocations (tracemalloc; resident memory up to about
+  1.08 times that). Past any bound a miss recomputes the value
+  instead of storing it; controls are composed in sorted-id order, so results are
+  bit-identical and only speed changes. Whole-run peak RSS measured with the bench (macOS,
+  not Fly; 64 controls; Monte Carlo included; default ensemble settings) is 1,031, 1,183 and
+  1,223 MiB for a SINGLE run with 1, 5 and 9 assignments per control, and 1,070 MiB for an
+  AGGREGATE of 6 scenarios with 5, against the 4,096 MiB VM. (2) At most one composition cache
+  is alive at a time: SINGLE and AGGREGATE both free the canonical cache before the ensemble
+  builds its own, and the ensemble's per-(scenario, subset) draw-vector cache is cleared on
+  entering each scenario. That draw-vector cache has no byte limit: it holds one scenario's
+  subsets, about 628 MiB at the default ensemble settings (measured at 64 controls, the
+  per-scenario maximum), and grows with
+  `WEIGHT_ENSEMBLE_DRAWS` and with `WEIGHT_ENSEMBLE_EVAL_BUDGET` (which has no upper bound), so
+  the peaks above hold only at the defaults.
+  (3) One attribution phase runs at a time: an asyncio lock per event loop
+  (`services/run_executor.py:899`), entered only after the run has returned its pooled
+  connection, so a queued run holds none. Production runs one uvicorn process with one loop
+  (no `--workers`), so the lock serializes attribution process-wide; as with the
+  samples-export guard above, a second worker process or a second machine would get its own
+  lock and need a shared limiter. (4) Only standard inline runs are ungated by the
+  concurrency caps above: their Monte Carlo phase is small, but their own attribution runs in
+  the same slot, can take minutes, and waits for attribution ahead of it (first bullet).
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
@@ -821,8 +902,8 @@ login and lockout (`routes/auth.py:188` `user.login_failed`, `routes/auth.py:198
 `user.login_locked_out`), role change (dict built at `routes/users.py:317`,
 logged at `routes/users.py:362` under the generic `"update"` action — not a role-specific
 action string), and the
-request-driven run lifecycle — create (`services/runs.py:361`), cancel (`services/runs.py:415`),
-delete (`services/runs.py:475`), sample-purge (`services/runs.py:508`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
+request-driven run lifecycle — create (`services/runs.py:414`), cancel (`services/runs.py:468`),
+delete (`services/runs.py:528`), sample-purge (`services/runs.py:561`); the executor and reaper add start/complete/fail/reap — plus bulk export via its
 own rate-limit-then-audit choke point
 (`services/audit.py:171-252`). Emails redacted to `*****@domain` — the domain is kept; hash-based redaction is #283
 (`redact_email`, `audit.py:95-116`; the two user-create sites that logged a
@@ -922,10 +1003,35 @@ concurrent race (SQLite; accepted, see the service docstring at
 review check, so the later one overwrites or fails `BUSY`, and both writes
 are audited).
 
-**New action (#199 slice 1, 2026-10): `run.flagged_stale`.** One deploy-gated
-writer, not request-reachable: migration `c4d2e8f1a6b9` writes one `run.flagged_stale`
-row per COMPLETED run it marks stale (`user_id` NULL; `changes.reason` names the engine
-change), bounded by the run count and idempotent (already-stale rows are skipped).
+**New action (#199 slice 1, #299, 2026-10): `run.flagged_stale`.** Two deploy-gated
+writers, neither request-reachable: migration `c4d2e8f1a6b9` (`changes.reason` names the
+engine change) and the downgrade of migration `a7c2e9f14b63` (#299; `changes.reason` is
+"issue-299 org-wide meta controls rollback") each write one `run.flagged_stale` row per
+COMPLETED run they mark stale (`user_id` NULL), bounded by the run count and idempotent
+(already-stale rows are skipped).
+
+**New action (#299, 2026-10): `control.org_wide_sweep`.** Written by `_org_wide_sweep`
+(`services/controls.py:129`) when a control create, update or soft delete changes the
+EFFECTIVE org-wide set (published, operating and flagged org-wide): a flag, status or stage
+flip, or an assignment or Correcting Misaligned Decisions link edit on a control that is
+effective now. Every COMPLETED run in the org is flagged stale, because an org-wide control
+changes every scenario's composition, not only the linked ones. `changes` carries
+`runs_flagged_stale` `[None, count]` and `trigger` `[None, name]`, the name one of
+`create`, `flag`, `status`, `stage`, `assignments` or `delete`. A library re-sync of an
+effective org-wide control sweeps the whole org inside its own `control.resync_from_library`
+row (its `runs_flagged_stale` count) and writes no separate sweep row; a save that only
+re-stamps confirmations changes nothing and writes nothing. Write amplification: it sits
+behind the existing control-write RBAC and CSRF, is at most one row per qualifying save, and
+the sweep is idempotent and org-scoped (already-stale runs are skipped; only id, status and
+`is_stale` are loaded).
+
+**Changed row (#299, 2026-10): `risk_analysis_run.create`.** `changes` now also carries
+`inherited_control_ids_per_scenario` (`services/runs.py:364`, the SINGLE `audit_changes` dict;
+the AGGREGATE dict carries the same key), the frozen org-wide inheritance map as plain
+hyphenated UUID strings, one key per scenario in the run. The run column is the source of
+truth and the audit row is its immutable echo; the list repeats per scenario by design, so it
+is bounded by the run's scenario and control counts. A run created before the feature has no
+such key in its audit row.
 
 ## 12. Known gaps / follow-ups
 
@@ -1015,6 +1121,12 @@ watching:
     `sign_count`/`last_used_at` before its active-user check, and the inactive
     branch returns without an `AuditWriter` call (`routes/auth.py:434-440`); the
     request-end commit persists the counter. Low: the account is already inactive.
+14. **Attribution leave-one-out time grows with the square of a scenario's control count
+    (#299, #301).** Leave-one-out has no control cap, there is no per-scenario cap
+    on links (explicit plus inherited org-wide), and the evaluation budget (§10) counts
+    evaluations, not their cost, so one run can hold the attribution slot for a long time while
+    every other run's attribution queues behind it. Availability only: memory stays bounded by
+    the byte budget. Tracked in #301.
 
 ## 13. Keeping this document current
 

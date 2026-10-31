@@ -47,7 +47,11 @@ from idraa.models.control_function_assignment import ControlFunctionAssignment
 from idraa.models.control_library import ControlLibraryEntry, ControlLibraryEntryAssignment
 from idraa.models.enums import FairCamSubFunction
 from idraa.services.audit import AuditWriter
-from idraa.services.control_library import ControlLibraryService, flag_runs_stale_for_control
+from idraa.services.control_library import (
+    ControlLibraryService,
+    flag_runs_stale_for_control,
+    flag_runs_stale_for_org,
+)
 
 
 @dataclass
@@ -289,12 +293,17 @@ async def apply_resync(
     re-pin + re-snapshot, audit, and flag affected COMPLETED runs stale.
 
     Returns the number of runs flagged. Raises ValueError when the control is
-    not adopted or not stale (routes translate to 4xx).
+    not adopted or not stale (routes translate to 4xx), and
+    ``OrgWideMetaIneligible`` (a ValueError; nothing mutated) when the control is
+    org-wide and the entry carries no inheritable VMC/DSC row (#299).
     """
     from idraa.services.controls import (
+        OrgWideMetaIneligible,
         _build_adopted_snapshot,
         _delete_derived_rows_first,
+        _org_wide_effective,
         _sync_derived_row,
+        has_meta_assignment,
     )
 
     info = await resync_info(db, control)
@@ -303,6 +312,17 @@ async def apply_resync(
     if not info.stale:
         raise ValueError("control is already in sync with the library entry")
     entry = info.entry
+    entry_assignments = await _entry_assignments(db, entry)
+    # #299 spec §3.1: the post-sync set is the entry's rows (the derived row, if
+    # any, is re-linked only to a source that survives). Refuse BEFORE the field
+    # loop and before any delete/flush so a refusal leaves the session untouched.
+    if control.org_wide_meta and not has_meta_assignment(
+        a.sub_function.value for a in entry_assignments
+    ):
+        raise OrgWideMetaIneligible(
+            "Re-sync would leave this organization-wide control without an inheritable "
+            "Variance Management / Decision Support function; clear the flag first."
+        )
 
     old_pin = dict(control.library_pin or {})
     for key, value in _entry_field_values(entry).items():
@@ -317,7 +337,6 @@ async def apply_resync(
             setattr(control, key, value)
 
     # Replace assignments with the re-curated set (UNCONFIRMED, same as adopt).
-    entry_assignments = await _entry_assignments(db, entry)
     # #268: the derived row first, flushed, BEFORE any other row is deleted (it links
     # to a row the loop below deletes; see the module docstring). The returned source
     # sub-function decides re-link vs drop once the entry rows are in.
@@ -377,9 +396,15 @@ async def apply_resync(
     # else: the entry no longer carries the source — the derived row stays dropped
     # (its .delete audit row was written by _delete_derived_rows_first).
 
-    flagged = await flag_runs_stale_for_control(
-        db, organization_id=control.organization_id, control_id=control.id
-    )
+    # An effective org-wide control is inherited by every scenario in the org, so its
+    # re-sync changes runs that never linked it: sweep the whole org, not just the
+    # runs that used it. The count lands in the row below (no separate sweep row).
+    if _org_wide_effective(control):
+        flagged = await flag_runs_stale_for_org(db, organization_id=control.organization_id)
+    else:
+        flagged = await flag_runs_stale_for_control(
+            db, organization_id=control.organization_id, control_id=control.id
+        )
     await audit.log(
         organization_id=control.organization_id,
         entity_type="control",

@@ -211,8 +211,30 @@ def test_build_control_effectiveness_rows_unknown_control_id() -> None:
     snapshot: list[dict[str, Any]] = []
     rows = _build_control_effectiveness_rows(adjustments, snapshot)
     assert rows == [
-        {"control_id": "c-missing", "name": "(unknown)", "effectiveness": 0.50},
+        {"control_id": "c-missing", "name": "(unknown)", "effectiveness": 0.50, "inherited": False},
     ]
+
+
+def test_build_control_effectiveness_rows_flags_inherited_variant() -> None:
+    # #299: an inherited org-wide variant row (control_id "<cid>:meta") is flagged
+    # so the page can badge it; a plain linked control and a hybrid's plain row are not.
+    adjustments = [
+        {"control_id": "c1", "effectiveness": 0.40},
+        {"control_id": "c1:meta", "effectiveness": 0.30},
+        {"control_id": "c2", "effectiveness": 0.20},
+    ]
+    snapshot = [
+        {"control_id": "c1", "name": "Patch Mgmt"},
+        {"control_id": "c1:meta", "name": "Patch Mgmt (org-wide)", "inherited_variant_of": "c1"},
+        {"control_id": "c2", "name": "EDR"},
+    ]
+    rows = _build_control_effectiveness_rows(adjustments, snapshot)
+    assert [(r["control_id"], r["inherited"]) for r in rows] == [
+        ("c1", False),
+        ("c1:meta", True),
+        ("c2", False),
+    ]
+    assert rows[1]["name"] == "Patch Mgmt (org-wide)"
 
 
 def test_build_control_effectiveness_rows_v1_snapshot_shape() -> None:

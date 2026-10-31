@@ -50,6 +50,11 @@
       "optional": false,
       "type": "list[str]"
     },
+    "org_wide_meta": {
+      "has_default": true,
+      "optional": false,
+      "type": "<class 'bool'>"
+    },
     "skill_requirements": {
       "has_default": true,
       "optional": false,

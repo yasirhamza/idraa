@@ -88,6 +88,11 @@
   {%- set cur_status = form_data.status if form_data and form_data.status else (control.status.value if control and control.status else 'active') -%}
   {%- set cur_stage = form_data.implementation_stage if form_data and form_data.implementation_stage else (control.implementation_stage.value if control and control.implementation_stage else 'active') -%}
   {%- set cur_annual_cost = form_data.annual_cost if form_data and form_data.annual_cost is not none else (control.annual_cost if control else 0) -%}
+  {# #299: a re-render (form_data present) echoes the SUBMITTED toggle state, including an
+     explicit uncheck: the route always writes org_wide_meta into form_data as a real bool
+     (absent field = False), so a refused save never falls back to the stored flag. Only a
+     GET (no form_data) reads the control row. #}
+  {%- set cur_org_wide = (form_data.org_wide_meta in (true, "true", "on", "1")) if form_data and form_data.org_wide_meta is defined else (control.org_wide_meta if control else false) -%}
 
   {# #268 — Correcting Misaligned Decisions link. A POST re-render (form_data) echoes the
      SUBMITTED selection; the edit GET passes the derived row's source slug as
@@ -197,6 +202,35 @@
                     options=stage_options,
                     error=errors_dict.get("implementation_stage"),
                     help="How far along this control is in real deployment. ONLY 'Active' controls reduce modeled risk; others are tracked but excluded from analyses.") }}
+      </div>
+
+      {# #299: organization-wide toggle. Disabled (UX only; the service check is
+         authoritative) while it is UNCHECKED and no assignment row picks a VMC/DSC
+         function. A CHECKED toggle is never disabled: a disabled control is not
+         submitted, the route would coerce the absent field to false, and the flag
+         would be cleared silently. When checked and ineligible the hint below turns
+         into a warning and the server's refused-save 422 is the path a browser takes.
+         The slug list comes from fair_cam's meta_sub_functions() via the route.
+         The checked state is reactive Alpine state (x-model="isOrgWide", seeded from
+         cur_org_wide), not a DOM read, so :disabled and the warning's x-show both
+         re-evaluate when the analyst clicks. #}
+      <div class="max-w-md space-y-1"
+           x-data='{ metaSlugs: {{ meta_slugs | tojson }}, eligible: false, isOrgWide: {{ cur_org_wide | tojson }},
+                     sync() { const picks = document.querySelectorAll("#assignments select");
+                              this.eligible = Array.from(picks).filter(s => s.name.endsWith("[sub_function]")).some(s => this.metaSlugs.includes(s.value)); } }'
+           x-init='sync(); new MutationObserver(() => sync()).observe(document.getElementById("assignments"), { childList: true, subtree: true })'
+           @change.window="sync()">
+        <label for="org_wide_meta" class="text-meta text-ink-2">Organization-wide</label>
+        <label class="inline-flex items-center gap-2" :title="eligible ? '' : 'Add a Variance Management or Decision Support function first'">
+          <input id="org_wide_meta" name="org_wide_meta" type="checkbox" value="true"
+                 x-ref="orgWide" x-model="isOrgWide"
+                 {% if cur_org_wide %}checked{% endif %} :disabled="!eligible && !isOrgWide"
+                 class="toggle toggle-primary">
+          <span class="text-body text-ink-1">Its Variance Management / Decision Support functions apply to every scenario</span>
+        </label>
+        <p class="text-micro text-ink-3">Loss-Event functions still need an explicit scenario link. Requires at least one VMC/DSC function. A Correcting Misaligned Decisions link counts only when its source is a Variance Management function.</p>
+        <p class="text-micro text-ink-3">Variance Management identification (Threat intelligence, Control monitoring) and Implementation score only as a pair, and Decision Support's Identify misalignment pairs only with a Correcting Misaligned Decisions link: a scenario gets a pair's uplift only when both halves are present across its active controls, inherited ones included, so a control holding one half can still contribute alongside another control that supplies the other. Treatment Selection is score-neutral (register C8). Inherited functions act only by raising the reliability of the Loss-Event functions on the scenario's other controls, not as a standalone reduction.</p>
+        <p class="text-micro text-status-warning" x-show="!eligible && isOrgWide" x-cloak>This control is organization-wide but no row is a VMC/DSC function any more — saving will be refused until you add one back or clear the flag.</p>
       </div>
     </fieldset>
 

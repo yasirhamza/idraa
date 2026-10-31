@@ -36,9 +36,11 @@ from idraa.models.risk_analysis_run import (
     RunType,
 )
 from idraa.models.run_samples import RunSamples
+from idraa.repositories.control_repo import ControlRepo
 from idraa.repositories.run_repo import RunRepo
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.services.audit import AuditWriter
+from idraa.services.controls import has_meta_assignment
 from idraa.services.run_executor import execute_run
 from idraa.services.run_inputs_hash import (
     ScenarioLike,
@@ -201,10 +203,10 @@ class RunService:
         # outage that blocked /login. The candidate query below feeds BOTH caps,
         # so it is computed ONCE. It runs only when a cap can actually fire: an
         # incoming high-fidelity run (either dispatch path), OR a standard run on
-        # the BACKGROUND path. A standard INLINE run (< _SYNC_THRESHOLD iters) is
-        # sub-second / few-MB and self-limiting, so it stays UNGATED [Arch-I3] —
-        # which also keeps this unindexed full-table-scan count OFF the
-        # latency-sensitive inline path.
+        # the BACKGROUND path. A standard INLINE run (< _SYNC_THRESHOLD iters) is ungated:
+        # its Monte-Carlo phase is bounded by NxM < 250k (~100 MB, config.py) and its own
+        # attribution waits its turn in run_executor._attribution_slot [Arch-I3]. Gating it
+        # would also put this unindexed full-table-scan count on the inline request path.
         will_background = effective_iterations >= _SYNC_THRESHOLD
         if incoming_high or will_background:
             active = active_run_ids()
@@ -286,6 +288,49 @@ class RunService:
                         seen.add(c.id)
                         control_ids.append(c.id)
 
+        # Issue #299: org-wide META inheritance. inherited(s) = effective org-wide
+        # - explicitly linked. Plain ids only; the executor derives the ":meta"
+        # variant ids. Shape: one key per scenario in the run, each holding a sorted
+        # list of plain ids, [] for a scenario that inherits nothing (NULL is
+        # reserved for pre-feature rows). Test "does anything inherit" with
+        # any(map.values()), never with the truthiness of the map.
+        # Defence in depth (Sec-I3): an org-wide control with no inheritable row
+        # would make the executor's meta_assignments() raise for EVERY run in the
+        # org - refuse here, before enqueue. The inherited plain ids are then
+        # appended to control_ids (below) so control_ids_used lists every control
+        # the executor must fetch.
+        org_wide = await ControlRepo(self._db).list_org_wide_meta(organization_id)
+        for c in org_wide:
+            if not has_meta_assignment(
+                a.sub_function.value for a in c.assignments if a.derived_from_assignment_id is None
+            ):
+                # Fixed text that states the eligibility rule (the same one as
+                # services/controls.py has_meta_assignment); no per-control data.
+                raise RunValidationError(
+                    "An organization-wide control has no inheritable Variance Management "
+                    "or Decision Support function (a Correcting Misaligned Decisions link "
+                    "counts only when its source is a Variance Management function). "
+                    "Open Controls, find the control marked organization-wide, and clear "
+                    "the flag or add one before running."
+                )
+        inherited_by_scenario: dict[str, list[str]] = {}
+        for s in scenarios:
+            explicit = {c.id for c in s.mitigating_controls}
+            inherited_by_scenario[str(s.id)] = sorted(
+                str(c.id) for c in org_wide if c.id not in explicit
+            )
+
+        # Inherited ids join the fetch universe (spec §3.2) so the executor can
+        # build variants; they are NOT in any scenario's explicit list.
+        # SINGLE has no `seen`; AGGREGATE's `seen` is exactly set(control_ids) here.
+        seen_ids: set[uuid.UUID] = set(control_ids)
+        for ids in inherited_by_scenario.values():
+            for cid_str in ids:
+                cid = uuid.UUID(cid_str)
+                if cid not in seen_ids:
+                    seen_ids.add(cid)
+                    control_ids.append(cid)
+
         if is_single:
             # Mapped[str] attributes on Scenario satisfy ScenarioLike's str
             # protocol at runtime; cast bridges the mypy v1.11 strict check.
@@ -294,6 +339,7 @@ class RunService:
                 control_ids=control_ids,
                 mc_iterations=effective_iterations,
                 random_seed=random_seed,
+                inherited_control_ids=inherited_by_scenario[str(scenarios[0].id)],
             )
             run = RiskAnalysisRun(
                 id=uuid.uuid4(),
@@ -306,6 +352,7 @@ class RunService:
                 inputs_hash=inputs_hash,
                 controls_snapshot=[],
                 control_ids_used=[str(cid) for cid in control_ids],
+                inherited_control_ids_per_scenario=inherited_by_scenario,
                 created_by=created_by,
                 name=name,
             )
@@ -314,6 +361,7 @@ class RunService:
                 "mc_iterations": effective_iterations,
                 "random_seed": random_seed,
                 "control_count": len(control_ids),
+                "inherited_control_ids_per_scenario": inherited_by_scenario,
             }
             if name is not None:
                 audit_changes["name"] = name
@@ -323,6 +371,7 @@ class RunService:
                 control_ids=control_ids,
                 mc_iterations=effective_iterations,
                 random_seed=random_seed,
+                inherited_by_scenario=inherited_by_scenario,
             )
             sorted_ids = sorted(str(s.id) for s in scenarios)
             run = RiskAnalysisRun(
@@ -338,6 +387,7 @@ class RunService:
                 control_ids_used=[str(cid) for cid in control_ids],
                 aggregate_scenario_ids=sorted_ids,
                 aggregate_control_ids_per_scenario=per_scenario_dict,
+                inherited_control_ids_per_scenario=inherited_by_scenario,
                 created_by=created_by,
                 name=name,
             )
@@ -350,6 +400,9 @@ class RunService:
                 # which scenario at run-create time. Frozen column is the source
                 # of truth; this is the immutable audit-log echo.
                 "aggregate_control_ids_per_scenario": per_scenario_dict,
+                # #299: the frozen org-wide inheritance map (plain ids). The run
+                # column is the source of truth; this is the audit echo.
+                "inherited_control_ids_per_scenario": inherited_by_scenario,
             }
             if name is not None:
                 audit_changes["name"] = name

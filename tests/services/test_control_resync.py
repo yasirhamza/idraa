@@ -547,3 +547,112 @@ async def test_form_save_confirms_the_derived_row_a_resync_left_null(
     assert after.measured_by == user.id
     confirms = await _audits(db_session, "control_function_assignment.confirm", derived_id)
     assert len(confirms) == 1
+
+
+_SRC_299 = uuid.UUID(int=_MID.int + 100)
+_DER_299 = uuid.UUID(int=_MID.int + 101)
+
+
+@pytest.mark.asyncio
+async def test_resync_refuses_to_strip_last_meta_row_from_org_wide_control_before_mutating(
+    db_session: Any, seed_org_user: Any
+) -> None:
+    """#299 spec §3.1 / D9 (Sec-I3, SC-I1): the eligibility check runs on the ENTRY's
+    rows FIRST — before the field loop and before any derived-row delete — so a
+    refusal leaves the control, its rows and its pin untouched."""
+    from idraa.services.controls import OrgWideMetaIneligible
+
+    org, user, control, entry = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=_SRC_299,
+        derived_id=_DER_299,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    control.org_wide_meta = True
+    await db_session.commit()
+    # v2 of the same entry drops every meta row (LEC-only) -> stale AND ineligible.
+    await _entry_version(db_session, funcs=[F.LEC_PREV_RESISTANCE], version=2, entry_id=entry.id)
+    await db_session.commit()
+    before = set(await _cfa_rows(db_session, control.id))
+    assert before == {F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE, F.DSC_CORR_MISALIGNED}
+    assert control.library_pin is not None
+    pin_before = dict(control.library_pin)
+    cost_before = control.annual_cost
+
+    with pytest.raises(OrgWideMetaIneligible, match="without an inheritable"):
+        await apply_resync(db_session, control, user_id=user.id)
+
+    # BEFORE the rollback: the refusal ran ahead of every mutation. The rollback below
+    # would erase a flushed delete / audit row or a dirty attribute whatever the order of
+    # the code, so a check moved after the field loop or the row replacement is visible
+    # only here. (`_cfa_rows` / `_audits` query -> autoflush, hence dirty is asserted first.)
+    assert not (db_session.new or db_session.dirty or db_session.deleted)
+    assert control.library_pin == pin_before
+    assert control.annual_cost == cost_before
+    assert set(await _cfa_rows(db_session, control.id)) == before
+    assert await _audits(db_session, "control_function_assignment.delete", _DER_299) == []
+    assert await _audits(db_session, "control.resync_from_library", control.id) == []
+
+    await db_session.rollback()
+
+    await db_session.refresh(control)  # rollback expired every attribute, assignments included
+    assert set(await _cfa_rows(db_session, control.id)) == before
+    assert control.library_pin == pin_before and control.library_pin["version"] == 1
+    assert (
+        control.annual_cost == cost_before
+    )  # (v1 and v2 share the cost here; pin + rows are the evidence)
+    assert control.org_wide_meta is True
+    assert await _audits(db_session, "control.resync_from_library", control.id) == []
+    assert await _audits(db_session, "control_function_assignment.delete", _DER_299) == []
+
+
+@pytest.mark.asyncio
+async def test_resync_of_org_wide_control_sweeps_the_whole_org(
+    db_session: Any, seed_org_user: Any
+) -> None:
+    """#299 spec D9 / §6: an accepted re-sync of an EFFECTIVE org-wide control
+    flags EVERY completed run in the org (a run that never used the control
+    included) and records the count in the existing control.resync_from_library
+    row — no separate org_wide_sweep row for resync."""
+    org, user, control, entry = await _adopted_with_derived(
+        db_session,
+        seed_org_user,
+        source_id=_SRC_299,
+        derived_id=_DER_299,
+        v1_funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_PREV_RESISTANCE],
+    )
+    control.org_wide_meta = True
+    unrelated = RiskAnalysisRun(  # COMPLETED, never used `control`
+        organization_id=org.id,
+        scenario_id=None,
+        run_type=RunType.AGGREGATE,
+        status=RunStatus.COMPLETED,
+        mc_iterations=1000,
+        inputs_hash="resync-299-unrelated",
+        control_ids_used=[],
+        created_by=user.id,
+    )
+    db_session.add(unrelated)
+    await db_session.commit()
+    # v2 keeps the meta row (changes the LEC row) -> stale, still eligible.
+    await _entry_version(
+        db_session,
+        funcs=[F.VMC_CORR_IMPLEMENTATION, F.LEC_RESP_RESILIENCE],
+        version=2,
+        entry_id=entry.id,
+    )
+    await db_session.commit()
+
+    flagged = await apply_resync(db_session, control, user_id=user.id)
+    await db_session.commit()
+    assert flagged == 1
+    await db_session.refresh(unrelated)
+    assert unrelated.is_stale is True
+    (row,) = await _audits(db_session, "control.resync_from_library", control.id)
+    assert row.changes["runs_flagged_stale"] == [None, 1]
+    assert row.changes["version"] == [1, 2]
+    assert await _audits(db_session, "control.org_wide_sweep", control.id) == []
+    await db_session.refresh(control, ["assignments"])
+    assert control.org_wide_meta is True
+    assert F.VMC_CORR_IMPLEMENTATION in set(await _cfa_rows(db_session, control.id))

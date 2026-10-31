@@ -838,6 +838,64 @@ async def test_a_control_without_a_derived_row_shows_no_fate_on_the_resync_page(
     assert "Correcting Misaligned Decisions link" not in " ".join(r.text.split())
 
 
+_ORG_WIDE_RESYNC_SENTENCE = (
+    "every completed run in the organization will be marked stale, not only the runs that used it"
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("org_wide", [False, True], ids=["plain", "org_wide_in_effect"])
+async def test_the_resync_page_states_the_stale_scope_it_will_actually_use(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession, org_wide: bool
+) -> None:
+    """The sweep scope follows `_org_wide_effective`: an organization-wide control that is in
+    effect marks EVERY completed run in the org (a run that never used it included), so the
+    consent copy must say so; a plain control marks only the runs that used it."""
+    client, org_id = authed_analyst
+    cid = await _stale_linked_control(
+        db_session, org_id, v2_funcs=[FairCamSubFunction.VMC_CORR_IMPLEMENTATION]
+    )
+    if org_wide:
+        control = await db_session.get(Control, cid)
+        assert control is not None
+        control.org_wide_meta = True
+        await db_session.commit()
+    r = await client.get(f"/controls/{cid}/resync")
+    assert r.status_code == 200
+    text = " ".join(_soup(r.text).get_text().split())
+    assert (
+        "Completed runs that used this control will be marked stale so you can re-run them." in text
+    )
+    assert (_ORG_WIDE_RESYNC_SENTENCE in text) is org_wide
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stale_runs", "expected"),
+    [
+        ("1", "1 completed run is now marked stale"),
+        ("3", "3 completed runs are now marked stale"),
+    ],
+)
+async def test_the_post_resync_flash_does_not_claim_the_runs_used_the_control(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    db_session: AsyncSession,
+    stale_runs: str,
+    expected: str,
+) -> None:
+    """For an organization-wide control the count is the org's, so the flash must not say the
+    flagged runs "used" the control."""
+    client, org_id = authed_analyst
+    cid = await _stale_linked_control(
+        db_session, org_id, v2_funcs=[FairCamSubFunction.VMC_CORR_IMPLEMENTATION]
+    )
+    r = await client.get(f"/controls/{cid}?resynced=1&stale_runs={stale_runs}")
+    assert r.status_code == 200
+    text = " ".join(_soup(r.text).get_text().split())
+    assert expected in text
+    assert "that used it" not in text
+
+
 @pytest.mark.asyncio
 async def test_a_resync_integrity_error_redirects_with_a_fixed_alert_and_changes_nothing(
     authed_analyst: tuple[AsyncClient, uuid.UUID],

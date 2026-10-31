@@ -72,6 +72,14 @@
       "primary_key": true,
       "type": "CHAR(32)"
     },
+    "inherited_control_ids_per_scenario": {
+      "foreign_key": false,
+      "has_default": false,
+      "indexed": false,
+      "nullable": true,
+      "primary_key": false,
+      "type": "JSON"
+    },
     "inputs_hash": {
       "foreign_key": false,
       "has_default": false,

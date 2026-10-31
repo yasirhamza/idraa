@@ -68,6 +68,7 @@
    data_table desktop link and its mobile card title. #}
 {%- set _name_cell -%}
   {{- c.name -}}{{- meta_tags(c.assignments | map(attribute="sub_function.value") | list) -}}
+  {%- if c.org_wide_meta -%}{%- if org_wide_effective(c) -%}<span class="badge badge-info badge-xs ml-1" title="Inherited by every scenario (VMC/DSC functions only)">Org-wide</span>{%- else -%}<span class="badge badge-ghost badge-xs ml-1" title="Flagged organization-wide; not inherited until the control's status and implementation stage are both Active">Org-wide</span>{%- endif -%}{%- endif -%}
 {%- endset -%}
 {%- set _ = rows.append({
   "id":           c.id | string,

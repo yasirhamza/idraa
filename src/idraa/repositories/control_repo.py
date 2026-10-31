@@ -64,3 +64,58 @@ class ControlRepo:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_org_wide_meta(
+        self, organization_id: uuid.UUID, *, with_assignments: bool = True
+    ) -> list[Control]:
+        """Issue #299: controls whose VMC/DSC assignments every scenario in the
+        org inherits at run time. Same eligibility predicate as list_for_org
+        (published + operating) AND org_wide_meta — mirrors
+        services.controls._org_wide_effective; test_repo_filter_matches_predicate
+        locks all three to ContributesToComposition. Control.assignments is
+        lazy="selectin" (models/control.py:112-116), so the rows load by default
+        for the callers that filter on them (freeze, run-create refusal);
+        display callers that only read id/name pass ``with_assignments=False``,
+        which swaps in ``raiseload`` — the second SELECT is skipped and an
+        accidental read fails loud instead of returning [] (Sec-N6 / Arch-N3).
+
+        Session stickiness (Arch-N8; probed on SQLAlchemy 2.1.1): instances first
+        loaded with ``with_assignments=False`` raise on ``.assignments`` for the
+        rest of the session unless re-selected (a later plain ``select(Control)``
+        repopulates the unloaded collection on the existing instance) — so call
+        this AFTER any query in the same session that needs those controls' rows.
+        The three display callers (Task 10) are safe: each only reads ``id`` /
+        ``name``, and ``list_for_org`` / ``selectinload(...mitigating_controls)``
+        run before it where their rows are needed."""
+        from sqlalchemy.orm import raiseload
+
+        from idraa.models.enums import ControlImplementationStage, EntityStatus
+
+        stmt = (
+            select(Control)
+            .where(Control.organization_id == organization_id)
+            .where(Control.org_wide_meta.is_(True))
+            .where(Control.status == EntityStatus.ACTIVE)
+            .where(Control.implementation_stage == ControlImplementationStage.ACTIVE)
+            .order_by(Control.name)
+        )
+        if not with_assignments:
+            stmt = stmt.options(raiseload(Control.assignments))
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def count_org_wide_meta(self, organization_id: uuid.UUID) -> int:
+        """Issue #299: how many effective org-wide controls the org has — one
+        scalar query (no assignment load) for the run-detail legacy note."""
+        from sqlalchemy import func
+
+        from idraa.models.enums import ControlImplementationStage, EntityStatus
+
+        stmt = (
+            select(func.count())
+            .select_from(Control)
+            .where(Control.organization_id == organization_id)
+            .where(Control.org_wide_meta.is_(True))
+            .where(Control.status == EntityStatus.ACTIVE)
+            .where(Control.implementation_stage == ControlImplementationStage.ACTIVE)
+        )
+        return int((await self._session.execute(stmt)).scalar_one())

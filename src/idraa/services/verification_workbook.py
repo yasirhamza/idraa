@@ -2156,7 +2156,7 @@ def build_single_run_let_workbook(run: Any, org: Any, *, base_url: str = "") -> 
     scenario = scenarios[0] if scenarios else {}
 
     reconstructible, mults = _residual_reconstructible(
-        controls_snapshot,
+        _per_scenario_controls_snapshot(run, controls_snapshot, str(run.scenario_id)),
         availability_self_detection=(scenario.get("effect") == "availability"),
     )
 
@@ -2969,13 +2969,30 @@ def _agg_app_base_ale(ps: dict[str, Any]) -> float:
 def _per_scenario_controls_snapshot(
     run: Any, controls_snapshot: list[dict[str, Any]], scenario_id: str
 ) -> list[dict[str, Any]]:
-    """Subset the RUN-LEVEL controls_snapshot (the deduplicated union for an
-    aggregate run) to the controls active on ``scenario_id``, using the frozen
-    ``aggregate_control_ids_per_scenario`` map (str-keyed). When that map is None
-    (engine full-universe fallback, native_control_aware.py:170), every scenario
-    uses the full universe."""
+    """Subset the RUN-LEVEL controls_snapshot to the controls active on
+    ``scenario_id``. AGGREGATE: the frozen ``aggregate_control_ids_per_scenario``
+    map (str-keyed); None = engine full-universe fallback (every scenario uses
+    the full universe). Issue #299: the scenario's inherited org-wide controls
+    are present as their ``variant_id`` rows (meta-filtered), so the workbook
+    recomposes exactly what the engine composed; SINGLE runs (one key) are
+    routed through here too so a plain row of an inherited control can never
+    be composed next to its variant."""
+    from idraa.services.inherited_controls import is_variant_id, variant_id
+
     per_scen = getattr(run, "aggregate_control_ids_per_scenario", None)
-    if not per_scen:
-        return controls_snapshot
-    active = {str(c) for c in per_scen.get(str(scenario_id), [])}
+    inherited_map = getattr(run, "inherited_control_ids_per_scenario", None)
+    if not per_scen and inherited_map is None:
+        return controls_snapshot  # legacy (pre-#89 aggregate or pre-#299 single)
+    sid = str(scenario_id)
+    inherited = [str(c) for c in (inherited_map or {}).get(sid, [])]
+    if per_scen:
+        active = {str(c) for c in per_scen.get(sid, [])}
+    else:  # SINGLE, feature active: every non-variant row except inherited plain ids
+        active = {
+            str(s.get("control_id"))
+            for s in controls_snapshot
+            if not is_variant_id(str(s.get("control_id")))
+            and str(s.get("control_id")) not in inherited
+        }
+    active |= {variant_id(c) for c in inherited}
     return [s for s in controls_snapshot if str(s.get("control_id")) in active]

@@ -95,6 +95,15 @@ HELP_ARTICLES: tuple[HelpArticle, ...] = (
         ("run-and-read-analyses", "controls-overlays"),
     ),
     HelpArticle(
+        "organization-wide-controls",
+        "Organization-wide controls",
+        "guide",
+        8,
+        "Flag a Variance Management / Decision Support control as organization-wide "
+        "so every scenario inherits it.",
+        ("how-controls-change-the-numbers", "controls-overlays"),
+    ),
+    HelpArticle(
         "fair-in-idraa-terms",
         "FAIR in Idraa's terms",
         "methodology",

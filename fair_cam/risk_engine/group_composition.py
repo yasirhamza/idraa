@@ -17,6 +17,7 @@ pair-group topology into `composition_topology`).
 
 from __future__ import annotations
 
+import functools
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -113,6 +114,15 @@ _META_GROUPS: frozenset[BooleanGroup] = frozenset(
 # The Loss-Event families (everything that is NOT meta): these are the groups
 # whose reliabilities the coupling uplifts, composed κ-dependently at finalize.
 _LEC_GROUPS: frozenset[BooleanGroup] = frozenset(g for g in BooleanGroup if g not in _META_GROUPS)
+
+
+@functools.cache
+def meta_sub_functions() -> frozenset[FairCamSubFunction]:
+    """Every sub-function routed to a meta (VMC/DSC) group — the single source
+    of truth the app layer uses for "is this assignment a meta assignment"
+    (issue #299: org-wide meta inheritance filters on this set). Derived from
+    ``_META_GROUPS`` so it can never drift from the topology."""
+    return frozenset(sf for sf in FairCamSubFunction if sub_function_to_group(sf) in _META_GROUPS)
 
 
 @dataclass(frozen=True)

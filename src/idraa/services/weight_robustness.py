@@ -389,9 +389,11 @@ def _kendall_tau(order_a: list[str], order_b: list[str]) -> float:
     """Kendall tau-a (no tie correction) between two orderings of the same elements.
 
     Near-ties treated as discordances is intentional: when two controls are nearly
-    indistinguishable in a given draw (identical values sorted by name tie-break), the
-    pair's order is maximally uncertain and we want that to register as a discordance
-    rather than being erased by a tie-correction factor.
+    indistinguishable in a given draw (close but unequal values), the pair's order is
+    maximally uncertain and we want a flip to register as a discordance rather than
+    being erased by a tie-correction factor. EXACTLY equal values are not flips: the
+    per-draw ranking keeps canonical order for them (stable sort), so they are
+    concordant with the canonical order by construction.
     """
     pos = {c: i for i, c in enumerate(order_b)}
     n = len(order_a)
@@ -513,7 +515,8 @@ def run_weight_ensemble(
             Receives ALL K ``(node_mapping, kappa)`` units at once (opaque hand-off
             — the runner never inspects the payloads) so the callee can vectorize
             the per-coalition value computation across the draw axis (#419/#439).
-        control_ids: canonical (band-center, descending) order of control IDs.
+        control_ids: canonical (band-center, descending) order of control IDs. Each
+            draw is ranked by value descending with ties kept in THIS order.
         rng: NumPy random generator (caller-owned; mutated in-place for reproducibility).
         draws: requested number of ensemble draws.
         eval_cost_per_draw: estimated Shapley eval cost per draw (for budget gating).
@@ -616,8 +619,14 @@ def run_weight_ensemble(
     per_draw_vals = per_control_value_fn(draws_list)
     for i in range(k):
         vals = per_draw_vals[i]
-        # tie-break by control_id for determinism when values are equal
-        order = sorted(control_ids, key=lambda c: (-vals[c], c))
+        # Equal values keep CANONICAL order: ``control_ids`` is already the displayed order
+        # (value desc, then display name - aggregate_run_view_model.displayed_control_order)
+        # and Python's sort is stable, so a tie is broken by the SAME key as the canonical
+        # ranking. Breaking it by control_id instead made every exact-tie pair whose name
+        # order and id order disagree flip in 100% of draws (false "too close to call" pairs
+        # and "unstable" badges among controls that contribute exactly 0.0). Deterministic:
+        # ``control_ids`` is a list. No value changes; only rank fields of tied controls.
+        order = sorted(control_ids, key=lambda c: -vals[c])
         rank_of = {c: r for r, c in enumerate(order)}
         for c in control_ids:
             values[c].append(vals[c])

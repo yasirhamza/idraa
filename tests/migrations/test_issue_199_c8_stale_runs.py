@@ -24,6 +24,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import idraa
+from tests.migrations.conftest import add_orm_columns_missing_at_old_revision
 
 _ROOT = Path(idraa.__file__).resolve().parent.parent.parent
 _MIGRATION_PATH = _ROOT / "alembic" / "versions" / "c4d2e8f1a6b9_issue_199_c8_stale_runs.py"
@@ -259,8 +260,11 @@ def _audit_rows(engine: Engine) -> list[dict[str, object]]:
 
 
 @pytest.fixture
-def seeded(alembic_runner: MigrationContext, alembic_config: Config) -> dict[str, str]:
+def seeded(
+    alembic_runner: MigrationContext, alembic_config: Config, alembic_engine: Engine
+) -> dict[str, str]:
     alembic_runner.migrate_up_to(PRE)
+    add_orm_columns_missing_at_old_revision(alembic_engine)  # ORM seed below writes them
     url = alembic_config.get_main_option("sqlalchemy.url")
     assert url is not None
     return asyncio.run(_seed(url))

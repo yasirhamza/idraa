@@ -202,6 +202,21 @@
   decisions rather than reliability.
 </p>
 <p class="text-body text-ink-2 mb-3">
+  <strong>Organization-wide controls are an applicability default
+  (implementation choice).</strong> FAIR-CAM does not say which loss-event
+  controls a variance-management or decision-support control governs.
+  Idraa&rsquo;s default is analyst-led: a control acts only on the scenarios it
+  is linked to. A control flagged organization-wide instead applies its
+  variance-management and decision-support functions to every scenario; an
+  explicit link on a scenario supersedes the inherited copy, and the
+  control&rsquo;s cost is counted once. The coupling, its constant and the
+  operators are unchanged, and only which controls are present together
+  changes. A wrongly inherited control moves any loss-event function&rsquo;s
+  effective reliability by at most 0.1 in absolute terms at the library&rsquo;s
+  reliability of 0.8. See
+  <a class="text-brand hover:underline" href="/help/organization-wide-controls">Organization-wide controls</a>.
+</p>
+<p class="text-body text-ink-2 mb-3">
   <strong>Decision-support prevention is not an all-or-nothing AND
   (departure).</strong> FAIR-CAM prescribes AND across nine decision-support
   functions, which would score any organisation missing one of them at zero.

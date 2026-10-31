@@ -46,7 +46,7 @@
   <div class="alert alert-success mb-4" role="status">
     <p>Control re-synced to the current library entry.
       {%- set _n = request.query_params.get("stale_runs", "0") %}
-      {% if _n != "0" %} {{ _n }} completed run{{ "s" if _n != "1" }} that used it
+      {% if _n != "0" %} {{ _n }} completed run{{ "s" if _n != "1" }}
       {{ "are" if _n != "1" else "is" }} now marked stale — re-run to reflect the
       new curation.{% endif %}</p>
   </div>
@@ -70,6 +70,7 @@
           <span class="badge {{ 'badge-warning' if c.implementation_stage.value != 'active' else 'badge-ghost' }}">
             {{ c.implementation_stage.label }}
           </span>
+          {% if c.org_wide_meta %}{% if org_wide_effective(c) %}<span class="badge badge-info badge-xs ml-1" title="Inherited by every scenario (VMC/DSC functions only)">Org-wide</span>{% else %}<span class="badge badge-ghost badge-xs ml-1" title="Flagged organization-wide; not inherited until the control's status and implementation stage are both Active">Org-wide</span>{% endif %}{% endif %}
           {% if c.implementation_stage.value != 'active' %}
           <span class="text-micro text-ink-2 ml-1">— excluded from analyses until Active</span>
           {% endif %}

@@ -626,19 +626,20 @@ async def test_sub_function_slug_humanized_with_raw_tooltip(
 
 
 # ---------------------------------------------------------------------------
-# #199 Task 6.5 — stale callout copy is cause-agnostic
+# Stale callout copy names every cause that sets is_stale (#199, #299, #438)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(not _DETAIL_TEMPLATE.exists(), reason="detail.html template not present")
 @pytest.mark.asyncio
-async def test_stale_completed_run_shows_cause_agnostic_copy(
+async def test_stale_completed_run_names_every_cause(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
     analyst_org_v3_snapshot_run: RiskAnalysisRun,
     db_session: AsyncSession,
 ) -> None:
-    """is_stale is set by a control re-sync (#438) AND by the #199 engine-change migration,
-    so the run-detail callout must not name a re-sync / library curation as the cause."""
+    """is_stale has no recorded cause: a control re-sync (#438), an organization-wide-controls
+    sweep (#299), the #199 engine-change migration and the #299 downgrade all set it, so the
+    run-detail callout names each of them and does not blame a re-sync / library curation."""
     run = analyst_org_v3_snapshot_run
     run.is_stale = True
     await db_session.commit()
@@ -647,8 +648,44 @@ async def test_stale_completed_run_shows_cause_agnostic_copy(
     assert response.status_code == 200
     body = " ".join(response.text.split())  # the template wraps the sentence across lines
     assert (
-        "These results may be out of date: a control this run used, or the risk engine, "
-        "changed after the run completed. Re-run the analysis to refresh them." in body
+        "These results may be out of date: a control this run used changed, the organization's "
+        "organization-wide controls changed, or the risk engine was updated or rolled back "
+        "after the run completed. Re-run the analysis to refresh them." in body
     )
     assert "re-synced" not in body
     assert "library curation" not in body
+
+
+@pytest.mark.skipif(not _DETAIL_TEMPLATE.exists(), reason="detail.html template not present")
+@pytest.mark.asyncio
+async def test_run_swept_stale_by_an_org_wide_change_renders_the_org_wide_cause(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    analyst_org_v3_snapshot_run: RiskAnalysisRun,
+    db_session: AsyncSession,
+) -> None:
+    """#299: the org-wide sweep flags EVERY completed run, including one whose
+    control_ids_used never held the changed control. The per-control sweep leaves such a run
+    alone, so a banner that blamed "a control this run used" alone would be false here; the
+    page must name the organization-wide cause."""
+    from idraa.services.control_library import (
+        flag_runs_stale_for_control,
+        flag_runs_stale_for_org,
+    )
+
+    run = analyst_org_v3_snapshot_run
+    _, org_id = authed_analyst
+    assert not run.is_stale
+    assert not run.control_ids_used
+    # The per-control sweep (the "control this run used" cause) does not touch this run ...
+    assert await flag_runs_stale_for_control(db_session, org_id, uuid.uuid4()) == 0
+    assert not run.is_stale
+    # ... the organization-wide sweep does.
+    assert await flag_runs_stale_for_org(db_session, org_id) == 1
+    await db_session.commit()
+
+    client, _ = authed_analyst
+    response = await client.get(f"/runs/{run.id}")
+    assert response.status_code == 200
+    body = " ".join(response.text.split())
+    assert "These results may be out of date:" in body
+    assert "the organization's organization-wide controls changed" in body

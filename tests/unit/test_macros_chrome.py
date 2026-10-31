@@ -216,9 +216,11 @@ def test_action_menu_renders_csrf_for_form_items() -> None:
     assert "test-csrf" in html
 
 
-def test_run_status_badge_stale_tooltip_is_cause_agnostic() -> None:
-    """#199 Task 6.5: is_stale is set by a control re-sync (#438) or an engine-change
-    migration (#199); the badge tooltip must not name a re-sync as the cause."""
+def test_run_status_badge_stale_tooltip_names_every_cause() -> None:
+    """is_stale has no recorded cause. It is set by a control re-sync (#438), an
+    organization-wide-controls sweep (#299, which flags runs that never used the control),
+    an engine-change migration (#199) and the #299 migration's downgrade, so the tooltip
+    names all of them and does not name a re-sync as THE cause."""
     from idraa.models.risk_analysis_run import RunStatus
 
     html = _r(
@@ -226,8 +228,9 @@ def test_run_status_badge_stale_tooltip_is_cause_agnostic() -> None:
     )
     assert ">stale</span>" in html
     assert (
-        "Results may be out of date — a control this run used, or the risk engine, "
-        "changed after the run completed. Re-run to refresh." in html
+        "Results may be out of date — a control this run used changed, the organization's "
+        "organization-wide controls changed, or the risk engine was updated or rolled back "
+        "after the run completed. Re-run to refresh." in html
     )
     assert "re-synced" not in html
     assert "library curation" not in html

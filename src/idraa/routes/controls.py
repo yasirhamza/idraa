@@ -23,6 +23,7 @@ import re
 import uuid
 from types import SimpleNamespace
 
+from fair_cam.risk_engine.group_composition import meta_sub_functions
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
@@ -69,6 +70,11 @@ router = APIRouter()
 
 # Form dropdown choices; the derived-only dsc_corr_misaligned has its own link select (#268).
 _FORM_SUB_FUNCTIONS = [sf for sf in FairCamSubFunction if sf.value != "dsc_corr_misaligned"]
+
+# VMC/DSC sub-function slugs, derived from fair_cam so the form's Alpine state can never
+# drift from the composition topology (#299). The org-wide toggle reads this to decide
+# whether any assignment row is eligible; the service re-checks authoritatively.
+_META_SLUGS = sorted(sf.value for sf in meta_sub_functions())
 
 # Server-set fields stripped from assignment rows before Pydantic validation: the service owns
 # them (user_id + now()), and derived_from_assignment_id is never client-supplied — the
@@ -148,6 +154,11 @@ async def _parse_control_form_dict(request: Request) -> dict[str, object]:
         if annual_cost_str:
             out["annual_cost"] = annual_cost_str
 
+    # Issue #299: an unchecked toggle is absent from the form; the form_field
+    # toggle branch posts value="true". Coerce to a real bool so Pydantic never
+    # sees a free-text value here.
+    out["org_wide_meta"] = str(out.get("org_wide_meta", "")).lower() in {"on", "true", "1"}
+
     return out
 
 
@@ -210,6 +221,7 @@ def _render_form_with_errors(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
         status_code=status_code,
@@ -387,6 +399,7 @@ async def control_new_get(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
     )
@@ -1065,6 +1078,7 @@ async def control_edit_get(
             "status_choices": list(EntityStatus),
             "stage_choices": list(ControlImplementationStage),
             "sub_function_choices": _FORM_SUB_FUNCTIONS,
+            "meta_slugs": _META_SLUGS,
             "flash": None,
         },
     )
@@ -1179,3 +1193,6 @@ from idraa.services._view_model_helpers import (  # noqa: E402
 )
 
 templates.env.globals["assignment_display_rows"] = assignment_display_rows
+# The Org-wide badge on the list and detail pages reads the SAME predicate the freeze and the
+# stale sweeps use (flag set, status Active, stage Active), never a template copy of it (#299).
+templates.env.globals["org_wide_effective"] = svc._org_wide_effective

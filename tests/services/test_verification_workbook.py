@@ -648,6 +648,7 @@ def _make_run(
     return SimpleNamespace(
         name=name,
         run_type=run_type,
+        scenario_id="s1",  # prod shape: a SINGLE run carries its scenario_id (#299 Task 7)
         mc_iterations=mc_iterations,
         random_seed=42,
         controls_snapshot=controls_snapshot if controls_snapshot is not None else [],
@@ -2166,6 +2167,7 @@ def test_build_workbook_handles_keyless_pert_scenario_shape():
     run = SimpleNamespace(
         name="Run X",
         run_type="single",
+        scenario_id="s1",  # prod shape: a SINGLE run carries its scenario_id (#299 Task 7)
         mc_iterations=10,
         random_seed=42,
         controls_snapshot=[],

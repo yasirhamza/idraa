@@ -6,7 +6,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import JSON, Boolean, Enum, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from idraa.db import Base
@@ -71,6 +71,13 @@ class Control(IdMixin, TimestampMixin, OrgMixin, Base):
         default=ControlImplementationStage.ACTIVE,
         server_default=ControlImplementationStage.ACTIVE.value,
         nullable=False,
+    )
+    # Issue #299: organization-wide META inheritance. When true, every scenario
+    # in the org inherits this control's VMC/DSC assignments at run time
+    # (meta channel only — LEC rows still need an explicit scenario link).
+    # Eligibility (>=1 inheritable assignment) is enforced in services/controls.py.
+    org_wide_meta: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
     )
     version: Mapped[str] = mapped_column(String(32), default="1.0", nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(

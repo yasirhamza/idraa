@@ -63,6 +63,7 @@ from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus, RunType
 from idraa.models.run_samples import RunSamples
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
+from idraa.repositories.control_repo import ControlRepo
 from idraa.repositories.run_repo import RunRepo
 from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
@@ -77,6 +78,7 @@ from idraa.services.audit import log_bulk_export
 from idraa.services.dashboard_view_model import appetite_strip
 from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService
+from idraa.services.inherited_controls import INHERITED_NAME_SUFFIX, is_variant_id
 from idraa.services.org import require_sole_org
 from idraa.services.reporting_currency import resolve_reporting_currency
 from idraa.services.retention import maybe_sweep_opportunistic
@@ -597,6 +599,23 @@ def _build_display_context(
     return {"display_results": display_results, "converted_cost_summary": converted_cost}
 
 
+async def _legacy_org_wide_count(
+    run: RiskAnalysisRun, db: AsyncSession, organization_id: uuid.UUID
+) -> int:
+    """How many org-wide controls the org has NOW, for a run that predates them.
+
+    A pre-feature run has ``inherited_control_ids_per_scenario IS NULL``; a run
+    created since then always carries a map, one key per scenario (``{sid: []}``
+    when nothing was inherited). Only the legacy branch takes the count: one COUNT query, no
+    relationship load, nothing at all on a feature-era run. Used by the detail page only:
+    the note sits outside the ``#run-status-inner`` region the status poll swaps, so the
+    poll fragment never renders it.
+    """
+    if run.inherited_control_ids_per_scenario is not None:
+        return 0
+    return await ControlRepo(db).count_org_wide_meta(organization_id)
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def get_run_detail(
     run_id: uuid.UUID,
@@ -640,7 +659,13 @@ async def get_run_detail(
         )
         if scenario is None:
             raise HTTPException(status_code=404)
-        snapshot_ids = sorted(str(c["control_id"]) for c in run.controls_snapshot)
+        # Inherited org-wide variant rows are not scenario-linked controls, so
+        # they never count toward the "overridden from scenario default" check.
+        snapshot_ids = sorted(
+            str(c["control_id"])
+            for c in run.controls_snapshot
+            if not is_variant_id(str(c["control_id"]))
+        )
         scenario_ids = sorted(str(c.id) for c in scenario.mitigating_controls)
         controls_overridden = snapshot_ids != scenario_ids
         scenarios = None
@@ -652,6 +677,11 @@ async def get_run_detail(
         )
         scenario = None
         controls_overridden = False
+
+    # #299: a run that predates org-wide controls shows a re-run note, but only
+    # while the org actually has an org-wide control now.
+    org_wide_count = await _legacy_org_wide_count(run, db, user.organization_id)
+    run_predates_inheritance = org_wide_count > 0
 
     # Anti-drift (plan-gate Arch-I1): the display view-model + converted cost
     # summary are built by the shared helper so the status-poll fragment renders
@@ -700,6 +730,8 @@ async def get_run_detail(
             "scenarios": scenarios,
             "display_results": display_results,
             "controls_overridden": controls_overridden,
+            "run_predates_inheritance": run_predates_inheritance,
+            "org_wide_count": org_wide_count,
             "has_reinterpreted_v2_snapshot": has_reinterpreted_v2_snapshot,
             "converted_cost_summary": converted_cost,
             "creator_label": creator_label,
@@ -1133,6 +1165,23 @@ async def get_new_analysis_form(
         for c in s.mitigating_controls:
             name_by_id[str(c.id)] = c.name
 
+    # #299: inherited (org-wide, not linked) controls per scenario for the preview.
+    # A separate name map, so an explicit chip never gets renamed "(org-wide)", built
+    # ONLY from ids some listed scenario inherits: a control linked on every listed
+    # scenario never appears under its "(org-wide)" name. Display only (id + name are
+    # read), so skip the assignment rows; this runs after the scenarios load above.
+    org_wide = await ControlRepo(db).list_org_wide_meta(org_id, with_assignments=False)
+    scenario_to_inherited: dict[str, list[str]] = {}
+    for s in scenarios:
+        linked_ids = {m.id for m in s.mitigating_controls}
+        scenario_to_inherited[str(s.id)] = [str(c.id) for c in org_wide if c.id not in linked_ids]
+    _inherited_anywhere = {cid for ids in scenario_to_inherited.values() for cid in ids}
+    inherited_name_by_id = {
+        str(c.id): f"{c.name}{INHERITED_NAME_SUFFIX}"
+        for c in org_wide
+        if str(c.id) in _inherited_anywhere
+    }
+
     # Auto-generate a default run name so the operator never has to type one.
     # User feedback (2026-05-09): "analysis run names should be generated."
     from datetime import datetime
@@ -1147,6 +1196,8 @@ async def get_new_analysis_form(
             "scenarios": scenarios,
             "scenario_to_mitigating": scenario_to_mitigating,
             "name_by_id": name_by_id,
+            "scenario_to_inherited": scenario_to_inherited,
+            "inherited_name_by_id": inherited_name_by_id,
             "prefill_scenario_ids": [str(prefill_scenario_id)] if prefill_scenario_id else [],
             "default_mc_iterations": get_settings().mc_iterations_default,
             "max_mc_iterations": get_settings().mc_iterations_max,

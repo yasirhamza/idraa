@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import idraa
 from idraa.schemas.control_library import ControlLibraryEntrySeed
+from tests.migrations.conftest import add_orm_columns_missing_at_old_revision
 
 _ROOT = Path(idraa.__file__).resolve().parent.parent.parent
 _MIGRATION_PATH = (
@@ -380,6 +381,7 @@ def test_adopted_siem_control_survives_unchanged_and_goes_resync_stale(
     entry_id, version = _latest(alembic_engine)
     url = alembic_config.get_main_option("sqlalchemy.url")
     assert url is not None
+    add_orm_columns_missing_at_old_revision(alembic_engine)  # the adopt below writes them
     cid = asyncio.run(_adopt(url, entry_id, version))
     control_before = _rows(alembic_engine, "SELECT * FROM controls WHERE id = :c", {"c": cid})
     cfa_before = _rows(

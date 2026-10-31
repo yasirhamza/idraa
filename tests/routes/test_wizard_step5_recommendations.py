@@ -17,8 +17,10 @@ authentically) but not EDR — exercising both the adopted and un-adopted paths.
 
 from __future__ import annotations
 
+import re
 import uuid
 from html.parser import HTMLParser
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -33,6 +35,7 @@ from idraa.models.control_library import (
 )
 from idraa.models.enums import (
     AssetClass,
+    ControlImplementationStage,
     ControlType,
     ThreatCategory,
 )
@@ -276,3 +279,104 @@ async def test_adopt_from_wizard_rejects_non_uuid_tx_without_adopting(
     assert r.status_code == 400
     after = (await db_session.execute(select(func.count()).select_from(Control))).scalar_one()
     assert after == before  # nothing adopted on a bad tx
+
+
+@pytest.mark.asyncio
+async def test_step5_marks_org_wide_controls_and_lists_inherited(
+    analyst_wizard_at_step5: tuple[AsyncClient, str],
+    db_session: AsyncSession,
+    seed_control_factory: Any,
+) -> None:
+    """#299 spec §7: the picker badges org-wide controls; a read-only inherited
+    list with the meta-only sentence sits beneath the picker, and a control that
+    is already shown CHECKED in the picker is never ALSO listed as inherited.
+
+    SC-I20: the fixture adopts MFA and the started-from entry recommends it
+    (``suggested_control_ids = [MFA_SLUG, EDR_SLUG]``), so MFA is in
+    ``precheck_control_ids`` (``routes/scenarios.py``: adopted
+    recommendations) and the SC-N10 exclusion removes it from
+    ``inherited_controls``. MFA alone would therefore leave the inherited list
+    EMPTY and the guarded block unrendered — so a second org-wide control that
+    is NOT library-recommended ("SAT") carries the inherited-list assertions,
+    and MFA carries the "never both checked and inherited" assertion. The
+    fixture returns only ``(client, tx)``, so SAT is created in MFA's org."""
+    client, tx = analyst_wizard_at_step5
+    mfa = (await db_session.execute(select(Control).where(Control.name == MFA_NAME))).scalar_one()
+    org_id = mfa.organization_id  # read BEFORE the factory commit expires `mfa`
+    mfa.org_wide_meta = True  # MFA's library entry carries vmc_id_control_monitoring (meta)
+    sat = await seed_control_factory(name="SAT", organization_id=org_id)  # VMC + LEC rows
+    sat.org_wide_meta = True
+    await db_session.commit()
+    r = await client.get(f"/scenarios/new/wizard/step/5?tx={tx}")
+    assert r.status_code == 200
+    assert 'data-org-wide="true"' in r.text  # picker badge (MFA and SAT are both org-wide)
+    assert "Inherited organization-wide" in r.text
+    assert "Only their VMC/DSC functions apply here" in r.text
+    assert (
+        "act only by raising the reliability of the scenario's linked Loss-Event controls" in r.text
+    )
+    # The list sits under a live picker, so the heading makes no promise about later checks.
+    assert "unless you link it above" in r.text
+    # The badge tooltip must not call a checkable control "already inherited" and must not
+    # presuppose Loss-Event functions the control may not have.
+    assert "Already inherited" not in r.text
+    assert "including any Loss-Event functions" in r.text
+    inherited_block = r.text.split("Inherited organization-wide", 1)[1].split("</ul>", 1)[0]
+    assert "SAT" in inherited_block  # org-wide, not recommended, not picked -> inherited
+    assert (
+        MFA_NAME not in inherited_block
+    )  # org-wide but pre-checked -> never checked AND inherited
+
+
+@pytest.mark.asyncio
+async def test_step5_picked_org_wide_control_is_not_listed_as_inherited(
+    analyst_wizard_at_step5: tuple[AsyncClient, str],
+    db_session: AsyncSession,
+    seed_control_factory: Any,
+) -> None:
+    """A control the analyst already PICKED (state.mitigating_control_ids) is
+    shown checked in the picker, so it is never also listed as inherited; once
+    nothing is left to inherit the list (and its sentence) is not rendered."""
+    client, tx = analyst_wizard_at_step5
+    mfa = (await db_session.execute(select(Control).where(Control.name == MFA_NAME))).scalar_one()
+    org_id = mfa.organization_id
+    sat = await seed_control_factory(name="SAT", organization_id=org_id)
+    sat.org_wide_meta = True
+    sat_id = str(sat.id)
+    await db_session.commit()
+    csrf = await _csrf_token(client)
+    picked = await client.post(
+        f"/scenarios/new/wizard/step/5?tx={tx}",
+        data={"_csrf": csrf, "control_ids": sat_id},
+        follow_redirects=False,
+    )
+    assert picked.status_code == 303, picked.status_code
+    r = await client.get(f"/scenarios/new/wizard/step/5?tx={tx}")
+    assert r.status_code == 200
+    sat_input = re.search(rf'<input[^>]*value="{sat_id}"[^>]*>', r.text)
+    assert sat_input is not None and "checked" in sat_input.group(0)
+    assert "Inherited organization-wide" not in r.text
+    assert "Only their VMC/DSC functions apply here" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_step5_flagged_but_not_operating_control_is_neither_badged_nor_inherited(
+    analyst_wizard_at_step5: tuple[AsyncClient, str],
+    db_session: AsyncSession,
+    seed_control_factory: Any,
+) -> None:
+    """The badge and the inherited list follow EFFECTIVE org-wide status: a
+    control flagged org-wide whose implementation stage is not Active composes
+    nowhere, so step 5 neither badges it nor lists it as inherited."""
+    client, tx = analyst_wizard_at_step5
+    mfa = (await db_session.execute(select(Control).where(Control.name == MFA_NAME))).scalar_one()
+    org_id = mfa.organization_id
+    planned = await seed_control_factory(name="Planned Policy", organization_id=org_id)
+    planned.org_wide_meta = True
+    planned.implementation_stage = ControlImplementationStage.PLANNED
+    await db_session.commit()
+    r = await client.get(f"/scenarios/new/wizard/step/5?tx={tx}")
+    assert r.status_code == 200
+    assert "Planned Policy" not in r.text
+    assert 'data-org-wide="true"' not in r.text
+    assert "Inherited organization-wide" not in r.text

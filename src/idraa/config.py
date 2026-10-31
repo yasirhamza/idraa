@@ -273,22 +273,22 @@ class Settings(BaseSettings):
     # standard runs so a burst can't exhaust the 15-connection pool + VM RAM.
     #
     # (a) SIZING — worst case is a standard run whose NxM sits JUST UNDER the
-    #     250k threshold, whose peak RSS is ~100 MB (NOT the ~70 MB 100k-iteration
-    #     figure — a standard run's effective work can approach the threshold).
-    #     8 x ~100 MB + 2 x ~700 MB (the high-fidelity cap) ≈ 2.2 GB < 4 GB VM
-    #     (fly.toml:91-94 performance / 2 cpu / 4096 mb). Value 8 survives.
+    #     250k threshold, whose Monte-Carlo peak RSS is ~100 MB (attribution is
+    #     iteration-free and is NOT in that figure; see (b)). 8 x ~100 MB + 2 x ~700 MB
+    #     (the high-fidelity cap) ≈ 2.2 GB < 4 GB VM (fly.toml:91-94). Value 8 survives.
     # (b) GUARD INVARIANT — the two caps together must fit RAM:
     #       max_concurrent_standard_runs · RAM(threshold)
     #         + max_concurrent_high_fidelity_runs · RAM(max_iters x max_M)
-    #         < VM_RAM
-    #     Stated explicitly so a future HIGH_FIDELITY_ITERATIONS_THRESHOLD bump
-    #     (which raises RAM(threshold), the standard-run worst case) can't
-    #     silently break the OOM guard — re-derive both caps against it.
-    # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no
-    #     durable queue exists), matching the high-fidelity cap. So a 9th
-    #     concurrent standard run is REJECTED even when it is one org's analysts
-    #     driving all 8 — fail-closed and precedent-matching, but far likelier to
-    #     be hit in normal use than the high-fidelity cap of 2. Raise via
+    #         + RAM(attribution, one run at a time) < VM_RAM - RAM(app baseline)
+    #     RAM(attribution) is iteration-free: one term (run_executor._attribution_slot). macOS bench
+    #     (not Fly), MiB, defaults, 64 controls: SINGLE 1,031 / 1,183 / 1,223 at 1 / 5 / 9 LEC per
+    #     control; AGGREGATE (6 scenarios) 1,070 at 5. 2,200 + 1,223 = 3,423 of 4,096 BEFORE the app
+    #     baseline. Composition caches <= 512 MiB (est.) each; the ensemble draw-vector cache has NO
+    #     byte limit: ~628 MiB at defaults, grows with WEIGHT_ENSEMBLE_DRAWS / _EVAL_BUDGET.
+    # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no durable queue
+    #     exists), matching the high-fidelity cap. So a 9th concurrent standard run is REJECTED even
+    #     when it is one org's analysts driving all 8 — fail-closed and precedent-matching, but far
+    #     likelier to be hit in normal use than the high-fidelity cap of 2. Raise via
     #     MAX_CONCURRENT_STANDARD_RUNS if a deployment's VM has more headroom.
     # No ``alias=`` (same rationale as min_free_disk_bytes /
     # max_concurrent_high_fidelity_runs). Env: MAX_CONCURRENT_STANDARD_RUNS.

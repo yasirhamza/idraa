@@ -130,6 +130,23 @@ class RiskAnalysisRun(IdMixin, TimestampMixin, OrgMixin, Base):
         nullable=True,
     )
 
+    # Issue #299: org-wide meta inheritance frozen at run-create time.
+    # dict[scenario_id -> [control_id, ...]] of PLAIN control ids inherited
+    # (org-wide AND not explicitly linked) by that scenario. Keys and values are
+    # hyphenated str(UUID) strings (readers match on str(run.scenario_id) /
+    # str(control.id); a 32-hex id would silently match nothing). Used for SINGLE
+    # too (one key). NULL = run predates the feature; a dict whose lists are all
+    # empty ({} or {scenario_id: []}) = feature active, nothing inherited. The
+    # executor derives the "<cid>:meta" variant ids from this column; they never
+    # land in a UUID column.
+    # none_as_null=True: Python None -> SQL NULL. Plain JSON would store the text
+    # 'null' for an explicitly assigned None, giving the pre-feature marker two
+    # encodings (the migration downgrade's IS NOT NULL would flag such a row stale;
+    # see also the NULLIF workaround ``_is_json_null`` in repositories/scenario_library_repo.py).
+    inherited_control_ids_per_scenario: Mapped[dict[str, list[str]] | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+
     @validates("aggregate_control_ids_per_scenario")
     def _validate_aggregate_control_ids_per_scenario(
         self, key: str, value: dict[str, list[str]] | None
