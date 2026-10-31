@@ -27,7 +27,7 @@ Internet ──TLS (ends at the Fly edge)──▶ Fly.io edge/proxy ──(B1)�
    │  HTTP, port 8000 only — no other port published (operators reach the VM over Fly's private ssh: §3 factor reset)
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1173-1237), then
+   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1211-1275), then
    │  per-route dependencies (step-up resolves before role on every gated route); [ ] = no letter.
    │  B0/B3 reject before B2's session lookup; [setup_guard] still reads the user count first.
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
@@ -80,10 +80,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1402-1410`). The idraa#107 cache-state
+  security-settings state (`app.py:1407-1415`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:1051-1068`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1056-1073`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -96,8 +96,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1264`; confirmed order
-`app.py:1206-1270`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1269`; confirmed order
+`app.py:1211-1275`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -385,7 +385,7 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
   `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
-  (`app.py:1223-1257`) allowlists `/setup` (`app.py:831-834`) and never blocks it.
+  (`app.py:1228-1262`) allowlists `/setup` (`app.py:831-834`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for

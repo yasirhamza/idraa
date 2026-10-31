@@ -13,15 +13,24 @@ equality of the parsed value between HTMX and plain JSON callers.
 from __future__ import annotations
 
 import json
+import pathlib
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import pytest
+from fastapi import HTTPException as FastAPIHTTPException
+from fastapi.exceptions import RequestValidationError
 from httpx import AsyncClient, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
+from idraa.app import (
+    _auth_redirect_handler,
+    _request_validation_handler,
+    _starlette_http_exception_handler,
+    create_app,
+)
 from idraa.models.enums import EntityStatus
 from tests.conftest import csrf_post
 
@@ -179,8 +188,6 @@ def _bare_request() -> Request:
 @pytest.mark.asyncio
 async def test_framework_http_exception_handler_encodes_markup_characters() -> None:
     """Router/multipart-raised (bare Starlette) exceptions get the same encoding."""
-    from idraa.app import _starlette_http_exception_handler
-
     response = await _starlette_http_exception_handler(
         _bare_request(), StarletteHTTPException(400, detail="<b>&x")
     )
@@ -193,8 +200,6 @@ async def test_framework_http_exception_handler_encodes_markup_characters() -> N
 
 @pytest.mark.asyncio
 async def test_framework_http_exception_handler_keeps_bodyless_statuses_empty() -> None:
-    from idraa.app import _starlette_http_exception_handler
-
     response = await _starlette_http_exception_handler(_bare_request(), StarletteHTTPException(304))
 
     assert response.status_code == 304
@@ -211,3 +216,54 @@ async def test_unknown_path_404_body_unchanged(
 
     assert response.status_code == 404
     assert response.content == b'{"detail":"Not Found"}'
+
+
+@pytest.mark.asyncio
+async def test_framework_http_exception_5xx_gets_the_generic_body_and_error_id() -> None:
+    """A bare Starlette 5xx takes the same generic-body + error-id path as every other 500."""
+    response = await _starlette_http_exception_handler(
+        _bare_request(), StarletteHTTPException(503, detail="internal <b> detail")
+    )
+
+    assert response.status_code == 500
+    body = bytes(response.body)
+    assert b"internal" not in body
+    assert b"<b>" not in body
+    assert body.startswith(b"Internal Server Error\nError ID: ")
+    assert response.headers["x-error-id"] == body.rsplit(b" ", 1)[1].decode()
+
+
+def test_error_handlers_are_registered_for_each_exception_class() -> None:
+    """Each JSON error producer is wired to its encoding handler (registry check)."""
+    handlers = create_app().exception_handlers
+
+    assert handlers[StarletteHTTPException] is _starlette_http_exception_handler
+    assert handlers[RequestValidationError] is _request_validation_handler
+    assert handlers[FastAPIHTTPException] is _auth_redirect_handler
+
+
+@pytest.mark.asyncio
+async def test_router_405_keeps_allow_header_and_plain_json_body(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """The router's own 405 goes through the framework handler: header and body preserved."""
+    client, _ = authed_analyst
+
+    response = await client.get(f"/scenarios/{uuid.uuid4()}/run", headers=_HTMX)
+
+    assert response.status_code == 405
+    assert "POST" in response.headers["allow"]
+    assert response.content == b'{"detail":"Method Not Allowed"}'
+    assert response.headers["content-type"] == "application/json"
+
+
+def test_sme_save_alert_shows_the_parsed_detail() -> None:
+    """The one client that read an error body as text shows ``detail``, not escapes."""
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    template = (
+        root / "src/idraa/templates/scenarios/wizard/_fair_params_form_inner.html"
+    ).read_text(encoding="utf-8")
+
+    assert "alert('Could not save SME: ' + (await resp.text()))" not in template
+    assert "JSON.parse(msg).detail" in template
+    assert "alert('Could not save SME: ' + msg)" in template

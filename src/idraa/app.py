@@ -866,12 +866,13 @@ def _internal_error_response(
     request: StarletteRequest, exc: BaseException, log_detail: str | None = None
 ) -> Response:
     """Generic 500 with a correlation id (idraa#72 fix 4) — the sanctioned 500
-    shape for uncaught exceptions and ``fastapi.HTTPException(5xx)``. (A bare
-    ``starlette.exceptions.HTTPException(5xx)`` would fall to Starlette's
-    default handler without an id — nothing in src raises one today.)
+    shape for uncaught exceptions and ``HTTPException(5xx)``, whether raised as
+    ``fastapi.HTTPException`` (``_auth_redirect_handler``) or as a bare
+    ``starlette.exceptions.HTTPException`` (``_starlette_http_exception_handler``;
+    nothing in src raises one today).
 
     Shared by the unhandled-exception handler AND the ``HTTPException(5xx)``
-    path in ``_auth_redirect_handler``, so no 500 ships without an id or
+    paths in those two handlers, so no 500 ships without an id or
     leaks internal detail (``exc.detail`` used to reach the client via the
     JSON fallback). The id is random (no request data) and ties the response
     to the server-side log line, so a user-reported id is greppable to a
@@ -908,7 +909,7 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     decision is the Accept header:
 
     - JSON API consumer (``Accept: application/json``) -> pass through
-      to FastAPI's default JSON-shaped error.
+      to the app's JSON error body (``HtmlSafeJSONResponse``).
     - Browser (``text/html``, ``*/*``, or no Accept header at all) ->
       303 to /login?next=<original path> so the login form posts back
       to the right place after sign-in.
@@ -919,9 +920,9 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     ignore. We only fall BACK to JSON when the caller explicitly asks
     for it.
 
-    Scope: 401-only. 403 (``require_role``) falls through to the default
-    JSON handler — the right behaviour for "signed in but wrong role",
-    where a redirect would loop the user back and forth.
+    Scope: 401-only. 403 (``require_role``) falls through to the same JSON
+    error body (``HtmlSafeJSONResponse``) — the right behaviour for "signed
+    in but wrong role", where a redirect would loop the user back and forth.
 
     5xx interception (idraa#72): a raised ``HTTPException(5xx)`` (e.g. the
     finalize row-version-capture 500, the reports COMPLETED-but-empty 500s)
@@ -952,7 +953,11 @@ async def _starlette_http_exception_handler(
     ``_auth_redirect_handler`` owns ``fastapi.HTTPException`` (handler lookup
     walks the exception's MRO, so it wins for those); this one catches the bare
     ``starlette.exceptions.HTTPException`` the router and multipart parser raise.
+    A 5xx takes the same generic-body + error-id path as every other 500
+    (``_internal_error_response``) instead of echoing ``exc.detail``.
     """
+    if exc.status_code >= 500:
+        return _internal_error_response(request, exc, log_detail=str(exc.detail))
     headers = getattr(exc, "headers", None)
     if not is_body_allowed_for_status_code(exc.status_code):
         return Response(status_code=exc.status_code, headers=headers)
