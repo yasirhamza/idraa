@@ -238,7 +238,7 @@
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/reports.py", "line": 1709, "pattern": "async def _load_live_scenarios_for_run(db: AsyncSession, run: Any) -> list[Any]:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/retention.py", "line": 195, "pattern": "samples = await db.get(RunSamples, run_id)  # org-scope: ok — sweep, not per-request", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/retention.py", "line": 237, "pattern": "run = await db.get(RiskAnalysisRun, run_id)  # org-scope: ok — sweep, not per-request", "regex": false},
-  {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/run_executor.py", "line": 786, "pattern": "MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000", "regex": false},
+  {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/run_executor.py", "line": 787, "pattern": "MAX_COMPOSITION_CACHE_BYTES: int | None = 512 * 1024 * 1024", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/run_executor.py", "line": 894, "pattern": "lock = _ATTRIBUTION_LOCKS[loop] = asyncio.Lock()", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/run_executor.py", "line": 2165, "pattern": "async def _release_conn_for_compute(session: AsyncSession) -> None:", "regex": false},
   {"doc": "docs/security/threat-model.md", "file": "src/idraa/services/run_executor.py", "line": 2595, "pattern": "del enhanced", "regex": false},

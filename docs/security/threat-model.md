@@ -844,24 +844,33 @@ new export format must re-implement, not assume is "someone else's problem."
   inherited org-wide controls) is an n-player game. Work is bounded per scenario by
   `MAX_ATTRIBUTION_CONTROLS` (64; Shapley and the ensemble skip a scenario above it) and per
   run by `MAX_ATTRIBUTION_TOTAL_EVALS` (2,000,000 evaluations per pass; a scenario whose
-  cost no longer fits the remainder is skipped), and memory by four rules. (1) The
-  composition caches are bounded in entries and in entry size: at most
-  `MAX_COMPOSITION_CACHE_ENTRIES` entries per cache (`services/run_executor.py:786`, 75,000),
-  and no subset of more than `MAX_ATTRIBUTION_CONTROLS` controls is ever stored (leave-one-out
-  has no control cap and used to fill the cache with near-full subsets, 1.3 GiB at 100
-  controls and 2.4 GiB at 200). Past either bound a miss recomputes the value instead of
-  storing it; controls are composed in sorted-id order, so results are bit-identical and only
-  speed changes. The worst case is 75,000 entries of about 13.8 KB (a 64-control subset),
-  about 989 MiB per cache, measured with tracemalloc, against the 4,096 MiB VM; a typical
-  cache is about 520 MiB at 64 controls and 300 MiB at 25 or fewer. (2) At most one
-  composition cache is alive at a time: SINGLE and AGGREGATE both free the canonical cache
-  before the ensemble builds its own, and the ensemble's per-(scenario, subset) draw-vector
-  cache is cleared on entering each scenario. (3) One attribution phase runs at a time: an
-  asyncio lock per event loop (`services/run_executor.py:894`), entered only after the run
-  has returned its pooled connection, so a queued run holds none. Production runs one uvicorn
-  process with one loop (no `--workers`), so the lock serializes attribution process-wide; as
-  with the samples-export guard above, a second worker process or a second machine would get
-  its own lock and need a shared limiter. (4) Only standard inline runs are ungated by the
+  cost no longer fits the remainder is skipped). An evaluation's cost grows with its subset
+  and leave-one-out has no control cap, so its time per scenario grows as n² and the budget
+  bounds only the evaluation count. Memory is bounded by four rules. (1) Each composition
+  cache is bounded three ways: no subset of more than `MAX_ATTRIBUTION_CONTROLS` controls is
+  stored (leave-one-out has no control cap and used to fill the cache with near-full subsets,
+  1.3 GiB at 100 controls and 2.4 GiB at 200); at most 75,000 entries
+  (`MAX_COMPOSITION_CACHE_ENTRIES`); and at most `MAX_COMPOSITION_CACHE_BYTES`
+  (`services/run_executor.py:787`, 512 MiB) of ESTIMATED entry bytes. The byte bound is the
+  one that matters because an entry grows with its subset and with each member control's
+  Loss-Event and currency assignments, up to 9 per control: about 14 KB for 64 controls with
+  one assignment each and about 69 KB with nine, so 75,000 entries ranged from 0.5 GiB to
+  4.7 GiB. The estimate (`4,000 + 130 per control + 115 per assignment` bytes) is an upper
+  envelope fitted to tracemalloc over 324 measured shapes (1.06 to 2.0 times the measured bytes), so
+  one cache never holds more than 512 MiB. Past any bound a miss recomputes the value
+  instead of storing it; controls are composed in sorted-id order, so results are
+  bit-identical and only speed changes. Whole-run peak RSS measured with the bench (macOS,
+  not Fly; 64 controls; Monte Carlo included) is 1,031, 1,183 and 1,223 MiB for a SINGLE run
+  with 1, 5 and 9 assignments per control, and 1,070 MiB for an AGGREGATE of 6 scenarios with
+  5, against the 4,096 MiB VM. (2) At most one composition cache is alive at a time: SINGLE and
+  AGGREGATE both free the canonical cache before the ensemble builds its own, and the
+  ensemble's per-(scenario, subset) draw-vector cache is cleared on entering each scenario.
+  (3) One attribution phase runs at a time: an asyncio lock per event loop
+  (`services/run_executor.py:894`), entered only after the run has returned its pooled
+  connection, so a queued run holds none. Production runs one uvicorn process with one loop
+  (no `--workers`), so the lock serializes attribution process-wide; as with the
+  samples-export guard above, a second worker process or a second machine would get its own
+  lock and need a shared limiter. (4) Only standard inline runs are ungated by the
   concurrency caps above: their Monte Carlo phase is small, but their own attribution runs in
   the same slot, can take minutes, and waits for attribution ahead of it (first bullet).
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
