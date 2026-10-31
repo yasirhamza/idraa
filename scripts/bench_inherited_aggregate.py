@@ -3,8 +3,8 @@
 (inherited) meta controls plus explicitly linked LEC controls per scenario,
 through the real create_and_dispatch -> execute_run path at the executor's
 production attribution constants (MAX_ATTRIBUTION_CONTROLS /
-MAX_ATTRIBUTION_TOTAL_EVALS / MAX_COMPOSITION_CACHE_ENTRIES are module
-constants). It MEASURES the persisted run rather than echoing its inputs: the
+MAX_ATTRIBUTION_TOTAL_EVALS / MAX_COMPOSITION_CACHE_ENTRIES /
+MAX_COMPOSITION_CACHE_BYTES are module constants). It MEASURES the persisted run rather than echoing its inputs: the
 inherited ids and ``:meta`` adjustment rows actually present per scenario,
 players per scenario, how many Shapley values are non-null, and the ensemble
 state and draw count. It prints wall-clock and peak RSS and exits non-zero if
@@ -29,10 +29,14 @@ commands:
     uv run python scripts/bench_inherited_aggregate.py
     # 13 players per scenario (sampled Shapley, ensemble degrades):
     uv run python scripts/bench_inherited_aggregate.py --linked 8 --allow-degraded
-    # production-scale shape; --cache-cap none = unbounded composition caches
-    # (before/after comparison only):
+    # production-scale shape; --cache-cap none / --cache-bytes-mib none = composition caches
+    # without the entry / byte bound (before/after comparison only):
     uv run python scripts/bench_inherited_aggregate.py --scenarios 400 --linked 7 \
-        --allow-degraded [--cache-cap none]
+        --allow-degraded [--cache-cap none] [--cache-bytes-mib none]
+    # a SINGLE run of 64 controls with 9 Loss-Event assignments each (entry size grows with
+    # the assignments per control; --lec-per-control 1..9):
+    uv run python scripts/bench_inherited_aggregate.py --scenarios 1 --linked 59 \
+        --lec-per-control 9 --allow-degraded
 
 ``elapsed_s`` is wall-clock around ``execute_run``. Run-row timestamps are not a
 substitute: ``completed_at`` is stamped before attribution, so a Fly timing must
@@ -92,16 +96,26 @@ META_SFS = [
     FairCamSubFunction.DSC_PREV_DEFINED_EXPECTATIONS,
     FairCamSubFunction.DSC_PREV_COMMUNICATION,
 ]
+# All nine Loss-Event sub-functions. A linked control with J assignments takes J consecutive
+# entries starting at its own offset (0, 1 or 2), so J = 1 is the original
+# resistance / visibility / resilience cycle and J = 9 gives every control all nine.
 LEC_SFS = [
     FairCamSubFunction.LEC_PREV_RESISTANCE,
     FairCamSubFunction.LEC_DET_VISIBILITY,
     FairCamSubFunction.LEC_RESP_RESILIENCE,
+    FairCamSubFunction.LEC_PREV_AVOIDANCE,
+    FairCamSubFunction.LEC_PREV_DETERRENCE,
+    FairCamSubFunction.LEC_DET_MONITORING,
+    FairCamSubFunction.LEC_DET_RECOGNITION,
+    FairCamSubFunction.LEC_RESP_EVENT_TERMINATION,
+    FairCamSubFunction.LEC_RESP_LOSS_REDUCTION,
 ]
+CURRENCY_SFS = {FairCamSubFunction.LEC_RESP_LOSS_REDUCTION}
 
 
 def _control(
-    org_id: uuid.UUID, name: str, sf: FairCamSubFunction, *, org_wide: bool
-) -> tuple[Control, ControlFunctionAssignment]:
+    org_id: uuid.UUID, name: str, sfs: Sequence[FairCamSubFunction], *, org_wide: bool
+) -> tuple[Control, list[ControlFunctionAssignment]]:
     c = Control(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -119,16 +133,19 @@ def _control(
         version="1.0",
         org_wide_meta=org_wide,
     )
-    a = ControlFunctionAssignment(
-        control_id=c.id,
-        organization_id=org_id,
-        sub_function=sf,
-        capability_value=0.7,
-        coverage=0.8,
-        reliability=0.85,
-        confirmed_by_user_at=datetime.now(UTC),
-    )
-    return c, a
+    assignments = [
+        ControlFunctionAssignment(
+            control_id=c.id,
+            organization_id=org_id,
+            sub_function=sf,
+            capability_value=10_000.0 if sf in CURRENCY_SFS else 0.7,
+            coverage=0.8,
+            reliability=0.85,
+            confirmed_by_user_at=datetime.now(UTC),
+        )
+        for sf in sfs
+    ]
+    return c, assignments
 
 
 def _scenario(org_id: uuid.UUID, name: str) -> Scenario:
@@ -172,6 +189,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--iterations", type=int, default=None, help="default: Settings.mc_iterations_default"
     )
     ap.add_argument(
+        "--lec-per-control",
+        type=int,
+        default=1,
+        help="Loss-Event assignments on each linked control (1-9); entry size grows with it",
+    )
+    ap.add_argument(
+        "--cache-bytes-mib",
+        default="default",
+        help="composition-cache byte budget: 'default' (the executor constant), 'none' "
+        "(unbounded; before/after comparison only) or a size in MiB",
+    )
+    ap.add_argument(
         "--cache-cap",
         default="default",
         help="composition-cache entry cap: 'default' (the executor constant), 'none' "
@@ -189,6 +218,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ap.error(f"--inherited must be in 0..{len(META_SFS)}")
     if args.linked < 1:
         ap.error("--linked must be >= 1")
+    if not 1 <= args.lec_per_control <= len(LEC_SFS):
+        ap.error(f"--lec-per-control must be in 1..{len(LEC_SFS)}")
+    if args.cache_bytes_mib not in ("default", "none") and not args.cache_bytes_mib.isdigit():
+        ap.error("--cache-bytes-mib must be 'default', 'none' or a size in MiB")
     if args.cache_cap not in ("default", "none") and not args.cache_cap.isdigit():
         ap.error("--cache-cap must be 'default', 'none' or a non-negative integer")
     return args
@@ -202,7 +235,12 @@ async def main(argv: Sequence[str] | None = None) -> int:
         run_executor.MAX_COMPOSITION_CACHE_ENTRIES = None
     elif args.cache_cap != "default":
         run_executor.MAX_COMPOSITION_CACHE_ENTRIES = int(args.cache_cap)
+    if args.cache_bytes_mib == "none":
+        run_executor.MAX_COMPOSITION_CACHE_BYTES = None
+    elif args.cache_bytes_mib != "default":
+        run_executor.MAX_COMPOSITION_CACHE_BYTES = int(args.cache_bytes_mib) * 1024 * 1024
     cache_cap = run_executor.MAX_COMPOSITION_CACHE_ENTRIES
+    cache_bytes = run_executor.MAX_COMPOSITION_CACHE_BYTES
 
     url = get_settings().database_url
     if "bench299" not in url:  # no override: a real DB would gain a second Organization
@@ -221,18 +259,18 @@ async def main(argv: Sequence[str] | None = None) -> int:
         session.add(org)
         await session.flush()
         for i, sf in enumerate(META_SFS[:n_inherited]):
-            c, a = _control(org.id, f"meta-{i}", sf, org_wide=True)
-            session.add_all([c, a])
+            c, asgs = _control(org.id, f"meta-{i}", [sf], org_wide=True)
+            session.add_all([c, *asgs])
         scenario_ids: list[uuid.UUID] = []
         for s_i in range(n_scenarios):
             s = _scenario(org.id, f"bench-{s_i}")
             session.add(s)
             linked: list[Control] = []
             for l_i in range(n_linked):
-                c, a = _control(
-                    org.id, f"lec-{s_i}-{l_i}", LEC_SFS[l_i % len(LEC_SFS)], org_wide=False
-                )
-                session.add_all([c, a])
+                start = l_i % 3  # the original resistance / visibility / resilience cycle
+                sfs = [LEC_SFS[(start + n) % len(LEC_SFS)] for n in range(args.lec_per_control)]
+                c, asgs = _control(org.id, f"lec-{s_i}-{l_i}", sfs, org_wide=False)
+                session.add_all([c, *asgs])
                 linked.append(c)
             # ScenarioControl has no relationship() to Scenario/Control, so the unit of
             # work does not order its INSERT after theirs: flush them first.
@@ -324,7 +362,7 @@ async def main(argv: Sequence[str] | None = None) -> int:
     )
     print(
         f"status={status.value if isinstance(status, RunStatus) else status} "
-        f"scenarios={len(sids)} mc_iterations={iterations} "
+        f"scenarios={len(sids)} mc_iterations={iterations} lec_per_control={args.lec_per_control} "
         f"inherited_ids_per_scenario={sorted(inherited_counts)} "
         f"meta_rows_per_scenario={sorted(meta_rows)} players_per_scenario={sorted(players)} "
         f"{value_key.removesuffix('_value')}_non_null={non_null}/{adjustments} "
@@ -332,6 +370,8 @@ async def main(argv: Sequence[str] | None = None) -> int:
         f"ensemble_state={ensemble_state} ensemble_draws={draws_used}/{draws_configured} "
         f"max_attribution_controls={MAX_ATTRIBUTION_CONTROLS} "
         f"total_eval_budget={MAX_ATTRIBUTION_TOTAL_EVALS} composition_cache_cap={cache_cap} "
+        f"composition_cache_budget_mib="
+        f"{'none' if cache_bytes is None else cache_bytes // (1024 * 1024)} "
         f"elapsed_s={elapsed:.2f} peak_rss_mb={rss_mb:.0f}"
     )
     for failure in failures:

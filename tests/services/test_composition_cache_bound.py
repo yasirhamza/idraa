@@ -3,13 +3,14 @@
 ComposedParts is a pure function of the control subset - its controls are composed
 in SORTED id order, so the last-ulp fold order of ``or_compose`` cannot follow a
 frozenset's iteration order - hence a full cache recomputes on a miss exactly the
-value a hit would have returned. These tests pin (a) the cap is honoured at every
+value a hit would have returned. These tests pin (a) the bounds are honoured at every
 cache creation site, found by structure rather than by variable name, (b) Shapley /
-leave-one-out / ensemble outputs under a tiny cap are `==` (same process) to an
-unbounded cache on an ORDER-SENSITIVE fixture, where unsorted composition differs,
-(c) the constant keeps a worst-case cache under 1 GiB (the arithmetic is in the
-constant's comment in services/run_executor.py), and (d) the ensemble's draw-vector
-cache holds one scenario at a time.
+leave-one-out / ensemble outputs under a tiny cap or byte budget are `==` (same process)
+to an unbounded cache on ORDER-SENSITIVE and MULTI-ASSIGNMENT fixtures, (c) the cache's
+ACTUAL tracemalloc bytes stay within its byte budget on controls that carry 9 LEC
+assignments each, for the Shapley-walk and the leave-one-out shapes (an entry's size grows
+with the subset and with each member's assignments, so an entry count alone bounds
+nothing), and (d) the ensemble's draw-vector cache holds one scenario at a time.
 """
 
 from __future__ import annotations
@@ -39,12 +40,11 @@ from idraa.services.weight_robustness import FINALIZE_TO_COMPOSE_COST_RATIO
 
 TINY_CAP = 3
 _REAL_FACTORY = rex._new_composition_cache  # un-spied; spies wrap this, never each other
-# Worst measured bytes per cache entry (frozenset key + ComposedParts): a 64-control
-# subset built by leave-one-out in a 65-control scenario (Shapley skipped, so nothing
-# else fills the cache), measured in situ with tracemalloc at 13,791-13,827 B. Larger
-# subsets are never stored, so no entry exceeds this.
-_WORST_BYTES_PER_ENTRY = 14_000
-_ONE_GIB = 1024**3
+_MIB = 1024**2
+# tracemalloc over the cache must stay within its estimated-byte budget plus this slack
+# (dict table growth and allocator rounding the estimator does not itemize). The estimator
+# is an upper envelope (1.06x-2.0x the measured bytes), so in practice it is never reached.
+_BUDGET_TOLERANCE = 0.05
 
 
 def _parts() -> ComposedParts:
@@ -57,7 +57,7 @@ def _parts() -> ComposedParts:
 # the cache class and the constant                                             #
 # --------------------------------------------------------------------------- #
 def test_bounded_cache_never_exceeds_cap_and_existing_keys_keep_hitting() -> None:
-    cache = rex._BoundedCompositionCache(TINY_CAP, 64)
+    cache = rex._BoundedCompositionCache(TINY_CAP, 64, None)
     parts = _parts()
     keys = [frozenset({f"c{i}"}) for i in range(10)]
     for k in keys:
@@ -74,7 +74,7 @@ def test_bounded_cache_never_exceeds_cap_and_existing_keys_keep_hitting() -> Non
 
 
 def test_none_cap_is_unbounded() -> None:
-    cache = rex._BoundedCompositionCache(None, 64)
+    cache = rex._BoundedCompositionCache(None, 64, None)
     parts = _parts()
     for i in range(500):
         cache[frozenset({f"c{i}"})] = parts
@@ -94,7 +94,7 @@ def test_factory_reads_the_module_constant_at_creation(monkeypatch: pytest.Monke
 
 
 def test_subsets_above_the_control_cap_are_never_stored() -> None:
-    cache = rex._BoundedCompositionCache(None, 4)  # no entry cap, subsets up to 4 controls
+    cache = rex._BoundedCompositionCache(None, 4, None)  # no entry cap, subsets up to 4 controls
     parts = _parts()
     fits = frozenset({"a", "b", "c", "d"})
     too_big = frozenset({"a", "b", "c", "d", "e"})
@@ -113,64 +113,183 @@ def test_factory_uses_the_attribution_control_cap(monkeypatch: pytest.MonkeyPatc
     assert len(cache) == 1
 
 
-def test_cap_constant_keeps_worst_case_cache_under_one_gib() -> None:
-    cap = rex.MAX_COMPOSITION_CACHE_ENTRIES
-    assert isinstance(cap, int) and cap > 0
-    assert cap * _WORST_BYTES_PER_ENTRY < _ONE_GIB
+def test_byte_budget_stops_new_entries_but_not_hits_or_overwrites() -> None:
+    parts = _parts()
+    key = frozenset({"a"})
+    one = rex._estimated_entry_bytes(key, parts)
+    cache = rex._BoundedCompositionCache(None, 64, 3 * one)  # room for exactly three
+    keys = [frozenset({f"c{i}"}) for i in range(8)]
+    for k in keys:
+        cache[k] = parts
+    assert list(cache) == keys[:3] and cache.estimated_bytes == 3 * one
+    assert all(cache.get(k) is parts for k in keys[:3])
+    cache[keys[0]] = _parts()  # an overwrite of the same size neither grows nor is refused
+    assert len(cache) == 3 and cache.estimated_bytes == 3 * one
 
 
-def test_measured_worst_entry_fits_the_pinned_bytes_per_entry() -> None:
-    """The arithmetic above multiplies two constants; this measures the entry. Leave-one-out
-    over 65-control scenarios (Shapley is skipped above the cap, so only LOO fills the cache)
-    stores 64-control subsets, the largest entry the cache admits. In situ, with the real
-    cache and the real LOO pass, tracemalloc over key + ComposedParts."""
-    import gc
-    import random
-    import tracemalloc
+def test_entry_estimate_grows_with_the_subset_and_its_assignments() -> None:
+    def parts_for(n_controls: int, per_control: int) -> tuple[frozenset[str], ComposedParts]:
+        controls = _heavy_controls(n_controls, per_control)
+        return frozenset(c.control_id for c in controls), precompose_parts(controls)
 
-    from fair_cam.tests.risk_engine._helpers import make_control
+    small = rex._estimated_entry_bytes(*parts_for(8, 1))
+    more_controls = rex._estimated_entry_bytes(*parts_for(32, 1))
+    more_assignments = rex._estimated_entry_bytes(*parts_for(8, 9))
+    assert more_controls > small and more_assignments > small
+    # 9 LEC assignments on each of 64 controls is the heaviest entry the cache admits
+    heavy = rex._estimated_entry_bytes(*parts_for(64, 9))
+    assert heavy > 3 * rex._estimated_entry_bytes(*parts_for(64, 1))
 
-    sfs = [
-        ("vmc_prev_reduce_variance_prob", "percent_reduction"),
-        ("vmc_id_control_monitoring", "probability"),
-        ("dsc_prev_defined_expectations", "probability"),
-        ("lec_prev_resistance", "probability"),
-        ("lec_det_visibility", "probability"),
-        ("lec_resp_resilience", "probability"),
-    ]
-    controls = [
+
+def test_budget_constants_are_sane() -> None:
+    budget = rex.MAX_COMPOSITION_CACHE_BYTES
+    assert isinstance(budget, int) and 0 < budget <= 1024 * _MIB
+    entries = rex.MAX_COMPOSITION_CACHE_ENTRIES
+    assert isinstance(entries, int) and entries > 0
+
+
+# The nine Loss-Event sub-functions (units from fair_cam's SUB_FUNCTION_UNITS) and their
+# capability values; a control may carry one assignment per sub-function.
+_LEC9 = [
+    ("lec_prev_resistance", "probability", 0.7),
+    ("lec_prev_avoidance", "probability", 0.7),
+    ("lec_prev_deterrence", "probability", 0.7),
+    ("lec_det_visibility", "probability", 0.7),
+    ("lec_det_monitoring", "elapsed_time", 5.0),
+    ("lec_det_recognition", "probability", 0.7),
+    ("lec_resp_event_termination", "elapsed_time", 5.0),
+    ("lec_resp_resilience", "probability", 0.7),
+    ("lec_resp_loss_reduction", "currency", 10_000.0),
+]
+
+
+def _heavy_controls(n: int, per_control: int) -> list[Any]:
+    """n controls with ``per_control`` Loss-Event assignments each (up to the 9 the schema
+    allows), cycling the sub-functions so different controls cover different ones."""
+    return [
         make_control(
             control_id=f"{i:08x}-0000-4000-8000-{i:012x}",
-            assignments=[(sfs[i % 6][0], sfs[i % 6][1], 0.7)],
+            assignments=[_LEC9[(i + k) % 9] for k in range(per_control)],
             coverage=0.8,
             reliability=0.85,
         )
-        for i in range(120)
+        for i in range(n)
     ]
-    universe = [c.control_id for c in controls]
-    calc = NativeControlAwareRiskCalculator(controls=controls, n_simulations=100)
-    rng = random.Random(7)
-    inputs = [(f"s{i}", f"s{i}", _params()) for i in range(6)]
-    per_scenario = {sid: sorted(rng.sample(universe, 65)) for sid, _n, _p in inputs}
+
+
+def _retained_bytes(fill: Any) -> tuple[Any, int]:
+    """Run ``fill(cache)`` under tracemalloc; return (cache, bytes the cache retains)."""
+    import gc
+    import tracemalloc
 
     gc.collect()
     tracemalloc.start()
     base, _ = tracemalloc.get_traced_memory()
     cache = rex._new_composition_cache()
-    by, skipped = rex._compute_loo_by_scenario(
-        calc, inputs, per_scenario, universe, composition_cache=cache
-    )
-    del by
+    result = fill(cache)
+    del result
     gc.collect()
     retained, _ = tracemalloc.get_traced_memory()
     tracemalloc.stop()
+    return cache, retained - base
 
-    assert skipped == [] and len(cache) == 6 * 65  # the 64-control N-minus-one subsets
-    assert max(len(k) for k in cache) == 64  # the 65-control full sets were not stored
-    per_entry = (retained - base) / len(cache)
-    assert per_entry <= _WORST_BYTES_PER_ENTRY, per_entry
-    cap = rex.MAX_COMPOSITION_CACHE_ENTRIES
-    assert cap is not None and per_entry * cap < _ONE_GIB
+
+@pytest.mark.parametrize("shape", ["shapley_walk", "leave_one_out"])
+def test_cache_bytes_stay_within_the_budget_on_nine_assignment_controls(
+    shape: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real cache, the real passes, controls carrying 9 LEC assignments each at 64-65
+    controls: the heaviest entries the bounds admit (~69 KB each; 75,000 of them were 4.7 GiB
+    under the old entry cap). Scaled to a 12 MiB budget so the test is quick (the estimator is
+    linear, so the check is the same at 512 MiB): the budget must bind, and tracemalloc's
+    ACTUAL retained bytes must stay within it, for the Shapley-walk shape (random subsets of a
+    64-control scenario) and the leave-one-out shape (64-control N-minus-one subsets)."""
+    budget = 12 * _MIB
+    monkeypatch.setattr(rex, "MAX_COMPOSITION_CACHE_BYTES", budget)
+    n = 64 if shape == "shapley_walk" else 65
+    controls = _heavy_controls(n * 2, 9)
+    universe = [c.control_id for c in controls]
+    calc = NativeControlAwareRiskCalculator(controls=controls, n_simulations=100)
+    inputs = [(f"s{i}", f"s{i}", _params()) for i in range(3)]
+    import random
+
+    rng = random.Random(3)
+    per_scenario = {sid: sorted(rng.sample(universe, n)) for sid, _n, _p in inputs}
+
+    def fill(cache: Any) -> Any:
+        if shape == "shapley_walk":
+            # a 15-permutation sampled walk per scenario (the production walk uses 4,612)
+            return rex._compute_shapley_by_scenario(
+                calc,
+                inputs,
+                per_scenario,
+                universe,
+                sample_permutations=15,
+                total_eval_budget=10**9,
+                composition_cache=cache,
+            )
+        return rex._compute_loo_by_scenario(
+            calc, inputs, per_scenario, universe, composition_cache=cache
+        )
+
+    cache, retained = _retained_bytes(fill)
+
+    assert cache.estimated_bytes <= budget  # the bound the code enforces
+    assert cache.estimated_bytes >= 0.9 * budget  # ...and it really bound (non-vacuous)
+    assert retained <= budget * (1 + _BUDGET_TOLERANCE), (retained / _MIB, budget / _MIB)
+    assert retained <= cache.estimated_bytes  # the estimate is an upper envelope
+    assert max(len(k) for k in cache) <= 64
+
+
+def test_results_are_identical_under_a_tiny_byte_budget_on_multi_assignment_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pure memo: with a byte budget so small that nearly every subset is recomputed,
+    typical and mean Shapley and LOO are `==` to an unbounded run, on controls that share
+    sub-functions and carry up to 9 LEC assignments each."""
+    controls = [
+        make_control(
+            control_id=f"c{i:02d}",
+            assignments=[_LEC9[(i + k) % 9] for k in range(1 + (i % 5) * 2)],  # 1, 3, 5, 7, 9
+            coverage=0.6 + 0.03 * (i % 7),
+            reliability=0.7 + 0.02 * (i % 9),
+        )
+        for i in range(10)
+    ]
+    universe = [c.control_id for c in controls]
+    calc = NativeControlAwareRiskCalculator(controls=controls, n_simulations=100)
+    inputs = [("s1", "one", _params()), ("s2", "two", _params())]
+    scenario_controls = {"s1": universe, "s2": universe[2:9]}
+
+    def run(budget: int | None) -> tuple[dict[str, Any], dict[frozenset[str], ComposedParts]]:
+        monkeypatch.setattr(rex, "MAX_COMPOSITION_CACHE_BYTES", budget)
+        cache = rex._new_composition_cache()
+        out: dict[str, Any] = {}
+        for stat in ("typical", "mean"):
+            out[f"shapley_{stat}"] = rex._compute_shapley_by_scenario(
+                calc,
+                inputs,
+                scenario_controls,
+                universe,
+                composition_cache=cache,
+                statistic=stat,
+            )
+            out[f"loo_{stat}"] = rex._compute_loo_by_scenario(
+                calc,
+                inputs,
+                scenario_controls,
+                universe,
+                composition_cache=cache,
+                statistic=stat,
+            )
+        return out, cache
+
+    unbounded, full = run(None)
+    tiny, small = run(60_000)  # a handful of 10-30 KB entries
+
+    assert len(small) < len(full) and len(small) >= 1
+    assert tiny == unbounded
+    assert any(v != 0.0 for v in unbounded["loo_typical"][0]["s1"].values())  # non-vacuous
 
 
 def _src_tree() -> ast.Module:

@@ -766,10 +766,10 @@ new export format must re-implement, not assume is "someone else's problem."
   sit for minutes behind a background run's attribution, holding no pooled connection
   while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2549`; `del calculator, fc_controls`
-  at `services/run_executor.py:2737` and again at `services/run_executor.py:2933`; `del per_scenario_inputs` at `services/run_executor.py:2934`;
-  `del aggregate` at `services/run_executor.py:2752`; `del results_payload` at `services/run_executor.py:2967`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2753`, `services/run_executor.py:2953`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2595`; `del calculator, fc_controls`
+  at `services/run_executor.py:2783` and again at `services/run_executor.py:2979`; `del per_scenario_inputs` at `services/run_executor.py:2980`;
+  `del aggregate` at `services/run_executor.py:2798`; `del results_payload` at `services/run_executor.py:3013`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2799`, `services/run_executor.py:2999`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -780,7 +780,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2119`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2165`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -846,7 +846,7 @@ new export format must re-implement, not assume is "someone else's problem."
   run by `MAX_ATTRIBUTION_TOTAL_EVALS` (2,000,000 evaluations per pass; a scenario whose
   cost no longer fits the remainder is skipped), and memory by four rules. (1) The
   composition caches are bounded in entries and in entry size: at most
-  `MAX_COMPOSITION_CACHE_ENTRIES` entries per cache (`services/run_executor.py:777`, 75,000),
+  `MAX_COMPOSITION_CACHE_ENTRIES` entries per cache (`services/run_executor.py:786`, 75,000),
   and no subset of more than `MAX_ATTRIBUTION_CONTROLS` controls is ever stored (leave-one-out
   has no control cap and used to fill the cache with near-full subsets, 1.3 GiB at 100
   controls and 2.4 GiB at 200). Past either bound a miss recomputes the value instead of
@@ -857,7 +857,7 @@ new export format must re-implement, not assume is "someone else's problem."
   composition cache is alive at a time: SINGLE and AGGREGATE both free the canonical cache
   before the ensemble builds its own, and the ensemble's per-(scenario, subset) draw-vector
   cache is cleared on entering each scenario. (3) One attribution phase runs at a time: an
-  asyncio lock per event loop (`services/run_executor.py:848`), entered only after the run
+  asyncio lock per event loop (`services/run_executor.py:894`), entered only after the run
   has returned its pooled connection, so a queued run holds none. Production runs one uvicorn
   process with one loop (no `--workers`), so the lock serializes attribution process-wide; as
   with the samples-export guard above, a second worker process or a second machine would get

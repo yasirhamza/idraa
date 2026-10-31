@@ -750,64 +750,110 @@ MAX_ATTRIBUTION_CONTROLS = 64
 # re-composing the meta side) but NOT free; see the _comp_cache note below and
 # issue #432.
 MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
-# #299: bound on each attribution ComposedParts cache (the canonical Shapley/LOO cache
+# #299: bounds on each attribution ComposedParts cache (the canonical Shapley/LOO cache
 # and the ensemble's cross-draw cache). The eval budget above counts evaluations, not
 # bytes, and a scenario's cached subsets grow as 2^n, so k org-wide controls multiplied
 # the cache 2^k: a 400-scenario x (7 linked + 5 inherited) aggregate held 1.63M entries
 # and peaked at 5.4 GiB against the 4 GiB Fly VM (fly.toml: performance, 2 CPU, 4096 MB,
-# no swap). Two rules bound it, both enforced in _BoundedCompositionCache:
-#   1. at most MAX_COMPOSITION_CACHE_ENTRIES entries (this constant), and
-#   2. no subset larger than MAX_ATTRIBUTION_CONTROLS is ever stored. Shapley and the
+# no swap). Three rules bound it, all enforced in _BoundedCompositionCache:
+#   1. no subset larger than MAX_ATTRIBUTION_CONTROLS is ever stored. Shapley and the
 #      ensemble skip scenarios above that size, but leave-one-out has no control cap and
 #      composes the full set and every N-minus-one subset of any scenario; those are
-#      near-full subsets, 2-5x larger than the Shapley walk's, and filled the cache to
-#      1.3 GiB at 100 controls and 2.4 GiB at 200 before this rule.
+#      near-full subsets that filled the cache to 1.3 GiB at 100 controls and 2.4 GiB at
+#      200 before this rule;
+#   2. the ESTIMATED bytes of the stored entries never pass MAX_COMPOSITION_CACHE_BYTES.
+#      An entry's size grows with the subset AND with each member control's LEC and
+#      currency assignments (ComposedParts.lec_items / currency_items), up to 9 per
+#      control, so an entry COUNT bounds nothing: 75,000 entries were 0.5 GiB for
+#      one-assignment controls, 1.3 GiB for the seed library's mix and 4.7 GiB for
+#      9 assignments each. _estimated_entry_bytes is an upper envelope fitted to
+#      tracemalloc over key + ComposedParts (324 measured shapes: 1-64 controls, 1-9 LEC
+#      assignments per control, 0-16 meta assignments, keys built by iterable, set
+#      difference and union; the estimate was 1.06x-2.0x the measured bytes, mean 1.27x);
+#   3. at most MAX_COMPOSITION_CACHE_ENTRIES entries, which still binds for the small
+#      entries of small subsets (it keeps the 50,801-entry no-inheritance 400 x 7
+#      portfolio whole at about 150 MiB).
 # ComposedParts is a pure function of the subset (its controls are composed in
 # sorted-id order, see _make_subset_value_fn), so a subset that is not stored is
 # recomputed to exactly the value a hit would have returned: results are bit-identical,
-# only speed changes. Sizing, measured with tracemalloc over key + ComposedParts
-# (CPython 3.11, arm64, production control shape): ~2.8 KB/entry at 8 players, 3.1 KB at
-# 12-13, 3.6 KB at 20, 4.2 KB at 25, 7.3 KB for the Shapley walk at the 64-control cap
-# (random half-size subsets, 521 MiB full). The largest entry the rules admit is a
-# 64-control subset built by leave-one-out (65-control scenarios, Shapley skipped):
-# 13.8 KB/entry, so a FULL cache is 75_000 x 13.8 KB = 986 MiB, under 1 GiB per cache
-# and about a quarter of the 4096 MiB VM; it still holds the 50,801-entry no-inheritance
-# 400 x 7 portfolio whole. None = unbounded entries (tests and the bench's before/after
-# comparison only; read when each cache is created).
+# only speed changes. The estimate is an upper envelope (>= 1.06x the measured bytes), so at
+# 512 MiB one cache never holds more than 512 MiB: a 64-control subset with 9 LEC
+# assignments per control is ~69 KB (est. 78 KB), so ~6,800 such entries fit, where 75,000
+# entries were 4.7 GiB. Whole-run peaks measured with the bench (macOS arm64, 10k
+# iterations, 5 inherited + 59 linked controls) are recorded in config.py's guard invariant.
+# None = unbounded (tests and the bench's before/after comparison only; read when each
+# cache is created).
 MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000
+MAX_COMPOSITION_CACHE_BYTES: int | None = 512 * 1024 * 1024
+
+# Estimated retained bytes of one cache entry (frozenset key + ComposedParts):
+#   _ENTRY_BYTES_BASE + _ENTRY_BYTES_PER_CONTROL * len(key) + _ENTRY_BYTES_PER_ITEM * W
+# with W = len(lec_items) + len(currency_items). Coefficients: a linear-programming fit of
+# the smallest covering envelope to the 324 tracemalloc shapes above (a=3,788,
+# b=124, c=108 bytes), rounded UP to 4,000 / 130 / 115 for allocator and platform
+# slack. The per-control term absorbs up to 16 meta assignments per control (~5 B each).
+_ENTRY_BYTES_BASE = 4_000
+_ENTRY_BYTES_PER_CONTROL = 130
+_ENTRY_BYTES_PER_ITEM = 115
+
+
+def _estimated_entry_bytes(key: frozenset[str], value: ComposedParts) -> int:
+    """Conservative estimate of the bytes a cache entry retains (see the constants above)."""
+    items = len(value.lec_items) + len(value.currency_items)
+    return _ENTRY_BYTES_BASE + _ENTRY_BYTES_PER_CONTROL * len(key) + _ENTRY_BYTES_PER_ITEM * items
 
 
 class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
-    """``{subset: ComposedParts}`` memo with two bounds: ``max_entries`` entries, and no
-    subset of more than ``max_subset`` controls (see MAX_COMPOSITION_CACHE_ENTRIES).
+    """``{subset: ComposedParts}`` memo with three bounds: no subset of more than
+    ``max_subset`` controls, ``max_entries`` entries, and ``max_bytes`` of ESTIMATED entry
+    bytes (see MAX_COMPOSITION_CACHE_BYTES; ``None`` = unbounded).
 
-    ``__setitem__`` skips the insert of a NEW key once the cache is full and skips any
-    key with ``len(key) > max_subset``; existing keys keep hitting and may be
-    overwritten. Callers recompute on a miss and assign unconditionally. That degrades
-    speed only because the value is a pure function of the key: the callers compose a
-    subset's controls in sorted-id order, so a recompute equals the entry it would have
-    hit (without that, the last-ulp fold order of ``or_compose`` would follow the
-    frozenset's iteration order and a capped run could differ from an uncapped one).
-    Only item assignment is bounded; the attribution code uses nothing else to populate
-    a cache (no ``update`` / ``setdefault``).
+    ``__setitem__`` skips the insert of a NEW key that breaks any bound; existing keys
+    keep hitting and may be overwritten (the running total follows the new value).
+    Callers recompute on a miss and assign unconditionally. That degrades speed only
+    because the value is a pure function of the key: the callers compose a subset's
+    controls in sorted-id order, so a recompute equals the entry it would have hit
+    (without that, the last-ulp fold order of ``or_compose`` would follow the frozenset's
+    iteration order and a capped run could differ from an uncapped one). Only item
+    assignment is bounded; the attribution code uses nothing else to populate a cache
+    (no ``update`` / ``setdefault``).
     """
 
-    def __init__(self, max_entries: int | None, max_subset: int) -> None:
+    def __init__(self, max_entries: int | None, max_subset: int, max_bytes: int | None) -> None:
         super().__init__()
         self._max_entries = max_entries
         self._max_subset = max_subset
+        self._max_bytes = max_bytes
+        self._estimated_bytes = 0
+
+    @property
+    def estimated_bytes(self) -> int:
+        return self._estimated_bytes
 
     def __setitem__(self, key: frozenset[str], value: ComposedParts) -> None:
         if len(key) > self._max_subset:
             return
-        if self._max_entries is not None and len(self) >= self._max_entries and key not in self:
-            return
+        old = self.get(key)
+        if old is None:
+            if self._max_entries is not None and len(self) >= self._max_entries:
+                return
+            cost = _estimated_entry_bytes(key, value)
+            if self._max_bytes is not None and self._estimated_bytes + cost > self._max_bytes:
+                return
+            self._estimated_bytes += cost
+        else:
+            delta = _estimated_entry_bytes(key, value) - _estimated_entry_bytes(key, old)
+            if self._max_bytes is not None and self._estimated_bytes + delta > self._max_bytes:
+                return
+            self._estimated_bytes += delta
         super().__setitem__(key, value)
 
 
 def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
     """A fresh attribution composition cache bounded by the module constants."""
-    return _BoundedCompositionCache(MAX_COMPOSITION_CACHE_ENTRIES, MAX_ATTRIBUTION_CONTROLS)
+    return _BoundedCompositionCache(
+        MAX_COMPOSITION_CACHE_ENTRIES, MAX_ATTRIBUTION_CONTROLS, MAX_COMPOSITION_CACHE_BYTES
+    )
 
 
 # SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the
