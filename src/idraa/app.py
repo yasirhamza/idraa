@@ -17,13 +17,17 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.utils import is_body_allowed_for_status_code
 from jinja2 import Undefined as JinjaUndefined
 from jinja2 import pass_context
 from markupsafe import Markup
 from sqlalchemy import func, select
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import Scope
@@ -44,6 +48,7 @@ from idraa.models.enums import SUB_FUNCTION_UNITS
 from idraa.models.user import User
 from idraa.services.audit import ExportRateLimitedError
 from idraa.services.auth import SESSION_COOKIE
+from idraa.utils.safe_json import HtmlSafeJSONResponse
 from idraa.utils.text import humanize_slug as _humanize_slug_impl
 
 # Per-coroutine current request. Set by the _patched_template_render wrapper
@@ -861,12 +866,13 @@ def _internal_error_response(
     request: StarletteRequest, exc: BaseException, log_detail: str | None = None
 ) -> Response:
     """Generic 500 with a correlation id (idraa#72 fix 4) — the sanctioned 500
-    shape for uncaught exceptions and ``fastapi.HTTPException(5xx)``. (A bare
-    ``starlette.exceptions.HTTPException(5xx)`` would fall to Starlette's
-    default handler without an id — nothing in src raises one today.)
+    shape for uncaught exceptions and ``HTTPException(5xx)``, whether raised as
+    ``fastapi.HTTPException`` (``_auth_redirect_handler``) or as a bare
+    ``starlette.exceptions.HTTPException`` (``_starlette_http_exception_handler``;
+    nothing in src raises one today).
 
     Shared by the unhandled-exception handler AND the ``HTTPException(5xx)``
-    path in ``_auth_redirect_handler``, so no 500 ships without an id or
+    paths in those two handlers, so no 500 ships without an id or
     leaks internal detail (``exc.detail`` used to reach the client via the
     JSON fallback). The id is random (no request data) and ties the response
     to the server-side log line, so a user-reported id is greppable to a
@@ -903,7 +909,7 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     decision is the Accept header:
 
     - JSON API consumer (``Accept: application/json``) -> pass through
-      to FastAPI's default JSON-shaped error.
+      to the app's JSON error body (``HtmlSafeJSONResponse``).
     - Browser (``text/html``, ``*/*``, or no Accept header at all) ->
       303 to /login?next=<original path> so the login form posts back
       to the right place after sign-in.
@@ -914,9 +920,9 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
     ignore. We only fall BACK to JSON when the caller explicitly asks
     for it.
 
-    Scope: 401-only. 403 (``require_role``) falls through to the default
-    JSON handler — the right behaviour for "signed in but wrong role",
-    where a redirect would loop the user back and forth.
+    Scope: 401-only. 403 (``require_role``) falls through to the same JSON
+    error body (``HtmlSafeJSONResponse``) — the right behaviour for "signed
+    in but wrong role", where a redirect would loop the user back and forth.
 
     5xx interception (idraa#72): a raised ``HTTPException(5xx)`` (e.g. the
     finalize row-version-capture 500, the reports COMPLETED-but-empty 500s)
@@ -931,11 +937,41 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
         accept = request.headers.get("accept", "")
         if "application/json" not in accept:
             return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
-    return JSONResponse(
+    return HtmlSafeJSONResponse(
         {"detail": exc.detail},
         status_code=exc.status_code,
         headers=getattr(exc, "headers", None),
     )
+
+
+async def _starlette_http_exception_handler(
+    request: StarletteRequest, exc: StarletteHTTPException
+) -> Response:
+    """Stock FastAPI body for framework-raised ``HTTPException`` (404/405/...),
+    serialized with ``HtmlSafeJSONResponse`` like every other error body here.
+
+    ``_auth_redirect_handler`` owns ``fastapi.HTTPException`` (handler lookup
+    walks the exception's MRO, so it wins for those); this one catches the bare
+    ``starlette.exceptions.HTTPException`` the router and multipart parser raise.
+    A 5xx takes the same generic-body + error-id path as every other 500
+    (``_internal_error_response``) instead of echoing ``exc.detail``.
+    """
+    if exc.status_code >= 500:
+        return _internal_error_response(request, exc, log_detail=str(exc.detail))
+    headers = getattr(exc, "headers", None)
+    if not is_body_allowed_for_status_code(exc.status_code):
+        return Response(status_code=exc.status_code, headers=headers)
+    return HtmlSafeJSONResponse(
+        {"detail": exc.detail}, status_code=exc.status_code, headers=headers
+    )
+
+
+async def _request_validation_handler(
+    request: StarletteRequest, exc: RequestValidationError
+) -> Response:
+    """Stock FastAPI 422 body (``detail`` = the error list, which echoes the
+    rejected input), serialized with ``HtmlSafeJSONResponse``."""
+    return HtmlSafeJSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
 
 
 async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Response:
@@ -952,7 +988,9 @@ async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Re
     if request.headers.get("HX-Request") == "true":
         return Response(status_code=204, headers={"HX-Redirect": dest})
     if "application/json" in request.headers.get("accept", ""):
-        return JSONResponse({"error": "step_up_required", "redirect": dest}, status_code=401)
+        return HtmlSafeJSONResponse(
+            {"error": "step_up_required", "redirect": dest}, status_code=401
+        )
     return RedirectResponse(dest, status_code=303)
 
 
@@ -1326,6 +1364,17 @@ def create_app() -> FastAPI:
     # attached to the app itself and the registration order has no bearing
     # on dispatch precedence. See ``_auth_redirect_handler`` for details.
     app.add_exception_handler(HTTPException, _auth_redirect_handler)  # type: ignore[arg-type]
+    # The two stock FastAPI JSON error handlers, re-registered so their bodies
+    # go through HtmlSafeJSONResponse too (error details are encoded so they are
+    # inert when rendered as HTML; see utils/safe_json.py).
+    app.add_exception_handler(
+        StarletteHTTPException,
+        _starlette_http_exception_handler,  # type: ignore[arg-type]
+    )
+    app.add_exception_handler(
+        RequestValidationError,
+        _request_validation_handler,  # type: ignore[arg-type]
+    )
     app.add_exception_handler(ExportRateLimitedError, _export_rate_limited_handler)
     app.add_exception_handler(StepUpRequired, _step_up_handler)  # type: ignore[arg-type]
     # Base-Exception (500) handler: applies security headers to responses that

@@ -167,6 +167,7 @@ subjects = [
 "src/idraa/templates/**" = "templating"
 "src/idraa/app.py" = "templating"
 "src/idraa/formatting.py" = "templating"
+"src/idraa/utils/safe_json.py" = "templating"
 "src/idraa/help_content.py" = "templating"
 "tests/routes/test_threat_community_pages.py" = "templating"
 "src/idraa/routes/**" = "rbac"

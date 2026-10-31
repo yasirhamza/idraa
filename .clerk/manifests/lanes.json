@@ -223,6 +223,7 @@
     "src/idraa/config.py",
     "src/idraa/db.py",
     "src/idraa/formatting.py",
+    "src/idraa/utils/safe_json.py",
     "src/idraa/help_content.py",
     "alembic/**",
     "security/**",

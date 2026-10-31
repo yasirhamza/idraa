@@ -216,7 +216,16 @@
                             return;
                           }
                           if (!resp.ok) {
-                            alert('Could not save SME: ' + (await resp.text()));
+                            let msg = await resp.text();
+                            try {
+                              const d = JSON.parse(msg).detail;
+                              if (d !== undefined) {
+                                msg = (typeof d === 'string') ? d : JSON.stringify(d);
+                              }
+                            } catch (e) {
+                              {# not JSON: show the body text as-is #}
+                            }
+                            alert('Could not save SME: ' + msg);
                             return;
                           }
                           const sme = await resp.json();
