@@ -39,8 +39,12 @@ from idraa.services.weight_robustness import FINALIZE_TO_COMPOSE_COST_RATIO
 
 TINY_CAP = 3
 _REAL_FACTORY = rex._new_composition_cache  # un-spied; spies wrap this, never each other
-# Worst measured bytes per cache entry (key + ComposedParts), 64-player corner.
-_WORST_BYTES_PER_ENTRY = 7_400
+# Worst measured bytes per cache entry (frozenset key + ComposedParts): a 64-control
+# subset built by leave-one-out in a 65-control scenario (Shapley skipped, so nothing
+# else fills the cache), measured in situ with tracemalloc at 13,791-13,827 B. Larger
+# subsets are never stored, so no entry exceeds this.
+_WORST_BYTES_PER_ENTRY = 14_000
+_ONE_GIB = 1024**3
 
 
 def _parts() -> ComposedParts:
@@ -53,7 +57,7 @@ def _parts() -> ComposedParts:
 # the cache class and the constant                                             #
 # --------------------------------------------------------------------------- #
 def test_bounded_cache_never_exceeds_cap_and_existing_keys_keep_hitting() -> None:
-    cache = rex._BoundedCompositionCache(TINY_CAP)
+    cache = rex._BoundedCompositionCache(TINY_CAP, 64)
     parts = _parts()
     keys = [frozenset({f"c{i}"}) for i in range(10)]
     for k in keys:
@@ -70,7 +74,7 @@ def test_bounded_cache_never_exceeds_cap_and_existing_keys_keep_hitting() -> Non
 
 
 def test_none_cap_is_unbounded() -> None:
-    cache = rex._BoundedCompositionCache(None)
+    cache = rex._BoundedCompositionCache(None, 64)
     parts = _parts()
     for i in range(500):
         cache[frozenset({f"c{i}"})] = parts
@@ -89,10 +93,84 @@ def test_factory_reads_the_module_constant_at_creation(monkeypatch: pytest.Monke
     assert (len(c5), len(cn)) == (5, 20)
 
 
+def test_subsets_above_the_control_cap_are_never_stored() -> None:
+    cache = rex._BoundedCompositionCache(None, 4)  # no entry cap, subsets up to 4 controls
+    parts = _parts()
+    fits = frozenset({"a", "b", "c", "d"})
+    too_big = frozenset({"a", "b", "c", "d", "e"})
+    cache[fits] = parts
+    cache[too_big] = parts
+    assert list(cache) == [fits]  # the limit is inclusive; one more control is not stored
+    assert cache.get(too_big) is None
+
+
+def test_factory_uses_the_attribution_control_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rex, "MAX_ATTRIBUTION_CONTROLS", 2)
+    cache = rex._new_composition_cache()
+    parts = _parts()
+    cache[frozenset({"a", "b"})] = parts
+    cache[frozenset({"a", "b", "c"})] = parts
+    assert len(cache) == 1
+
+
 def test_cap_constant_keeps_worst_case_cache_under_one_gib() -> None:
     cap = rex.MAX_COMPOSITION_CACHE_ENTRIES
     assert isinstance(cap, int) and cap > 0
-    assert cap * _WORST_BYTES_PER_ENTRY < 1024**3
+    assert cap * _WORST_BYTES_PER_ENTRY < _ONE_GIB
+
+
+def test_measured_worst_entry_fits_the_pinned_bytes_per_entry() -> None:
+    """The arithmetic above multiplies two constants; this measures the entry. Leave-one-out
+    over 65-control scenarios (Shapley is skipped above the cap, so only LOO fills the cache)
+    stores 64-control subsets, the largest entry the cache admits. In situ, with the real
+    cache and the real LOO pass, tracemalloc over key + ComposedParts."""
+    import gc
+    import random
+    import tracemalloc
+
+    from fair_cam.tests.risk_engine._helpers import make_control
+
+    sfs = [
+        ("vmc_prev_reduce_variance_prob", "percent_reduction"),
+        ("vmc_id_control_monitoring", "probability"),
+        ("dsc_prev_defined_expectations", "probability"),
+        ("lec_prev_resistance", "probability"),
+        ("lec_det_visibility", "probability"),
+        ("lec_resp_resilience", "probability"),
+    ]
+    controls = [
+        make_control(
+            control_id=f"{i:08x}-0000-4000-8000-{i:012x}",
+            assignments=[(sfs[i % 6][0], sfs[i % 6][1], 0.7)],
+            coverage=0.8,
+            reliability=0.85,
+        )
+        for i in range(120)
+    ]
+    universe = [c.control_id for c in controls]
+    calc = NativeControlAwareRiskCalculator(controls=controls, n_simulations=100)
+    rng = random.Random(7)
+    inputs = [(f"s{i}", f"s{i}", _params()) for i in range(6)]
+    per_scenario = {sid: sorted(rng.sample(universe, 65)) for sid, _n, _p in inputs}
+
+    gc.collect()
+    tracemalloc.start()
+    base, _ = tracemalloc.get_traced_memory()
+    cache = rex._new_composition_cache()
+    by, skipped = rex._compute_loo_by_scenario(
+        calc, inputs, per_scenario, universe, composition_cache=cache
+    )
+    del by
+    gc.collect()
+    retained, _ = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert skipped == [] and len(cache) == 6 * 65  # the 64-control N-minus-one subsets
+    assert max(len(k) for k in cache) == 64  # the 65-control full sets were not stored
+    per_entry = (retained - base) / len(cache)
+    assert per_entry <= _WORST_BYTES_PER_ENTRY, per_entry
+    cap = rex.MAX_COMPOSITION_CACHE_ENTRIES
+    assert cap is not None and per_entry * cap < _ONE_GIB
 
 
 def _src_tree() -> ast.Module:
@@ -384,6 +462,54 @@ def test_attribution_under_tiny_cap_is_bit_identical_to_unbounded(
     shap_s1 = capped["shapley_typical"][0]["s1"]
     assert len(shap_s1) == 12 and any(v != 0.0 for v in shap_s1.values())
     assert capped["ensemble"]["state"] == "ok" and capped["ensemble"]["draws_used"] == 12
+
+
+def test_results_are_identical_when_large_subsets_are_not_stored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Leave-one-out composes the full set and every N-minus-one subset; the cache refuses to
+    store any subset over MAX_ATTRIBUTION_CONTROLS. Shrinking that limit to 4 makes almost
+    every subset of the 12-control fixture "too big", so nearly everything is recomputed:
+    typical and mean Shapley and LOO must still be `==` to the run that stored them all."""
+    calculator, universe = _calculator()
+    inputs = [("s1", "one", _params()), ("s2", "two", _params())]
+    scenario_controls = {
+        "s1": universe,
+        "s2": universe[3:5] + universe[9:] + universe[:2] + universe[7:9],
+    }
+
+    def run(limit: int) -> tuple[dict[str, Any], dict[frozenset[str], ComposedParts]]:
+        monkeypatch.setattr(rex, "MAX_ATTRIBUTION_CONTROLS", limit)
+        cache = rex._new_composition_cache()
+        out: dict[str, Any] = {}
+        for stat in ("typical", "mean"):
+            out[f"shapley_{stat}"] = rex._compute_shapley_by_scenario(
+                calculator,
+                inputs,
+                scenario_controls,
+                universe,
+                composition_cache=cache,
+                statistic=stat,
+            )
+            out[f"loo_{stat}"] = rex._compute_loo_by_scenario(
+                calculator,
+                inputs,
+                scenario_controls,
+                universe,
+                composition_cache=cache,
+                statistic=stat,
+            )
+        return out, cache
+
+    stored, stored_cache = run(64)
+    unstored, unstored_cache = run(4)
+
+    assert max(len(k) for k in stored_cache) == 12  # the full set and its N-minus-one subsets
+    assert max(len(k) for k in unstored_cache) <= 4  # over the limit: computed, never stored
+    assert len(unstored_cache) < len(stored_cache)
+    assert unstored == stored  # a pure memo: only speed differs
+    loo = stored["loo_typical"][0]["s1"]
+    assert len(loo) == 12 and any(v != 0.0 for v in loo.values())  # non-vacuous
 
 
 def test_controls_are_composed_in_sorted_order_at_both_composition_sites(

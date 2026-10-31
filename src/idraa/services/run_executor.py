@@ -750,53 +750,64 @@ MAX_ATTRIBUTION_CONTROLS = 64
 # re-composing the meta side) but NOT free; see the _comp_cache note below and
 # issue #432.
 MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
-# #299: cap on ENTRIES in each attribution ComposedParts cache (the canonical
-# Shapley/LOO cache and the ensemble's cross-draw cache). The eval budget above
-# counts evaluations, not bytes, and a scenario's cached subsets grow as 2^n, so
-# k org-wide controls multiplied the cache 2^k: a 400-scenario x (7 linked + 5
-# inherited) aggregate held 1.63M entries and peaked at 5.4 GiB against the 4 GiB
-# Fly VM (fly.toml: performance, 2 CPU, 4096 MB, no swap). ComposedParts is a pure
-# function of the subset (its controls are composed in sorted-id order, see
-# _make_subset_value_fn), so past the cap a miss recomputes exactly the value a hit
-# would have returned and does not store it: results are bit-identical, only speed
-# changes. Sizing, measured with tracemalloc over
-# key + ComposedParts for the production control shape (CPython 3.11, arm64):
-# ~2.8 KB/entry at 8 players, 3.1 KB at 12-13, 3.6 KB at 20, 4.2 KB at 25,
-# 7.4 KB at the 64-player cap (average subset 32). 75_000 entries is therefore
-# ~315 MB at <=25 players and ~555 MB in the 64-player corner, well under
-# 1 GiB per cache and under a quarter of the VM, while still holding the
-# 50,801-entry no-inheritance 400 x 7 portfolio whole. None = unbounded (tests
-# and the bench's before/after comparison only; read when each cache is created).
+# #299: bound on each attribution ComposedParts cache (the canonical Shapley/LOO cache
+# and the ensemble's cross-draw cache). The eval budget above counts evaluations, not
+# bytes, and a scenario's cached subsets grow as 2^n, so k org-wide controls multiplied
+# the cache 2^k: a 400-scenario x (7 linked + 5 inherited) aggregate held 1.63M entries
+# and peaked at 5.4 GiB against the 4 GiB Fly VM (fly.toml: performance, 2 CPU, 4096 MB,
+# no swap). Two rules bound it, both enforced in _BoundedCompositionCache:
+#   1. at most MAX_COMPOSITION_CACHE_ENTRIES entries (this constant), and
+#   2. no subset larger than MAX_ATTRIBUTION_CONTROLS is ever stored. Shapley and the
+#      ensemble skip scenarios above that size, but leave-one-out has no control cap and
+#      composes the full set and every N-minus-one subset of any scenario; those are
+#      near-full subsets, 2-5x larger than the Shapley walk's, and filled the cache to
+#      1.3 GiB at 100 controls and 2.4 GiB at 200 before this rule.
+# ComposedParts is a pure function of the subset (its controls are composed in
+# sorted-id order, see _make_subset_value_fn), so a subset that is not stored is
+# recomputed to exactly the value a hit would have returned: results are bit-identical,
+# only speed changes. Sizing, measured with tracemalloc over key + ComposedParts
+# (CPython 3.11, arm64, production control shape): ~2.8 KB/entry at 8 players, 3.1 KB at
+# 12-13, 3.6 KB at 20, 4.2 KB at 25, 7.3 KB for the Shapley walk at the 64-control cap
+# (random half-size subsets, 521 MiB full). The largest entry the rules admit is a
+# 64-control subset built by leave-one-out (65-control scenarios, Shapley skipped):
+# 13.8 KB/entry, so a FULL cache is 75_000 x 13.8 KB = 986 MiB, under 1 GiB per cache
+# and about a quarter of the 4096 MiB VM; it still holds the 50,801-entry no-inheritance
+# 400 x 7 portfolio whole. None = unbounded entries (tests and the bench's before/after
+# comparison only; read when each cache is created).
 MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000
 
 
 class _BoundedCompositionCache(dict[frozenset[str], ComposedParts]):
-    """``{subset: ComposedParts}`` memo that stops growing at ``max_entries``.
+    """``{subset: ComposedParts}`` memo with two bounds: ``max_entries`` entries, and no
+    subset of more than ``max_subset`` controls (see MAX_COMPOSITION_CACHE_ENTRIES).
 
-    ``__setitem__`` skips the insert of a NEW key once the cache is full;
-    existing keys keep hitting and may be overwritten. Callers recompute on a
-    miss and assign unconditionally. That degrades speed only because the value
-    is a pure function of the key: the callers compose a subset's controls in
-    sorted-id order, so a recompute equals the entry it would have hit (without
-    that, the last-ulp fold order of ``or_compose`` would follow the frozenset's
-    iteration order and a capped run could differ from an uncapped one). Only
-    item assignment is bounded; the attribution code uses nothing else to
-    populate a cache (no ``update`` / ``setdefault``).
+    ``__setitem__`` skips the insert of a NEW key once the cache is full and skips any
+    key with ``len(key) > max_subset``; existing keys keep hitting and may be
+    overwritten. Callers recompute on a miss and assign unconditionally. That degrades
+    speed only because the value is a pure function of the key: the callers compose a
+    subset's controls in sorted-id order, so a recompute equals the entry it would have
+    hit (without that, the last-ulp fold order of ``or_compose`` would follow the
+    frozenset's iteration order and a capped run could differ from an uncapped one).
+    Only item assignment is bounded; the attribution code uses nothing else to populate
+    a cache (no ``update`` / ``setdefault``).
     """
 
-    def __init__(self, max_entries: int | None) -> None:
+    def __init__(self, max_entries: int | None, max_subset: int) -> None:
         super().__init__()
         self._max_entries = max_entries
+        self._max_subset = max_subset
 
     def __setitem__(self, key: frozenset[str], value: ComposedParts) -> None:
+        if len(key) > self._max_subset:
+            return
         if self._max_entries is not None and len(self) >= self._max_entries and key not in self:
             return
         super().__setitem__(key, value)
 
 
 def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
-    """A fresh attribution composition cache bounded by the module constant."""
-    return _BoundedCompositionCache(MAX_COMPOSITION_CACHE_ENTRIES)
+    """A fresh attribution composition cache bounded by the module constants."""
+    return _BoundedCompositionCache(MAX_COMPOSITION_CACHE_ENTRIES, MAX_ATTRIBUTION_CONTROLS)
 
 
 # SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the

@@ -203,10 +203,10 @@ class RunService:
         # outage that blocked /login. The candidate query below feeds BOTH caps,
         # so it is computed ONCE. It runs only when a cap can actually fire: an
         # incoming high-fidelity run (either dispatch path), OR a standard run on
-        # the BACKGROUND path. A standard INLINE run (< _SYNC_THRESHOLD iters) is
-        # sub-second / few-MB and self-limiting, so it stays UNGATED [Arch-I3] —
-        # which also keeps this unindexed full-table-scan count OFF the
-        # latency-sensitive inline path.
+        # the BACKGROUND path. A standard INLINE run (< _SYNC_THRESHOLD iters) is ungated:
+        # its Monte-Carlo phase is bounded by NxM < 250k (~100 MB, config.py) and its own
+        # attribution waits its turn in run_executor._attribution_slot [Arch-I3]. Gating it
+        # would also put this unindexed full-table-scan count on the inline request path.
         will_background = effective_iterations >= _SYNC_THRESHOLD
         if incoming_high or will_background:
             active = active_run_ids()

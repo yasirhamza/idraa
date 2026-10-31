@@ -281,9 +281,9 @@ class Settings(BaseSettings):
     #         + max_concurrent_high_fidelity_runs · RAM(max_iters x max_M)
     #         + RAM(attribution, one run at a time) < VM_RAM - RAM(app baseline)
     #     RAM(attribution) is iteration-free; run_executor._attribution_slot makes it one term.
-    #     Whole-process peak RSS from the bench, 64 controls: 1,158 MiB AGGREGATE (6 scenarios) /
-    #     1,207 MiB SINGLE (macOS bench peaks, not Fly). 2.2 + 1.2 = 3.4 GB BEFORE the app baseline
-    #     (uvicorn, imports, Argon2 transients). Re-derive on a THRESHOLD bump; re-measure on Fly.
+    #     macOS bench peaks (not Fly) in MiB: 1,158 AGGREGATE (64 ctl x 6 scen), 1,207 SINGLE
+    #     2,200 + 1,207 = 3,407 of 4,096 BEFORE the app baseline (uvicorn, imports, Argon2). One
+    #     cache alone reaches 989 (75,000 x 13.8 KB, 65-control LOO; no run peak benched).
     # (c) CROSS-ORG AVAILABILITY COUPLING [SA-N] — GLOBAL, reject-not-queue (no
     #     durable queue exists), matching the high-fidelity cap. So a 9th
     #     concurrent standard run is REJECTED even when it is one org's analysts

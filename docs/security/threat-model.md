@@ -759,10 +759,10 @@ new export format must re-implement, not assume is "someone else's problem."
   bullet below), so the request can sit for minutes behind a background run's
   attribution, holding no pooled connection while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2538`; `del calculator, fc_controls`
-  at `services/run_executor.py:2726` and again at `services/run_executor.py:2922`; `del per_scenario_inputs` at `services/run_executor.py:2923`;
-  `del aggregate` at `services/run_executor.py:2741`; `del results_payload` at `services/run_executor.py:2956`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2742`, `services/run_executor.py:2942`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2549`; `del calculator, fc_controls`
+  at `services/run_executor.py:2737` and again at `services/run_executor.py:2933`; `del per_scenario_inputs` at `services/run_executor.py:2934`;
+  `del aggregate` at `services/run_executor.py:2752`; `del results_payload` at `services/run_executor.py:2967`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2753`, `services/run_executor.py:2953`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -773,7 +773,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2108`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2119`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -834,13 +834,13 @@ new export format must re-implement, not assume is "someone else's problem."
   weight-robustness ensemble) is the memory-heavy phase of a run and its footprint does not
   scale with iterations, so it is bounded apart from the iteration caps above. (1) The
   attribution composition caches are entry-capped at `MAX_COMPOSITION_CACHE_ENTRIES`
-  (`services/run_executor.py:770`, 75,000), per cache; past the cap a miss recomputes the
+  (`services/run_executor.py:777`, 75,000), per cache; past the cap a miss recomputes the
   value instead of storing it, so results are bit-identical and only speed changes (the
   in-code sizing is about 315 MB per cache at 25 players or fewer and about 555 MB at the
   64-player cap). The ensemble's per-(scenario, subset) draw-vector cache is cleared on
   entering each scenario, and a SINGLE run frees its canonical cache before the ensemble
   starts. (2) One attribution phase runs at a time per process: a process-wide asyncio lock,
-  one per event loop (`services/run_executor.py:837`), that a run enters only after returning
+  one per event loop (`services/run_executor.py:848`), that a run enters only after returning
   its pooled connection, so a queued run holds none. Like the samples-export guard above,
   this is a single-process invariant; running more than one machine would need a shared
   limiter. (3) Inline runs (under 1000 iterations, ungated by the concurrency caps above)
