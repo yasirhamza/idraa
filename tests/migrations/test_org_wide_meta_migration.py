@@ -6,7 +6,9 @@ scenario-scoped, so no result changes) and an existing run's new column is SQL N
 is NOT NULL as stale BEFORE the column is dropped -- the last chance to identify
 feature-era rows -- and then drops both columns. The flagged set is a deliberate
 superset (a run that inherited nothing is flagged too); a NULL run, and a run that is
-not COMPLETED, are untouched.
+not COMPLETED, are untouched. Each run the downgrade flips also gets one ``run.flagged_stale``
+audit row (system actor, no-hyphen hex ids, a reason: the c4d2e8f1a6b9 shape); a run that was
+already stale is neither rewritten nor given a row.
 
 Rows are seeded with raw SQL at the pre-revision schema: the real ORM now writes the
 new columns, which that schema lacks. Revisions are pinned explicitly (not "head"), so
@@ -82,7 +84,12 @@ def _insert_pre_feature_run(engine: sa.Engine, org_id: str, status: str) -> str:
 
 
 def _insert_feature_run(
-    engine: sa.Engine, org_id: str, status: str, inherited: dict[str, list[str]]
+    engine: sa.Engine,
+    org_id: str,
+    status: str,
+    inherited: dict[str, list[str]],
+    *,
+    stale: bool = False,
 ) -> str:
     """A run at the post-revision schema with a NON-NULL (JSON text) column value."""
     run_id = _hex()
@@ -91,7 +98,7 @@ def _insert_feature_run(
         "org": org_id,
         "st": status,
         "ts": _STAMP,
-        "stale": False,
+        "stale": stale,
         "inh": json.dumps(inherited),
     }
     with engine.begin() as conn:
@@ -105,6 +112,20 @@ def _is_stale(engine: sa.Engine, run_id: str) -> bool:
             conn.execute(
                 sa.text("SELECT is_stale FROM risk_analysis_runs WHERE id = :id"), {"id": run_id}
             ).scalar_one()
+        )
+
+
+def _audit_rows(engine: sa.Engine) -> list[sa.RowMapping]:
+    with engine.connect() as conn:
+        return list(
+            conn.execute(
+                sa.text(
+                    "SELECT id, organization_id, entity_type, entity_id, user_id, action, changes "
+                    "FROM audit_log WHERE action = 'run.flagged_stale' ORDER BY entity_id"
+                )
+            )
+            .mappings()
+            .all()
         )
 
 
@@ -172,3 +193,44 @@ def test_downgrade_flags_feature_era_completed_runs_then_drops_both_columns(
     assert "inherited_control_ids_per_scenario" not in _columns(
         alembic_engine, "risk_analysis_runs"
     )
+
+
+def test_downgrade_writes_one_audit_row_per_flagged_run(
+    alembic_runner: MigrationContext, alembic_engine: sa.Engine
+) -> None:
+    """The stale flag is never set without a trail (precedent c4d2e8f1a6b9): one
+    ``run.flagged_stale`` row per run the downgrade flips -- system actor, the run's own
+    organization, no-hyphen hex ids, the ``[false, true]`` transition and a reason. A run that
+    was already stale is not rewritten and gets no row; a NULL run and a non-COMPLETED run get
+    none either."""
+    alembic_runner.migrate_up_to(_PRE)
+    org_id = _seed_control(alembic_engine)
+    pre_feature = _insert_pre_feature_run(alembic_engine, org_id, "completed")
+    alembic_runner.migrate_up_to(_REV)
+
+    nothing_inherited = _insert_feature_run(alembic_engine, org_id, "completed", {})
+    empty_list = _insert_feature_run(alembic_engine, org_id, "completed", {"s": []})
+    inherited = _insert_feature_run(alembic_engine, org_id, "completed", {"s": ["c-1", "c-2"]})
+    already_stale = _insert_feature_run(
+        alembic_engine, org_id, "completed", {"s": ["c-1"]}, stale=True
+    )
+    failed = _insert_feature_run(alembic_engine, org_id, "failed", {"s": ["c-1"]})
+    assert _audit_rows(alembic_engine) == []  # upgrade writes nothing
+
+    alembic_runner.migrate_down_to(_PRE)
+
+    flagged = {nothing_inherited, empty_list, inherited}
+    rows = _audit_rows(alembic_engine)
+    assert {str(r["entity_id"]) for r in rows} == flagged  # exactly one per flipped run
+    assert len(rows) == len(flagged)
+    assert {pre_feature, already_stale, failed}.isdisjoint(str(r["entity_id"]) for r in rows)
+    assert _is_stale(alembic_engine, already_stale) is True  # still stale, no row
+    for row in rows:
+        assert row["entity_type"] == "risk_analysis_run"
+        assert str(row["organization_id"]) == org_id  # org-scoped system row
+        assert row["user_id"] is None
+        assert str(row["id"]) == uuid.UUID(hex=str(row["id"])).hex  # no-hyphen hex
+        assert json.loads(str(row["changes"])) == {
+            "is_stale": [False, True],
+            "reason": ["", "issue-299 org-wide meta controls rollback"],
+        }
