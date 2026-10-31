@@ -212,8 +212,8 @@ closed on a mismatch.
   GitHub advisory covers 13.0.0. Only pillow moved in the lock, and the 8 dated pillow suppressions were removed.
 - **2026-10-31, `pyasn1` 0.6.5 as a security update inside the cooldown.** 0.6.5 (uploaded 2026-10-27
   06:32 UTC) is the first patched version for CVE-2026-119194, CVE-2026-119195, CVE-2026-119196 and
-  CVE-2026-119197, which failed the dependency audit unsuppressed on 0.6.4 (pulled in via `webauthn` →
-  `pyasn1-modules`). Security updates bypass the cooldown (§2); this repo's Dependabot security updates are off,
+  CVE-2026-119197, which failed the dependency audit unsuppressed on 0.6.4 (pulled in by `webauthn`, both
+  directly and through `pyasn1-modules`). Security updates bypass the cooldown (§2); this repo's Dependabot security updates are off,
   so the bump was locked by hand about 3 days before the window closed. Checked the same day: 0.6.5 is not
   yanked, both sha256 digests in `uv.lock` (sdist and wheel) match PyPI, and no GitHub or OSV advisory covers
   0.6.5. Only pyasn1 moved in the lock, and no suppression was added.

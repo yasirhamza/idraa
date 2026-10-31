@@ -437,17 +437,20 @@ docstring).
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
   (`routes/controls.py:82-89`); one that survives, a submitted `dsc_corr_misaligned` row and
   an ineligible or absent source are refused by a pure check (`services/controls.py:196-246`),
-  and an unknown slug by the route parse. That check and the org-wide eligibility check in the
-  next bullet are both pure and both run before any mutation in create and update, so a
-  refusal leaves no row and no audit entry. The 422 messages are fixed text or enum values (the
-  org-wide refusal is fixed text too); the
-  slug comes back only as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:344`;
+  and an unknown slug by the route parse, before the service is called. That check and the
+  org-wide eligibility check in the next bullet are both pure and both run before any mutation
+  in create and update, so a refusal leaves no row and no audit entry. The 422 messages are
+  fixed text or enum values (the org-wide refusal is fixed text too); the slug comes back only
+  as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:344`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
-- **Org-wide controls (issue #299):** the run-create freeze and every inherited-controls
-  display read org-wide controls through `ControlRepo.list_org_wide_meta`
-  (`repositories/control_repo.py:68`) and `ControlRepo.count_org_wide_meta` (no line number of
-  its own), both filtered by `organization_id` plus the published-and-operating predicate, so
-  another org's flagged control is never inherited
+- **Org-wide controls (issue #299):** the run-create freeze, the scenario detail and edit
+  pages and the run-create preview read org-wide controls through
+  `ControlRepo.list_org_wide_meta` (`repositories/control_repo.py:68`), and the run-detail
+  legacy note through `ControlRepo.count_org_wide_meta` (no line number of its own), both
+  filtered by `organization_id` plus the published-and-operating predicate, so another org's
+  flagged control is never inherited. The wizard's step-5 list uses neither method: it filters
+  the org-scoped `ControlRepo.list_for_org` result by the flag, which applies the same
+  predicate, so it shows only the caller's own effective org-wide controls too
   (`tests/services/test_org_wide_meta_eligibility.py::test_list_and_count_org_wide_meta_filter_status_stage_and_org`,
   `tests/services/test_run_service_inherited_controls.py::test_other_orgs_org_wide_controls_never_inherited`).
   The flag is set only through the existing analyst/admin control form (§6, B6): the importer,
@@ -751,13 +754,17 @@ new export format must re-implement, not assume is "someone else's problem."
   (≥250k effective-iteration, i.e. iterations × scenarios) runs to
   `max_concurrent_high_fidelity_runs` (default 2), and standard (sub-250k)
   BACKGROUND runs to `max_concurrent_standard_runs` (default 8). A standard
-  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED — its engine
-  phase is still small and self-limiting (sub-second / few-MB), and gating such
+  (sub-250k) sub-1000-iteration INLINE run is intentionally UNGATED, because gating such
   runs would put the unindexed candidate-count query on the latency-sensitive
-  inline path. Since #299 an inline run is not sub-second end to end: it WAITS for
-  any attribution ahead of it (the one-at-a-time slot in the attribution-memory
-  bullet below), so the request can sit for minutes behind a background run's
-  attribution, holding no pooled connection while it waits.
+  inline path; an inline run of 250k or more effective iterations is high-fidelity
+  and IS gated. Its Monte Carlo phase is bounded by iterations × scenarios below 250k
+  (about 100 MB at the top, the sizing in `config.py`; an inline AGGREGATE can reach
+  it, so this is not a few-MB run). Its own attribution does not shrink with iterations:
+  it can take tens of seconds or minutes (a 64-control SINGLE run took 39 s in the
+  bench) and runs in the same one-at-a-time slot (the attribution-memory bullet
+  below). Since #299 the request also WAITS for any attribution ahead of it, so it can
+  sit for minutes behind a background run's attribution, holding no pooled connection
+  while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
   the run pipeline (`del enhanced` at `services/run_executor.py:2549`; `del calculator, fc_controls`
   at `services/run_executor.py:2737` and again at `services/run_executor.py:2933`; `del per_scenario_inputs` at `services/run_executor.py:2934`;
@@ -831,20 +838,32 @@ new export format must re-implement, not assume is "someone else's problem."
   (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and
   the per-user export rate limit at the §11 bulk-export choke point.
 - **Attribution memory (issue #299):** attribution (Shapley, leave-one-out and the
-  weight-robustness ensemble) is the memory-heavy phase of a run and its footprint does not
-  scale with iterations, so it is bounded apart from the iteration caps above. (1) The
-  attribution composition caches are entry-capped at `MAX_COMPOSITION_CACHE_ENTRIES`
-  (`services/run_executor.py:777`, 75,000), per cache; past the cap a miss recomputes the
-  value instead of storing it, so results are bit-identical and only speed changes (the
-  in-code sizing is about 315 MB per cache at 25 players or fewer and about 555 MB at the
-  64-player cap). The ensemble's per-(scenario, subset) draw-vector cache is cleared on
-  entering each scenario, and a SINGLE run frees its canonical cache before the ensemble
-  starts. (2) One attribution phase runs at a time per process: a process-wide asyncio lock,
-  one per event loop (`services/run_executor.py:848`), that a run enters only after returning
-  its pooled connection, so a queued run holds none. Like the samples-export guard above,
-  this is a single-process invariant; running more than one machine would need a shared
-  limiter. (3) Inline runs (under 1000 iterations, ungated by the concurrency caps above)
-  therefore wait for any attribution ahead of them, as the first bullet of this section says.
+  weight-robustness ensemble) is a memory-heavy phase of a run, and its footprint does not
+  scale with iterations, so the iteration caps above do not bound it. A "player" here is a
+  control in a scenario's attribution game: a scenario with n controls (explicit links plus
+  inherited org-wide controls) is an n-player game. Work is bounded per scenario by
+  `MAX_ATTRIBUTION_CONTROLS` (64; Shapley and the ensemble skip a scenario above it) and per
+  run by `MAX_ATTRIBUTION_TOTAL_EVALS` (2,000,000 evaluations per pass; a scenario whose
+  cost no longer fits the remainder is skipped), and memory by four rules. (1) The
+  composition caches are bounded in entries and in entry size: at most
+  `MAX_COMPOSITION_CACHE_ENTRIES` entries per cache (`services/run_executor.py:777`, 75,000),
+  and no subset of more than `MAX_ATTRIBUTION_CONTROLS` controls is ever stored (leave-one-out
+  has no control cap and used to fill the cache with near-full subsets, 1.3 GiB at 100
+  controls and 2.4 GiB at 200). Past either bound a miss recomputes the value instead of
+  storing it; controls are composed in sorted-id order, so results are bit-identical and only
+  speed changes. The worst case is 75,000 entries of about 13.8 KB (a 64-control subset),
+  about 989 MiB per cache, measured with tracemalloc, against the 4,096 MiB VM; a typical
+  cache is about 520 MiB at 64 controls and 300 MiB at 25 or fewer. (2) At most one
+  composition cache is alive at a time: SINGLE and AGGREGATE both free the canonical cache
+  before the ensemble builds its own, and the ensemble's per-(scenario, subset) draw-vector
+  cache is cleared on entering each scenario. (3) One attribution phase runs at a time: an
+  asyncio lock per event loop (`services/run_executor.py:848`), entered only after the run
+  has returned its pooled connection, so a queued run holds none. Production runs one uvicorn
+  process with one loop (no `--workers`), so the lock serializes attribution process-wide; as
+  with the samples-export guard above, a second worker process or a second machine would get
+  its own lock and need a shared limiter. (4) Only standard inline runs are ungated by the
+  concurrency caps above: their Monte Carlo phase is small, but their own attribution runs in
+  the same slot, can take minutes, and waits for attribution ahead of it (first bullet).
 - **CLAUDE.md drift flag — RESOLVED 2026-08-05.** The original sweep found
   CLAUDE.md's "Production deploy + operational envelope" section claiming
   `VM size: shared-cpu-1x / memory_mb = 2048` while `fly.toml:91-94` had
