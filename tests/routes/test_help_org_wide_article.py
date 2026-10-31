@@ -121,6 +121,31 @@ async def test_article_attribution_limits_match_the_code(
 
 
 @pytest.mark.asyncio
+async def test_article_rerun_paragraph_states_who_marks_runs(
+    authed_analyst: tuple[AsyncClient, object],
+) -> None:
+    """The "Re-runs" paragraph says what marks runs, and it must stay true in both directions.
+    An in-effect organization-wide control marks every completed run in the organization; a
+    control that is not in effect does not trigger THAT marking, but a library re-sync of any
+    adopted control still marks the runs that used it (apply_resync), and ordinary edits mark
+    nothing. "Only ..." and "mark nothing" for every edit were false and are pinned out."""
+    client, _ = authed_analyst
+    r = await client.get(f"/help/{_SLUG}", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    text = " ".join(r.text.split())
+    for sentence in (
+        "A change to an organization-wide control that is in effect (flagged organization-wide, "
+        "published, implementation stage Active) marks every completed analysis in the "
+        "organization as needing a re-run.",
+        "do not trigger that organization-wide marking: a library re-sync of any adopted control "
+        "still marks the completed runs that used it",
+    ):
+        assert sentence in text, sentence
+    assert "Only a change to an organization-wide control" not in text
+    assert "change no scenario and mark nothing" not in text
+
+
+@pytest.mark.asyncio
 async def test_article_does_not_carry_the_retired_pairing_wording(
     authed_analyst: tuple[AsyncClient, object],
 ) -> None:
