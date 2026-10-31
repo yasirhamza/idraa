@@ -17,13 +17,17 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.utils import is_body_allowed_for_status_code
 from jinja2 import Undefined as JinjaUndefined
 from jinja2 import pass_context
 from markupsafe import Markup
 from sqlalchemy import func, select
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import Scope
@@ -44,6 +48,7 @@ from idraa.models.enums import SUB_FUNCTION_UNITS
 from idraa.models.user import User
 from idraa.services.audit import ExportRateLimitedError
 from idraa.services.auth import SESSION_COOKIE
+from idraa.utils.safe_json import HtmlSafeJSONResponse
 from idraa.utils.text import humanize_slug as _humanize_slug_impl
 
 # Per-coroutine current request. Set by the _patched_template_render wrapper
@@ -931,11 +936,37 @@ async def _auth_redirect_handler(request: StarletteRequest, exc: HTTPException) 
         accept = request.headers.get("accept", "")
         if "application/json" not in accept:
             return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
-    return JSONResponse(
+    return HtmlSafeJSONResponse(
         {"detail": exc.detail},
         status_code=exc.status_code,
         headers=getattr(exc, "headers", None),
     )
+
+
+async def _starlette_http_exception_handler(
+    request: StarletteRequest, exc: StarletteHTTPException
+) -> Response:
+    """Stock FastAPI body for framework-raised ``HTTPException`` (404/405/...),
+    serialized with ``HtmlSafeJSONResponse`` like every other error body here.
+
+    ``_auth_redirect_handler`` owns ``fastapi.HTTPException`` (handler lookup
+    walks the exception's MRO, so it wins for those); this one catches the bare
+    ``starlette.exceptions.HTTPException`` the router and multipart parser raise.
+    """
+    headers = getattr(exc, "headers", None)
+    if not is_body_allowed_for_status_code(exc.status_code):
+        return Response(status_code=exc.status_code, headers=headers)
+    return HtmlSafeJSONResponse(
+        {"detail": exc.detail}, status_code=exc.status_code, headers=headers
+    )
+
+
+async def _request_validation_handler(
+    request: StarletteRequest, exc: RequestValidationError
+) -> Response:
+    """Stock FastAPI 422 body (``detail`` = the error list, which echoes the
+    rejected input), serialized with ``HtmlSafeJSONResponse``."""
+    return HtmlSafeJSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
 
 
 async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Response:
@@ -952,7 +983,9 @@ async def _step_up_handler(request: StarletteRequest, exc: StepUpRequired) -> Re
     if request.headers.get("HX-Request") == "true":
         return Response(status_code=204, headers={"HX-Redirect": dest})
     if "application/json" in request.headers.get("accept", ""):
-        return JSONResponse({"error": "step_up_required", "redirect": dest}, status_code=401)
+        return HtmlSafeJSONResponse(
+            {"error": "step_up_required", "redirect": dest}, status_code=401
+        )
     return RedirectResponse(dest, status_code=303)
 
 
@@ -1326,6 +1359,17 @@ def create_app() -> FastAPI:
     # attached to the app itself and the registration order has no bearing
     # on dispatch precedence. See ``_auth_redirect_handler`` for details.
     app.add_exception_handler(HTTPException, _auth_redirect_handler)  # type: ignore[arg-type]
+    # The two stock FastAPI JSON error handlers, re-registered so their bodies
+    # go through HtmlSafeJSONResponse too (error details are encoded so they are
+    # inert when rendered as HTML; see utils/safe_json.py).
+    app.add_exception_handler(
+        StarletteHTTPException,
+        _starlette_http_exception_handler,  # type: ignore[arg-type]
+    )
+    app.add_exception_handler(
+        RequestValidationError,
+        _request_validation_handler,  # type: ignore[arg-type]
+    )
     app.add_exception_handler(ExportRateLimitedError, _export_rate_limited_handler)
     app.add_exception_handler(StepUpRequired, _step_up_handler)  # type: ignore[arg-type]
     # Base-Exception (500) handler: applies security headers to responses that

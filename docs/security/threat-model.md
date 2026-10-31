@@ -80,10 +80,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1358-1366`). The idraa#107 cache-state
+  security-settings state (`app.py:1402-1410`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:1018-1035`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1051-1068`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -96,8 +96,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1231`; confirmed order
-`app.py:1173-1237`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1264`; confirmed order
+`app.py:1206-1270`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -385,7 +385,7 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
   `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
-  (`app.py:1190-1224`) allowlists `/setup` (`app.py:826-829`) and never blocks it.
+  (`app.py:1223-1257`) allowlists `/setup` (`app.py:831-834`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for
@@ -554,11 +554,11 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:97-100`), which Starlette constructs with
+  (`app.py:102-105`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — all 146 tracked templates are `.html`, so autoescape covers every
-  one; the two `| safe` bypasses emit app-built markup only (`app.py:152`'s `csrf_field()`
+  one; the two `| safe` bypasses emit app-built markup only (`app.py:157`'s `csrf_field()`
   Markup, the segno TOTP SVG at `templates/account/_totp.html:12`). **Alpine `x-data` is the sharp edge**: an attribute the browser
   HTML-decodes before Alpine evaluates it as a JS expression, so autoescape is
   no defense there — the value must be JSON-encoded via `| tojson` inside a
@@ -576,6 +576,10 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `| tojson` idiom, `data_table.html`'s `page_size` x-data gets a defensive
   `| int`, and a source-grep guard (`tests/unit/test_scenario_form_xdata_escaping.py`)
   fails if any dist selector regresses to the raw shape; #268's link select reflects its slug the same way (§7).
+- **4xx JSON error bodies** — encoded so markup characters are inert when HTMX swaps them
+  into the page: `HtmlSafeJSONResponse` (`utils/safe_json.py:29`) writes `<`, `>` and `&` as JSON
+  unicode escapes, and the `HTTPException`, framework-exception and request-validation handlers in
+  `app.py` all return it.
 - **URL-context injection (href)** — a third class, distinct from both:
   autoescape escapes `&<>"'` in an `href` value, preventing attribute
   breakout, but does not validate the URL scheme, so `javascript:` survives
@@ -586,7 +590,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   #349) auto-links `https://` URLs inside free-text citation strings, used
   in `templates/library/entry_detail.html`'s citations block; and
   `formatting.safe_https_href` (`formatting.py:62`, issue #349/Sec-I5),
-  registered as the Jinja filter `https_href` (`app.py:503`), gates a
+  registered as the Jinja filter `https_href` (`app.py:508`), gates a
   citation URL used directly as an `href=` attribute value — e.g. the
   Threat Agent Library's community detail page
   (`templates/library/threat_community_detail.html:74`:
@@ -607,7 +611,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:102-107` about a
+  The only textual hit is an explanatory comment in `app.py:107-112` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template
