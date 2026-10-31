@@ -506,6 +506,11 @@ def _build_active_control_plan(run: RiskAnalysisRun, controls: list[Control]) ->
     else:
         per_scen = run.aggregate_control_ids_per_scenario
         if per_scen is None:  # pre-#89 legacy row: full universe everywhere
+            if any(inherited.values()):
+                # Unreachable from the freeze (it always writes the per-scenario map for an
+                # AGGREGATE run). Without the map every fetched id, an inherited one included,
+                # would compose as a plain row AND as its variant: a silent double count.
+                raise RuntimeError("AGGREGATE run has inherited controls but no per-scenario map")
             explicit_by_scenario = {}
         else:
             explicit_by_scenario = {s: list(ids) for s, ids in per_scen.items()}
@@ -764,23 +769,23 @@ MAX_ATTRIBUTION_TOTAL_EVALS = 2_000_000
 #   2. the ESTIMATED bytes of the stored entries never pass MAX_COMPOSITION_CACHE_BYTES.
 #      An entry's size grows with the subset AND with each member control's LEC and
 #      currency assignments (ComposedParts.lec_items / currency_items), up to 9 per
-#      control, so an entry COUNT bounds nothing: 75,000 entries were 0.5 GiB for
-#      one-assignment controls, 1.3 GiB for the seed library's mix and 4.7 GiB for
-#      9 assignments each. _estimated_entry_bytes is an upper envelope fitted to
-#      tracemalloc over key + ComposedParts (324 measured shapes: 1-64 controls, 1-9 LEC
-#      assignments per control, 0-16 meta assignments, keys built by iterable, set
-#      difference and union; the estimate was 1.06x-2.0x the measured bytes, mean 1.27x);
+#      control, so an entry COUNT bounds nothing: 75,000 entries were ~1.0 GiB for one-assignment
+#      controls (14 KB each), 1.3 GiB for the seed library's mix and ~4.8 GiB for 9 assignments each
+#      (69 KB). _estimated_entry_bytes is an envelope fitted to tracemalloc over key + ComposedParts
+#      (324 measured shapes: 1-64 controls, 1-9 LEC assignments per control, 0-16 meta assignments,
+#      keys built by iterable, set difference and union; the estimate was 1.06x-2.0x the measured
+#      bytes, mean 1.27x, and up to 1.4% under on some other 20-21-control shapes);
 #   3. at most MAX_COMPOSITION_CACHE_ENTRIES entries, which still binds for the small
 #      entries of small subsets (it keeps the 50,801-entry no-inheritance 400 x 7
 #      portfolio whole at about 150 MiB).
 # ComposedParts is a pure function of the subset (its controls are composed in
 # sorted-id order, see _make_subset_value_fn), so a subset that is not stored is
 # recomputed to exactly the value a hit would have returned: results are bit-identical,
-# only speed changes. The estimate is an upper envelope (>= 1.06x the measured bytes), so at
-# 512 MiB one cache never holds more than 512 MiB: a 64-control subset with 9 LEC
-# assignments per control is ~69 KB (est. 78 KB), so ~6,800 such entries fit, where 75,000
-# entries were 4.7 GiB. Whole-run peaks measured with the bench (macOS arm64, 10k
-# iterations, 5 inherited + 59 linked controls) are recorded in config.py's guard invariant.
+# only speed changes. The estimate is a fitted envelope, not a strict bound, so one cache holds
+# about 512 MiB of traced allocations (tracemalloc; RSS up to ~1.08x that): a 64-control subset with
+# 9 LEC assignments per control is ~69 KB (est. 78 KB), so ~6,800 such entries fit, where 75,000
+# entries were ~4.8 GiB. Whole-run peaks measured with the bench (macOS arm64, 10k iterations, 5
+# inherited + 59 linked controls) are recorded in config.py's guard invariant.
 # None = unbounded (tests and the bench's before/after comparison only; read when each
 # cache is created).
 MAX_COMPOSITION_CACHE_ENTRIES: int | None = 75_000
@@ -856,11 +861,11 @@ def _new_composition_cache() -> dict[frozenset[str], ComposedParts]:
     )
 
 
-# SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the
-# memory-heavy phase of a run and its footprint does NOT scale with iterations: the
-# composition caches are capped per run (MAX_COMPOSITION_CACHE_ENTRIES), but the
-# admission gate (services/runs.py) budgets only iterations x scenarios and allows
-# 8 standard runs at once, so N concurrent attributions multiplied the ceiling by N.
+# SEC-T12F1-I2: attribution (Shapley + leave-one-out + weight ensemble) is the memory-heavy phase of
+# a run and its footprint does NOT scale with iterations: the composition caches are bounded per run
+# (_new_composition_cache: subset size, entry count, estimated bytes), but the admission gate
+# (services/runs.py) budgets only iterations x scenarios and allows 8 standard runs at once, so N
+# concurrent attributions multiplied the ceiling by N.
 # Attribution is single-core and holds the GIL, so running one at a time costs no
 # throughput and turns the per-run ceiling into a per-PROCESS one. Single-process
 # invariant, same as the run reaper and the samples-export guard in routes/runs.py.
@@ -1458,8 +1463,10 @@ def _build_weight_robustness(
             (``_ActiveControlPlan.names``, from the snapshot rows).
         per_scenario_inputs: [(scenario_id, name, FAIRParameters)] (one element for
             SINGLE; N for AGGREGATE).
-        per_scenario_dict: per-scenario active control-id subsets, or None (legacy /
-            SINGLE full-universe fallback).
+        per_scenario_dict: per-scenario active control-id subsets, or None (a legacy
+            AGGREGATE row with no stored map, or a SINGLE run that inherited nothing:
+            the full-universe path). A SINGLE run that inherited something passes a
+            one-key dict.
         canonical_values: the REUSED canonical _aggregate_clean(clean_shapley) for
             AGGREGATE (do NOT re-run a second canonical pass — Arch-B2); for SINGLE
             the one canonical pass result.
@@ -1522,10 +1529,10 @@ def _build_weight_robustness(
     # (K = draw count) at full precision. Keyed by subset alone (#432 item 2,
     # shipped): ComposedParts is a pure function of the subset's authored
     # assignments, so identical subsets dedup across scenarios in aggregates.
-    # #299: bounded (MAX_COMPOSITION_CACHE_ENTRIES). The per-scenario draw-vector
-    # cache in _per_control_values_for already composes each (scenario, subset)
-    # at most once per call, so past the cap only the CROSS-scenario reuse is lost;
-    # the per-draw cost model below (compose once, then finalize) is unchanged.
+    # #299: bounded by _new_composition_cache (subset size, entry count, estimated bytes). The
+    # per-scenario draw-vector cache in _per_control_values_for already composes each (scenario,
+    # subset) at most once per call, so past a bound only the CROSS-scenario reuse is lost; the
+    # per-draw cost model below (compose once, then finalize) is unchanged.
     _comp_cache: dict[frozenset[str], ComposedParts] = _new_composition_cache()
 
     # Arch-I10: realized per-draw eval cost — replicates the exact skip-aware

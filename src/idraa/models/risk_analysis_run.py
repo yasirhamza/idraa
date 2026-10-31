@@ -142,7 +142,7 @@ class RiskAnalysisRun(IdMixin, TimestampMixin, OrgMixin, Base):
     # none_as_null=True: Python None -> SQL NULL. Plain JSON would store the text
     # 'null' for an explicitly assigned None, giving the pre-feature marker two
     # encodings (the migration downgrade's IS NOT NULL would flag such a row stale;
-    # see also the NULLIF workaround at repositories/scenario_repo.py:128-131).
+    # see also the NULLIF workaround ``_is_json_null`` in repositories/scenario_library_repo.py).
     inherited_control_ids_per_scenario: Mapped[dict[str, list[str]] | None] = mapped_column(
         JSON(none_as_null=True), nullable=True
     )

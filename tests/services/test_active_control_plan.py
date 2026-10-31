@@ -138,3 +138,40 @@ def test_stale_per_scenario_ids_strips_variant_suffix() -> None:
     u = {"x", "y"}
     assert _stale_per_scenario_ids({"s": ["x", variant_id("y")]}, u) == {}
     assert _stale_per_scenario_ids({"s": ["x", variant_id("z")]}, u) == {"s": ["z"]}
+
+
+def test_legacy_aggregate_without_a_map_but_with_inherited_ids_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-#89 AGGREGATE row has no per-scenario map and takes the full-universe path. If it
+    also carried an inherited map, each inherited id (fetched, since control_ids_used holds it)
+    would compose as a plain row AND as its variant. The freeze never writes that shape; the plan
+    refuses it instead of double counting, and a legacy row that inherited nothing is unchanged."""
+    import idraa.services.run_executor as rx
+
+    monkeypatch.setattr(
+        rx,
+        "_snapshot_control_v3",
+        lambda c, **kw: SimpleNamespace(control_id=str(c.id), name=c.name),
+    )
+    edr, pm = _ctrl("EDR"), _ctrl("PM")
+    a = str(uuid.uuid4())
+
+    def _run(inherited: Any) -> Any:
+        return SimpleNamespace(
+            run_type=RunType.AGGREGATE,
+            scenario_id=None,
+            control_ids_used=[str(edr.id), str(pm.id)],
+            aggregate_control_ids_per_scenario=None,
+            inherited_control_ids_per_scenario=inherited,
+        )
+
+    with pytest.raises(RuntimeError, match="no per-scenario map"):
+        _build_active_control_plan(_run({a: [str(pm.id)]}), [edr, pm])
+
+    nothing_inherited_shapes: list[Any] = [None, {}, {a: []}]
+    for nothing_inherited in nothing_inherited_shapes:
+        plan = _build_active_control_plan(_run(nothing_inherited), [edr, pm])
+        assert plan.explicit_ids == [str(edr.id), str(pm.id)]  # today's full universe
+        assert plan.universe_ids == plan.explicit_ids
+        assert plan.has_inheritance is False

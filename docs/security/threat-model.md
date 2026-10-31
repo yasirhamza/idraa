@@ -766,10 +766,10 @@ new export format must re-implement, not assume is "someone else's problem."
   sit for minutes behind a background run's attribution, holding no pooled connection
   while it waits.
   Memory-cleanup pattern in `services/run_executor.py` — staged deletes across
-  the run pipeline (`del enhanced` at `services/run_executor.py:2595`; `del calculator, fc_controls`
-  at `services/run_executor.py:2783` and again at `services/run_executor.py:2979`; `del per_scenario_inputs` at `services/run_executor.py:2980`;
-  `del aggregate` at `services/run_executor.py:2798`; `del results_payload` at `services/run_executor.py:3013`), with
-  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2799`, `services/run_executor.py:2999`) — breaks numpy reference
+  the run pipeline (`del enhanced` at `services/run_executor.py:2602`; `del calculator, fc_controls`
+  at `services/run_executor.py:2790` and again at `services/run_executor.py:2986`; `del per_scenario_inputs` at `services/run_executor.py:2987`;
+  `del aggregate` at `services/run_executor.py:2805`; `del results_payload` at `services/run_executor.py:3020`), with
+  explicit `gc.collect()` passes after `del aggregate` and before the samples split (`services/run_executor.py:2806`, `services/run_executor.py:3006`) — breaks numpy reference
   cycles before SQLite serialization; comments tie this directly to a prior
   OOM incident (issue #211).
 - **D (connection-pool exhaustion)**: the Monte-Carlo / Shapley / ensemble
@@ -780,7 +780,7 @@ new export format must re-implement, not assume is "someone else's problem."
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
   reports.py production outage (`routes/reports.py:217-229,329-347`). Control
-  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2165`) runs
+  (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2172`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
   on-loop split/encode in the AGGREGATE terminal window (9 releases total); the
@@ -851,22 +851,28 @@ new export format must re-implement, not assume is "someone else's problem."
   stored (leave-one-out has no control cap and used to fill the cache with near-full subsets,
   1.3 GiB at 100 controls and 2.4 GiB at 200); at most 75,000 entries
   (`MAX_COMPOSITION_CACHE_ENTRIES`); and at most `MAX_COMPOSITION_CACHE_BYTES`
-  (`services/run_executor.py:787`, 512 MiB) of ESTIMATED entry bytes. The byte bound is the
+  (`services/run_executor.py:792`, 512 MiB) of ESTIMATED entry bytes. The byte bound is the
   one that matters because an entry grows with its subset and with each member control's
   Loss-Event and currency assignments, up to 9 per control: about 14 KB for 64 controls with
-  one assignment each and about 69 KB with nine, so 75,000 entries ranged from 0.5 GiB to
-  4.7 GiB. The estimate (`4,000 + 130 per control + 115 per assignment` bytes) is an upper
-  envelope fitted to tracemalloc over 324 measured shapes (1.06 to 2.0 times the measured bytes), so
-  one cache never holds more than 512 MiB. Past any bound a miss recomputes the value
+  one assignment each and about 69 KB with nine, so 75,000 entries ranged from about 1.0 GiB
+  (75,000 x 14 KB) to about 4.8 GiB (75,000 x 69 KB). The estimate (`4,000 + 130 per control +
+  115 per assignment` bytes) is an envelope fitted to tracemalloc over 324 measured shapes (1.06
+  to 2.0 times the measured bytes there; up to 1.4% under on some 20- and 21-control shapes), so
+  one cache holds about 512 MiB of traced allocations (tracemalloc; resident memory up to about
+  1.08 times that). Past any bound a miss recomputes the value
   instead of storing it; controls are composed in sorted-id order, so results are
   bit-identical and only speed changes. Whole-run peak RSS measured with the bench (macOS,
-  not Fly; 64 controls; Monte Carlo included) is 1,031, 1,183 and 1,223 MiB for a SINGLE run
-  with 1, 5 and 9 assignments per control, and 1,070 MiB for an AGGREGATE of 6 scenarios with
-  5, against the 4,096 MiB VM. (2) At most one composition cache is alive at a time: SINGLE and
-  AGGREGATE both free the canonical cache before the ensemble builds its own, and the
-  ensemble's per-(scenario, subset) draw-vector cache is cleared on entering each scenario.
+  not Fly; 64 controls; Monte Carlo included; default ensemble settings) is 1,031, 1,183 and
+  1,223 MiB for a SINGLE run with 1, 5 and 9 assignments per control, and 1,070 MiB for an
+  AGGREGATE of 6 scenarios with 5, against the 4,096 MiB VM. (2) At most one composition cache
+  is alive at a time: SINGLE and AGGREGATE both free the canonical cache before the ensemble
+  builds its own, and the ensemble's per-(scenario, subset) draw-vector cache is cleared on
+  entering each scenario. That draw-vector cache has no byte limit: it holds one scenario's
+  subsets, about 628 MiB at the default ensemble settings, and grows with
+  `WEIGHT_ENSEMBLE_DRAWS` and with `WEIGHT_ENSEMBLE_EVAL_BUDGET` (which has no upper bound), so
+  the peaks above hold only at the defaults.
   (3) One attribution phase runs at a time: an asyncio lock per event loop
-  (`services/run_executor.py:894`), entered only after the run has returned its pooled
+  (`services/run_executor.py:899`), entered only after the run has returned its pooled
   connection, so a queued run holds none. Production runs one uvicorn process with one loop
   (no `--workers`), so the lock serializes attribution process-wide; as with the
   samples-export guard above, a second worker process or a second machine would get its own
@@ -1112,6 +1118,12 @@ watching:
     `sign_count`/`last_used_at` before its active-user check, and the inactive
     branch returns without an `AuditWriter` call (`routes/auth.py:434-440`); the
     request-end commit persists the counter. Low: the account is already inactive.
+14. **Attribution leave-one-out time grows with the square of a scenario's control count
+    (#299, follow-up issue).** Leave-one-out has no control cap, there is no per-scenario cap
+    on links (explicit plus inherited org-wide), and the evaluation budget (§10) counts
+    evaluations, not their cost, so one run can hold the attribution slot for a long time while
+    every other run's attribution queues behind it. Availability only: memory stays bounded by
+    the byte budget. Tracked in a follow-up issue.
 
 ## 13. Keeping this document current
 

@@ -924,7 +924,9 @@ Everything numeric in this section is therefore Idraa's.
   on the control form only (one eligible source of the same control; never by
   CSV import, which skips the virtual path); a library resync replaces all of a
   control's assignments and re-links the derived row when the entry still
-  carries the source sub-function, else drops it, both audited.
+  carries the source sub-function, else drops it, both audited. For the org-wide
+  inheritance rule above (an LEC-sourced derived row is dropped from the inherited
+  variant together with its source, with no raise):
   `tests/contracts/test_inherited_variant_adapter.py::test_meta_assignments_drops_lec_sourced_derived_row_with_its_source`.
 
 ---

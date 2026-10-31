@@ -199,7 +199,7 @@ def test_cache_bytes_stay_within_the_budget_on_nine_assignment_controls(
     shape: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The real cache, the real passes, controls carrying 9 LEC assignments each at 64-65
-    controls: the heaviest entries the bounds admit (~69 KB each; 75,000 of them were 4.7 GiB
+    controls: the heaviest entries the bounds admit (~69 KB each; 75,000 of them were ~4.8 GiB
     under the old entry cap). Scaled to a 12 MiB budget so the test is quick (the estimator is
     linear, so the check is the same at 512 MiB): the budget must bind, and tracemalloc's
     ACTUAL retained bytes must stay within it, for the Shapley-walk shape (random subsets of a

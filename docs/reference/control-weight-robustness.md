@@ -165,9 +165,14 @@ Aggregate across K draws:
 - `indistinguishable_pairs` — ordered pairs where the canonical order flips in
   ≥ 10% of draws (default threshold). Pairs near this boundary carry ~±few% MC
   error at K=256 — treat them as "borderline" (Meth-N6).
-- `kendall_tau_p50` — Kendall τ-a (no tie correction; ties negligible with
-  continuous values and alphabetical tiebreak; near-ties counting as discordances
-  is intentional for surfacing indistinguishability — Meth-N2).
+- `kendall_tau_p50` — Kendall τ-a (no tie correction). Exact ties are common, not
+  negligible: a control worth exactly $0 in a draw ties every other such control
+  (for example inherited organization-wide variants on a scenario with no Loss-Event
+  control). Tie-break rule: each draw's ranking is a stable sort by value descending
+  over the canonical (displayed) order, so exactly equal values keep their canonical
+  order and count as concordant, never as flips. Near-ties (close but unequal values)
+  that swap DO count as discordances; that is intentional for surfacing
+  indistinguishability (Meth-N2).
 - `topk_preservation_k / topk_preservation_prob` — fraction of draws where the
   top-k set is identical to canonical.
 

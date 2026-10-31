@@ -90,7 +90,7 @@ class ThreatCommunity(TimestampMixin, Base):
     reference_org: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     tef_landmark: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     # none_as_null=True: Python None -> SQL NULL (plain JSON would store the text 'null';
-    # see the library_pin NULLIF workaround at repositories/scenario_repo.py:128-131).
+    # see the NULLIF workaround ``_is_json_null`` in repositories/scenario_library_repo.py).
     tcap_landmark: Mapped[dict[str, Any] | None] = mapped_column(
         JSON(none_as_null=True), nullable=True
     )
