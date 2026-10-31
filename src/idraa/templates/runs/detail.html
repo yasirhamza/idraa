@@ -41,13 +41,18 @@
 ) }}
 
 {# Staleness callout — the run completed, but something it depended on changed
-   afterwards. is_stale is set by a control re-sync (#438) or by an engine-change
-   migration (#199), so the copy must stay cause-agnostic. #}
+   afterwards. is_stale is a single flag with no recorded cause and four setters:
+   a control re-sync of a control the run used (#438), a change to the organization's
+   organization-wide controls (#299, which flags every completed run in the org,
+   including runs that never used the control), an engine-change migration (#199),
+   and the rollback of the #299 migration. The copy names all of them, so it is true
+   whichever one flagged the run. #}
 {% if run.is_stale %}
 <div class="alert alert-warning mt-4" role="status">
-  <p class="text-body">These results may be out of date: a control this run used,
-    or the risk engine, changed after the run completed. Re-run the analysis to
-    refresh them.</p>
+  <p class="text-body">These results may be out of date: a control this run used
+    changed, the organization's organization-wide controls changed, or the risk
+    engine was updated or rolled back after the run completed. Re-run the analysis
+    to refresh them.</p>
 </div>
 {% endif %}
 
@@ -185,7 +190,7 @@
       the control was left out (it may have been linked explicitly). -#}
   {% if run_predates_inheritance %}
     <div class="alert alert-info text-meta my-2" role="status">
-      This run predates organization-wide controls. {{ org_wide_count }} control{{ ' is' if org_wide_count == 1 else 's are' }} now marked organization-wide; re-running applies {{ 'its' if org_wide_count == 1 else 'their' }} Variance Management / Decision Support functions to any scenario that does not link {{ 'it' if org_wide_count == 1 else 'them' }}.
+      This run predates organization-wide controls. {{ org_wide_count }} control{{ ' is' if org_wide_count == 1 else 's are' }} now in effect organization-wide; re-running applies {{ 'its' if org_wide_count == 1 else 'their' }} Variance Management / Decision Support functions to any scenario that does not link {{ 'it' if org_wide_count == 1 else 'them' }}.
     </div>
   {% endif %}
 

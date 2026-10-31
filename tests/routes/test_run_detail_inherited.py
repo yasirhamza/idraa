@@ -93,7 +93,7 @@ async def test_detail_legacy_note_only_when_org_has_org_wide(
     await db_session.commit()
     body = (await client.get(f"/runs/{run.id}")).text
     assert "predates organization-wide controls" in body
-    assert "1 control is now marked organization-wide" in body
+    assert "1 control is now in effect organization-wide" in body
     assert "re-running applies its Variance Management / Decision Support functions" in body
     assert "any scenario that does not link it." in body
 
@@ -257,14 +257,15 @@ async def test_detail_inherited_only_run_has_no_empty_main_table(
 
 
 @pytest.mark.asyncio
-async def test_status_fragment_for_legacy_run_renders(
+async def test_status_fragment_for_legacy_run_renders_without_the_legacy_note(
     authed_analyst: tuple[AsyncClient, Any],
     db_session: AsyncSession,
     seed_control_factory: Any,
     seed_scenario_factory: Any,
     wire_executor_to_test_db: Any,
 ) -> None:
-    """The poll fragment takes the same legacy-count path as the detail page."""
+    """The legacy note sits outside the region the status poll swaps, so the poll fragment
+    renders for a legacy run without it (and without the per-poll COUNT it would need)."""
     client, org_id = authed_analyst
     pm, run = await _seed(
         org_id, db_session, seed_control_factory, seed_scenario_factory, flag=True
@@ -274,6 +275,9 @@ async def test_status_fragment_for_legacy_run_renders(
     assert pm.org_wide_meta is True
     r = await client.get(f"/runs/{run.id}/status")
     assert r.status_code == 200
+    assert "predates organization-wide controls" not in r.text
+    # The full page for the same row still carries the note.
+    assert "predates organization-wide controls" in (await client.get(f"/runs/{run.id}")).text
 
 
 @pytest.mark.asyncio
@@ -311,7 +315,7 @@ async def test_detail_legacy_note_for_explicitly_linked_org_wide_control(
     assert "Inherited (organization-wide)" not in body
     # New wording: true whether or not the run linked the control.
     assert "This run predates organization-wide controls." in body
-    assert "1 control is now marked organization-wide" in body
+    assert "1 control is now in effect organization-wide" in body
     assert "re-running applies its Variance Management / Decision Support functions" in body
     assert "to any scenario that does not link it." in body
     # The old claim is gone.
@@ -340,7 +344,7 @@ async def test_detail_legacy_note_plural_agreement(
     other.org_wide_meta = True
     await db_session.commit()
     body = (await client.get(f"/runs/{run.id}")).text
-    assert "2 controls are now marked organization-wide" in body
+    assert "2 controls are now in effect organization-wide" in body
     assert "re-running applies their Variance Management / Decision Support functions" in body
     assert "any scenario that does not link them." in body
 

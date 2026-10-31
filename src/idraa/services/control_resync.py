@@ -320,8 +320,8 @@ async def apply_resync(
         a.sub_function.value for a in entry_assignments
     ):
         raise OrgWideMetaIneligible(
-            "Re-sync would remove every Variance Management / Decision Support "
-            "function from an organization-wide control; clear the flag first."
+            "Re-sync would leave this organization-wide control without an inheritable "
+            "Variance Management / Decision Support function; clear the flag first."
         )
 
     old_pin = dict(control.library_pin or {})

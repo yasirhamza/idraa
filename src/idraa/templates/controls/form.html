@@ -231,7 +231,6 @@
         <p class="text-micro text-ink-3">Loss-Event functions still need an explicit scenario link. Requires at least one VMC/DSC function. A Correcting Misaligned Decisions link counts only when its source is a Variance Management function.</p>
         <p class="text-micro text-ink-3">Variance Management identification (Threat intelligence, Control monitoring) and Implementation score only as a pair, and Decision Support's Identify misalignment pairs only with a Correcting Misaligned Decisions link: a scenario gets a pair's uplift only when both halves are present across its active controls, inherited ones included, so a control holding one half can still contribute alongside another control that supplies the other. Treatment Selection is score-neutral (register C8). Inherited functions act only by raising the reliability of the Loss-Event functions on the scenario's other controls, not as a standalone reduction.</p>
         <p class="text-micro text-status-warning" x-show="!eligible && isOrgWide" x-cloak>This control is organization-wide but no row is a VMC/DSC function any more — saving will be refused until you add one back or clear the flag.</p>
-        {% if errors_dict.get("org_wide_meta") %}<p class="text-micro text-status-critical">{{ errors_dict.get("org_wide_meta") }}</p>{% endif %}
       </div>
     </fieldset>
 

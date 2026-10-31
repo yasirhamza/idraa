@@ -441,7 +441,7 @@ docstring).
   org-wide eligibility check in the next bullet are both pure and both run before any mutation
   in create and update, so a refusal leaves no row and no audit entry. The 422 messages are
   fixed text or enum values (the org-wide refusal is fixed text too); the slug comes back only
-  as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:344`;
+  as JSON via `| tojson` in a single-quoted `x-data` (`templates/controls/form.html:343`;
   breakout-tested, `tests/routes/test_controls_derived_link_form.py`).
 - **Org-wide controls (issue #299):** the run-create freeze, the scenario detail and edit
   pages and the run-create preview read org-wide controls through
@@ -746,7 +746,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1240-1251`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1284`) relies on the service gate alone — and the HTML form's `max=`
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1237-1248`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1281`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:173`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are

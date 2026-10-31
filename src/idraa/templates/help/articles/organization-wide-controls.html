@@ -111,13 +111,15 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="re-runs">Re-runs</h2>
 <p class="text-body text-ink-2 mb-3">
-  Flagging or unflagging a control, publishing or deprecating it, changing its implementation stage
-  (for example demoting it), deleting it, or editing an organization-wide control's functions
-  (including adding or clearing its Correcting Misaligned Decisions link) marks every completed
-  analysis in the organization as needing a re-run, because every scenario's composition changed,
-  not just the scenarios that linked the control. A run created before organization-wide controls
-  existed says so on its page when the organization now has any, and shows what a re-run would
-  add.
+  Only a change to an organization-wide control that is in effect (flagged organization-wide,
+  published, implementation stage Active) marks analyses as needing a re-run. When such a control
+  is flagged or unflagged, published, deprecated, demoted from Active, deleted, re-synced from the
+  library or has its functions edited (including adding or clearing its Correcting Misaligned
+  Decisions link), every completed analysis in the organization is marked, because every scenario's
+  composition changed, not just the scenarios that linked the control. The same edits to a control
+  that is not in effect (a Draft or Planned one, or one that is not flagged) change no scenario and
+  mark nothing. A run created before organization-wide controls existed says so on its page when
+  the organization now has any in effect, and shows what a re-run would add.
 </p>
 <p class="text-body text-ink-2">
   Clearing the flag is always an explicit act: the toggle stays enabled while it is on, and a save

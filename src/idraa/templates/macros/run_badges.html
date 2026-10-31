@@ -7,10 +7,12 @@
 {% macro run_status_badge(status, is_stale=false) -%}
   {{ status_pill(status.value, "run") }}
   {#- A COMPLETED run is stale when something it depended on changed afterwards.
-      is_stale is set by a control re-sync (#438) or by an engine-change
-      migration (#199), so the tooltip must stay cause-agnostic. Shown beside
+      is_stale has no recorded cause and four setters: a control re-sync (#438), a
+      change to the organization's organization-wide controls (#299, org-wide: it also
+      flags runs that never used the control), an engine-change migration (#199) and the
+      rollback of the #299 migration, so the tooltip names all four. Shown beside
       (not instead of) the status pill: the run genuinely completed. -#}
   {%- if is_stale %} <span class="badge badge-warning badge-outline badge-sm"
-        title="Results may be out of date — a control this run used, or the risk engine, changed after the run completed. Re-run to refresh.">stale</span>
+        title="Results may be out of date — a control this run used changed, the organization's organization-wide controls changed, or the risk engine was updated or rolled back after the run completed. Re-run to refresh.">stale</span>
   {%- endif %}
 {%- endmacro %}

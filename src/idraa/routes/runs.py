@@ -78,7 +78,7 @@ from idraa.services.audit import log_bulk_export
 from idraa.services.dashboard_view_model import appetite_strip
 from idraa.services.flash import build_flash
 from idraa.services.fx_rates import FxRateService
-from idraa.services.inherited_controls import is_variant_id
+from idraa.services.inherited_controls import INHERITED_NAME_SUFFIX, is_variant_id
 from idraa.services.org import require_sole_org
 from idraa.services.reporting_currency import resolve_reporting_currency
 from idraa.services.retention import maybe_sweep_opportunistic
@@ -607,8 +607,9 @@ async def _legacy_org_wide_count(
     A pre-feature run has ``inherited_control_ids_per_scenario IS NULL``; a run
     created since then always carries a map, one key per scenario (``{sid: []}``
     when nothing was inherited). Only the legacy branch takes the count: one COUNT query, no
-    relationship load, nothing at all on a feature-era run. Shared by the detail
-    page and the status-poll fragment so both render the same note.
+    relationship load, nothing at all on a feature-era run. Used by the detail page only:
+    the note sits outside the ``#run-status-inner`` region the status poll swaps, so the
+    poll fragment never renders it.
     """
     if run.inherited_control_ids_per_scenario is not None:
         return 0
@@ -789,10 +790,6 @@ async def get_run_status_fragment(
         display_results = _ctx["display_results"]
         converted_cost = _ctx["converted_cost_summary"]
 
-    # #299: same legacy-note inputs as get_run_detail, so a poll-completion
-    # render agrees with a fresh page load.
-    org_wide_count = await _legacy_org_wide_count(run, db, user.organization_id)
-
     return templates.TemplateResponse(
         request,
         "runs/_status_poll.html",
@@ -801,8 +798,6 @@ async def get_run_status_fragment(
             "run": run,
             "display_results": display_results,
             "converted_cost_summary": converted_cost,
-            "run_predates_inheritance": org_wide_count > 0,
-            "org_wide_count": org_wide_count,
         },
     )
 
@@ -1182,7 +1177,9 @@ async def get_new_analysis_form(
         scenario_to_inherited[str(s.id)] = [str(c.id) for c in org_wide if c.id not in linked_ids]
     _inherited_anywhere = {cid for ids in scenario_to_inherited.values() for cid in ids}
     inherited_name_by_id = {
-        str(c.id): f"{c.name} (org-wide)" for c in org_wide if str(c.id) in _inherited_anywhere
+        str(c.id): f"{c.name}{INHERITED_NAME_SUFFIX}"
+        for c in org_wide
+        if str(c.id) in _inherited_anywhere
     }
 
     # Auto-generate a default run name so the operator never has to type one.

@@ -46,7 +46,7 @@
   <div class="alert alert-success mb-4" role="status">
     <p>Control re-synced to the current library entry.
       {%- set _n = request.query_params.get("stale_runs", "0") %}
-      {% if _n != "0" %} {{ _n }} completed run{{ "s" if _n != "1" }} that used it
+      {% if _n != "0" %} {{ _n }} completed run{{ "s" if _n != "1" }}
       {{ "are" if _n != "1" else "is" }} now marked stale — re-run to reflect the
       new curation.{% endif %}</p>
   </div>

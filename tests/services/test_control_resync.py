@@ -580,7 +580,7 @@ async def test_resync_refuses_to_strip_last_meta_row_from_org_wide_control_befor
     pin_before = dict(control.library_pin)
     cost_before = control.annual_cost
 
-    with pytest.raises(OrgWideMetaIneligible):
+    with pytest.raises(OrgWideMetaIneligible, match="without an inheritable"):
         await apply_resync(db_session, control, user_id=user.id)
 
     # BEFORE the rollback: the refusal ran ahead of every mutation. The rollback below
