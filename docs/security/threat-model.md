@@ -868,7 +868,8 @@ new export format must re-implement, not assume is "someone else's problem."
   is alive at a time: SINGLE and AGGREGATE both free the canonical cache before the ensemble
   builds its own, and the ensemble's per-(scenario, subset) draw-vector cache is cleared on
   entering each scenario. That draw-vector cache has no byte limit: it holds one scenario's
-  subsets, about 628 MiB at the default ensemble settings, and grows with
+  subsets, about 628 MiB at the default ensemble settings (measured at 64 controls, the
+  per-scenario maximum), and grows with
   `WEIGHT_ENSEMBLE_DRAWS` and with `WEIGHT_ENSEMBLE_EVAL_BUDGET` (which has no upper bound), so
   the peaks above hold only at the defaults.
   (3) One attribution phase runs at a time: an asyncio lock per event loop
@@ -1002,10 +1003,12 @@ concurrent race (SQLite; accepted, see the service docstring at
 review check, so the later one overwrites or fails `BUSY`, and both writes
 are audited).
 
-**New action (#199 slice 1, 2026-10): `run.flagged_stale`.** One deploy-gated
-writer, not request-reachable: migration `c4d2e8f1a6b9` writes one `run.flagged_stale`
-row per COMPLETED run it marks stale (`user_id` NULL; `changes.reason` names the engine
-change), bounded by the run count and idempotent (already-stale rows are skipped).
+**New action (#199 slice 1, #299, 2026-10): `run.flagged_stale`.** Two deploy-gated
+writers, neither request-reachable: migration `c4d2e8f1a6b9` (`changes.reason` names the
+engine change) and the downgrade of migration `a7c2e9f14b63` (#299; `changes.reason` is
+"issue-299 org-wide meta controls rollback") each write one `run.flagged_stale` row per
+COMPLETED run they mark stale (`user_id` NULL), bounded by the run count and idempotent
+(already-stale rows are skipped).
 
 **New action (#299, 2026-10): `control.org_wide_sweep`.** Written by `_org_wide_sweep`
 (`services/controls.py:129`) when a control create, update or soft delete changes the
@@ -1119,11 +1122,11 @@ watching:
     branch returns without an `AuditWriter` call (`routes/auth.py:434-440`); the
     request-end commit persists the counter. Low: the account is already inactive.
 14. **Attribution leave-one-out time grows with the square of a scenario's control count
-    (#299, follow-up issue).** Leave-one-out has no control cap, there is no per-scenario cap
+    (#299, #301).** Leave-one-out has no control cap, there is no per-scenario cap
     on links (explicit plus inherited org-wide), and the evaluation budget (§10) counts
     evaluations, not their cost, so one run can hold the attribution slot for a long time while
     every other run's attribution queues behind it. Availability only: memory stays bounded by
-    the byte budget. Tracked in a follow-up issue.
+    the byte budget. Tracked in #301.
 
 ## 13. Keeping this document current
 
