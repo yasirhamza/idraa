@@ -80,7 +80,7 @@ dev = [
 curation = [
   # Dev-only curation checker judge (scripts/curation_check). Pinned. Outside
   # sca_gate like `dev`; covered by Dependabot + dependency-review (docs/supply-chain.md).
-  "typesafe-sdk==0.7.2",
+  "typesafe-sdk==0.7.5",
 ]
 
 [project.scripts]
