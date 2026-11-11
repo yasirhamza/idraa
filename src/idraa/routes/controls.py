@@ -51,6 +51,7 @@ from idraa.routes.deps import (
     audit_client_ip,
     client_ip,
     get_db,
+    require_export_role,
     require_role,
     require_step_up,
     require_user,
@@ -783,7 +784,7 @@ async def control_assignment_row_partial(
 async def controls_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Stream all controls for the current org as a CSV download.
 

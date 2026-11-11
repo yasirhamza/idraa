@@ -15,7 +15,7 @@
 {%- if current_user and current_user.role.value in ("analyst", "admin") -%}
   {%- set _ = _actions.append({"label": "New analysis", "href": "/analyses/new", "style": "primary"}) -%}
 {%- endif -%}
-{%- if run_display_rows -%}
+{%- if run_display_rows and can_export() -%}
   {%- set _ = _actions.append({"label": "Export CSV", "href": "/analyses/export.csv", "icon": "⇩", "download": True}) -%}
 {%- endif -%}
 

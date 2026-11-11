@@ -27,7 +27,7 @@ Internet ──TLS (ends at the Fly edge)──▶ Fly.io edge/proxy ──(B1)�
    │  HTTP, port 8000 only — no other port published (operators reach the VM over Fly's private ssh: §3 factor reset)
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1211-1275), then
+   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1232-1296), then
    │  per-route dependencies (step-up resolves before role on every gated route); [ ] = no letter.
    │  B0/B3 reject before B2's session lookup; [setup_guard] still reads the user count first.
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
@@ -80,10 +80,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1407-1415`). The idraa#107 cache-state
+  security-settings state (`app.py:1428-1436`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:1056-1073`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1077-1094`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -96,8 +96,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1269`; confirmed order
-`app.py:1211-1275`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1290`; confirmed order
+`app.py:1232-1296`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -271,7 +271,7 @@ docstring).
   cross-site page reset the victim's cookie), and every 403 to an
   `HX-Request` carries `HX-Refresh: true` so HTMX reloads instead of swapping
   "Forbidden" into the page. **No exemption list** — module docstring and
-  inline comments (`routes/register_import.py:45`, `routes/library.py:352-353`)
+  inline comments (`routes/register_import.py:45`, `routes/library.py:345-346`)
   state nothing is exempted; fail-closed by design. Non-form JS reads the
   token through `window.idraaCsrfToken()` (`static/js/csrf.js`: the
   `csrf_token` cookie first — last exact-name match, like the server — then
@@ -318,13 +318,13 @@ docstring).
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
-  (`routes/deps.py:230-266`) 401s if unauthenticated, else requires
+  (`routes/deps.py:243-279`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
   `services/security_settings.py:146-188`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from finding B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
-  `routes/deps.py:236` and a prose mention at
+  `routes/deps.py:249` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
   destructive (7 deletes, overlay deactivate, run sample purge), **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,256,376,467,510,557`, 1 in
@@ -341,7 +341,7 @@ docstring).
   them, so one fresh write could previously switch step-up off for good —
   every later write, including re-arming it, passed with any stale admin
   cookie. That route alone is wired `require_step_up(ADMIN, unconditional=True)`
-  (`routes/settings.py:172-177`, `routes/deps.py:259-262`): it ignores both
+  (`routes/settings.py:172-177`, `routes/deps.py:272-275`): it ignores both
   switches and checks freshness against `settings_write_step_up_window()`
   (`services/security_settings.py`) — the env default (600 s floor when the env
   opts out), which a configured window can only TIGHTEN (`min`), so neither the
@@ -385,20 +385,20 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
   `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
-  (`app.py:1228-1262`) allowlists `/setup` (`app.py:831-834`) and never blocks it.
+  (`app.py:1249-1283`) allowlists `/setup` (`app.py:852-855`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
-  four. `VIEWER` is used in **9** read-only routes (re-derived 2026-10-01 for
-  the Threat Agent Library, up from 7 — the first sweep said "2", an
-  undercount): 4 inline in `routes/library.py:96,145,266,389` and 3 via the
-  `_VIEWER_PLUS` allowlist (`routes/control_library.py:45`, applied at
-  `routes/control_library.py:154,210,249`), plus 2 new Threat Agent Library read-only pages behind
+  four. `VIEWER` is named in **7** read-only routes (9 until #315 moved the two
+  CSV exports among them to the export role, below; the first sweep said "2", an
+  undercount): 3 inline in `routes/library.py:96,259,382` and 2 via the
+  `_VIEWER_PLUS` allowlist (`routes/control_library.py:51`, applied at
+  `routes/control_library.py:216,255`), plus 2 Threat Agent Library read-only pages behind
   their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:19`,
   applied at `GET /library/threat-communities` (`routes/threat_communities.py:23`, role dependency
   `routes/threat_communities.py:27`) and `GET /library/threat-communities/{slug}` (`routes/threat_communities.py:39`, role
-  dependency `routes/threat_communities.py:44`). Separately, `scenario_export_routes.py:51` deliberately
-  uses bare `require_user` — a strict VIEWER-inclusive allowlist would 403
-  admins and analysts, per its inline comment. Never a security defect, only
+  dependency `routes/threat_communities.py:44`). Routes that name no role at all
+  (bare `require_user`) are open to every role as well, so the 7 count allowlists, not
+  VIEWER's whole reach. Never a security defect, only
   a doc-accuracy one; CLAUDE.md (local, untracked) now names all four roles — its
   "Corrected 2026-08-05" note was dropped in a later consolidation (re-checked 2026-10-23).
 - **New analyst+ POST (Threat Agent Library, 2026-10-01):** `POST
@@ -414,8 +414,22 @@ docstring).
   remains (`routes/users.py:321-344`, `services/users.py:159-194`, idraa#83). The role is
   re-read from the `users` row on every request (`middleware/session.py:58-60`), so a
   demotion takes effect on the next request; deactivation also revokes live sessions
-  (cited in §3). Measured 2026-10-23: REVIEWER is named only in the same six
-  four-role allowlists as VIEWER (the 9 GET routes above), so its reach equals VIEWER's.
+  (cited in §3). Measured 2026-10-23: REVIEWER is named only in the same
+  four-role allowlists as VIEWER (five since #315, on the 7 GET routes above), so its reach equals VIEWER's.
+- **Export role (#315, 2026-11):** taking data away as a file needs ANALYST or ADMIN. One
+  dependency, `require_export_role` (`routes/deps.py:197-198`, the `EXPORT_ROLES` pair), gates
+  13 of the 14 routes behind EXPORTS step-up (§5): the scenario, control, control-library,
+  overlay, library, analyses and reports exports, the verification workbook, the attribution
+  matrix and the raw samples. VIEWER and REVIEWER get 403 there, and the role check answers
+  before any lookup, so an id-bearing export gives them 403 whether or not the id exists.
+  Before #315 these routes took any authenticated user or a four-role allowlist. One route is
+  left open to every role on purpose: the run PDF (`GET /reports/run/{run_id}`), the report a
+  read-only reader takes away. `GET /users/export.csv` is ADMIN-gated and under ADMIN step-up,
+  not EXPORTS. `tests/unit/test_export_role_gate.py` walks the live route table and fails if an
+  EXPORTS-gated route admits a role outside the pair without being on its one-entry exemption
+  list, so a new export cannot ship open to every role unnoticed; a route that exports without
+  EXPORTS step-up is outside what it sees. Templates hide the export buttons with
+  `can_export()`, a display convenience only.
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
@@ -424,18 +438,18 @@ docstring).
   (`repositories/scenario_library_repo.py:361-377`, invisible to the checker below);
   the codebase follows a "no bare-PK / no existence-oracle" convention —
   cross-org IDs 404, not 403, so lookups don't leak existence
-  (`routes/overlays.py:457`, `routes/scenarios.py:732,774`,
-  `routes/qualitative_bands.py:224,262`). `routes/controls.py:710`'s check
+  (`routes/overlays.py:458`, `routes/scenarios.py:732,774`,
+  `routes/qualitative_bands.py:224,262`). `routes/controls.py:711`'s check
   (`assignment.control_id != control_id`) is not itself an org check — it's
   transitively safe because `control` was org-verified earlier in the same handler
-  (`routes/controls.py:705-706`).
+  (`routes/controls.py:706-707`).
 - **Correcting Misaligned Decisions link is a same-control slug, never a
   client id (issue #268):** the link is a top-level form field, not a `ControlForm` field,
-  parsed to a sub-function slug (`routes/controls.py:971-986`); the server resolves it to the
+  parsed to a sub-function slug (`routes/controls.py:972-987`); the server resolves it to the
   row of the SAME, already org-verified control by an explicit control + org select
   (`services/controls.py:249-267`), so it can never name another control's or org's row.
   A client `assignments[N][derived_from_assignment_id]` is dropped before validation
-  (`routes/controls.py:82-89`); one that survives, a submitted `dsc_corr_misaligned` row and
+  (`routes/controls.py:83-90`); one that survives, a submitted `dsc_corr_misaligned` row and
   an ineligible or absent source are refused by a pure check (`services/controls.py:196-246`),
   and an unknown slug by the route parse, before the service is called. That check and the
   org-wide eligibility check in the next bullet are both pure and both run before any mutation
@@ -509,7 +523,7 @@ docstring).
       if control is None or control.organization_id != org.id:
           raise NotFound()
       run = await db.get(RiskAnalysisRun, run_id)  # different id, NEVER
-      return control, run                            # checked — not flagged
+      return control, run  # checked — not flagged
   ```
   A parent-fetch-then-child-fetch handler with two related ids is an
   ordinary shape, so this is the more exploitable gap versus the allowlist-
@@ -590,7 +604,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   #349) auto-links `https://` URLs inside free-text citation strings, used
   in `templates/library/entry_detail.html`'s citations block; and
   `formatting.safe_https_href` (`formatting.py:62`, issue #349/Sec-I5),
-  registered as the Jinja filter `https_href` (`app.py:508`), gates a
+  registered as the Jinja filter `https_href` (`app.py:529`), gates a
   citation URL used directly as an `href=` attribute value — e.g. the
   Threat Agent Library's community detail page
   (`templates/library/threat_community_detail.html:74`:
@@ -645,7 +659,7 @@ extension/content-type/zip-magic (`register_import_parsers.py:160-183`).
 Guards: 5 MB upload cap via a forgeable
 `Content-Length` pre-check plus a post-read length check that holds when the header lies (the `MAX_UPLOAD_BYTES` constant in `routes/deps.py` cited in §4 (B3); enforced in
 `routes/register_import.py:253-264`, `routes/scenario_import.py:124-133`,
-`library_import.py:80-89`, `routes/controls.py:505-514`, `routes/overlays.py:302-311`); a zip-bomb guard on the XLSX path that reads only
+`library_import.py:80-89`, `routes/controls.py:506-515`, `routes/overlays.py:303-312`); a zip-bomb guard on the XLSX path that reads only
 central-directory metadata before `load_workbook` — max 200 members / 50 MB
 per member / 500x per-member compression ratio above a 1 MB floor
 (`register_import_parsers.py:80-94,112-147`). `zipfile` bounds every read to the
@@ -714,7 +728,7 @@ canonical `CSV_HEADERS` list (`scenario_export.py:64`), which has no
 explicitly excludes `LEGACY_SEED_FIELDS` (`library_bundle_export.py:41`);
 and the third export path, the library catalog's own `library.csv` download,
 hardcodes its header list with `threat_community` and no legacy column
-(`routes/library.py:183`) — a
+(`routes/library.py:176`) — a
 round-tripped export always re-imports through the canonical slug path, never
 the legacy one, so legacy-format acceptance is import-only, one-directional,
 and shrinking (back-compat for bundles exported before P1), not a live
@@ -750,7 +764,7 @@ new export format must re-implement, not assume is "someone else's problem."
 
 - **D (RAM / OOM)**: `mc_iterations_max` (`config.py:65-81`, default
   1,000,000, env `MC_ITERATIONS_MAX`) is enforced server-side in the one service gate both dispatch
-  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1237-1248`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1281`) relies on the service gate alone — and the HTML form's `max=`
+  routes share (`services/runs.py:144-153`) — `POST /analyses` re-checks it (`routes/runs.py:1238-1249`), the legacy `POST /scenarios/{id}/run` adapter (`routes/runs.py:1282`) relies on the service gate alone — and the HTML form's `max=`
   attribute (`templates/analyses/new.html:173`) is explicitly documented
   in-code as client-side sugar only. Two GLOBAL (not per-org) concurrency caps
   bound simultaneous in-flight runs, since RAM and the DB connection pool are
@@ -783,7 +797,7 @@ new export format must re-implement, not assume is "someone else's problem."
   window. A burst of concurrent runs would then drain the 15-slot pool (size 5
   + overflow 10 — SQLAlchemy's pool defaults, which `db.py` leaves unset), and every other request — INCLUDING `/login` — 500s
   after the 30s pool timeout. This is the SAME DoS shape as the 2026-06-15
-  reports.py production outage (`routes/reports.py:217-229,329-347`). Control
+  reports.py production outage (`routes/reports.py:223-235,335-353`). Control
   (A1 / #508 Part 1): `_release_conn_for_compute` (`run_executor.py:2172`) runs
   `session.expunge_all()` + `await session.close()` to return the connection to
   the pool BEFORE each compute-offload `to_thread` (8 sites) plus once before the
@@ -836,7 +850,7 @@ new export format must re-implement, not assume is "someone else's problem."
   reservation: it stops sequential accumulation, not a concurrent burst nor one run
   whose samples outgrow the space left. This is the disk guard §11's C1 note means.
 - **D (export and report compute).** The raw-samples export runs one at a time
-  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:401`; a concurrent request
+  process-wide (`_SAMPLES_EXPORT_GUARD`, `routes/runs.py:402`; a concurrent request
   gets 429), and the verification workbook builds its in-Excel Monte Carlo for at
   most K = 15 scenarios with per-run N ≤ 50,000 and ΣN ≤ 150,000
   (`config.py:86-108`). Both, like the PDF report, sit behind EXPORTS step-up and

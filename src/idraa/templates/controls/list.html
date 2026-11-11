@@ -13,9 +13,10 @@
 {{ page_header(
   title="Controls",
   breadcrumb=breadcrumb_for(request),
-  actions=[
-    {"label": "Export CSV", "href": "/controls/export.csv", "style": "brand", "icon": "⇩", "download": True},
-  ] + (
+  actions=(
+    [{"label": "Export CSV", "href": "/controls/export.csv", "style": "brand", "icon": "⇩", "download": True}]
+      if can_export() else []
+  ) + (
     [{"label": "Import CSV", "href": "/controls/import", "style": "outline"}]
       if (current_user and current_user.role.value == "admin") else []
   ) + [

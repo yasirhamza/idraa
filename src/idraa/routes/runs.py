@@ -69,6 +69,7 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     audit_client_ip,
     get_db,
+    require_export_role,
     require_role,
     require_step_up,
     require_user,
@@ -238,7 +239,7 @@ async def get_aggregate_matrix_csv(
     run_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Per-scenario control attribution matrix as a CSV download.
 
@@ -410,7 +411,7 @@ async def get_run_samples_csv_gz(
     request: Request,
     run_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Persisted per-iteration MC arrays as a gzipped wide CSV (#109).
 
@@ -1085,7 +1086,7 @@ async def list_analyses(
 async def analyses_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Stream all runs for the current org as a CSV download.
 

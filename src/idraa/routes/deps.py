@@ -190,6 +190,19 @@ def require_role(*roles: UserRole) -> Callable[[Request, User], User]:
     return _checker
 
 
+# Roles that may take data away as a file (#315). Read-only roles (viewer,
+# reviewer) read on screen; every EXPORTS-step-up route except the run PDF
+# requires one of these. Pinned over the live route table by
+# tests/unit/test_export_role_gate.py.
+EXPORT_ROLES: tuple[UserRole, ...] = (UserRole.ANALYST, UserRole.ADMIN)
+require_export_role = require_role(*EXPORT_ROLES)
+
+
+def can_export(user: object) -> bool:
+    """Whether ``user`` may use the role-gated exports; templates hide the buttons otherwise."""
+    return getattr(user, "role", None) in EXPORT_ROLES
+
+
 def safe_next(raw: str | None) -> str:
     """Sanitize a ``?next=`` redirect target (relocated from routes/auth.py).
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -45,12 +46,12 @@ async def _seed_scenario(
 
 @pytest_asyncio.fixture
 async def seeded_scenario(
-    authed_viewer: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> object:
-    """An ACTIVE scenario in the viewer client's org."""
+    """An ACTIVE scenario in the analyst client's org."""
     from idraa.models.enums import EntityStatus
 
-    _client, org_id = authed_viewer
+    _client, org_id = authed_analyst
     return await _seed_scenario(
         db_session, org_id=org_id, name="Phishing AD Compromise", status=EntityStatus.ACTIVE
     )
@@ -58,12 +59,12 @@ async def seeded_scenario(
 
 @pytest_asyncio.fixture
 async def archived_scenario(
-    authed_viewer: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
 ) -> object:
-    """A non-ACTIVE (deprecated) scenario in the viewer client's org."""
+    """A non-ACTIVE (deprecated) scenario in the analyst client's org."""
     from idraa.models.enums import EntityStatus
 
-    _client, org_id = authed_viewer
+    _client, org_id = authed_analyst
     return await _seed_scenario(
         db_session, org_id=org_id, name="Retired Legacy VPN", status=EntityStatus.DEPRECATED
     )
@@ -82,37 +83,37 @@ async def other_org_scenario(db_session: AsyncSession) -> object:
 
 
 @pytest.mark.asyncio
-async def test_bulk_export_csv_viewer_ok(
-    viewer_client: AsyncClient, seeded_scenario: object
+async def test_bulk_export_csv_analyst_ok(
+    analyst_client: AsyncClient, seeded_scenario: object
 ) -> None:
-    r = await viewer_client.get("/scenarios/export?format=csv")
+    r = await analyst_client.get("/scenarios/export?format=csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert seeded_scenario.name in r.text
 
 
 @pytest.mark.asyncio
-async def test_bulk_export_json_viewer_ok(
-    viewer_client: AsyncClient, seeded_scenario: object
+async def test_bulk_export_json_analyst_ok(
+    analyst_client: AsyncClient, seeded_scenario: object
 ) -> None:
-    r = await viewer_client.get("/scenarios/export?format=json")
+    r = await analyst_client.get("/scenarios/export?format=json")
     assert r.status_code == 200
     body = json.loads(r.text)
     assert any(o["name"] == seeded_scenario.name for o in body)
 
 
 @pytest.mark.asyncio
-async def test_single_export_json(viewer_client: AsyncClient, seeded_scenario: object) -> None:
-    r = await viewer_client.get(f"/scenarios/{seeded_scenario.id}/export?format=json")
+async def test_single_export_json(analyst_client: AsyncClient, seeded_scenario: object) -> None:
+    r = await analyst_client.get(f"/scenarios/{seeded_scenario.id}/export?format=json")
     assert r.status_code == 200
     assert json.loads(r.text)[0]["name"] == seeded_scenario.name
 
 
 @pytest.mark.asyncio
 async def test_single_export_cross_org_404(
-    viewer_client: AsyncClient, other_org_scenario: object
+    analyst_client: AsyncClient, other_org_scenario: object
 ) -> None:
-    r = await viewer_client.get(f"/scenarios/{other_org_scenario.id}/export?format=json")
+    r = await analyst_client.get(f"/scenarios/{other_org_scenario.id}/export?format=json")
     assert r.status_code == 404
 
 
@@ -125,29 +126,52 @@ async def test_export_unauthenticated_blocked(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_bulk_export_admin_and_analyst_ok(
-    admin_client: AsyncClient, analyst_client: AsyncClient, seeded_scenario: object
+async def test_bulk_export_admin_ok(admin_client: AsyncClient) -> None:
+    # #315: the export role is analyst or admin. (The role fixtures share one
+    # client, so each role gets its own test: one cookie per test.)
+    r = await admin_client.get("/scenarios/export?format=csv")
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/scenarios/export?format=csv", "/scenarios/export?format=json"])
+async def test_bulk_export_viewer_forbidden(viewer_client: AsyncClient, path: str) -> None:
+    # #315: read-only roles read on screen; they do not take the register away.
+    r = await viewer_client.get(path)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_bulk_export_reviewer_forbidden(reviewer_client: AsyncClient) -> None:
+    r = await reviewer_client.get("/scenarios/export?format=csv")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_single_export_viewer_forbidden_before_lookup(
+    viewer_client: AsyncClient, other_org_scenario: Any
 ) -> None:
-    # B3/Sec-B1: export is require_user (any authenticated), NOT require_role(VIEWER).
-    # A require_role(VIEWER) allowlist would 403 these two — this test pins the fix.
-    for c in (admin_client, analyst_client):
-        r = await c.get("/scenarios/export?format=csv")
-        assert r.status_code == 200, f"export must be reachable by {c}"
+    # The role gate answers before the org-scoped lookup, so a viewer gets the
+    # same 403 for an id in another org as for one in their own: no oracle.
+    r = await viewer_client.get(f"/scenarios/{other_org_scenario.id}/export?format=json")
+    assert r.status_code == 403
+    r = await viewer_client.get(f"/scenarios/{uuid.uuid4()}/export?format=json")
+    assert r.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_bulk_export_honors_status_filter(
-    viewer_client: AsyncClient, seeded_scenario: object, archived_scenario: object
+    analyst_client: AsyncClient, seeded_scenario: object, archived_scenario: object
 ) -> None:
     # SC-I3: ?status= filter is applied (active-only excludes the archived one).
-    r = await viewer_client.get("/scenarios/export?format=json&status=active")
+    r = await analyst_client.get("/scenarios/export?format=json&status=active")
     names = [o["name"] for o in json.loads(r.text)]
     assert seeded_scenario.name in names
     assert archived_scenario.name not in names
 
 
 @pytest.mark.asyncio
-async def test_export_route_registered_before_id_parser(viewer_client: AsyncClient) -> None:
+async def test_export_route_registered_before_id_parser(analyst_client: AsyncClient) -> None:
     # B5/Sec-I1: /scenarios/export must NOT be parsed as /scenarios/{uuid}.
-    r = await viewer_client.get("/scenarios/export?format=csv")
+    r = await analyst_client.get("/scenarios/export?format=csv")
     assert r.status_code != 422  # 422 == the UUID parser ate "export"

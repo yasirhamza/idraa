@@ -7,9 +7,10 @@
 {{ page_header(
   title="Control Library",
   breadcrumb=breadcrumb_for(request),
-  actions=[
-    {"label": "Export CSV", "href": "/controls/library/export.csv", "style": "brand", "icon": "⇩", "download": True},
-  ],
+  actions=(
+    [{"label": "Export CSV", "href": "/controls/library/export.csv", "style": "brand", "icon": "⇩", "download": True}]
+      if can_export() else []
+  ),
 ) }}
 
 {# Mobile filter toggle (Alpine) #}

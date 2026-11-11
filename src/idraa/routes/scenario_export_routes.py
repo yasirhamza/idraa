@@ -15,8 +15,8 @@ literal string ``"export"``. ``/scenarios/{scenario_id}/export`` has no such
 collision (three path segments vs two) but is included alongside its sibling
 for one consistent router.
 
-RBAC: ``require_user`` (any authenticated role) per the B3 plan-gate
-precedent — export is a read, not a VIEWER-only allowlist. Both routes are
+RBAC: ``require_export_role`` (analyst or admin, #315) — read-only roles read
+on screen and do not take the register away as a file. Both routes are
 gated behind ``require_step_up(StepUpCategory.EXPORTS)``. CSRF is enforced
 by the global CSRFMiddleware (GET is a safe method; no route-level CSRF dep
 needed). Transaction commit is owned by the ``get_db`` dependency.
@@ -33,7 +33,7 @@ from idraa.models.enums import EntityStatus, StepUpCategory
 from idraa.models.scenario import Scenario
 from idraa.models.user import User
 from idraa.repositories.scenario_repo import ScenarioRepo
-from idraa.routes.deps import audit_client_ip, get_db, require_step_up, require_user
+from idraa.routes.deps import audit_client_ip, get_db, require_export_role, require_step_up
 from idraa.services.audit import log_bulk_export
 
 router = APIRouter()
@@ -48,16 +48,15 @@ async def scenarios_export(
     format: str = "csv",
     status: EntityStatus | None = Query(default=None),  # honor the list's status filter (I1)
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),  # B3: any authenticated user, not require_role(VIEWER)
+    user: User = Depends(require_export_role),
 ) -> Response:
-    """Bulk export the org's scenarios (honoring the ?status= filter) — any authenticated user.
+    """Bulk export the org's scenarios (honoring the ?status= filter) — analyst or admin.
 
     Plan-gate B5/Sec-I1: registered BEFORE /scenarios/{scenario_id} so FastAPI's
     declaration-order match does not route "export" to the UUID parser (→ 422).
 
-    Plan-gate B3/Sec-B1: gated on ``require_user`` (any authenticated user),
-    NOT ``require_role(VIEWER)`` — a strict VIEWER allowlist would 403 admins
-    and analysts. Export is a read; all authenticated roles may export.
+    #315: gated on ``require_export_role`` (analyst or admin). It replaced the
+    earlier any-authenticated-user gate; viewer and reviewer now get 403.
 
     Plan-gate Sec-3: scoped by org via ``user.organization_id`` — cross-org IDOR
     is not possible because ``list_for_org`` applies the org_id predicate.
@@ -95,9 +94,9 @@ async def scenario_export_one(
     request: Request,
     format: str = "csv",
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),  # B3
+    user: User = Depends(require_export_role),
 ) -> Response:
-    """Export a single scenario — any authenticated user, org-scoped 404 on cross-org id.
+    """Export a single scenario — analyst or admin, org-scoped 404 on cross-org id.
 
     Cross-org IDs return 404 (NOT 403) so we don't leak existence of scenarios
     owned by other orgs (mirrors view_scenario's B9/B10 precedent).

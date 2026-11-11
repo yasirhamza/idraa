@@ -1,6 +1,6 @@
 """Control library catalog browse + export (P2b Task 7). Mirrors routes/library.py.
 
-Read-only (viewer+). The adopt (clone-snapshot) action lives in routes/controls.py
+Browse is read-only (viewer+); the CSV export needs the export role (#315). The adopt (clone-snapshot) action lives in routes/controls.py
 (analyst+) and is a separate task. Browse surfaces the latest-published version per
 logical id; filtering/search/pagination delegate to ControlLibraryService.
 """
@@ -30,7 +30,13 @@ from idraa.models.enums import (
     UserRole,
 )
 from idraa.models.user import User
-from idraa.routes.deps import audit_client_ip, get_db, require_role, require_step_up
+from idraa.routes.deps import (
+    audit_client_ip,
+    get_db,
+    require_export_role,
+    require_role,
+    require_step_up,
+)
 from idraa.services.audit import log_bulk_export
 from idraa.services.control_library import (
     ControlLibraryBrowseFilters,
@@ -151,7 +157,7 @@ async def _adopted_entry_ids(db: AsyncSession) -> set[str]:
 async def control_library_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(_VIEWER_PLUS),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Stream the published control catalog as a CSV download.
 

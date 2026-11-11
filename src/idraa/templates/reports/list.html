@@ -12,9 +12,10 @@
   title="Reports",
   breadcrumb=breadcrumb_for(request),
   meta=org.name,
-  actions=[
-    {"label": "Export CSV", "href": "/reports/export.csv", "style": "brand", "icon": "⇩", "download": True},
-  ],
+  actions=(
+    [{"label": "Export CSV", "href": "/reports/export.csv", "style": "brand", "icon": "⇩", "download": True}]
+      if can_export() else []
+  ),
 ) }}
 {{ help_trigger('reports-and-workbook') }}
 
@@ -30,7 +31,9 @@
 {%- set download_action = [] -%}
 {%- if run.status.value == "completed" -%}
   {%- set _ = download_action.append({"label": "Download PDF", "href": "/reports/run/" ~ run.id, "download": True}) -%}
+  {%- if can_export() -%}
   {%- set _ = download_action.append({"label": "Verification workbook (.xlsx)", "href": "/reports/run/" ~ run.id ~ "/verification.xlsx", "download": True}) -%}
+  {%- endif -%}
 {%- endif -%}
 {%- set _ = rows.append({
   "id":           run.id | string,

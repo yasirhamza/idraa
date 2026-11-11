@@ -27,8 +27,12 @@
 {%- set _actions = [] -%}
 {% if run.status.value == "completed" %}
   {%- set _ = _actions.append({"label": "Download report (PDF)", "style": "primary", "href": "/reports/run/" ~ run.id, "download": true}) -%}
+  {#- #315: the PDF is open to every role; the workbook and raw samples are
+      data exports and need the export role, so they are hidden otherwise. -#}
+  {% if can_export() %}
   {%- set _ = _actions.append({"label": "Download verification workbook (Excel)", "style": "outline", "href": "/reports/run/" ~ run.id ~ "/verification.xlsx", "download": true}) -%}
-  {% if samples_present %}
+  {% endif %}
+  {% if samples_present and can_export() %}
     {%- set _ = _actions.append({"label": "Download raw samples (CSV)", "style": "outline", "href": "/runs/" ~ run.id ~ "/samples.csv.gz", "download": true}) -%}
   {% endif %}
 {% endif %}
@@ -60,7 +64,7 @@
     org member; re-run + danger items (purge/delete) are analyst/admin only so a
     viewer never sees an action the server would 403 (plan-gate Sec-R1/Sec-N1). -#}
 {%- set _menu_items = [] -%}
-{% if run.run_type.value == "aggregate" and run.status.value == "completed" %}
+{% if run.run_type.value == "aggregate" and run.status.value == "completed" and can_export() %}
   {%- set _ = _menu_items.append({"label": "Export attribution matrix (CSV)",
        "href": "/runs/" ~ run.id ~ "/control-matrix.csv", "download": true}) -%}
 {% endif %}

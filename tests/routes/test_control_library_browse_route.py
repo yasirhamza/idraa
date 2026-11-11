@@ -76,12 +76,22 @@ async def test_browse_requires_auth_viewer_ok(
 
 @pytest.mark.asyncio
 async def test_browse_export_csv(
-    viewer_client: AsyncClient, seed_control_library_entry: Any
+    analyst_client: AsyncClient, seed_control_library_entry: Any
 ) -> None:
-    r = await viewer_client.get("/controls/library/export.csv")
+    r = await analyst_client.get("/controls/library/export.csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert b"Multi-Factor Authentication" in r.content
+
+
+@pytest.mark.asyncio
+async def test_browse_export_csv_viewer_forbidden(viewer_client: AsyncClient) -> None:
+    # #315: browse stays viewer+, the CSV export needs the export role.
+    r = await viewer_client.get("/controls/library/export.csv")
+    assert r.status_code == 403
+    page = await viewer_client.get("/controls/library")
+    assert page.status_code == 200
+    assert b"/controls/library/export.csv" not in page.content
 
 
 @pytest.mark.asyncio

@@ -151,7 +151,7 @@
               {"key": "ale",        "label": data.currency.code ~ " ALE",   "numeric": true},
             ],
             row_href_template="/runs/{id}",
-            exportable=true,
+            exportable=can_export(),
             export_url="/analyses/export.csv",
         ) }}
       {% endif %}
