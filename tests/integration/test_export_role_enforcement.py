@@ -162,6 +162,7 @@ async def test_run_pages_offer_read_only_roles_the_pdf_only(
         assert link not in detail.text, f"{name} offered to {role.value} on run detail"
     assert "data-chart-data" in detail.text, "the charts themselves still render"
     assert 'data-role="csv"' not in detail.text, "chart Download data offered"
+    assert "Export matrix CSV" not in detail.text
 
     reports = await client.get("/reports")
     assert reports.status_code == 200
@@ -186,10 +187,12 @@ async def test_run_pages_offer_the_export_role_everything(
     assert f'href="/reports/run/{run_id}"' in detail.text
     links = _run_links(run_id)
     assert links["workbook"] in detail.text
+    assert links["samples"] in detail.text
     assert links["matrix"] in detail.text
     # The control-ledger macro is imported without context: the link there
     # exercises can_export()'s request fallback.
     assert detail.text.count(links["matrix"]) >= 2
+    assert "Export matrix CSV" in detail.text
     assert 'data-role="csv"' in detail.text, "chart Download data lost for the export role"
 
     reports = await client.get("/reports")
@@ -223,7 +226,13 @@ async def test_scenario_view_export_buttons_follow_the_role(
     org_id = await _org_of_run(db_session, run_id)
     await _login_as_role(client, db_session, org_id, role)
     scenario_id = (
-        (await db_session.execute(select(Scenario.id).where(Scenario.organization_id == org_id)))
+        (
+            await db_session.execute(
+                select(Scenario.id)
+                .where(Scenario.organization_id == org_id)
+                .order_by(Scenario.name)
+            )
+        )
         .scalars()
         .first()
     )

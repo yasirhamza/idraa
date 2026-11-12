@@ -27,11 +27,30 @@ from idraa.routes.deps import EXPORT_ROLES, can_export
 #     (owner decision 2026-11-11, #315).
 _OPEN_TO_EVERY_ROLE: frozenset[tuple[str, str]] = frozenset({("GET", "/reports/run/{run_id}")})
 
-# The live count: 13 role-gated routes and the PDF (the users export sits under
-# ADMIN step-up, not EXPORTS). Pinned exactly, so a route that silently leaves
-# the walk (closure inspection breaking, or EXPORTS step-up dropped from an
-# export) fails here, and a new export changes the number on purpose.
-_EXPORT_ROUTE_COUNT = 14
+# The live set: 13 role-gated routes and the PDF (the users export sits under
+# ADMIN step-up, not EXPORTS). Pinned by identity, so a route that silently
+# leaves the walk (closure inspection breaking, or EXPORTS step-up dropped from
+# an export) fails here even if another route joins in the same change, and a
+# new export is added to this list on purpose.
+_EXPORT_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    ("GET", path)
+    for path in (
+        "/analyses/export.csv",
+        "/controls/export.csv",
+        "/controls/library/export.csv",
+        "/library/entries/{entry_id}/export",
+        "/library/export",
+        "/library/export.csv",
+        "/overlays/export.csv",
+        "/reports/export.csv",
+        "/reports/run/{run_id}",
+        "/reports/run/{run_id}/verification.xlsx",
+        "/runs/{run_id}/control-matrix.csv",
+        "/runs/{run_id}/samples.csv.gz",
+        "/scenarios/export",
+        "/scenarios/{scenario_id}/export",
+    )
+)
 
 
 def _flatten(routes: Iterable[Any]) -> Iterator[APIRoute]:
@@ -92,7 +111,7 @@ def test_export_roles_are_analyst_and_admin() -> None:
 
 
 def test_walk_finds_exactly_the_export_routes() -> None:
-    assert len(_export_routes()) == _EXPORT_ROUTE_COUNT
+    assert set(_export_routes()) == _EXPORT_ROUTES
 
 
 def test_every_export_route_requires_the_export_role_or_is_exempt() -> None:
