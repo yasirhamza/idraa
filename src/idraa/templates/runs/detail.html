@@ -60,8 +60,8 @@
 </div>
 {% endif %}
 
-{#- Overflow ⋯ menu — top-right cluster (spec §3/§4). CSV export is open to any
-    org member; re-run + danger items (purge/delete) are analyst/admin only so a
+{#- Overflow ⋯ menu — top-right cluster (spec §3/§4). CSV export, re-run
+    and the danger items (purge/delete) are analyst/admin only (#315 for export) so a
     viewer never sees an action the server would 403 (plan-gate Sec-R1/Sec-N1). -#}
 {%- set _menu_items = [] -%}
 {% if run.run_type.value == "aggregate" and run.status.value == "completed" and can_export() %}

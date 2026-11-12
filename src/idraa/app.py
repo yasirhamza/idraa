@@ -46,6 +46,7 @@ from idraa.middleware.session import SessionMiddleware
 from idraa.middleware.uat_basic_auth import uat_basic_auth_factory
 from idraa.models.enums import SUB_FUNCTION_UNITS
 from idraa.models.user import User
+from idraa.routes.deps import can_export, current_user
 from idraa.services.audit import ExportRateLimitedError
 from idraa.services.auth import SESSION_COOKIE
 from idraa.utils.safe_json import HtmlSafeJSONResponse
@@ -169,8 +170,6 @@ def _can_export(context: dict[str, object]) -> bool:
     ``csrf_field`` uses). Neither present hides the buttons. Display only: the
     route's ``require_export_role`` is the gate.
     """
-    from idraa.routes.deps import can_export, current_user
-
     user = context.get("current_user")
     if user is None:
         request = _current_request_var.get()

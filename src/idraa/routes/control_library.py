@@ -1,6 +1,7 @@
 """Control library catalog browse + export (P2b Task 7). Mirrors routes/library.py.
 
-Browse is read-only (viewer+); the CSV export needs the export role (#315). The adopt (clone-snapshot) action lives in routes/controls.py
+Browse is read-only (viewer+); the CSV export needs the export role (#315). The adopt
+(clone-snapshot) action lives in routes/controls.py
 (analyst+) and is a separate task. Browse surfaces the latest-published version per
 logical id; filtering/search/pagination delegate to ControlLibraryService.
 """

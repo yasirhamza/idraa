@@ -27,7 +27,7 @@ Internet ──TLS (ends at the Fly edge)──▶ Fly.io edge/proxy ──(B1)�
    │  HTTP, port 8000 only — no other port published (operators reach the VM over Fly's private ssh: §3 factor reset)
    ▼
 Idraa FastAPI process (single VM: performance / 2 cpu / 4096mb, fly.toml:91-94)
-   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1232-1296), then
+   │  Request path, outermost first: all 8 middleware (LIFO-registered, app.py:1231-1295), then
    │  per-route dependencies (step-up resolves before role on every gated route); [ ] = no letter.
    │  B0/B3 reject before B2's session lookup; [setup_guard] still reads the user count first.
    ├─ RequestFramingMiddleware (outermost, pure ASGI) ──(B1)── ambiguous framing refused (desync defence)
@@ -80,10 +80,10 @@ covered by another boundary's row."
   `tests/unit/test_request_framing.py`.
 - **I (C5, 2026-09)**: `/healthz` is exempt from the B0 pre-gate and the
   setup guard, so it is liveness-only — `{"status": "ok"}`, no version and no
-  security-settings state (`app.py:1428-1436`). The idraa#107 cache-state
+  security-settings state (`app.py:1427-1435`). The idraa#107 cache-state
   signal renders on the admin-only `/settings/security` page instead.
 - **D**: boot-time warning fires in prod if the per-IP login throttle is
-  enabled with no trust strategy configured (`app.py:1077-1094`) — misconfig is
+  enabled with no trust strategy configured (`app.py:1076-1093`) — misconfig is
   loud, not silent.
 - Gap: `fly.toml:4` comments that it's "read on every `fly deploy` (run by
   `.github/workflows/uat-deploy.yml`)" — that workflow does not exist in
@@ -96,8 +96,8 @@ covered by another boundary's row."
 **Omitted from the original 2026-08-05 sweep** — caught by the 2026-08-05
 full-doc re-audit. This is the app's outermost **authentication** layer (only
 the B1 request-framing guard sits outside it, since 2026-09)
-(`middleware/uat_basic_auth.py`, wired at `app.py:1290`; confirmed order
-`app.py:1232-1296`) — outside even `setup_guard` (which carries no boundary
+(`middleware/uat_basic_auth.py`, wired at `app.py:1289`; confirmed order
+`app.py:1231-1295`) — outside even `setup_guard` (which carries no boundary
 letter of its own; see §6), the security headers (so its 401s carry none), B3's CSRF and B2's session auth. A single
 shared HTTP Basic credential gating the hosted UAT
 deployment, layered ON TOP of the app's normal `/login` session auth (compromising
@@ -318,13 +318,13 @@ docstring).
 
 - **E**: `StepUpCategory` = `EXPORTS | DESTRUCTIVE | ADMIN | CREDENTIALS`
   (`models/enums.py:15-19`). `require_step_up(category)`
-  (`routes/deps.py:243-279`) 401s if unauthenticated, else requires
+  (`routes/deps.py:244-280`) 401s if unauthenticated, else requires
   `now - session.reauthenticated_at <= effective_step_up_window()` (default
   600s, `config.py:372`; per-category admin override,
   `services/security_settings.py:146-188`). **43** real call sites (37 as of
   the 2026-08-05 re-derivation; +6 from finding B2 on 2026-08-09; the first-ever sweep
   said "~40 / 16 exports" by counting a docstring example at
-  `routes/deps.py:249` and a prose mention at
+  `routes/deps.py:250` and a prose mention at
   `routes/scenario_export_routes.py:20` as call sites): **14** exports, 9
   destructive (7 deletes, overlay deactivate, run sample purge), **14** admin/user-mgmt (7 in
   `routes/users.py:110,160,256,376,467,510,557`, 1 in
@@ -341,7 +341,7 @@ docstring).
   them, so one fresh write could previously switch step-up off for good —
   every later write, including re-arming it, passed with any stale admin
   cookie. That route alone is wired `require_step_up(ADMIN, unconditional=True)`
-  (`routes/settings.py:172-177`, `routes/deps.py:272-275`): it ignores both
+  (`routes/settings.py:172-177`, `routes/deps.py:273-276`): it ignores both
   switches and checks freshness against `settings_write_step_up_window()`
   (`services/security_settings.py`) — the env default (600 s floor when the env
   opts out), which a configured window can only TIGHTEN (`min`), so neither the
@@ -385,14 +385,14 @@ docstring).
   Depends(current_user)` — no-op on an already-logged-out session, correct
   by design) and `/setup` (`routes/setup.py:58`), whose only first-run check is its own
   `_has_any_user` re-check (`routes/setup.py:77-78`): the outer `setup_guard`
-  (`app.py:1249-1283`) allowlists `/setup` (`app.py:852-855`) and never blocks it.
+  (`app.py:1248-1282`) allowlists `/setup` (`app.py:851-854`) and never blocks it.
 - **Doc-drift flag — RESOLVED 2026-08-05**: `CLAUDE.md`'s scope-discipline
   section named three roles ("analyst / reviewer / admin"); the code has
   four. `VIEWER` is named in **7** read-only routes (9 until #315 moved the two
   CSV exports among them to the export role, below; the first sweep said "2", an
   undercount): 3 inline in `routes/library.py:96,259,382` and 2 via the
-  `_VIEWER_PLUS` allowlist (`routes/control_library.py:51`, applied at
-  `routes/control_library.py:216,255`), plus 2 Threat Agent Library read-only pages behind
+  `_VIEWER_PLUS` allowlist (`routes/control_library.py:52`, applied at
+  `routes/control_library.py:217,256`), plus 2 Threat Agent Library read-only pages behind
   their own `_ALL_ROLES` allowlist — `routes/threat_communities.py:19`,
   applied at `GET /library/threat-communities` (`routes/threat_communities.py:23`, role dependency
   `routes/threat_communities.py:27`) and `GET /library/threat-communities/{slug}` (`routes/threat_communities.py:39`, role
@@ -417,7 +417,7 @@ docstring).
   (cited in §3). Measured 2026-10-23: REVIEWER is named only in the same
   four-role allowlists as VIEWER (five since #315, on the 7 GET routes above), so its reach equals VIEWER's.
 - **Export role (#315, 2026-11):** taking data away as a file needs ANALYST or ADMIN. One
-  dependency, `require_export_role` (`routes/deps.py:197-198`, the `EXPORT_ROLES` pair), gates
+  dependency, `require_export_role` (`routes/deps.py:198-199`, the `EXPORT_ROLES` pair), gates
   13 of the 14 routes behind EXPORTS step-up (§5): the scenario, control, control-library,
   overlay, library, analyses and reports exports, the verification workbook, the attribution
   matrix and the raw samples. VIEWER and REVIEWER get 403 there, and the role check answers
@@ -429,7 +429,10 @@ docstring).
   EXPORTS-gated route admits a role outside the pair without being on its one-entry exemption
   list, so a new export cannot ship open to every role unnoticed; a route that exports without
   EXPORTS step-up is outside what it sees. Templates hide the export buttons with
-  `can_export()`, a display convenience only.
+  `can_export()`, a display convenience only. That includes the per-chart "Download data"
+  button, which no route serves: `static/js/charts.js` builds that CSV in the browser from
+  the points embedded in the page, so hiding it removes the button, not the data. A read-only
+  role can still read a chart's plotted points from the page it is allowed to view.
 
 ## 7. B7 — Multi-tenancy / org boundary (IDOR)
 
@@ -568,11 +571,11 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
 
 - **Output escaping (XSS)** — every render goes through
   `Jinja2Templates(directory=..., context_processors=[...])`
-  (`app.py:102-105`), which Starlette constructs with
+  (`app.py:103-106`), which Starlette constructs with
   `select_autoescape(["html", "htm", "xml"])`; confirmed live
   (`templates.env.autoescape` is the `select_autoescape` closure) and
   confirmed total — all 146 tracked templates are `.html`, so autoescape covers every
-  one; the two `| safe` bypasses emit app-built markup only (`app.py:157`'s `csrf_field()`
+  one; the two `| safe` bypasses emit app-built markup only (`app.py:158`'s `csrf_field()`
   Markup, the segno TOTP SVG at `templates/account/_totp.html:12`). **Alpine `x-data` is the sharp edge**: an attribute the browser
   HTML-decodes before Alpine evaluates it as a JS expression, so autoescape is
   no defense there — the value must be JSON-encoded via `| tojson` inside a
@@ -604,7 +607,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   #349) auto-links `https://` URLs inside free-text citation strings, used
   in `templates/library/entry_detail.html`'s citations block; and
   `formatting.safe_https_href` (`formatting.py:62`, issue #349/Sec-I5),
-  registered as the Jinja filter `https_href` (`app.py:529`), gates a
+  registered as the Jinja filter `https_href` (`app.py:528`), gates a
   citation URL used directly as an `href=` attribute value — e.g. the
   Threat Agent Library's community detail page
   (`templates/library/threat_community_detail.html:74`:
@@ -625,7 +628,7 @@ prompted by a review flag that Jinja2 is a known SSTI vector):
   `Template(user_text)`, `render_template_string`), not just a substituted
   variable. Swept the full `src/` and `fair_cam/` trees: **zero application
   call sites** of `from_string(`, `Template(`, or `render_template_string`.
-  The only textual hit is an explanatory comment in `app.py:107-112` about a
+  The only textual hit is an explanatory comment in `app.py:108-113` about a
   CSRF context-var patch that defensively also covers `from_string` *in case
   it's ever called* — it documents an environment capability, not a used
   one. 125 of 128 `TemplateResponse` calls pass a literal path; the wizard step template

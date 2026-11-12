@@ -251,7 +251,7 @@ async def get_aggregate_matrix_csv(
 
     Plan-gate M-2: cells iterated as dict-per-cell ({control_id, value}).
 
-    RBAC: any authenticated org user (same as /runs/{id} GET).
+    RBAC: the export role (analyst or admin, #315) + EXPORTS step-up.
     """
     service = RunService(db)
     try:
@@ -418,8 +418,8 @@ async def get_run_samples_csv_gz(
     The analyst-facing complement to the verification workbook: the workbook
     reproduces sampling + ALE; this export lets tail metrics (VaR/ES/LEC) be
     recomputed independently. 410 (not 404) when samples were purged, so a
-    stale link explains itself. RBAC: any authenticated org user + EXPORTS
-    step-up, same as the other bulk exports.
+    stale link explains itself. RBAC: the export role (analyst or admin, #315)
+    + EXPORTS step-up, same as the other bulk exports.
     """
     service = RunService(db)
     try:

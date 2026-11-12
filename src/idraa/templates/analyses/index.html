@@ -8,8 +8,8 @@
 {% block content %}
 
 {# "New analysis" is analyst/admin-only (the /analyses/new form enforces this
-   server-side); viewers/reviewers see the list + CSV export but not the create
-   button. CSV export uses download=True so the browser navigates to the file
+   server-side); viewers/reviewers see the list but neither the create button nor
+   the CSV export (#315: export needs analyst/admin). CSV export uses download=True so the browser navigates to the file
    instead of HTMX-swapping the bytes into the DOM. #}
 {%- set _actions = [] -%}
 {%- if current_user and current_user.role.value in ("analyst", "admin") -%}

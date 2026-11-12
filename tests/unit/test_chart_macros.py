@@ -80,6 +80,9 @@ _env.globals["chart_svg"] = SimpleNamespace(
 # Deterministic (not uuid4) so isolated-macro-render assertions on the emitted
 # markup stay stable across runs.
 _env.globals["chart_uid"] = lambda: "unit0000"
+# #315: the legend's "Download data" button is offered to the export role only
+# (app.py registers can_export). These tests render the macro as that role.
+_env.globals["can_export"] = lambda: True
 
 
 _LEC_POINTS = [
