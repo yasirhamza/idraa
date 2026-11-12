@@ -435,7 +435,12 @@
     <span class="chart-legend-item"><span class="chart-legend-line chart-legend-line--inherent"></span>Without controls</span>
     <span class="chart-legend-item"><span class="chart-legend-line chart-legend-line--residual chart-legend-line--dashed"></span>With controls</span>
     {%- if marker %}<span class="chart-legend-item"><span class="chart-legend-dot"></span>Risk appetite {{ marker.label }}</span>{%- endif %}
+    {#- #315: a file download, so offered to the export role only. Display
+        only: the points stay embedded in the page for the chart itself, and
+        charts.js skips the wiring when the button is absent. -#}
+    {%- if can_export() %}
     <button type="button" class="btn btn-ghost btn-xs ml-auto" data-role="csv" aria-label="Download {{ csv_name }} data as CSV">Download data</button>
+    {%- endif %}
   </div>
 {%- endmacro -%}
 

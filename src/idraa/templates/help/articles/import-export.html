@@ -9,10 +9,12 @@
   a file exported from Idraa can be re-imported without data loss.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  <strong>Role requirement:</strong> export is available to any authenticated
-  user (Analyst, Reviewer, or Admin). Import is restricted to
-  <strong>Admin</strong> users only &mdash; the upload form and both
-  template downloads are 403-blocked for Analyst and Reviewer roles.
+  <strong>Role requirement:</strong> export needs the <strong>Analyst</strong>
+  or <strong>Admin</strong> role. Viewer and Reviewer are read-only on screen:
+  they do not see the export buttons, and the export links return 403 for
+  them. The one download every role keeps is the PDF report of a run. Import
+  is restricted to <strong>Admin</strong> users only &mdash; the upload form
+  and both template downloads are 403-blocked for every other role.
 </p>
 <p class="text-body text-ink-2 mb-6">
   Because export and import both move data in bulk, Idraa treats them as
@@ -23,7 +25,7 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="exporting-scenarios">Exporting scenarios</h2>
 <p class="text-body text-ink-2 mb-3">
-  Any authenticated user can export from the Scenarios list page
+  An Analyst or Admin can export from the Scenarios list page
   (<a class="text-brand hover:underline" href="/scenarios">/scenarios</a>).
   Use the <strong>Export</strong> dropdown at the top of the list to choose
   between <strong>CSV</strong> and <strong>JSON</strong>. The download honours

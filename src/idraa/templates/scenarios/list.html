@@ -14,10 +14,12 @@
   actions=(
     [{"label": "Import", "href": "/scenarios/import", "style": "ghost", "icon": "⇧"}]
       if (current_user and current_user.role.value == "admin") else []
-  ) + [
-    {"label": "Export CSV", "href": "/scenarios/export?format=csv", "style": "brand", "icon": "⇩", "download": True},
-    {"label": "Export JSON", "href": "/scenarios/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
-  ] + (
+  ) + (
+    [
+      {"label": "Export CSV", "href": "/scenarios/export?format=csv", "style": "brand", "icon": "⇩", "download": True},
+      {"label": "Export JSON", "href": "/scenarios/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
+    ] if can_export() else []
+  ) + (
     [{"label": "+ New scenario", "href": "/scenarios/new/wizard", "style": "primary"}]
       if (current_user and current_user.role.value in ("analyst", "admin")) else []
   ),

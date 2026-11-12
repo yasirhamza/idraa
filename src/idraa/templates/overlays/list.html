@@ -11,8 +11,10 @@
   title="Overlays",
   breadcrumb=breadcrumb_for(request),
   meta="Calibration multipliers applied on top of the base FAIR distribution.",
-  actions=[
-    {"label": "Export CSV", "href": "/overlays/export.csv", "style": "brand", "icon": "⇩", "download": True},
+  actions=(
+    [{"label": "Export CSV", "href": "/overlays/export.csv", "style": "brand", "icon": "⇩", "download": True}]
+      if can_export() else []
+  ) + [
     {"label": "CSV template", "href": "/overlays/template.csv", "style": "outline", "download": True},
     {"label": "+ New overlay", "href": "/overlays/new", "style": "primary", "requires_md": True},
   ],

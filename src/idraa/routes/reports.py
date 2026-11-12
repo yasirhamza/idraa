@@ -41,7 +41,13 @@ from idraa.models.organization import Organization
 from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
 from idraa.models.user import User
 from idraa.repositories.run_repo import RunRepo
-from idraa.routes.deps import audit_client_ip, get_db, require_step_up, require_user
+from idraa.routes.deps import (
+    audit_client_ip,
+    get_db,
+    require_export_role,
+    require_step_up,
+    require_user,
+)
 from idraa.services.audit import AuditWriter, log_bulk_export
 from idraa.services.org import require_sole_org
 from idraa.services.pdf_report import render_executive_pdf
@@ -112,7 +118,7 @@ async def list_reports(
 @router.get("/reports/export.csv", dependencies=[Depends(require_step_up(StepUpCategory.EXPORTS))])
 async def reports_export_csv(
     request: Request,
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Stream aggregate runs list as CSV download.
@@ -282,7 +288,7 @@ def _build_xlsx_filename(run: RiskAnalysisRun, org: Organization) -> str:
 async def download_verification_workbook(
     request: Request,
     run_id: uuid.UUID,
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Independent in-Excel Monte Carlo workbook for a COMPLETED run.

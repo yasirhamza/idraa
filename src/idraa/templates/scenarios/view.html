@@ -12,10 +12,12 @@
     title=scenario.name,
     breadcrumb=[("Home", "/"), ("Scenarios", "/scenarios"), (scenario.name, none)],
     meta=scenario.threat_category ~ " · v" ~ scenario.version,
-    actions=[
-      {"label": "Export JSON", "href": "/scenarios/" ~ scenario.id ~ "/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
-      {"label": "Export CSV", "href": "/scenarios/" ~ scenario.id ~ "/export?format=csv", "style": "ghost", "icon": "⇩", "download": True},
-    ] + (
+    actions=(
+      [
+        {"label": "Export JSON", "href": "/scenarios/" ~ scenario.id ~ "/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
+        {"label": "Export CSV", "href": "/scenarios/" ~ scenario.id ~ "/export?format=csv", "style": "ghost", "icon": "⇩", "download": True},
+      ] if can_export() else []
+    ) + (
       [
         {"label": "Edit", "href": "/scenarios/" ~ scenario.id ~ "/edit", "style": "outline"},
         {"label": "Run simulation", "href": "/analyses/new?prefill_scenario_id=" ~ scenario.id, "style": "primary"},

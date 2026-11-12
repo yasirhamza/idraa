@@ -125,6 +125,7 @@
               ],
             },
         ) }}
+        {% if can_export() %}
         <div class="mt-2 flex justify-end">
           {#- hx-boost="false": file download, opts out of the global
               <body hx-boost="true"> so the click navigates instead of HTMX
@@ -135,6 +136,7 @@
               breaking a step-up navigation the moment this route is gated. -#}
           <a href="/runs/{{ run.id }}/control-matrix.csv" hx-boost="false" class="btn btn-outline btn-xs">Export matrix CSV</a>
         </div>
+        {% endif %}
       </div>
     </details>
   {% endif %}

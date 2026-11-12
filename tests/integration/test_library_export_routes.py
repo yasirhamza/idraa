@@ -88,14 +88,17 @@ async def test_export_bundle_returns_json_array_with_slug(
 
 
 @pytest.mark.asyncio
-async def test_export_bundle_viewer_allowed(
-    viewer_client: AsyncClient,
-    db_session: AsyncSession,
-) -> None:
-    """Export is require_user — any authenticated user (viewer+) may download."""
-    await _insert_entry(db_session, slug="exp-viewer", name="ExpViewer")
-    r = await viewer_client.get("/library/export")
-    assert r.status_code == 200
+@pytest.mark.parametrize("path", ["/library/export", "/library/export.csv"])
+async def test_export_viewer_forbidden(viewer_client: AsyncClient, path: str) -> None:
+    """#315: exports need the export role (analyst or admin); a viewer gets 403."""
+    r = await viewer_client.get(path)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_export_single_entry_reviewer_forbidden(reviewer_client: AsyncClient) -> None:
+    r = await reviewer_client.get(f"/library/entries/{uuid.uuid4()}/export")
+    assert r.status_code == 403
 
 
 @pytest.mark.asyncio

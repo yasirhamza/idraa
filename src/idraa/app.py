@@ -46,6 +46,7 @@ from idraa.middleware.session import SessionMiddleware
 from idraa.middleware.uat_basic_auth import uat_basic_auth_factory
 from idraa.models.enums import SUB_FUNCTION_UNITS
 from idraa.models.user import User
+from idraa.routes.deps import can_export, current_user
 from idraa.services.audit import ExportRateLimitedError
 from idraa.services.auth import SESSION_COOKIE
 from idraa.utils.safe_json import HtmlSafeJSONResponse
@@ -158,7 +159,26 @@ def _csrf_field(context: dict[str, object]) -> Markup:
     return template.format(token=token)
 
 
+@pass_context
+def _can_export(context: dict[str, object]) -> bool:
+    """Jinja global: may the page's user use the role-gated exports (#315)?
+
+    Templates call ``can_export()`` to hide export buttons the server would 403.
+    The user is the page's ``current_user`` when the template has one. A macro
+    imported without context does not see template variables, so there it falls
+    back to the session user of the request being rendered (the ContextVar
+    ``csrf_field`` uses). Neither present hides the buttons. Display only: the
+    route's ``require_export_role`` is the gate.
+    """
+    user = context.get("current_user")
+    if user is None:
+        request = _current_request_var.get()
+        user = current_user(request) if request is not None else None
+    return can_export(user)
+
+
 templates.env.globals["csrf_field"] = _csrf_field
+templates.env.globals["can_export"] = _can_export
 templates.env.globals["help_url"] = _help_url
 templates.env.globals["help_slug_for_path"] = _help_slug_for_path
 

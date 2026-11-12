@@ -69,6 +69,7 @@ from idraa.repositories.scenario_repo import ScenarioRepo
 from idraa.routes.deps import (
     audit_client_ip,
     get_db,
+    require_export_role,
     require_role,
     require_step_up,
     require_user,
@@ -238,7 +239,7 @@ async def get_aggregate_matrix_csv(
     run_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Per-scenario control attribution matrix as a CSV download.
 
@@ -250,7 +251,7 @@ async def get_aggregate_matrix_csv(
 
     Plan-gate M-2: cells iterated as dict-per-cell ({control_id, value}).
 
-    RBAC: any authenticated org user (same as /runs/{id} GET).
+    RBAC: the export role (analyst or admin, #315) + EXPORTS step-up.
     """
     service = RunService(db)
     try:
@@ -410,15 +411,15 @@ async def get_run_samples_csv_gz(
     request: Request,
     run_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Persisted per-iteration MC arrays as a gzipped wide CSV (#109).
 
     The analyst-facing complement to the verification workbook: the workbook
     reproduces sampling + ALE; this export lets tail metrics (VaR/ES/LEC) be
     recomputed independently. 410 (not 404) when samples were purged, so a
-    stale link explains itself. RBAC: any authenticated org user + EXPORTS
-    step-up, same as the other bulk exports.
+    stale link explains itself. RBAC: the export role (analyst or admin, #315)
+    + EXPORTS step-up, same as the other bulk exports.
     """
     service = RunService(db)
     try:
@@ -1085,7 +1086,7 @@ async def list_analyses(
 async def analyses_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Stream all runs for the current org as a CSV download.
 

@@ -35,9 +35,9 @@ from idraa.routes.deps import (
     audit_client_ip,
     client_ip,
     get_db,
+    require_export_role,
     require_role,
     require_step_up,
-    require_user,
 )
 from idraa.services.audit import log_bulk_export
 from idraa.services.library_bundle_export import export_bundle_response
@@ -146,22 +146,15 @@ async def get_library(
 async def library_export_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(
-        require_role(
-            UserRole.VIEWER,
-            UserRole.ANALYST,
-            UserRole.REVIEWER,
-            UserRole.ADMIN,
-        )
-    ),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Stream all published library entries as a CSV download.
 
     Plan-gate Arch-2: registered BEFORE /library/entries/{entry_id} so
     "export.csv" is matched as a literal path.
     Plan-gate Sec-3: library entries are not org-specific (shared canonical
-    data); no org filter needed. Access is still gated by authentication
-    (viewer+ role).
+    data); no org filter needed. Access is gated by the export role (analyst
+    or admin, #315), like every data export.
     """
     svc = ScenarioLibraryService(db)
     entries = await svc.repo.list_published(limit=10_000)
@@ -201,15 +194,15 @@ async def library_export_csv(
 async def library_export(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Download the full published catalog as a re-importable JSON bundle.
 
     P3: a LITERAL path registered alongside ``/library/export.csv`` and BEFORE
     ``/library/entries/{entry_id}`` so it is matched literally, not captured by
-    the typed entry-id param. ``require_user`` — any authenticated user may
-    download the public catalog (read of shared canonical data); import is
-    admin-only (a separate router). The bundle is the exact LibraryEntrySeed
+    the typed entry-id param. ``require_export_role`` (analyst or admin, #315),
+    one rule for every data export even though the catalog is shared canonical
+    data; import is admin-only (a separate router). The bundle is the exact LibraryEntrySeed
     shape so a downloaded file re-imports cleanly.
     """
     entries = await ScenarioLibraryRepo(db).list_published(limit=10_000, offset=0)
@@ -234,13 +227,13 @@ async def library_export_one(
     entry_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_export_role),
 ) -> Response:
     """Download one entry (latest published version) as a JSON bundle.
 
     Registered BEFORE the bare ``/library/entries/{entry_id}`` detail route so
-    the ``/export`` suffix is matched as its own handler. ``require_user`` —
-    same read-of-public-catalog posture as the bulk export.
+    the ``/export`` suffix is matched as its own handler. ``require_export_role``,
+    like the bulk export.
 
     idraa#107/#110 review: gated + audited like the bulk sibling. Without the
     audit row, enumerating entry ids pulls the whole catalog one entry at a

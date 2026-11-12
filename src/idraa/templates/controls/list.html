@@ -8,14 +8,15 @@
 {% block content %}
 
 {# Header actions matched to route RBAC gates (PR-5 review follow-through):
-   export + library browse are viewer+; import is admin-only; /controls/new
+   library browse is viewer+; export needs the export role (#315); import is admin-only; /controls/new
    is analyst+. Don't render buttons that 403. #}
 {{ page_header(
   title="Controls",
   breadcrumb=breadcrumb_for(request),
-  actions=[
-    {"label": "Export CSV", "href": "/controls/export.csv", "style": "brand", "icon": "⇩", "download": True},
-  ] + (
+  actions=(
+    [{"label": "Export CSV", "href": "/controls/export.csv", "style": "brand", "icon": "⇩", "download": True}]
+      if can_export() else []
+  ) + (
     [{"label": "Import CSV", "href": "/controls/import", "style": "outline"}]
       if (current_user and current_user.role.value == "admin") else []
   ) + [
