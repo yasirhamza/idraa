@@ -803,6 +803,21 @@ async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
     # #56: the warning points the operator at the wizard re-estimate path
     # as the way to re-elicit from experts instead of flattening the pool.
     assert "Re-estimate" in r.text
+    # #325: the replacement wording follows the node's selector. The form
+    # loads under lognormal, but the analyst may switch to PERT, where the
+    # shown values are stored as the minimum and maximum — so each wording
+    # sits in its own span keyed on ``dist``, and the PERT one stays cloaked.
+    import re
+
+    warning = re.search(r"Pooled estimate:.*?</div>", r.text, re.S)
+    assert warning
+    spans = dict(
+        re.findall(r"<span x-show=\"dist === '(\w+)'\"[^>]*>(.*?)</span>", warning.group(0), re.S)
+    )
+    assert set(spans) == {"lognormal", "pert"}
+    assert "single lognormal fitted to the shown 5th" in spans["lognormal"]
+    assert "PERT whose low and high are the shown values" in " ".join(spans["pert"].split())
+    assert re.search(r"<span x-show=\"dist === 'pert'\" x-cloak>", warning.group(0))
 
 
 # ---- update ----------------------------------------------------------

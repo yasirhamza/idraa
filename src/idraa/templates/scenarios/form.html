@@ -429,8 +429,14 @@
         {% if as_pert -%}
         with a PERT whose low and high are the shown values (enter a mode)
         {%- else -%}
-        with a single lognormal fitted to the shown 5th&ndash;95th percentile
-        range
+        {#- Loss nodes: the wording follows the node's selector (#325). The
+            form loads a pooled mixture under "lognormal", but the analyst
+            may switch to PERT, where the shown values become the minimum
+            and maximum. Rendered inside the pl / sl x-data that owns
+            ``dist``. -#}
+        <span x-show="dist === 'lognormal'">with a single lognormal fitted to the shown 5th&ndash;95th percentile
+        range</span><span x-show="dist === 'pert'" x-cloak>with a PERT whose low and high are the shown values (enter a
+        mode)</span>
         {%- endif %} &mdash; the individual expert opinions are discarded. To
         re-elicit from experts instead, use <strong>Re-estimate</strong> on
         the scenario page.
