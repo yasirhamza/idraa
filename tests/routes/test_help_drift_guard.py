@@ -17,7 +17,9 @@ from the app object without starting a server.
 from __future__ import annotations
 
 import html
+import io
 import re
+import tokenize
 from collections.abc import Iterable, Iterator
 from html.parser import HTMLParser
 from pathlib import Path
@@ -50,6 +52,72 @@ _REQUIRED_LABELS = (
 )
 
 
+_VOID_TAGS = frozenset(
+    [
+        "br",
+        "img",
+        "hr",
+        "input",
+        "wbr",
+        "meta",
+        "link",
+        "area",
+        "base",
+        "col",
+        "embed",
+        "source",
+        "track",
+        "param",
+    ]
+)
+_TEMPLATE_COMMENT_RE = re.compile(r"\{#.*?#\}|<!--.*?-->", re.DOTALL)
+
+
+def _strip_comments(text: str, suffix: str) -> str:
+    """Remove comments (and, for Python, docstrings) so they cannot satisfy a label match.
+
+    Templates: Jinja ``{# #}`` (including ``{#-``/``-#}``) and HTML ``<!-- -->``.
+    Python: ``#`` comments and bare-expression string statements (docstrings);
+    other string literals are kept because labels live in them.
+    """
+    if suffix != ".py":
+        return _TEMPLATE_COMMENT_RE.sub("", text)
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return text
+    skip = {
+        tokenize.COMMENT,
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.ENDMARKER,
+    }
+    out: list[str] = []
+    prev_sig: tokenize.TokenInfo | None = None
+    for i, tok in enumerate(tokens):
+        if tok.type == tokenize.COMMENT:
+            continue
+        if tok.type == tokenize.STRING:
+            # A docstring: a string that starts a statement and ends it.
+            starts = prev_sig is None or prev_sig.type in (
+                tokenize.NEWLINE,
+                tokenize.INDENT,
+                tokenize.DEDENT,
+            )
+            nxt = next((t for t in tokens[i + 1 :] if t.type not in (tokenize.COMMENT,)), None)
+            ends = nxt is None or nxt.type in (tokenize.NEWLINE, tokenize.ENDMARKER)
+            if starts and ends:
+                continue
+        if tok.type not in skip:
+            out.append(tok.string)
+            out.append(" ")
+        if tok.type not in (tokenize.NL, tokenize.COMMENT):
+            prev_sig = tok
+    return "".join(out)
+
+
 def _collapse(text: str) -> str:
     """Unescape entities, treat non-breaking spaces as spaces, collapse runs."""
     return re.sub(r"\s+", " ", html.unescape(text).replace("\xa0", " ")).strip()
@@ -77,6 +145,8 @@ class _ArticleScan(HTMLParser):
         if tag == "code":
             self._in_code = True
             self._code_buf = []
+        if tag in _VOID_TAGS:
+            return
         if self._strong_src is not None:
             self._strong_depth += 1
         elif tag == "strong" and attr.get("data-ui") is not None:
@@ -84,7 +154,14 @@ class _ArticleScan(HTMLParser):
             self._strong_depth = 1
             self._strong_buf = []
 
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # Self-closing ``<x/>``: opens and closes in one step, so depth is unchanged.
+        if tag == "a" and dict(attrs).get("href"):
+            self.hrefs.append(dict(attrs).get("href") or "")
+
     def handle_endtag(self, tag: str) -> None:
+        if tag in _VOID_TAGS:
+            return
         if tag == "code" and self._in_code:
             self._in_code = False
             self.codes.append(_collapse("".join(self._code_buf)))
@@ -140,8 +217,44 @@ def test_marked_ui_label_exists_in_its_source(slug: str, label: str, src: str) -
     assert source.is_file(), f"{where}, but that file does not exist under src/idraa/"
     rel = source.resolve().relative_to(_SRC.resolve()).as_posix()
     assert not rel.startswith("templates/help/"), f"{where}, but help content is not a source"
-    haystack = _collapse(source.read_text(encoding="utf-8"))
+    haystack = _collapse(_strip_comments(source.read_text(encoding="utf-8"), source.suffix))
     assert _collapse(label) in haystack, f"{where}, but the file does not contain that text"
+
+
+def test_label_in_jinja_comment_only_is_not_found() -> None:
+    src = "{#- org-wide badge -#}\n{# multi\nline org-wide #}\n<b>x</b>"
+    assert "org-wide" not in _strip_comments(src, ".html")
+
+
+def test_label_in_html_comment_only_is_not_found() -> None:
+    assert "Export" not in _strip_comments("<!-- Export\nCSV --><p>y</p>", ".html")
+
+
+def test_label_in_rendered_template_text_is_found() -> None:
+    assert "org-wide" in _strip_comments("{# c #}<span>org-wide</span>", ".html")
+
+
+def test_label_in_python_comment_or_docstring_only_is_not_found() -> None:
+    src = '"""Module says Export CSV."""\n\n\ndef f() -> None:\n    """Doc Export CSV."""\n    x = 1  # Export CSV\n'
+    assert "Export CSV" not in _strip_comments(src, ".py")
+
+
+def test_label_in_python_string_literal_is_found() -> None:
+    src = '"""doc"""\nPara("Export CSV", style)\nx = "Contents"\n'
+    out = _strip_comments(src, ".py")
+    assert "Export CSV" in out
+    assert "Contents" in out
+    assert "doc" not in out
+
+
+def test_void_tag_inside_marked_label_still_closes() -> None:
+    scan = _ArticleScan()
+    scan.feed(
+        '<p><strong data-ui="a.html">First<br>line</strong> and '
+        '<strong data-ui="b.html">Second<img src="x"><hr/></strong></p>'
+    )
+    scan.close()
+    assert scan.labels == [("a.html", "Firstline"), ("b.html", "Second")]
 
 
 def test_marked_label_count_does_not_drop() -> None:
@@ -268,6 +381,17 @@ def _article_paths(scan: _ArticleScan) -> set[str]:
 _PATHS: list[tuple[str, str]] = [
     (slug, path) for slug, scan in _ARTICLES.items() for path in sorted(_article_paths(scan))
 ]
+
+
+# Floor for collected product paths (22 when written). Raise it when paths are
+# added; it stops a parser regression from emptying the parametrisation.
+_MIN_PATHS = 22
+
+
+def test_path_count_does_not_drop() -> None:
+    assert len(_PATHS) >= _MIN_PATHS, (
+        f"only {len(_PATHS)} product paths collected; the floor is {_MIN_PATHS}."
+    )
 
 
 def test_route_table_was_read() -> None:
