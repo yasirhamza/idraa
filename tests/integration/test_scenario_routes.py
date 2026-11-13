@@ -182,6 +182,47 @@ async def test_new_form_renders(
     assert 'name="name"' in r.text
 
 
+async def test_new_form_loss_percentile_qualifier_is_lognormal_only(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """#325: the loss low/high inputs are the 5th/95th percentiles only under
+    the lognormal selector; under PERT they are the minimum and maximum. The
+    "(5th pct)" / "(95th pct)" qualifier must therefore sit in a span that
+    Alpine shows only while ``dist === 'lognormal'`` (and that stays cloaked
+    until Alpine has evaluated it), never in the unconditional label text."""
+    import re
+
+    client, _ = authed_analyst
+    r = await client.get("/scenarios/new")
+    assert r.status_code == 200
+    expected = {
+        "pl_low": ("Primary loss low", "(5th pct)"),
+        "pl_high": ("Primary loss high", "(95th pct)"),
+        "sl_low": ("Secondary loss low", "(5th pct)"),
+        "sl_high": ("Secondary loss high", "(95th pct)"),
+    }
+    for field, (text, suffix) in expected.items():
+        m = re.search(rf'<label for="{field}"[^>]*>(.*?)</label>', r.text, re.S)
+        assert m, f"no label for {field}"
+        inner = m.group(1)
+        span = re.search(r"<span([^>]*)>(.*?)</span>", inner, re.S)
+        assert span, f"{field}: the percentile qualifier must be in its own span"
+        attrs, span_text = span.group(1), span.group(2).strip()
+        assert span_text == suffix
+        assert "x-show=\"dist === 'lognormal'\"" in attrs, attrs
+        assert "x-cloak" in attrs
+        # Outside the conditional span the label is just the plain name.
+        outside = (inner[: span.start()] + inner[span.end() :]).strip()
+        assert outside == text, f"{field}: unconditional label text is {outside!r}"
+
+    # No percentile wording in any label that has no conditional span: the
+    # frequency and vulnerability inputs are PERT-only.
+    for field in ("tef_low", "tef_high", "vuln_low", "vuln_high", "pl_mode"):
+        m = re.search(rf'<label for="{field}"[^>]*>(.*?)</label>', r.text, re.S)
+        assert m, f"no label for {field}"
+        assert "pct" not in m.group(1)
+
+
 async def test_new_form_frames_vulnerability_as_inherent(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
 ) -> None:
@@ -762,6 +803,21 @@ async def test_edit_form_mixture_primary_loss_flattens_with_replacement_warning(
     # #56: the warning points the operator at the wizard re-estimate path
     # as the way to re-elicit from experts instead of flattening the pool.
     assert "Re-estimate" in r.text
+    # #325: the replacement wording follows the node's selector. The form
+    # loads under lognormal, but the analyst may switch to PERT, where the
+    # shown values are stored as the minimum and maximum — so each wording
+    # sits in its own span keyed on ``dist``, and the PERT one stays cloaked.
+    import re
+
+    warning = re.search(r"Pooled estimate:.*?</div>", r.text, re.S)
+    assert warning
+    spans = dict(
+        re.findall(r"<span x-show=\"dist === '(\w+)'\"[^>]*>(.*?)</span>", warning.group(0), re.S)
+    )
+    assert set(spans) == {"lognormal", "pert"}
+    assert "single lognormal fitted to the shown 5th" in spans["lognormal"]
+    assert "PERT whose low and high are the shown values" in " ".join(spans["pert"].split())
+    assert re.search(r"<span x-show=\"dist === 'pert'\" x-cloak>", warning.group(0))
 
 
 # ---- update ----------------------------------------------------------

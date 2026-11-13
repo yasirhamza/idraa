@@ -7,7 +7,9 @@ context and asserts:
   - the TEF node has no distribution <select> (#318: TEF is PERT-only), and
   - selecting "lognormal" on the primary-loss node's ``pl_dist`` <select> hides
     the ``pl_mode`` input (Alpine x-if removes it from the DOM), while low/high
-    remain — the visible affordance the selector exists to provide.
+    remain — the visible affordance the selector exists to provide, and
+  - the loss low/high labels say "(5th pct)" / "(95th pct)" only while
+    lognormal is selected (#325: under PERT they are the minimum and maximum).
 
 Harness mirrors ``tests/e2e/test_wizard_mobile_e2e.py`` EXACTLY: an ephemeral
 per-run SQLite migrated to ``head``, a uvicorn subprocess bound via
@@ -177,6 +179,16 @@ async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> N
         pl_mode = page.locator("input[name='pl_mode']")
         assert await pl_mode.count() == 1
         assert await pl_mode.is_visible()
+        # #325: under PERT the loss labels carry no percentile qualifier; the
+        # secondary-loss node stays PERT throughout and is the control.
+        # (inner_text reflects the label's CSS uppercase transform, hence
+        # the case-folded comparisons.)
+        pl_low_label = page.locator("label[for='pl_low']")
+        pl_high_label = page.locator("label[for='pl_high']")
+        sl_low_label = page.locator("label[for='sl_low']")
+        assert (await pl_low_label.inner_text()).strip().lower() == "primary loss low"
+        assert (await pl_high_label.inner_text()).strip().lower() == "primary loss high"
+        assert (await sl_low_label.inner_text()).strip().lower() == "secondary loss low"
 
         # 5. Switch the primary-loss node to lognormal — x-if removes the mode.
         await page.select_option("select[name='pl_dist']", "lognormal")
@@ -189,6 +201,12 @@ async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> N
         # Low / high stay (they are the p5/p95 pair under lognormal).
         assert await page.locator("input[name='pl_low']").count() == 1
         assert await page.locator("input[name='pl_high']").count() == 1
+        # #325: now they ARE percentiles and the labels say so; the untouched
+        # secondary-loss node does not change.
+        await page.locator("[data-testid='pl_low-pct-suffix']").wait_for(state="visible")
+        assert (await pl_low_label.inner_text()).strip().lower() == "primary loss low (5th pct)"
+        assert (await pl_high_label.inner_text()).strip().lower() == "primary loss high (95th pct)"
+        assert (await sl_low_label.inner_text()).strip().lower() == "secondary loss low"
 
         # 6. Switch back to PERT — the mode input reappears.
         await page.select_option("select[name='pl_dist']", "pert")
@@ -196,6 +214,8 @@ async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> N
             "() => document.querySelectorAll(\"input[name='pl_mode']\").length === 1"
         )
         assert await page.locator("input[name='pl_mode']").count() == 1
+        await page.locator("[data-testid='pl_low-pct-suffix']").wait_for(state="hidden")
+        assert (await pl_low_label.inner_text()).strip().lower() == "primary loss low"
 
         await context.close()
         await browser.close()
