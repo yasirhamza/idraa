@@ -15,11 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from idraa.models.enums import UserRole
 from idraa.models.organization import Organization
+from idraa.routes.deps import EXPORT_ROLES
 from idraa.services.auth import SESSION_COOKIE
 from tests.factories import create_user, login_client_as
 from tests.integration.test_aggregate_matrix_grid import (  # noqa: F401  (fixture)
     aggregate_run_client,
 )
+
+
+def can_export_role(role: UserRole) -> bool:
+    return role in EXPORT_ROLES
+
 
 _RID = "00000000-0000-4000-8000-000000000315"
 
@@ -239,3 +245,54 @@ async def test_scenario_view_export_buttons_follow_the_role(
     r = await client.get(f"/scenarios/{scenario_id}")
     assert r.status_code == 200
     assert (f"/scenarios/{scenario_id}/export" in r.text) is offered
+
+
+# ---- run detail: the header and overflow-menu buttons, by label -----------
+
+_PDF_BUTTON = "Download report (PDF)"
+_EXPORT_BUTTONS = (
+    "Download verification workbook (Excel)",
+    "Download raw samples (CSV)",
+    "Export attribution matrix (CSV)",
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", list(UserRole))
+async def test_run_detail_buttons_follow_the_role(
+    aggregate_run_client: tuple[AsyncClient, uuid.UUID],  # noqa: F811
+    db_session: AsyncSession,
+    role: UserRole,
+) -> None:
+    """Every role gets the PDF button; only the export role gets the three
+    data-export buttons. Pinned by label, so a renamed or re-gated button fails
+    here rather than only in the href checks above."""
+    client, run_id = aggregate_run_client
+    await _login_as_role(client, db_session, await _org_of_run(db_session, run_id), role)
+
+    detail = await client.get(f"/runs/{run_id}")
+    assert detail.status_code == 200
+    assert _PDF_BUTTON in detail.text, f"{role.value} lost the PDF button"
+    for label in _EXPORT_BUTTONS:
+        assert (label in detail.text) is can_export_role(role), f"{label!r} wrong for {role.value}"
+
+
+@pytest.mark.asyncio
+async def test_run_detail_offers_no_downloads_until_the_run_completes(
+    aggregate_run_client: tuple[AsyncClient, uuid.UUID],  # noqa: F811
+    db_session: AsyncSession,
+) -> None:
+    """The download routes 404 on a run that is not completed, so the page must
+    not offer them, even to the export role (the fixture's client is an analyst)."""
+    from idraa.models.risk_analysis_run import RiskAnalysisRun, RunStatus
+
+    client, run_id = aggregate_run_client
+    run = await db_session.get(RiskAnalysisRun, run_id)
+    assert run is not None
+    run.status = RunStatus.FAILED
+    await db_session.commit()
+
+    detail = await client.get(f"/runs/{run_id}")
+    assert detail.status_code == 200
+    for label in (_PDF_BUTTON, *_EXPORT_BUTTONS):
+        assert label not in detail.text, f"{label!r} offered on a failed run"
