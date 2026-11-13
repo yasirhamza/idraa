@@ -67,7 +67,7 @@
 </ul>
 <p class="text-body text-ink-2 mb-6">
   If the file is unparseable (wrong format, truncated, or exceeds the 5&thinsp;MB
-  size limit) or contains more than 500 rows, the upload returns an error immediately and nothing is stored.
+  size limit) or contains more than 500 rows, the upload returns an error immediately and no scenarios are created.
   The preview is held server-side under a short-lived token (10 minutes); if the
   token expires before you confirm, you will see an &ldquo;expired preview&rdquo;
   message and must re-upload.
@@ -93,9 +93,11 @@
   expected column names and value encodings, so the round-trip &mdash;
   export &rarr; (optionally edit) &rarr; re-import &mdash; carries all the
   fields in the format. Re-imported scenarios are created as new records; they
-  do not overwrite the originals. A row whose name matches an active scenario
-  in your workspace is skipped as a duplicate, so re-importing into the same
-  workspace creates nothing unless you change the names.
+  do not overwrite the originals. A row whose name matches any existing scenario
+  in your workspace (any status, including drafts and deleted scenarios; case
+  is ignored), or an earlier row in the same file, is skipped as a duplicate,
+  so re-importing into the same workspace creates nothing unless you change
+  the names.
 </p>
 <p class="text-body text-ink-2 mb-6">
   If you edit the file between export and import, only rows that pass

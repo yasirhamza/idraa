@@ -53,8 +53,10 @@
 
 <p class="text-meta text-ink-2 mt-4">
   Each assignment also carries a <strong>capability</strong>, <strong>coverage</strong>,
-  and <strong>reliability</strong> value. The three are multiplied together, and a
-  missing capability counts as one half; see
+  and <strong>reliability</strong> value. The three are multiplied together (a time-valued
+  capability is first converted to a 0&ndash;1 score), and a missing capability
+  counts as one half, except for a currency-valued loss reduction, where it
+  counts as nothing; see
   <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#the-control-model">Where Idraa departs from FAIR</a>
   for the rule and the other formulas behind it.
 </p>

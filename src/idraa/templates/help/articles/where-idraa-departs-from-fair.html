@@ -87,7 +87,8 @@
   percentiles of a right-skewed lognormal, then samples from a bounded PERT
   whose top is that 95th percentile. (A PERT typed on the scenario form or
   imported is stored as given, with no fit; its high is the ceiling
-  directly.) The alternative, clipping a lognormal at a cap, piles the
+  directly. A lognormal chosen there for a loss field keeps its tail and is
+  bounded only by the loss cap.) The alternative, clipping a lognormal at a cap, piles the
   cut-off tail into a spike at the cap. The cost is a lower expected loss
   than the unbounded curve would give, accepted because the removed tail was
   not a plausible outcome for a single organisation.
@@ -244,7 +245,7 @@
   Idraa lets you link a control&rsquo;s own implementation, event-termination
   or resilience assignment as also correcting misaligned decisions; the linked
   function then scores exactly as that assignment does (same capability,
-  coverage and authored reliability) and pairs with misalignment detection on
+  coverage and authored reliability) and pairs with Identify misalignment on
   any control in the run. Treatment selection cannot be the source, since it
   never changes a score. A resilience source is a weaker proxy: a probability
   of recovery stands in for the standard&rsquo;s time-to-correct. Where the same

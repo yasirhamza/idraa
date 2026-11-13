@@ -120,14 +120,18 @@
   organization&rsquo;s capacity cap rather than at any single expert&rsquo;s
   95th-percentile judgement. Vulnerability is always a probability
   (0&ndash;100%): the wizard fits it as a normal distribution truncated to
-  [0,&nbsp;100%], not a lognormal, and collapses that fit to a PERT bounded
-  to [0,&nbsp;100%].
+  [0,&nbsp;100%], not a lognormal, and collapses that fit to a PERT running from its
+  5th to its 95th percentile, which always lies within [0,&nbsp;100%].
 </p>
 <p class="text-body text-ink-2 mb-6">
   The scenario form and CSV/JSON import do no such fitting for a PERT entry.
   PERT is the form&rsquo;s default distribution: the low, mode and high you
   type are stored as given, so there the low and high are the minimum and
-  maximum of the sampled values, not 5th and 95th percentiles.
+  maximum of the sampled values, not 5th and 95th percentiles. If you choose
+  Lognormal for a loss field there instead, the low and high are read as the
+  5th and 95th percentiles of a lognormal that is stored and sampled as such,
+  with no collapse to a PERT: the high is then not a ceiling, and only the
+  loss cap, when one is set, bounds the draws.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="lognormal-authoring-the-distribution-assumption">Lognormal authoring &mdash; the distribution assumption</h2>
@@ -249,7 +253,7 @@
       <tr><td>PL</td><td>Primary Loss</td><td>Cost your organization itself incurs from the event (response, recovery, ransom, replacement, downtime).</td></tr>
       <tr><td>SL</td><td>Secondary Loss</td><td>Cost to you arising from secondary stakeholders&rsquo; reactions (fines, lost business, notification and legal defence).</td></tr>
       <tr><td>LM</td><td>Loss Magnitude</td><td>The total cost per event (Primary plus Secondary Loss).</td></tr>
-      <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level. On the control form, LEC instead stands for Loss Event Control.</td></tr>
+      <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level. On control screens and in the PDF&rsquo;s control inventory, LEC instead stands for Loss Event Control.</td></tr>
       <tr><td>EPC</td><td>Exceedance Probability Curve</td><td>A companion view of the loss exceedance curve, showing the probability of exceeding each loss amount.</td></tr>
       <tr><td>VaR</td><td>Value at Risk</td><td>A loss level at a chosen confidence, e.g. &ldquo;95% Value at Risk&rdquo;.</td></tr>
       <tr><td>ROI</td><td>Return on Investment</td><td>How much risk a control removes relative to its cost.</td></tr>
