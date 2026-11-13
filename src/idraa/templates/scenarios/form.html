@@ -339,7 +339,12 @@
        loss_preview.js needed). idx is always 0 — the expert form has
        exactly one (low, high) pair per field, unlike the wizard's
        multi-SME-row grid. #}
-    {%- macro pert_input(name, label, req=True, fmt="money", dispatch_fieldset=none) -%}
+    {# ``lognormal_suffix`` (#325): a label qualifier shown ONLY while the
+       enclosing ``dist`` Alpine state is "lognormal" — the loss low/high
+       inputs are 5th/95th percentiles under lognormal but the minimum and
+       maximum under PERT, so the qualifier must not show under PERT. Pass it
+       only inside an ancestor whose x-data defines ``dist`` (pl / sl). #}
+    {%- macro pert_input(name, label, req=True, fmt="money", dispatch_fieldset=none, lognormal_suffix=none) -%}
     {%- set raw = form[name] if form[name] is defined else none -%}
     {%- if fmt == "rate" -%}
       {%- set display_value = raw | format_rate_input -%}
@@ -351,7 +356,7 @@
     {%- endif -%}
     <div>
       <div class="flex items-center justify-between">
-        <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}</label>
+        <label for="{{ name }}" class="text-meta text-ink-2">{{ label }}{% if lognormal_suffix %} <span x-show="dist === 'lognormal'" x-cloak data-testid="{{ name }}-pct-suffix">{{ lognormal_suffix }}</span>{% endif %}</label>
         {% if req %}<span class="text-micro text-ink-3">REQUIRED</span>{% endif %}
       </div>
       {% if fmt == "money" %}
@@ -406,9 +411,11 @@
     {# Each node below shares ONE low + ONE high input across both modes (so the
        field is never duplicated in the POST body), and gates only `mode` behind
        x-if so it is absent from the DOM — and therefore unsubmitted — under
-       lognormal. The "low / high" labels carry both readings: under PERT they
-       are the triangular endpoints; under lognormal they are the 5th / 95th
-       percentiles the closed form converts to native {mean, sigma}. #}
+       lognormal. The low / high inputs carry both readings: under PERT they
+       are the distribution's minimum and maximum; under lognormal they are
+       the 5th / 95th percentiles the closed form converts to native
+       {mean, sigma}. The labels say "(5th pct)" / "(95th pct)" only while
+       lognormal is selected (#325, pert_input's lognormal_suffix). #}
 
     {# #27: a stored lognormal_mixture (pooled multi-expert estimate) has no
        form editor — dist_to_form flattens it to the mixture's true p5/p95
@@ -519,9 +526,9 @@
         </div>
       {% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {{ pert_input("pl_low", "Primary loss low (5th pct)", fmt="money", dispatch_fieldset="pl") }}
+        {{ pert_input("pl_low", "Primary loss low", lognormal_suffix="(5th pct)", fmt="money", dispatch_fieldset="pl") }}
         <template x-if="dist === 'pert'">{{ pert_input("pl_mode", "Primary loss mode", fmt="money") }}</template>
-        {{ pert_input("pl_high", "Primary loss high (95th pct)", fmt="money", dispatch_fieldset="pl") }}
+        {{ pert_input("pl_high", "Primary loss high", lognormal_suffix="(95th pct)", fmt="money", dispatch_fieldset="pl") }}
       </div>
       {{ capacity_max_input("pl") }}
     </div>
@@ -539,9 +546,9 @@
         </div>
       {% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {{ pert_input("sl_low", "Secondary loss low (5th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
+        {{ pert_input("sl_low", "Secondary loss low", lognormal_suffix="(5th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
         <template x-if="dist === 'pert'">{{ pert_input("sl_mode", "Secondary loss mode", req=False, fmt="money") }}</template>
-        {{ pert_input("sl_high", "Secondary loss high (95th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
+        {{ pert_input("sl_high", "Secondary loss high", lognormal_suffix="(95th pct)", req=False, fmt="money", dispatch_fieldset="sl") }}
       </div>
       {{ capacity_max_input("sl") }}
     </div>
