@@ -2,14 +2,14 @@
 must JSON-encode the reflected value, never interpolate it raw into the
 attribute.
 
-The raw shape ``x-data="{ dist: '{{ form.tef_dist ... }}' }"`` let a reflected
+The raw shape ``x-data="{ dist: '{{ form.pl_dist ... }}' }"`` let a reflected
 POST value break out of the single-quoted JS string and execute — self-XSS,
 proven in headless Chromium against the app's own vendored Alpine during the
 STRIDE audit (autoescape is no defense: the browser HTML-decodes the attribute
 before Alpine evaluates it as a JS expression). The fix mirrors the money-field
 idiom in the SAME file: a single-quoted attribute + ``| tojson`` (which escapes
-``'``/``<``/``>``/``&``). This guard fails loudly if any of the three selectors
-(tef/pl/sl) regresses to the raw shape.
+``'``/``<``/``>``/``&``). This guard fails loudly if any of the loss selectors
+(pl/sl) regresses to the raw shape.
 """
 
 from __future__ import annotations
@@ -38,10 +38,11 @@ def test_no_raw_dist_xdata_interpolation():
     )
 
 
-def test_all_three_dist_selectors_use_tojson():
+def test_all_dist_selectors_use_tojson():
     src = _FORM.read_text()
-    # tef/pl/sl selectors, each a single-quoted x-data routed through tojson.
+    # pl/sl selectors (TEF is PERT-only, #318: no selector), each a
+    # single-quoted x-data routed through tojson.
     safe = re.findall(r"x-data='\{ dist:[^']*\|\s*tojson[^']*\}'", src)
-    assert len(safe) == 3, (
-        f"expected 3 tojson-guarded dist x-data selectors (tef/pl/sl), found {len(safe)}"
+    assert len(safe) == 2, (
+        f"expected 2 tojson-guarded dist x-data selectors (pl/sl), found {len(safe)}"
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -175,3 +176,59 @@ async def test_export_route_registered_before_id_parser(analyst_client: AsyncCli
     # B5/Sec-I1: /scenarios/export must NOT be parsed as /scenarios/{uuid}.
     r = await analyst_client.get("/scenarios/export?format=csv")
     assert r.status_code != 422  # 422 == the UUID parser ate "export"
+
+
+# ---- #317: the list's Export buttons carry the active status filter --------
+
+_PLAIN_CSV = 'href="/scenarios/export?format=csv"'
+_PLAIN_JSON = 'href="/scenarios/export?format=json"'
+
+
+@pytest.mark.asyncio
+async def test_list_export_hrefs_unfiltered(analyst_client: AsyncClient) -> None:
+    r = await analyst_client.get("/scenarios")
+    assert r.status_code == 200
+    assert _PLAIN_CSV in r.text
+    assert _PLAIN_JSON in r.text
+    assert "/scenarios/export?format=csv&amp;status=" not in r.text
+    assert "/scenarios/export?format=json&amp;status=" not in r.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["active", "draft"])
+async def test_list_export_hrefs_carry_status_filter(
+    analyst_client: AsyncClient, status: str
+) -> None:
+    r = await analyst_client.get(f"/scenarios?status={status}")
+    assert r.status_code == 200
+    # Jinja autoescape renders the `&` joining the query params as `&amp;`.
+    assert f'href="/scenarios/export?format=csv&amp;status={status}"' in r.text
+    assert f'href="/scenarios/export?format=json&amp;status={status}"' in r.text
+    assert _PLAIN_CSV not in r.text
+    assert _PLAIN_JSON not in r.text
+
+
+@pytest.mark.asyncio
+async def test_list_filtered_export_href_exports_only_that_status(
+    analyst_client: AsyncClient,
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+    seeded_scenario: Any,
+    db_session: AsyncSession,
+) -> None:
+    import html
+
+    from idraa.models.enums import EntityStatus
+
+    _client, org_id = authed_analyst
+    await _seed_scenario(
+        db_session, org_id=org_id, name="Draft Only Scenario", status=EntityStatus.DRAFT
+    )
+    r = await analyst_client.get("/scenarios?status=active")
+    match = re.search(r'href="(/scenarios/export\?format=csv[^"]*)"', r.text)
+    assert match is not None
+    href = html.unescape(match.group(1))
+    assert href == "/scenarios/export?format=csv&status=active"
+    export = await analyst_client.get(href)
+    assert export.status_code == 200
+    assert seeded_scenario.name in export.text
+    assert "Draft Only Scenario" not in export.text

@@ -379,7 +379,7 @@ def pert_dist_from_raw(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
 def dist_from_raw(
     raw: dict[str, Any], prefix: str, *, capacity_max: float | None = None
 ) -> dict[str, Any]:
-    """Build a distribution dict for a NON-vuln node from form fields.
+    """Build a distribution dict for a LOSS node (pl / sl) from form fields.
 
     Epic B (#326). Reads ``{prefix}_dist`` (default "pert"). For "lognormal",
     reads ``{prefix}_low``/``{prefix}_high`` as the p5/p95 pair and stores the
@@ -387,9 +387,10 @@ def dist_from_raw(
     :func:`fair_cam.quantile_pooling.lognormal_from_quantiles`. For "pert"
     (or any unrecognised value), falls through to the existing PERT path.
 
-    Vulnerability is a probability ∈ [0, 1] (FAIR Standard) and is therefore
-    NOT routed through this helper — the caller keeps it on
-    :func:`pert_dist_from_raw` so no ``vuln_dist`` field is ever honoured.
+    Vulnerability (a probability ∈ [0, 1]) and threat event frequency (D12:
+    lognormal is strictly a loss distribution) are therefore NOT routed through
+    this helper — the caller keeps them on :func:`pert_dist_from_raw` so no
+    ``vuln_dist`` / ``tef_dist`` field is ever honoured.
 
     ``lognormal_from_quantiles`` raises :class:`ValueError` for low<=0 / high<=0
     / high<low; that propagates so the route's existing
@@ -400,8 +401,7 @@ def dist_from_raw(
     annual_revenue`` for the TARGET org, or ``None`` when revenue is unset —
     D14) is only ever threaded through the ``prefix == "pl"`` call site —
     this is a loss field (D19 floor governs lognormal LOSS shapes only; TEF
-    is never routed through the capacity ceiling even if a stray
-    ``{prefix}_max`` key were present in ``raw``). Secondary loss is built
+    never reaches this helper at all). Secondary loss is built
     INLINE in :func:`parse_scenario_form`, not through this helper — its
     ``sl_max`` is resolved at that call site via the same
     :func:`_resolve_capacity_max` helper.
@@ -484,7 +484,9 @@ def dist_to_form(dist: dict[str, Any] | None, prefix: str) -> dict[str, str]:
     - PERT (or ``None`` / missing): delegate to :func:`pert_dist_to_form` and
       stamp ``{prefix}_dist = "pert"`` so the select renders the PERT option.
 
-    Used for tef / pl / sl in :func:`form_from_scenario`. Vulnerability keeps
+    Used for tef / pl / sl in :func:`form_from_scenario` (the tef selector is
+    gone from the form, #318, so ``tef_dist`` is emitted but never rendered or
+    read back). Vulnerability keeps
     :func:`pert_dist_to_form` directly (no selector; mixtures are barred from
     vulnerability at both the wizard and import gates).
 
@@ -743,7 +745,9 @@ def parse_scenario_form(raw: dict[str, Any], *, capacity_max: float | None = Non
         attack_vector=(raw.get("attack_vector") or "").strip() or None,
         asset_class=(raw.get("asset_class") or "").strip() or None,
         effect=(raw.get("effect") or "").strip() or None,
-        threat_event_frequency=dist_from_raw(raw, "tef"),
+        # TEF is PERT-only (D12: lognormal is a loss distribution only), like
+        # vulnerability: any posted ``tef_dist`` is ignored.
+        threat_event_frequency=pert_dist_from_raw(raw, "tef"),
         vulnerability=vulnerability_dist,
         primary_loss=dist_from_raw(raw, "pl", capacity_max=capacity_max),
         secondary_loss=secondary_loss,
@@ -782,8 +786,9 @@ def form_from_scenario(s: Scenario) -> dict[str, Any]:
         "effect": getattr(s.effect, "value", s.effect) or "",
         "mitigating_control_ids": [str(c.id) for c in (s.mitigating_controls or [])],
     }
-    # tef / pl / sl are per-node distribution-typed (#326) — dist_to_form emits
-    # the {prefix}_dist selector value + re-derived p5/p95 for lognormal nodes.
+    # pl / sl are per-node distribution-typed (#326) — dist_to_form emits the
+    # {prefix}_dist selector value + re-derived p5/p95 for lognormal nodes. TEF
+    # goes through the same helper but is PERT-only on the form (#318, D12).
     # Vulnerability is PERT-only (probability ∈ [0, 1]); it keeps pert_dist_to_form.
     out.update(dist_to_form(s.threat_event_frequency, "tef"))
     out.update(pert_dist_to_form(s.vulnerability, "vuln"))
@@ -816,8 +821,9 @@ def form_defaults() -> dict[str, Any]:
         "attack_vector": "",
         "asset_class": "",
         "effect": "",
-        # Per-node distribution selectors (#326) default to PERT. Vulnerability
-        # has no selector (probability ∈ [0, 1], PERT-only) so no vuln_dist key.
+        # Per-loss-node distribution selectors (#326) default to PERT. Vulnerability
+        # and TEF have no selector (PERT-only, D12). ``tef_dist`` stays only for
+        # shape-parity with dist_to_form output; nothing renders or reads it.
         "tef_dist": "pert",
         "tef_low": "",
         "tef_mode": "",

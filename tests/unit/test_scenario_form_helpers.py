@@ -108,13 +108,33 @@ def test_pert_node_default_unregressed() -> None:
     }
 
 
-def test_tef_lognormal_node_stored_as_native() -> None:
-    raw = _base_raw(tef_dist="lognormal", tef_low="0.1", tef_high="10")
+def test_lognormal_loss_node_stored_as_native() -> None:
+    raw = _base_raw(pl_dist="lognormal", pl_low="0.1", pl_high="10", pl_max="1000")
     form = parse_scenario_form(raw)
-    assert form.threat_event_frequency["distribution"] == "lognormal"
+    assert form.primary_loss["distribution"] == "lognormal"
     # ln(0.1) + ln(10) = 0 => mean = 0 exactly.
-    assert form.threat_event_frequency["mean"] == pytest.approx(0.0, abs=1e-9)
-    assert "mode" not in form.threat_event_frequency
+    assert form.primary_loss["mean"] == pytest.approx(0.0, abs=1e-9)
+    assert "mode" not in form.primary_loss
+
+
+def test_tef_is_always_pert_even_if_lognormal_posted() -> None:
+    """#318 / D12: lognormal is a loss distribution only. A stray or
+    hand-crafted ``tef_dist=lognormal`` is ignored; TEF is built as a PERT."""
+    raw = _base_raw(tef_dist="lognormal", tef_low="0.1", tef_mode="1", tef_high="10")
+    form = parse_scenario_form(raw)
+    assert form.threat_event_frequency == {
+        "distribution": "PERT",
+        "low": 0.1,
+        "mode": 1.0,
+        "high": 10.0,
+    }
+
+
+def test_tef_lognormal_posted_without_mode_fails_as_pert() -> None:
+    raw = _base_raw(tef_dist="lognormal", tef_low="0.1", tef_high="10")
+    del raw["tef_mode"]
+    with pytest.raises(KeyError):
+        parse_scenario_form(raw)
 
 
 def test_vuln_never_lognormal() -> None:
@@ -379,12 +399,13 @@ def test_dist_from_raw_pl_max_malformed_raises(bad_val: str) -> None:
         dist_from_raw(raw, "pl", capacity_max=1_000_000.0)
 
 
-def test_dist_from_raw_tef_never_gets_max_even_if_present_in_raw() -> None:
-    """D12/D19 scope: the capacity ceiling applies to loss fields only —
-    dist_from_raw only resolves it for prefix == "pl"."""
-    raw = {"tef_dist": "lognormal", "tef_low": "0.1", "tef_high": "10", "tef_max": "5"}
-    out = dist_from_raw(raw, "tef", capacity_max=1_000_000.0)
-    assert "max" not in out
+def test_tef_never_gets_max_even_if_present_in_raw() -> None:
+    """D12/D19 scope: the capacity ceiling applies to loss fields only. TEF is
+    a PERT built by pert_dist_from_raw, so a stray ``tef_max`` (and a stray
+    ``tef_dist=lognormal``) never reach the stored dict."""
+    raw = _base_raw(tef_dist="lognormal", tef_max="5")
+    form = parse_scenario_form(raw, capacity_max=1_000_000.0)
+    assert "max" not in form.threat_event_frequency
 
 
 def test_dist_from_raw_pert_kind_unaffected_by_capacity_max() -> None:

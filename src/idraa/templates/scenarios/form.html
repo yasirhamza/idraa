@@ -443,14 +443,14 @@
     </div>
     {%- endmacro -%}
 
-    {# TEF — frequency. #}
-    <div x-data='{ dist: {{ (form.tef_dist or "pert") | tojson }} }' class="space-y-3">
-      {{ dist_select("tef", form.tef_dist) }}
+    {# TEF — frequency. PERT-only (no selector, no Alpine state): lognormal is a
+       loss distribution only (D12), exactly like vulnerability below. #}
+    <div class="space-y-3">
       {% if form.tef_from_mixture %}{{ mixture_replace_warning(form.tef_from_mixture, "threat event frequency") }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {{ pert_input("tef_low", "TEF low (5th pct)", fmt="rate") }}
-        <template x-if="dist === 'pert'">{{ pert_input("tef_mode", "TEF mode", fmt="rate") }}</template>
-        {{ pert_input("tef_high", "TEF high (95th pct)", fmt="rate") }}
+        {{ pert_input("tef_low", "TEF low", fmt="rate") }}
+        {{ pert_input("tef_mode", "TEF mode", fmt="rate") }}
+        {{ pert_input("tef_high", "TEF high", fmt="rate") }}
       </div>
     </div>
 

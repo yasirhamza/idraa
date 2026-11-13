@@ -616,12 +616,88 @@ async def test_edit_form_renders(
     assert f'value="{s.row_version}"' in r.text
     # View-calibration link points back to the detail page.
     assert f'href="/scenarios/{s.id}"' in r.text
-    # #326: the per-node distribution selector renders for tef/pl/sl.
-    assert 'name="tef_dist"' in r.text
+    # #326: the per-node distribution selector renders for pl/sl. #318: TEF is
+    # PERT-only (D12: lognormal is a loss distribution), so no tef selector.
+    assert 'name="tef_dist"' not in r.text
     assert 'name="pl_dist"' in r.text
     assert 'name="sl_dist"' in r.text
     # Vulnerability has no selector (PERT-only probability).
     assert 'name="vuln_dist"' not in r.text
+
+
+async def test_create_form_has_no_tef_distribution_select(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """#318: TEF is PERT-only; the form must not offer a lognormal option that
+    validation rejects on every write path."""
+    client, _org_id = authed_analyst
+    r = await client.get("/scenarios/new")
+    assert r.status_code == 200
+    assert 'name="tef_dist"' not in r.text
+    assert 'name="pl_dist"' in r.text
+    for field in ("tef_low", "tef_mode", "tef_high"):
+        assert f'name="{field}"' in r.text
+
+
+async def test_create_scenario_ignores_posted_tef_lognormal(
+    authed_analyst: tuple[AsyncClient, uuid.UUID], db_session: AsyncSession
+) -> None:
+    """#318: a hand-crafted ``tef_dist=lognormal`` is ignored; TEF is a PERT."""
+    client, org_id = authed_analyst
+    payload = {
+        "name": "TEF lognormal ignored",
+        "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
+        "tef_dist": "lognormal",
+        "tef_low": "0.1",
+        "tef_mode": "0.5",
+        "tef_high": "2.0",
+        "vuln_low": "0.2",
+        "vuln_mode": "0.4",
+        "vuln_high": "0.6",
+        "pl_low": "50000",
+        "pl_mode": "250000",
+        "pl_high": "2000000",
+    }
+    r = await csrf_post(client, "/scenarios", payload, follow_redirects=False)
+    assert r.status_code == 303
+    s = (
+        await db_session.execute(
+            select(Scenario).where(
+                Scenario.organization_id == org_id,
+                Scenario.name == "TEF lognormal ignored",
+            )
+        )
+    ).scalar_one()
+    assert s.threat_event_frequency == {
+        "distribution": "PERT",
+        "low": 0.1,
+        "mode": 0.5,
+        "high": 2.0,
+    }
+
+
+async def test_create_scenario_tef_lognormal_without_mode_is_422(
+    authed_analyst: tuple[AsyncClient, uuid.UUID],
+) -> None:
+    """#318: without a TEF mode the PERT path fails as a 422 re-render, not a 500."""
+    client, _org_id = authed_analyst
+    payload = {
+        "name": "TEF no mode",
+        "threat_category": "ransomware",
+        "threat_community": "cybercriminals",
+        "tef_dist": "lognormal",
+        "tef_low": "0.1",
+        "tef_high": "2.0",
+        "vuln_low": "0.2",
+        "vuln_mode": "0.4",
+        "vuln_high": "0.6",
+        "pl_low": "50000",
+        "pl_mode": "250000",
+        "pl_high": "2000000",
+    }
+    r = await csrf_post(client, "/scenarios", payload, follow_redirects=False)
+    assert r.status_code == 422
 
 
 async def test_edit_form_lognormal_primary_loss_round_trips(
