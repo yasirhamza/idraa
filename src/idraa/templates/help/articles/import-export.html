@@ -28,7 +28,7 @@
 <p class="text-body text-ink-2 mb-3">
   An Analyst or Admin can export from the Scenarios list page
   (<a class="text-brand hover:underline" href="/scenarios">/scenarios</a>).
-  Use the <strong>Export CSV</strong> or <strong>Export JSON</strong> button at
+  Use the <strong data-ui="templates/scenarios/list.html">Export CSV</strong> or <strong data-ui="templates/scenarios/list.html">Export JSON</strong> button at
   the top of the list.
 </p>
 <p class="text-body text-ink-2 mb-3">
@@ -48,15 +48,15 @@
 <p class="text-body text-ink-2 mb-3">
   Navigate to
   <a class="text-brand hover:underline" href="/scenarios/import">/scenarios/import</a>.
-  The page provides download links for a blank <strong>CSV template</strong>
-  (<code>scenarios_template.csv</code>) and a <strong>JSON sample</strong>
+  The page provides download links for a blank <strong data-ui="templates/scenarios/import.html">CSV template</strong>
+  (<code>scenarios_template.csv</code>) and a <strong data-ui="templates/scenarios/import.html">JSON sample</strong>
   (<code>scenarios_sample.json</code>) so you can see the expected column
   layout and field names before authoring your file.
 </p>
 
 <h3 class="text-h4 text-ink-1 mb-2">Step 1 &mdash; Upload and preview</h3>
 <p class="text-body text-ink-2 mb-3">
-  Choose your CSV or JSON file and click <strong>Upload &amp; preview</strong>. Idraa
+  Choose your CSV or JSON file and click <strong data-ui="templates/scenarios/import.html">Upload &amp; preview</strong>. Idraa
   validates every row without writing anything to the database. The preview
   page shows:
 </p>
@@ -75,7 +75,7 @@
 
 <h3 class="text-h4 text-ink-1 mb-2">Step 2 &mdash; Confirm</h3>
 <p class="text-body text-ink-2 mb-3">
-  Review the preview and click <strong>Confirm import</strong>. Only the
+  Review the preview and click <strong data-ui="templates/scenarios/import_preview.html">Confirm import</strong>. Only the
   rows that passed validation are written. Duplicate rows are silently skipped;
   error rows are also skipped and listed in the result summary. A successful
   import with no errors redirects you to the Scenarios list; a partial import
@@ -127,8 +127,10 @@
   downloadable <strong>Excel verification workbook</strong> &mdash; an
   independent, in-Excel re-derivation of the Monte Carlo math using native
   spreadsheet formulas, so a stakeholder can check Idraa&rsquo;s numbers
-  without trusting the app&rsquo;s engine. Find it next to
-  <strong>Download PDF</strong> on the run detail page; see the
+  without trusting the app&rsquo;s engine. Its
+  <strong data-ui="templates/runs/detail.html">Download verification workbook (Excel)</strong>
+  button sits next to <strong data-ui="templates/runs/detail.html">Download report (PDF)</strong>
+  on the run detail page; see the
   <a class="text-brand hover:underline" href="/help/reports">Reports guide</a>
   for details.
 </p>

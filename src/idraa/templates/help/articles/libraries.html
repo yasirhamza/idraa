@@ -1,7 +1,7 @@
 <h2 class="text-h3 text-ink-1 mb-3" id="overview">Overview</h2>
 <p class="text-body text-ink-2 mb-3">
-  Idraa ships with two curated catalogs &mdash; the <strong>Scenario Library</strong>
-  and the <strong>Control Library</strong> &mdash; plus a
+  Idraa ships with two curated catalogs &mdash; the <strong data-ui="templates/library/browse.html">Scenario Library</strong>
+  and the <strong data-ui="templates/controls/library/browse.html">Control Library</strong> &mdash; plus a
   <strong>Framework&rarr;FAIR-CAM Crosswalk</strong> that grounds control entries in
   recognised frameworks (CIS Controls, NIST CSF). Together these let you start from
   ready-made, peer-reviewed content rather than a blank form.
@@ -31,7 +31,7 @@
 <p class="text-body text-ink-2 mb-3">
   Open an entry&rsquo;s detail page to see its full description and calibrated parameters.
   From there you can start a new scenario pre-populated with the entry&rsquo;s values by
-  clicking <strong>Use in wizard</strong>. The wizard opens with the library values
+  clicking <strong data-ui="templates/library/entry_detail.html">Use in wizard</strong>. The wizard opens with the library values
   already filled in; you then adjust any input that does not match your specific context.
   This is the fastest path to a defensible first estimate.
 </p>
@@ -87,10 +87,10 @@
   not duplicate effort.
 </p>
 
-<h3 class="text-h4 text-ink-1 mb-2">Adopt a control (&ldquo;Add to My Controls&rdquo;)</h3>
+<h3 class="text-h4 text-ink-1 mb-2">Adopt a control (&ldquo;Add to my controls&rdquo;)</h3>
 <p class="text-body text-ink-2 mb-3">
   Analyst and Admin users can adopt a library control into their organisation&rsquo;s
-  editable control set by clicking <strong>Add to My Controls</strong> on any entry
+  editable control set by clicking <strong data-ui="templates/controls/library/_entry_card.html">Add to my controls</strong> on any entry
   card or detail page. Adopting clones a snapshot of the library entry at that version
   and creates a new control in your organisation&rsquo;s control list
   (<a class="text-brand hover:underline" href="/controls">/controls</a>) with
@@ -134,14 +134,14 @@
 <h2 class="text-h3 text-ink-1 mb-3" id="scenario-control-recommendations">Scenario&rarr;Control Recommendations</h2>
 <p class="text-body text-ink-2 mb-3">
   When you open a scenario library entry&rsquo;s detail page, Idraa shows a
-  <strong>Recommended controls</strong> panel listing the control library entries
+  <strong data-ui="templates/library/entry_detail.html">Recommended controls</strong> panel listing the control library entries
   that the scenario&rsquo;s curators suggest as most relevant. The same recommendations
   appear in the scenario wizard&rsquo;s Controls step (Step 5) for scenarios that were
   started from a library entry.
 </p>
 <p class="text-body text-ink-2 mb-3">
   Each recommendation shows whether your organisation has already adopted that
-  control. Un-adopted recommendations display an <strong>Add to My Controls</strong>
+  control. Un-adopted recommendations display an <strong data-ui="templates/library/entry_detail.html">Add to my controls</strong>
   button so you can adopt them inline without leaving the page. Recommendations are
   curated by the library authors and kept short per scenario entry &mdash; they are suggestions, not a mandatory control set.
 </p>
