@@ -9,7 +9,7 @@
 <p class="text-body text-ink-2 mb-6">
   Library values are <strong>starting points to review for your context</strong>, not
   definitive figures. Before relying on any catalog entry, check that the threat actor
-  type, asset class, and loss assumptions match your organisation&rsquo;s situation.
+  community, asset class, and loss assumptions match your organisation&rsquo;s situation.
   See also the
   <a class="text-brand hover:underline" href="/help/getting-started">Getting started</a>
   caveats for more on calibration and decision-support limits.
@@ -19,26 +19,27 @@
 <p class="text-body text-ink-2 mb-3">
   The Scenario Library (<a class="text-brand hover:underline" href="/library">/library</a>)
   is a browseable catalog of pre-built risk scenarios. Each entry carries a
-  threat actor type, threat event type, asset class, industry tags, and calibrated
+  threat community, threat category, asset class, industry tags, and calibrated
   FAIR input ranges (Threat Event Frequency, Vulnerability, Primary Loss, Secondary Loss).
 </p>
 <p class="text-body text-ink-2 mb-3">
-  Use the filter sidebar to narrow by threat actor, threat category, asset class, or
-  industry. The search box matches on entry name. Results are paginated; use the page
+  Use the filter sidebar to narrow by threat community, threat category, asset class,
+  provenance, sub-sector, or industry. The search box matches on entry name,
+  description, and slug. Results are paginated; use the page
   controls at the bottom to move through the catalog.
 </p>
 <p class="text-body text-ink-2 mb-3">
   Open an entry&rsquo;s detail page to see its full description and calibrated parameters.
   From there you can start a new scenario pre-populated with the entry&rsquo;s values by
-  clicking <strong>Use this scenario</strong>. The wizard opens with the library values
+  clicking <strong>Use in wizard</strong>. The wizard opens with the library values
   already filled in; you then adjust any input that does not match your specific context.
   This is the fastest path to a defensible first estimate.
 </p>
 <p class="text-body text-ink-2 mb-3">
   For the mechanics of adjusting inputs once the wizard is open, see
   <a class="text-brand hover:underline" href="/help/build-a-scenario">Build a scenario</a>.
-  To bulk-import or export library entries as JSON bundles, see
-  <a class="text-brand hover:underline" href="/help/import-export">Import &amp; export</a>.
+  Admins can import library entries as a JSON bundle at
+  <code>/library/import</code>.
 </p>
 
 <h3 class="text-h4 text-ink-1 mb-2">Adopt from any industry and tweak</h3>
@@ -81,7 +82,7 @@
   (NIST CSF subcategories, CIS Safeguards, ISO 27001 controls).
 </p>
 <p class="text-body text-ink-2 mb-3">
-  Browse and filter by FAIR-CAM sub-function, control type, or framework tag.
+  Browse and filter by FAIR-CAM function, control type, NIST CSF subcategory, CIS safeguard, or industry.
   Cards show whether your organisation has already adopted the control so you do
   not duplicate effort.
 </p>
@@ -117,18 +118,17 @@
   subcategories &mdash; to FAIR-CAM sub-functions (Threat Event Frequency
   reduction, Vulnerability reduction, Primary Loss reduction, and so on). This
   mapping is the evidence layer behind each library control entry&rsquo;s
-  FAIR-CAM claim: a control that carries a CIS or NIST tag has its claimed
-  FAIR-CAM sub-function validated against the crosswalk at import time. ISO
+  FAIR-CAM claim: the seeded control library entries that carry a CIS or NIST
+  tag have their claimed FAIR-CAM sub-function checked against the crosswalk
+  by Idraa&rsquo;s test suite before release. ISO
   27001 controls appear as informational tags on control cards (see above),
   but are not yet part of the validated crosswalk &mdash; an ISO 27001
   crosswalk is planned.
 </p>
 <p class="text-body text-ink-2 mb-6">
   The crosswalk is canonical and read-only &mdash; it reflects the published
-  framework versions seeded into Idraa. It is used internally to validate control
-  library entries and to surface framework tags on control cards. If you are importing
-  custom control library data, ensure the framework tags in your bundle match the
-  seeded framework identifiers and codes.
+  framework versions seeded into Idraa. It is used internally (by Idraa&rsquo;s test suite) to validate the seeded control
+  library entries and to surface framework tags on control cards.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="scenario-control-recommendations">Scenario&rarr;Control Recommendations</h2>
@@ -143,8 +143,7 @@
   Each recommendation shows whether your organisation has already adopted that
   control. Un-adopted recommendations display an <strong>Add to My Controls</strong>
   button so you can adopt them inline without leaving the page. Recommendations are
-  curated by the library authors and scoped to a maximum of six controls per scenario
-  entry &mdash; they are suggestions, not a mandatory control set.
+  curated by the library authors and kept short per scenario entry &mdash; they are suggestions, not a mandatory control set.
 </p>
 <p class="text-body text-ink-2 mb-3">
   Recommendations also appear on the scenario detail page for scenarios created from a

@@ -99,18 +99,19 @@
 <h2 class="text-h3 text-ink-1 mb-3" id="monte-carlo-simulation">Monte Carlo simulation</h2>
 <p class="text-body text-ink-2 mb-3">
   Nobody knows the exact value of TEF, Vulnerability, PL, or SL. You enter
-  a <strong>low&ndash;high range</strong> &mdash; the bounds you are 90%
-  confident contain the true value (formally, the 5th and 95th percentiles of
-  your belief distribution). The engine draws thousands of random samples from
+  a <strong>low&ndash;high range</strong> &mdash; in the estimation wizard,
+  the bounds you are 90% confident contain the true value (formally, the 5th
+  and 95th percentiles of your belief distribution). The engine draws thousands of random samples from
   that range, computes Risk = LEF &times; LM for each draw, and collects the
   results into an annual-loss distribution. The result is not one number but a
   realistic spread: the typical year, a bad year, and the rare disaster.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  The 5th and 95th percentile framing sets the <em>shape</em> of the fitted
-  distribution &mdash; it is not a live hard min/max clip applied at sample
-  time. By default, Threat Event Frequency and Loss Magnitude (Primary and
-  Secondary Loss) inputs are fitted as a lognormal and then collapsed to a
+  In the wizard, the 5th and 95th percentile framing sets the <em>shape</em>
+  of the fitted distribution &mdash; it is not a live hard min/max clip
+  applied at sample time. By default, the wizard fits Threat Event Frequency
+  and Loss Magnitude (Primary and Secondary Loss) inputs as a lognormal and
+  then collapses the fit to a
   <strong>bounded PERT</strong> distribution for sampling, so under default
   settings your high estimate <em>is</em> the ceiling of the sampled values.
   Loss Magnitude entries you flag as <strong>catastrophic</strong> are the
@@ -118,27 +119,39 @@
   than collapsing to a bounded PERT), bounded above at your
   organization&rsquo;s capacity cap rather than at any single expert&rsquo;s
   95th-percentile judgement. Vulnerability is always a probability
-  (0&ndash;100%) and uses the same capped-PERT approach, bounded to
-  [0,&nbsp;100%].
+  (0&ndash;100%): the wizard fits it as a normal distribution truncated to
+  [0,&nbsp;100%], not a lognormal, and collapses that fit to a PERT running from its
+  5th to its 95th percentile, which always lies within [0,&nbsp;100%].
+</p>
+<p class="text-body text-ink-2 mb-6">
+  The scenario form and CSV/JSON import do no such fitting for a PERT entry.
+  PERT is the form&rsquo;s default distribution: the low, mode and high you
+  type are stored as given, so there the low and high are the minimum and
+  maximum of the sampled values, not 5th and 95th percentiles. If you choose
+  Lognormal for a loss field there instead (on the form or in a CSV; a JSON
+  file gives the lognormal&rsquo;s parameters directly), the low and high are
+  read as the 5th and 95th percentiles of a lognormal that is stored and
+  sampled as such, with no collapse to a PERT: the high is then not a ceiling.
+  The draws are bounded only by the loss cap, which a lognormal loss is always
+  saved with.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="lognormal-authoring-the-distribution-assumption">Lognormal authoring &mdash; the distribution assumption</h2>
 <p class="text-body text-ink-2 mb-3">
   Cyber loss and frequency quantities are right-skewed with a heavy upper
-  tail, so Idraa elicits them as a <strong>lognormal</strong>: your low and
+  tail, so the estimation wizard elicits them as a <strong>lognormal</strong>: your low and
   high estimates are treated as the <strong>5th</strong> and
   <strong>95th</strong> percentiles of a lognormal belief distribution. This
   elicitation shape is well-supported in the calibration literature. Douglas
   Hubbard and Richard Seiersen note (in <em>How to Measure Anything in
   Cybersecurity Risk</em>, 2nd&nbsp;ed., 2023, ch.&nbsp;6) that 90% credible
   intervals elicited as low&ndash;high estimates map naturally onto lognormal
-  parameters via the 5th&ndash;95th percentile pair. Jack Jones and the FAIR
-  Institute document the same elicitation assumption in the FAIR-CAM
-  calibration framework. Neither source is a claim about the shape Idraa
+  parameters via the 5th&ndash;95th percentile pair. That is not a claim
+  about the shape Idraa
   ultimately <em>samples</em> from &mdash; see below.
 </p>
 <p class="text-body text-ink-2 mb-3">
-  Idraa fits a right-skewed lognormal to your 5th/95th anchors and then
+  The wizard fits a right-skewed lognormal to your 5th/95th anchors and then
   <strong>collapses it to a bounded PERT</strong> for sampling &mdash; your
   high estimate is the ceiling of the sampled distribution. This is a
   deliberate choice over a runtime clip, which would instead dump the
@@ -219,7 +232,11 @@
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="glossary">Glossary</h2>
-<p class="text-body text-ink-2 mb-3">Every term and acronym used in Idraa, spelled out.</p>
+<p class="text-body text-ink-2 mb-3">
+  The core FAIR and reporting terms, spelled out. The control-model acronyms
+  (LEC, VMC, DSC) are spelled out in
+  <a class="text-brand hover:underline" href="/help/how-controls-change-the-numbers">FAIR-CAM sub-functions</a>.
+</p>
 <div class="overflow-x-auto">
   <table class="table table-sm w-full">
     <thead>
@@ -238,7 +255,7 @@
       <tr><td>PL</td><td>Primary Loss</td><td>Cost your organization itself incurs from the event (response, recovery, ransom, replacement, downtime).</td></tr>
       <tr><td>SL</td><td>Secondary Loss</td><td>Cost to you arising from secondary stakeholders&rsquo; reactions (fines, lost business, notification and legal defence).</td></tr>
       <tr><td>LM</td><td>Loss Magnitude</td><td>The total cost per event (Primary plus Secondary Loss).</td></tr>
-      <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level.</td></tr>
+      <tr><td>LEC</td><td>Loss Exceedance Curve</td><td>The chance that your yearly loss is above each dollar level. On control screens and in the PDF&rsquo;s control inventory, LEC instead stands for Loss Event Control.</td></tr>
       <tr><td>EPC</td><td>Exceedance Probability Curve</td><td>A companion view of the loss exceedance curve, showing the probability of exceeding each loss amount.</td></tr>
       <tr><td>VaR</td><td>Value at Risk</td><td>A loss level at a chosen confidence, e.g. &ldquo;95% Value at Risk&rdquo;.</td></tr>
       <tr><td>ROI</td><td>Return on Investment</td><td>How much risk a control removes relative to its cost.</td></tr>
