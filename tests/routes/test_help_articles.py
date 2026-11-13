@@ -162,8 +162,9 @@ async def test_import_export_covers_csv_json_roundtrip(authed_analyst):
     assert "csv" in body and "json" in body
     assert "import" in body and "export" in body
     assert "round-trip" in body or "round trip" in body
-    # B10: sensitive downloads/uploads may require step-up re-auth
+    # B10: sensitive downloads may require step-up re-auth; imports are not step-up gated
     assert "re-authenticate" in body
+    assert "importing does not prompt for re-authentication" in body
     # B11b: verification workbook + admin-only register-import pointers
     assert "verification workbook" in body
     assert "register-import" in body

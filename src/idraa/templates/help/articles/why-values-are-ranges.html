@@ -17,9 +17,13 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="too-close-to-call">&ldquo;Too close to call&rdquo;</h2>
 <p class="text-body text-ink-2 mb-6">
-  Sometimes two controls have value ranges that overlap so much the model
+  Sometimes the order of two controls flips often enough as the assumptions are
+  varied (by default, in at least one in ten of the trial draws) that the model
   <strong>can&rsquo;t reliably say which one matters more</strong>. Idraa marks
-  these pairs <strong>too close to call</strong>. It is not saying the controls are
+  these pairs <strong>too close to call</strong>. The test is how often the
+  order flips, not whether the two ranges overlap, and it is run on
+  multi-scenario (aggregate) runs only; a single-scenario run shows ranges
+  without it. It is not saying the controls are
   worthless &mdash; only that, given the uncertainty in the assumptions, their
   ranking relative to each other isn&rsquo;t trustworthy. Don&rsquo;t base a
   &ldquo;this control beats that one&rdquo; decision on a too-close-to-call pair.
@@ -41,10 +45,8 @@
   disaster-driven loss profile.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  For the underlying distributions and the exact mean-versus-median relationship
-  (for a lognormal loss, the average is the median times
-  <span class="font-mono">exp(&sigma;&sup2;/2)</span>), see the
-  <a class="text-brand hover:underline" href="/help/methodology-primer">FAIR methodology primer</a>.
+  For the underlying distributions, see
+  <a class="text-brand hover:underline" href="/help/fair-in-idraa-terms">FAIR in Idraa&rsquo;s terms</a>.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="average-and-typical-shown-side-by-side">Average and typical, shown side by side</h2>
@@ -83,24 +85,29 @@
 <p class="text-body text-ink-2 mb-6">
   Testing whether the control ranking holds up under the assumption-spread takes
   extra simulation work. On very large runs Idraa may not have enough simulation
-  budget to do it, and will say the
-  <strong>ranking-stability check was skipped</strong> (with the number of draws it
-  managed). The value ranges are still shown; only the &ldquo;is the ranking
-  stable?&rdquo; verdict is withheld so it doesn&rsquo;t report a conclusion drawn
-  from too little data.
+  budget to do it. The value ranges are still shown, but they then come from
+  three evaluations (the low, middle and high ends of the assumption-spread)
+  rather than the full set of draws; each control&rsquo;s ranking reads
+  &ldquo;not assessed&rdquo; and no pair is marked too close to call. Only the
+  &ldquo;is the ranking stable?&rdquo; verdict is withheld so it doesn&rsquo;t
+  report a conclusion drawn from too little data. The Excel verification
+  workbook states that the <strong>ranking-stability check was skipped</strong>;
+  on the run page and in the PDF that line (with the number of draws) appears
+  only where no value range is available.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="where-this-shows-up">Where this shows up</h2>
 <p class="text-body text-ink-2 mb-3">
   The same ranges, &ldquo;too close to call&rdquo; flags, and average-versus-typical
-  framing appear on the run results, the dashboard control-value tile, the executive
-  <a class="text-brand hover:underline" href="/help/reports">PDF report</a>, and the
+  framing appear on the run results, the executive
+  <a class="text-brand hover:underline" href="/help/reports-and-workbook">PDF report</a>, and the
   downloadable Excel verification workbook &mdash; so the story is consistent
-  wherever you read it.
+  wherever you read it. The dashboard shows only the headline value range
+  beneath its control-value tile, with no per-control ranges or flags.
 </p>
 <p class="text-body text-ink-2 mb-6">
   For how controls reduce modeled risk in the first place, see
   <a class="text-brand hover:underline" href="/help/controls-overlays">Controls &amp; overlays</a>
-  and the
-  <a class="text-brand hover:underline" href="/help/methodology-primer">methodology primer</a>.
+  and
+  <a class="text-brand hover:underline" href="/help/fair-in-idraa-terms">FAIR in Idraa&rsquo;s terms</a>.
 </p>

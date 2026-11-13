@@ -33,7 +33,7 @@
     <ul class="list-disc list-inside text-meta text-ink-2 space-y-0.5">
       <li><strong>Prevent:</strong> Defined expectations, Communication, Ensure capability, Incentives, and
         <em>Situational awareness</em> — which subdivides into data (asset, threat, controls), analysis, and reporting</li>
-      <li><strong>Identify:</strong> Misalignment detection</li>
+      <li><strong>Identify:</strong> Identify misalignment</li>
     </ul>
     <p class="text-micro text-ink-2 mt-1">
       FAIR-CAM §5.3 also defines <em>Correcting Misaligned Decisions</em>. It has no controls
@@ -42,7 +42,7 @@
       the control&rsquo;s own Implementation, Event termination or Resilience assignment as
       also correcting misaligned decisions; the engine then scores that function with the
       linked assignment&rsquo;s capability, coverage and reliability, and it pairs with
-      Misalignment detection on any control in the same run. The link is set on the control
+      Identify misalignment on any control in the same run. The link is set on the control
       form only, not by CSV import. Because a control is credited once per sub-function it
       performs, a linked control&rsquo;s displayed per-control effectiveness (run page, PDF,
       effectiveness chart &mdash; a summary, not the risk maths) counts the linked function
@@ -53,10 +53,10 @@
 
 <p class="text-meta text-ink-2 mt-4">
   Each assignment also carries a <strong>capability</strong>, <strong>coverage</strong>,
-  and <strong>reliability</strong> value. See the
-  <a class="text-brand hover:underline" href="/help/fair-in-idraa-terms">methodology primer</a> and
-  <a class="text-brand hover:underline" href="/help/controls-overlays">Controls &amp; overlays</a> for how
-  these reduce modeled risk.
+  and <strong>reliability</strong> value. The three are multiplied together, and a
+  missing capability counts as one half; see
+  <a class="text-brand hover:underline" href="/help/where-idraa-departs-from-fair#the-control-model">Where Idraa departs from FAIR</a>
+  for the rule and the other formulas behind it.
 </p>
 <h2 class="text-h3 text-ink-1 mb-3" id="whose-numbers-are-these">Whose numbers are these?</h2>
 <p class="text-body text-ink-2 mb-3">

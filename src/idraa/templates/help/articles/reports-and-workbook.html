@@ -2,9 +2,9 @@
 <p class="text-body text-ink-2 mb-3">
   Every completed analysis run includes a downloadable <strong>PDF report</strong>
   designed for a board, CFO, or risk committee audience. To generate one, open the
-  run detail page at
-  <a class="text-brand hover:underline" href="/analyses">/analyses</a>, then click
-  <strong>Download PDF</strong>.
+  run detail page from the
+  <a class="text-brand hover:underline" href="/analyses">Analyses</a> list, then click
+  <strong>Download report (PDF)</strong>.
 </p>
 <p class="text-body text-ink-2 mb-3">
   The PDF is rendered server-side from the stored simulation results &mdash; no
@@ -14,9 +14,15 @@
 <p class="text-body text-ink-2 mb-6">
   Every completed run also has a companion downloadable
   <strong>Excel verification workbook</strong>: an independent, in-Excel
-  re-derivation of the same Monte Carlo math using native spreadsheet formulas,
+  re-derivation of the Monte Carlo math using native spreadsheet formulas,
   so a stakeholder can check Idraa&rsquo;s numbers without trusting the app&rsquo;s
-  engine. Find it next to <strong>Download PDF</strong> on the run detail page.
+  engine. Find it as <strong>Download verification workbook (Excel)</strong>
+  next to <strong>Download report (PDF)</strong> on the run detail page. To keep
+  the workbook responsive, it re-draws a capped number of iterations per run
+  (50,000 by default), so it agrees with the app within sampling error rather
+  than draw for draw, and an aggregate run gets a full in-Excel block for only
+  the first 15 scenarios by default (the rest are listed summary-only). The
+  operator can change these limits.
 </p>
 
 <h3 class="text-h4 text-ink-1 mb-2">What the PDF contains</h3>
@@ -30,17 +36,22 @@
     <tbody class="text-body text-ink-2">
       <tr>
         <td><strong>Cover page</strong></td>
-        <td>Organisation name, run name, classification label, and generation timestamp.</td>
+        <td>
+          Classification label, organisation name, run name and run completion
+          date, the headline control value, a short narrative, and the run UUID.
+          The generation timestamp appears in the running page footer.
+        </td>
       </tr>
       <tr>
         <td><strong>Table of contents</strong></td>
-        <td>Hyperlinked page index for navigation in any PDF viewer.</td>
+        <td>Page index (<strong>Contents</strong>) listing each section with its page number.</td>
       </tr>
       <tr>
         <td><strong>Risk picture</strong></td>
         <td>
-          Headline Annualized Loss Expectancy (ALE) with confidence interval,
-          plus a risk-comparison bar showing residual vs.&nbsp;inherent exposure.
+          Headline Annualized Loss Expectancy (ALE) with the central interval of
+          modeled annualized losses (an empirical percentile band, not a
+          confidence interval), plus a risk-comparison bar showing residual vs.&nbsp;inherent exposure.
         </td>
       </tr>
       <tr>
@@ -52,29 +63,56 @@
         </td>
       </tr>
       <tr>
+        <td><strong>Distribution statistics &amp; tail risk</strong></td>
+        <td>Value at Risk (VaR) and Expected Shortfall (ES) tail metrics.</td>
+      </tr>
+      <tr>
         <td><strong>Per-scenario breakdown</strong></td>
         <td>
-          Horizontal bar chart and table listing each included scenario&rsquo;s
-          ALE, residual ALE, and Value at Risk (VaR).
+          Aggregate runs only. A horizontal bar chart and a table with, for
+          each included scenario, the loss <strong>Without</strong> controls,
+          <strong>With</strong> controls, and the <strong>Reduction</strong>.
+          An aggregate run may also include a
+          <strong>Scenarios by threat community</strong> section.
         </td>
+      </tr>
+      <tr>
+        <td><strong>Control economics</strong></td>
+        <td>
+          Cost figures for the run&rsquo;s controls and a per-control
+          loss-reduction breakdown. Both run types include it; it notes when
+          cost data is not available for the run.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Attribution matrix</strong> (aggregate runs)<br>
+          <strong>Control effectiveness</strong> (single-scenario runs)</td>
+        <td>
+          For aggregate runs, a scenario-by-control table of Shapley-value
+          dollar credits with a <strong>Total</strong> row (see below). For
+          single-scenario runs, the modelled effectiveness of each control.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Assumptions &amp; inputs</strong></td>
+        <td>Organisation context, run metadata and the inputs the run used.</td>
+      </tr>
+      <tr>
+        <td><strong>Methodology &amp; provenance appendix</strong></td>
+        <td>Per-scenario provenance and methodology notes.</td>
       </tr>
       <tr>
         <td><strong>Control inventory</strong></td>
         <td>
-          FAIR-CAM-grouped list of every active control, including tier badge,
-          scenarios it covers, and its modelled effectiveness.
-        </td>
-      </tr>
-      <tr>
-        <td><strong>Control attribution</strong></td>
-        <td>
-          Shapley-value breakdown crediting each control with its fair share of
-          the total risk reduction (see below).
+          Every control used in the run, grouped by FAIR-CAM domain (Loss
+          Event, Variance Management, Decision Support), each shown with its
+          name and type, followed by a list of the scenarios in the run. Each
+          domain lists at most 20 controls and notes how many more there are.
         </td>
       </tr>
       <tr>
         <td><strong>Back page</strong></td>
-        <td>Run UUID, app version, and generation metadata for audit traceability.</td>
+        <td>Run UUID, run completion time, iteration count, app version (when set), and the central loss interval line, for audit traceability.</td>
       </tr>
     </tbody>
   </table>
@@ -119,16 +157,20 @@
 
 <h3 class="text-h4 text-ink-1 mb-2">How to read the attribution table</h3>
 <p class="text-body text-ink-2 mb-3">
-  The attribution table lists each control, its Shapley value in dollars, and its
-  share of the total modelled risk reduction as a percentage. The percentages sum
-  to&nbsp;100&nbsp;% (the efficiency axiom guarantees this). A control that appears
-  in many overlapping scenarios may have a smaller percentage than its standalone
-  simulation would suggest &mdash; that is the correct answer, not a calculation
-  error. Controls with very little overlap retain most of their standalone credit.
+  In the PDF, the <strong>Attribution matrix</strong> (aggregate runs) shows
+  each scenario against each control in dollars, with a <strong>Total</strong>
+  row giving each control&rsquo;s total credit. When the weight-robustness
+  ensemble was computed, an <strong>Estimated value per control (range)</strong>
+  table lists <strong>Control</strong>, <strong>Value range</strong>,
+  <strong>If removed</strong> and <strong>Ranking</strong>. The credits are in
+  dollars, and the efficiency axiom guarantees they sum to the total modelled
+  risk reduction. A control that appears in many overlapping scenarios may have
+  a smaller credit than its standalone simulation would suggest &mdash; that is
+  the correct answer, not a calculation error. Controls with very little overlap retain most of their standalone credit.
 </p>
 <p class="text-body text-ink-2 mb-6">
   Use the attribution table to prioritise renewal and investment decisions:
-  controls with the highest Shapley share deliver the most unique, non-redundant
+  controls with the largest Shapley credit deliver the most unique, non-redundant
   risk reduction across your scenario portfolio. Controls near zero may be
   redundant with higher-ranked peers and are candidates for rationalisation.
 </p>
@@ -160,7 +202,7 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="downloading-and-sharing-the-pdf">Downloading and sharing the PDF</h2>
 <p class="text-body text-ink-2 mb-3">
-  The <strong>Download PDF</strong> button is available to all authenticated users
+  The <strong>Download report (PDF)</strong> button is available to all authenticated users
   (Analyst, Reviewer, Viewer, Admin). Every download is recorded in the audit log
   against the user who triggered it. Because downloading a report is a sensitive
   action, Idraa may prompt you to re-authenticate (with your password or
@@ -172,13 +214,13 @@
 <p class="text-body text-ink-2 mb-6">
   The verification workbook, the raw-samples file and the CSV exports are data
   exports, and need the Analyst or Admin role. A Viewer or Reviewer sees only
-  <strong>Download PDF</strong>.
+  <strong>Download report (PDF)</strong>.
 </p>
 <p class="text-body text-ink-2 mb-6">
   Because the PDF is rendered from the stored run snapshot, the figures, tables,
   and numbers are identical every time you re-download the same run &mdash;
   useful when you need to confirm that the report shared with the board matches
-  the current system record. The cover page and footer do stamp the time you
+  the current system record. The running page footer stamps the time you
   generated that particular copy, so two downloads of the same run will show
   different generation timestamps even though the underlying data is unchanged.
 </p>

@@ -6,7 +6,7 @@
   re-import into another workspace; import is the reverse &mdash; a
   two-step upload-then-confirm flow that validates each row before writing
   anything. The pair is designed for a clean <strong>round-trip</strong>:
-  a file exported from Idraa can be re-imported without data loss.
+  a file exported from Idraa can be re-imported cleanly.
 </p>
 <p class="text-body text-ink-2 mb-6">
   <strong>Role requirement:</strong> export needs the <strong>Analyst</strong>
@@ -17,30 +17,30 @@
   and both template downloads are 403-blocked for every other role.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  Because export and import both move data in bulk, Idraa treats them as
-  sensitive actions: if your session&rsquo;s authentication isn&rsquo;t recent,
-  you may be prompted to re-authenticate with your password or passkey before
-  the download or upload proceeds.
+  Because exports move data out in bulk, Idraa treats them as sensitive
+  actions: if your session&rsquo;s authentication isn&rsquo;t recent, you may
+  be prompted to re-authenticate (with a code from your authenticator app, a
+  recovery code, or a passkey) before the download proceeds.
+  Importing does not prompt for re-authentication.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="exporting-scenarios">Exporting scenarios</h2>
 <p class="text-body text-ink-2 mb-3">
   An Analyst or Admin can export from the Scenarios list page
   (<a class="text-brand hover:underline" href="/scenarios">/scenarios</a>).
-  Use the <strong>Export</strong> dropdown at the top of the list to choose
-  between <strong>CSV</strong> and <strong>JSON</strong>. The download honours
-  whatever <code>?status=</code> filter is active, so you can export only
-  active scenarios, archived scenarios, or the full set.
+  Use the <strong>Export CSV</strong> or <strong>Export JSON</strong> button at
+  the top of the list.
 </p>
 <p class="text-body text-ink-2 mb-3">
   You can also export a single scenario from its detail page using the same
-  dropdown. The resulting file is named
+  buttons. The resulting file is named
   <code>scenario-&lt;id&gt;.csv</code> or <code>scenario-&lt;id&gt;.json</code>.
 </p>
 <p class="text-body text-ink-2 mb-6">
-  Both formats carry the same fields: scenario name, description, threat actor
-  type, asset class, all FAIR input parameters (TEF, Vulnerability, Primary
-  Loss, Secondary Loss ranges), status, and creation timestamps. Every export
+  Both formats carry the same fields: scenario name, description, threat
+  category, threat community, asset class, all FAIR input parameters (TEF,
+  Vulnerability, Primary Loss, Secondary Loss ranges), and status. Timestamps
+  are not exported. Every export
   is recorded in the audit log.
 </p>
 
@@ -56,7 +56,7 @@
 
 <h3 class="text-h4 text-ink-1 mb-2">Step 1 &mdash; Upload and preview</h3>
 <p class="text-body text-ink-2 mb-3">
-  Choose your CSV or JSON file and click <strong>Upload</strong>. Idraa
+  Choose your CSV or JSON file and click <strong>Upload &amp; preview</strong>. Idraa
   validates every row without writing anything to the database. The preview
   page shows:
 </p>
@@ -67,7 +67,7 @@
 </ul>
 <p class="text-body text-ink-2 mb-6">
   If the file is unparseable (wrong format, truncated, or exceeds the 5&thinsp;MB
-  size limit) the upload returns an error immediately and nothing is stored.
+  size limit) or contains more than 500 rows, the upload returns an error immediately and nothing is stored.
   The preview is held server-side under a short-lived token (10 minutes); if the
   token expires before you confirm, you will see an &ldquo;expired preview&rdquo;
   message and must re-upload.
@@ -89,13 +89,13 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="round-trip-fidelity">Round-trip fidelity</h2>
 <p class="text-body text-ink-2 mb-3">
-  A file exported from Idraa is designed to re-import cleanly without data
-  loss or field drift. The export format matches the import parser&rsquo;s
+  A file exported from Idraa is designed to re-import cleanly. The export format matches the import parser&rsquo;s
   expected column names and value encodings, so the round-trip &mdash;
-  export &rarr; (optionally edit) &rarr; re-import &mdash; is lossless for
-  all fields carried in the format. Scenarios re-imported this way are treated
-  as new records; they do not overwrite the originals, which lets you use
-  export-then-import as a duplication mechanism.
+  export &rarr; (optionally edit) &rarr; re-import &mdash; carries all the
+  fields in the format. Re-imported scenarios are created as new records; they
+  do not overwrite the originals. A row whose name matches an active scenario
+  in your workspace is skipped as a duplicate, so re-importing into the same
+  workspace creates nothing unless you change the names.
 </p>
 <p class="text-body text-ink-2 mb-6">
   If you edit the file between export and import, only rows that pass
@@ -110,13 +110,12 @@
   <strong>CSV</strong> &mdash; each row is one scenario; the header row names
   the columns. Download the template to get the exact column order. Numeric
   FAIR parameters (e.g. TEF low / high, loss low / high) use decimal notation.
-  String enumerations (threat actor type, asset class) must match the values
+  String enumerations (threat category, asset class) must match the values
   shown in the template.
 </p>
 <p class="text-body text-ink-2 mb-6">
   <strong>JSON</strong> &mdash; a JSON array of scenario objects; field names
-  match the CSV column names. The sample file provides one worked example per
-  common threat actor type. JSON is preferable when field values may contain
+  match the CSV column names. The sample file provides one worked example scenario. JSON is preferable when field values may contain
   commas or newlines (e.g. long descriptions).
 </p>
 

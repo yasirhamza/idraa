@@ -99,14 +99,12 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="size-envelope">Size envelope</h2>
 <p class="text-body text-ink-2 mb-6">
-  At Idraa&rsquo;s production caps &mdash; 100,000 iterations, roughly 30
-  scenarios in a single aggregate run &mdash; the export is on the order of
-  <strong>75&nbsp;MB expanded</strong> and
-  <strong>25&ndash;35&nbsp;MB compressed</strong> (the file you actually
-  download). Smaller runs are proportionally smaller; a 10,000-iteration
-  single-scenario run is a few hundred kilobytes. Size scales roughly
-  linearly with iteration count and with the number of scenarios in an
-  aggregate run, so a run with more scenarios or a higher iteration count
+  The file is downloaded gzip-compressed. The server&rsquo;s iteration cap is
+  <strong>1,000,000</strong> by default (the operator can change it), and an
+  aggregate run can include many scenarios, so exports for large runs can be
+  big. Size scales roughly linearly with iteration count and with the number
+  of scenarios in an aggregate run, so a run with more scenarios or a higher
+  iteration count
   produces a larger file, not a slower page &mdash; the export streams in
   chunks rather than building the whole file in memory first.
 </p>
@@ -120,6 +118,10 @@
   download link disappears from the run detail page, and requesting the
   export URL directly returns <strong>410&nbsp;Gone</strong> rather than a
   file.
+  If another raw-samples export is already running, the server answers
+  <strong>429</strong> with a short &ldquo;retry shortly&rdquo; message
+  (and a <span class="font-mono">Retry-After</span> header); wait and try
+  again.
 </p>
 <p class="text-body text-ink-2 mb-6">
   A 410 is not an error to report &mdash; it means exactly what it says: the
