@@ -46,3 +46,17 @@ def test_all_dist_selectors_use_tojson():
     assert len(safe) == 2, (
         f"expected 2 tojson-guarded dist x-data selectors (pl/sl), found {len(safe)}"
     )
+
+
+def test_tef_mixture_warning_says_pert_not_lognormal() -> None:
+    """#318: saving a pooled TEF from this form stores a PERT, so the TEF call of
+    the pooled-estimate warning must take the PERT wording (the loss calls keep
+    the lognormal wording)."""
+    src = _FORM.read_text()
+    tef_calls = re.findall(r"mixture_replace_warning\(form\.tef_from_mixture,[^)]*\)", src)
+    assert len(tef_calls) == 1
+    assert "as_pert=true" in tef_calls[0]
+    loss_calls = re.findall(r"mixture_replace_warning\(form\.(?:pl|sl)_from_mixture,[^)]*\)", src)
+    assert loss_calls, "the loss nodes still warn"
+    assert all("as_pert" not in call for call in loss_calls)
+    assert "with a PERT whose low and high are the shown values" in src

@@ -1,7 +1,7 @@
 """Unit tests for routes.scenario_form_helpers per-node distribution parsing.
 
-Epic B (#326) Task 5: TEF / Primary loss / Secondary loss each gain a
-PERT|lognormal selector. ``dist_from_raw`` dispatches on ``{prefix}_dist``;
+Epic B (#326) Task 5: Primary loss / Secondary loss each have a
+PERT|lognormal selector (TEF had one too until #318: it is PERT-only, D12). ``dist_from_raw`` dispatches on ``{prefix}_dist``;
 for "lognormal" it reads ``{prefix}_low``/``{prefix}_high`` as the p5/p95 pair
 and stores native ``{mean, sigma}`` via the closed form in
 ``fair_cam.quantile_pooling.lognormal_from_quantiles``. Vulnerability is a

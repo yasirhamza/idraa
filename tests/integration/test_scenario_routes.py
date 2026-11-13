@@ -680,7 +680,12 @@ async def test_create_scenario_ignores_posted_tef_lognormal(
 async def test_create_scenario_tef_lognormal_without_mode_is_422(
     authed_analyst: tuple[AsyncClient, uuid.UUID],
 ) -> None:
-    """#318: without a TEF mode the PERT path fails as a 422 re-render, not a 500."""
+    """#318: without a TEF mode the save is a 422 re-render, not a 500.
+
+    This passes with or without the parser change (D12 validation also 422s a
+    lognormal TEF); the unit test that tells the two paths apart is
+    ``test_tef_lognormal_posted_without_mode_fails_as_pert``.
+    """
     client, _org_id = authed_analyst
     payload = {
         "name": "TEF no mode",

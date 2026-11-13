@@ -414,13 +414,17 @@
        form editor — dist_to_form flattens it to the mixture's true p5/p95
        under the lognormal selector and sets {prefix}_from_mixture, so we warn
        that saving replaces the pooled mixture (informed, never silent). #}
-    {%- macro mixture_replace_warning(count, node_label) -%}
+    {%- macro mixture_replace_warning(count, node_label, as_pert=false) -%}
     <div class="alert alert-warning" role="alert">
       <span class="text-sm">
         <strong>Pooled estimate:</strong> this {{ node_label }} is a mixture
         pooled from {{ count }} expert estimates. Saving this form replaces it
+        {% if as_pert -%}
+        with a PERT whose low and high are the shown values (enter a mode)
+        {%- else -%}
         with a single lognormal fitted to the shown 5th&ndash;95th percentile
-        range &mdash; the individual expert opinions are discarded. To
+        range
+        {%- endif %} &mdash; the individual expert opinions are discarded. To
         re-elicit from experts instead, use <strong>Re-estimate</strong> on
         the scenario page.
       </span>
@@ -446,7 +450,7 @@
     {# TEF — frequency. PERT-only (no selector, no Alpine state): lognormal is a
        loss distribution only (D12), exactly like vulnerability below. #}
     <div class="space-y-3">
-      {% if form.tef_from_mixture %}{{ mixture_replace_warning(form.tef_from_mixture, "threat event frequency") }}{% endif %}
+      {% if form.tef_from_mixture %}{{ mixture_replace_warning(form.tef_from_mixture, "threat event frequency", as_pert=true) }}{% endif %}
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {{ pert_input("tef_low", "TEF low", fmt="rate") }}
         {{ pert_input("tef_mode", "TEF mode", fmt="rate") }}
