@@ -73,32 +73,22 @@ _VOID_TAGS = frozenset(
 _TEMPLATE_COMMENT_RE = re.compile(r"\{#.*?#\}|<!--.*?-->", re.DOTALL)
 
 
-def _strip_comments(text: str, suffix: str) -> str:
-    """Remove comments (and, for Python, docstrings) so they cannot satisfy a label match.
+def _matchable_text(text: str, suffix: str) -> str:
+    """Return only the text a reader-facing label can legitimately come from.
 
-    Templates: Jinja ``{# #}`` (including ``{#-``/``-#}``) and HTML ``<!-- -->``.
-    Python: ``#`` comments and bare-expression string statements (docstrings);
-    other string literals are kept because labels live in them.
+    Templates: everything outside Jinja ``{# #}`` (including ``{#-``/``-#}``) and
+    HTML ``<!-- -->`` comments.
+    Python: string literals only (``STRING`` tokens, plus ``FSTRING_MIDDLE`` on
+    3.12+), excluding docstrings. Identifiers, keywords, operators and comments
+    are never matchable. Raises if the source cannot be tokenized.
     """
     if suffix != ".py":
         return _TEMPLATE_COMMENT_RE.sub("", text)
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return text
-    skip = {
-        tokenize.COMMENT,
-        tokenize.NL,
-        tokenize.NEWLINE,
-        tokenize.INDENT,
-        tokenize.DEDENT,
-        tokenize.ENDMARKER,
-    }
+    tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    fstring_middle = getattr(tokenize, "FSTRING_MIDDLE", None)
     out: list[str] = []
     prev_sig: tokenize.TokenInfo | None = None
     for i, tok in enumerate(tokens):
-        if tok.type == tokenize.COMMENT:
-            continue
         if tok.type == tokenize.STRING:
             # A docstring: a string that starts a statement and ends it.
             starts = prev_sig is None or prev_sig.type in (
@@ -106,11 +96,12 @@ def _strip_comments(text: str, suffix: str) -> str:
                 tokenize.INDENT,
                 tokenize.DEDENT,
             )
-            nxt = next((t for t in tokens[i + 1 :] if t.type not in (tokenize.COMMENT,)), None)
+            nxt = next((t for t in tokens[i + 1 :] if t.type != tokenize.COMMENT), None)
             ends = nxt is None or nxt.type in (tokenize.NEWLINE, tokenize.ENDMARKER)
-            if starts and ends:
-                continue
-        if tok.type not in skip:
+            if not (starts and ends):
+                out.append(tok.string)
+                out.append(" ")
+        elif fstring_middle is not None and tok.type == fstring_middle:
             out.append(tok.string)
             out.append(" ")
         if tok.type not in (tokenize.NL, tokenize.COMMENT):
@@ -121,6 +112,12 @@ def _strip_comments(text: str, suffix: str) -> str:
 def _collapse(text: str) -> str:
     """Unescape entities, treat non-breaking spaces as spaces, collapse runs."""
     return re.sub(r"\s+", " ", html.unescape(text).replace("\xa0", " ")).strip()
+
+
+def _contains_label(haystack: str, label: str) -> bool:
+    """Whole-label match: no word char before, no word char or hyphen after."""
+    pattern = rf"(?<!\w){re.escape(_collapse(label))}(?![\w-])"
+    return re.search(pattern, _collapse(haystack)) is not None
 
 
 class _ArticleScan(HTMLParser):
@@ -153,11 +150,6 @@ class _ArticleScan(HTMLParser):
             self._strong_src = attr["data-ui"] or ""
             self._strong_depth = 1
             self._strong_buf = []
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        # Self-closing ``<x/>``: opens and closes in one step, so depth is unchanged.
-        if tag == "a" and dict(attrs).get("href"):
-            self.hrefs.append(dict(attrs).get("href") or "")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in _VOID_TAGS:
@@ -217,34 +209,79 @@ def test_marked_ui_label_exists_in_its_source(slug: str, label: str, src: str) -
     assert source.is_file(), f"{where}, but that file does not exist under src/idraa/"
     rel = source.resolve().relative_to(_SRC.resolve()).as_posix()
     assert not rel.startswith("templates/help/"), f"{where}, but help content is not a source"
-    haystack = _collapse(_strip_comments(source.read_text(encoding="utf-8"), source.suffix))
-    assert _collapse(label) in haystack, f"{where}, but the file does not contain that text"
+    try:
+        haystack = _matchable_text(source.read_text(encoding="utf-8"), source.suffix)
+    except (tokenize.TokenError, IndentationError, SyntaxError) as exc:
+        pytest.fail(f"{where}, but {src} could not be tokenized: {exc!r}")
+    assert _contains_label(haystack, label), f"{where}, but the file does not contain that text"
 
 
 def test_label_in_jinja_comment_only_is_not_found() -> None:
     src = "{#- org-wide badge -#}\n{# multi\nline org-wide #}\n<b>x</b>"
-    assert "org-wide" not in _strip_comments(src, ".html")
+    assert "org-wide" not in _matchable_text(src, ".html")
 
 
 def test_label_in_html_comment_only_is_not_found() -> None:
-    assert "Export" not in _strip_comments("<!-- Export\nCSV --><p>y</p>", ".html")
+    assert "Export" not in _matchable_text("<!-- Export\nCSV --><p>y</p>", ".html")
 
 
 def test_label_in_rendered_template_text_is_found() -> None:
-    assert "org-wide" in _strip_comments("{# c #}<span>org-wide</span>", ".html")
+    assert "org-wide" in _matchable_text("{# c #}<span>org-wide</span>", ".html")
 
 
 def test_label_in_python_comment_or_docstring_only_is_not_found() -> None:
     src = '"""Module says Export CSV."""\n\n\ndef f() -> None:\n    """Doc Export CSV."""\n    x = 1  # Export CSV\n'
-    assert "Export CSV" not in _strip_comments(src, ".py")
+    assert "Export CSV" not in _matchable_text(src, ".py")
 
 
 def test_label_in_python_string_literal_is_found() -> None:
     src = '"""doc"""\nPara("Export CSV", style)\nx = "Contents"\n'
-    out = _strip_comments(src, ".py")
+    out = _matchable_text(src, ".py")
     assert "Export CSV" in out
     assert "Contents" in out
     assert "doc" not in out
+
+
+def test_identifier_is_not_a_python_label_match() -> None:
+    src = "from x import TableOfContents\ntoc = TableOfContents()\n"
+    assert not _contains_label(_matchable_text(src, ".py"), "Contents")
+    assert "Contents" not in _matchable_text(src, ".py")
+
+
+def test_python_string_literal_label_is_matched() -> None:
+    assert _contains_label(_matchable_text('Paragraph("Contents", style)\n', ".py"), "Contents")
+
+
+def test_fstring_literal_part_is_found() -> None:
+    src = 'x = f"Reduction {sym}"\n'
+    assert "Reduction" in _matchable_text(src, ".py")
+
+
+def test_label_is_not_satisfied_by_longer_hyphenated_text() -> None:
+    hay = _matchable_text('x = "Ranking-stability check skipped"\n', ".py")
+    assert not _contains_label(hay, "Ranking")
+    assert _contains_label(_matchable_text('x = "Ranking"\n', ".py"), "Ranking")
+
+
+def test_label_is_not_satisfied_by_longer_word() -> None:
+    assert not _contains_label("<p>TableOfContents</p>", "Contents")
+
+
+@pytest.mark.parametrize("tail", ['"', "<", ""])
+def test_label_ending_in_non_word_char_matches(tail: str) -> None:
+    assert _contains_label(f"<b>Download report (PDF){tail}", "Download report (PDF)")
+
+
+def test_unparseable_python_source_raises() -> None:
+    with pytest.raises((tokenize.TokenError, IndentationError, SyntaxError)):
+        _matchable_text('x = """unterminated\n', ".py")
+
+
+def test_self_closing_anchor_href_is_recorded() -> None:
+    scan = _ArticleScan()
+    scan.feed('<p><a href="/scenarios" /> <a href="/runs"></a></p>')
+    scan.close()
+    assert scan.hrefs == ["/scenarios", "/runs"]
 
 
 def test_void_tag_inside_marked_label_still_closes() -> None:
