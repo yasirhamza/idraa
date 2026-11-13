@@ -4,7 +4,7 @@
   designed for a board, CFO, or risk committee audience. To generate one, open the
   run detail page from the
   <a class="text-brand hover:underline" href="/analyses">Analyses</a> list, then click
-  <strong>Download report (PDF)</strong>.
+  <strong data-ui="templates/runs/detail.html">Download report (PDF)</strong>.
 </p>
 <p class="text-body text-ink-2 mb-3">
   The PDF is rendered server-side from the stored simulation results &mdash; no
@@ -16,8 +16,8 @@
   <strong>Excel verification workbook</strong>: an independent, in-Excel
   re-derivation of the Monte Carlo math using native spreadsheet formulas,
   so a stakeholder can check Idraa&rsquo;s numbers without trusting the app&rsquo;s
-  engine. Find it as <strong>Download verification workbook (Excel)</strong>
-  next to <strong>Download report (PDF)</strong> on the run detail page. To keep
+  engine. Find it as <strong data-ui="templates/runs/detail.html">Download verification workbook (Excel)</strong>
+  next to <strong data-ui="templates/runs/detail.html">Download report (PDF)</strong> on the run detail page. To keep
   the workbook responsive, it re-draws a capped number of iterations per run
   (50,000 by default; for an aggregate run, 150,000 in total across its scenarios), so it agrees with the app within sampling error rather
   than draw for draw, and an aggregate run gets a full in-Excel block for only
@@ -44,10 +44,10 @@
       </tr>
       <tr>
         <td><strong>Table of contents</strong></td>
-        <td>Page index (<strong>Contents</strong>) listing each section with its page number.</td>
+        <td>Page index (<strong data-ui="services/pdf_report.py">Contents</strong>) listing each section with its page number.</td>
       </tr>
       <tr>
-        <td><strong>Risk picture</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Risk picture</strong></td>
         <td>
           Headline Annualized Loss Expectancy (ALE) with the central interval of
           modeled annualized losses (an empirical percentile band, not a
@@ -55,7 +55,7 @@
         </td>
       </tr>
       <tr>
-        <td><strong>Loss distributions</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Loss distributions</strong></td>
         <td>
           Loss Exceedance Curve (LEC) and Exceedance Probability Curve (EPC),
           both with-controls and without-controls overlays so the dollar value
@@ -63,21 +63,21 @@
         </td>
       </tr>
       <tr>
-        <td><strong>Distribution statistics &amp; tail risk</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Distribution statistics &amp; tail risk</strong></td>
         <td>Value at Risk (VaR) and Expected Shortfall (ES) tail metrics.</td>
       </tr>
       <tr>
-        <td><strong>Per-scenario breakdown</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Per-scenario breakdown</strong></td>
         <td>
           Aggregate runs only. A horizontal bar chart and a table with, for
           each included scenario, the loss <strong>Without</strong> controls,
-          <strong>With</strong> controls, and the <strong>Reduction</strong>.
+          <strong>With</strong> controls, and the <strong data-ui="services/pdf_report.py">Reduction</strong>.
           An aggregate run may also include a
-          <strong>Scenarios by threat community</strong> section.
+          <strong data-ui="services/pdf_report.py">Scenarios by threat community</strong> section.
         </td>
       </tr>
       <tr>
-        <td><strong>Control economics</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Control economics</strong></td>
         <td>
           Cost figures for the run&rsquo;s controls and a per-control
           loss-reduction breakdown. Both run types include it; it notes when
@@ -85,8 +85,8 @@
         </td>
       </tr>
       <tr>
-        <td><strong>Attribution matrix</strong> (aggregate runs)<br>
-          <strong>Control effectiveness</strong> (single-scenario runs)</td>
+        <td><strong data-ui="services/pdf_report.py">Attribution matrix</strong> (aggregate runs)<br>
+          <strong data-ui="services/pdf_report.py">Control effectiveness</strong> (single-scenario runs)</td>
         <td>
           For aggregate runs, a scenario-by-control table of Shapley-value
           dollar credits with a <strong>Total</strong> row (see below). For
@@ -94,15 +94,15 @@
         </td>
       </tr>
       <tr>
-        <td><strong>Assumptions &amp; inputs</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Assumptions &amp; inputs</strong></td>
         <td>Organisation context, run metadata and the inputs the run used.</td>
       </tr>
       <tr>
-        <td><strong>Methodology &amp; provenance appendix</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Methodology &amp; provenance appendix</strong></td>
         <td>Per-scenario provenance and methodology notes.</td>
       </tr>
       <tr>
-        <td><strong>Control inventory</strong></td>
+        <td><strong data-ui="services/pdf_report.py">Control inventory</strong></td>
         <td>
           Every control used in the run, grouped by FAIR-CAM domain (Loss
           Event, Variance Management, Decision Support, plus an Uncategorized group for any control without a recognised domain), each shown with its
@@ -157,12 +157,12 @@
 
 <h3 class="text-h4 text-ink-1 mb-2">How to read the attribution table</h3>
 <p class="text-body text-ink-2 mb-3">
-  In the PDF, the <strong>Attribution matrix</strong> (aggregate runs) shows
+  In the PDF, the <strong data-ui="services/pdf_report.py">Attribution matrix</strong> (aggregate runs) shows
   each scenario against each control in dollars, with a <strong>Total</strong>
   row giving each control&rsquo;s total credit. When the weight-robustness
-  ensemble was computed, an <strong>Estimated value per control (range)</strong>
-  table in the Control economics section (single-scenario runs included) lists <strong>Control</strong>, <strong>Value range</strong>,
-  <strong>If removed</strong> and <strong>Ranking</strong>. The credits are in
+  ensemble was computed, an <strong data-ui="services/pdf_report.py">Estimated value per control (range)</strong>
+  table in the Control economics section (single-scenario runs included) lists <strong>Control</strong>, <strong data-ui="services/pdf_report.py">Value range</strong>,
+  <strong data-ui="services/pdf_report.py">If removed</strong> and <strong data-ui="services/pdf_report.py">Ranking</strong>. The credits are in
   dollars, and the efficiency axiom guarantees they sum to the attribution
   model&rsquo;s total risk reduction for that scenario (a closed-form figure that
   can differ from the simulated headline). A control that appears in many overlapping scenarios may have
@@ -172,7 +172,7 @@
 <p class="text-body text-ink-2 mb-6">
   Use the attribution table to prioritise renewal and investment decisions:
   controls with the largest Shapley credit carry the largest fair share of the
-  modelled reduction; read it with the <strong>If removed</strong> figure, which
+  modelled reduction; read it with the <strong data-ui="services/pdf_report.py">If removed</strong> figure, which
   shows what is lost if that control alone goes. Controls near zero may be
   redundant with higher-ranked peers and are candidates for rationalisation.
 </p>
@@ -204,7 +204,7 @@
 
 <h2 class="text-h3 text-ink-1 mb-3" id="downloading-and-sharing-the-pdf">Downloading and sharing the PDF</h2>
 <p class="text-body text-ink-2 mb-3">
-  The <strong>Download report (PDF)</strong> button is available to all authenticated users
+  The <strong data-ui="templates/runs/detail.html">Download report (PDF)</strong> button is available to all authenticated users
   (Analyst, Reviewer, Viewer, Admin). Every download is recorded in the audit log
   against the user who triggered it. Because downloading a report is a sensitive
   action, Idraa may prompt you to re-authenticate (with a code from your
@@ -216,7 +216,7 @@
 <p class="text-body text-ink-2 mb-6">
   The verification workbook, the raw-samples file and the CSV exports are data
   exports, and need the Analyst or Admin role. A Viewer or Reviewer sees only
-  <strong>Download report (PDF)</strong>.
+  <strong data-ui="templates/runs/detail.html">Download report (PDF)</strong>.
 </p>
 <p class="text-body text-ink-2 mb-6">
   Because the PDF is rendered from the stored run snapshot, the figures, tables,

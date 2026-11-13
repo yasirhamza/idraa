@@ -44,15 +44,15 @@
 <h3 class="text-h4 text-ink-1 mb-2">Adding controls to a scenario</h3>
 <p class="text-body text-ink-2 mb-3">
   Controls are linked to a scenario in the scenario wizard&rsquo;s
-  <strong>Mitigating controls</strong> step, or later in the
-  <strong>Mitigating controls</strong> section of the scenario&rsquo;s edit form
-  (use <strong>Edit</strong> on the scenario detail page). You can pick controls
+  <strong data-ui="templates/scenarios/wizard/_shell.html">Mitigating controls</strong> step, or later in the
+  <strong data-ui="templates/scenarios/form.html">Mitigating controls</strong> section of the scenario&rsquo;s edit form
+  (use <strong data-ui="templates/scenarios/view.html">Edit</strong> on the scenario detail page). You can pick controls
   you have already created. In the wizard step, controls recommended from the
-  curated <strong>Control Library</strong> offer an <strong>Add to my
+  curated <strong data-ui="templates/controls/library/browse.html">Control Library</strong> offer an <strong data-ui="templates/scenarios/wizard/step_5_controls.html">Add to my
   controls</strong> button; you can also browse the library at
   <a class="text-brand hover:underline" href="/controls/library">/controls/library</a>.
   The scenario detail page lists the linked controls under
-  <strong>Mitigating controls</strong> (read-only), and a control that is linked
+  <strong data-ui="templates/scenarios/view.html">Mitigating controls</strong> (read-only), and a control that is linked
   and has an Active implementation stage is included in every subsequent
   analysis run.
 </p>
@@ -68,9 +68,9 @@
   apply to a scenario draft in the scenario wizard. Overlays carry two
   multipliers — <strong>frequency multiplier</strong> and
   <strong>magnitude multiplier</strong> — and each wizard step applies only its own.
-  On the <strong>Likelihood</strong> step, choosing an overlay under
-  <strong>Prefill options</strong> scales the draft&rsquo;s Threat Event Frequency (TEF)
-  rows by the frequency multiplier. On the <strong>Impact</strong> step, it scales the
+  On the <strong data-ui="templates/scenarios/wizard/_shell.html">Likelihood</strong> step, choosing an overlay under
+  <strong data-ui="templates/scenarios/wizard/step_3_likelihood.html">Prefill options</strong> scales the draft&rsquo;s Threat Event Frequency (TEF)
+  rows by the frequency multiplier. On the <strong data-ui="templates/scenarios/wizard/_shell.html">Impact</strong> step, it scales the
   Primary and Secondary Loss rows by the magnitude multiplier (the same factor for
   both). To get both effects, apply the overlay on both steps. Vulnerability is never
   scaled. A step offers an overlay only when that step&rsquo;s multiplier is not 1.0.
