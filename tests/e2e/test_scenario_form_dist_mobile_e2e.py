@@ -4,8 +4,9 @@ Drives the simple scenario form (``/scenarios/new``) in a 390px-wide Chromium
 context and asserts:
   - the page does not scroll horizontally (the dist-selector + low/mode/high
     grid stacks via grid-cols-1 sm:grid-cols-3), and
-  - selecting "lognormal" on the TEF node's ``tef_dist`` <select> hides the
-    ``tef_mode`` input (Alpine x-if removes it from the DOM), while low/high
+  - the TEF node has no distribution <select> (#318: TEF is PERT-only), and
+  - selecting "lognormal" on the primary-loss node's ``pl_dist`` <select> hides
+    the ``pl_mode`` input (Alpine x-if removes it from the DOM), while low/high
     remain — the visible affordance the selector exists to provide.
 
 Harness mirrors ``tests/e2e/test_wizard_mobile_e2e.py`` EXACTLY: an ephemeral
@@ -133,7 +134,7 @@ _MOBILE_VIEWPORT = {"width": 390, "height": 844}
 @pytest.mark.asyncio
 async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> None:
     """At 390px the FAIR-distribution block fits the viewport and switching the
-    TEF node to 'lognormal' removes the TEF mode input from the DOM."""
+    primary-loss node to 'lognormal' removes the PL mode input from the DOM."""
     from playwright.async_api import Error as PlaywrightError
     from playwright.async_api import async_playwright
 
@@ -155,7 +156,8 @@ async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> N
 
         # 2. Open the simple scenario form (un-gated on mobile, tranche 2b).
         await page.goto(f"{base}/scenarios/new")
-        await page.wait_for_selector("select[name='tef_dist']")
+        await page.wait_for_selector("select[name='pl_dist']")
+        assert await page.locator("select[name='tef_dist']").count() == 0
         assert "Switch device" not in (await page.content()), (
             "scenario form must be un-gated on mobile"
         )
@@ -169,29 +171,31 @@ async def test_scenario_form_dist_selector_mobile(migrated_server_url: str) -> N
             "— the distribution block does not fit a phone screen"
         )
 
-        # 4. Default is PERT: the TEF mode input is present and visible.
-        tef_mode = page.locator("input[name='tef_mode']")
-        assert await tef_mode.count() == 1
-        assert await tef_mode.is_visible()
+        # 4. Default is PERT: the TEF mode input is always present (no TEF
+        #    selector) and the PL mode input is present and visible.
+        assert await page.locator("input[name='tef_mode']").count() == 1
+        pl_mode = page.locator("input[name='pl_mode']")
+        assert await pl_mode.count() == 1
+        assert await pl_mode.is_visible()
 
-        # 5. Switch the TEF node to lognormal — x-if removes the mode input.
-        await page.select_option("select[name='tef_dist']", "lognormal")
+        # 5. Switch the primary-loss node to lognormal — x-if removes the mode.
+        await page.select_option("select[name='pl_dist']", "lognormal")
         await page.wait_for_function(
-            "() => document.querySelectorAll(\"input[name='tef_mode']\").length === 0"
+            "() => document.querySelectorAll(\"input[name='pl_mode']\").length === 0"
         )
-        assert await page.locator("input[name='tef_mode']").count() == 0, (
-            "tef_mode must be removed from the DOM under lognormal so it never submits"
+        assert await page.locator("input[name='pl_mode']").count() == 0, (
+            "pl_mode must be removed from the DOM under lognormal so it never submits"
         )
         # Low / high stay (they are the p5/p95 pair under lognormal).
-        assert await page.locator("input[name='tef_low']").count() == 1
-        assert await page.locator("input[name='tef_high']").count() == 1
+        assert await page.locator("input[name='pl_low']").count() == 1
+        assert await page.locator("input[name='pl_high']").count() == 1
 
         # 6. Switch back to PERT — the mode input reappears.
-        await page.select_option("select[name='tef_dist']", "pert")
+        await page.select_option("select[name='pl_dist']", "pert")
         await page.wait_for_function(
-            "() => document.querySelectorAll(\"input[name='tef_mode']\").length === 1"
+            "() => document.querySelectorAll(\"input[name='pl_mode']\").length === 1"
         )
-        assert await page.locator("input[name='tef_mode']").count() == 1
+        assert await page.locator("input[name='pl_mode']").count() == 1
 
         await context.close()
         await browser.close()

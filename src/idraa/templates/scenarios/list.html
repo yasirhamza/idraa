@@ -7,7 +7,9 @@
 
 {# Import is admin-only — gate the page-action so non-admins don't see it
    (the route's require_role(ADMIN) is the real gate; this hides the affordance).
-   Export CSV (repointed in Task 7) + Export JSON are read-only and shown to all. #}
+   Export CSV + Export JSON are shown when can_export() (analyst/admin) and carry
+   the active status filter, which GET /scenarios/export honours (#317). #}
+{% set export_status = ("&status=" ~ status_filter.value) if status_filter else "" %}
 {{ page_header(
   title="Scenarios",
   breadcrumb=breadcrumb_for(request),
@@ -16,8 +18,8 @@
       if (current_user and current_user.role.value == "admin") else []
   ) + (
     [
-      {"label": "Export CSV", "href": "/scenarios/export?format=csv", "style": "brand", "icon": "⇩", "download": True},
-      {"label": "Export JSON", "href": "/scenarios/export?format=json", "style": "ghost", "icon": "⇩", "download": True},
+      {"label": "Export CSV", "href": "/scenarios/export?format=csv" ~ export_status, "style": "brand", "icon": "⇩", "download": True},
+      {"label": "Export JSON", "href": "/scenarios/export?format=json" ~ export_status, "style": "ghost", "icon": "⇩", "download": True},
     ] if can_export() else []
   ) + (
     [{"label": "+ New scenario", "href": "/scenarios/new/wizard", "style": "primary"}]
