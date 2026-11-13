@@ -20,7 +20,7 @@
   Because exports move data out in bulk, Idraa treats them as sensitive
   actions: if your session&rsquo;s authentication isn&rsquo;t recent, you may
   be prompted to re-authenticate (with a code from your authenticator app, a
-  recovery code, or a passkey) before the download proceeds.
+  recovery code, or a passkey, or your password if your account has no second factor) before the download proceeds.
   Importing does not prompt for re-authentication.
 </p>
 
@@ -94,10 +94,10 @@
   export &rarr; (optionally edit) &rarr; re-import &mdash; carries all the
   fields in the format. Re-imported scenarios are created as new records; they
   do not overwrite the originals. A row whose name matches any existing scenario
-  in your workspace (any status, including drafts and deleted scenarios; case
-  is ignored), or an earlier row in the same file, is skipped as a duplicate,
-  so re-importing into the same workspace creates nothing unless you change
-  the names.
+  in your workspace (active or draft; case is ignored), or an earlier row in
+  the same file, is skipped as a duplicate, so re-importing into the same
+  workspace creates nothing unless you change the names. A deleted scenario is
+  removed entirely, so its name can be imported again.
 </p>
 <p class="text-body text-ink-2 mb-6">
   If you edit the file between export and import, only rows that pass

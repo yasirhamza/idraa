@@ -128,10 +128,12 @@
   PERT is the form&rsquo;s default distribution: the low, mode and high you
   type are stored as given, so there the low and high are the minimum and
   maximum of the sampled values, not 5th and 95th percentiles. If you choose
-  Lognormal for a loss field there instead, the low and high are read as the
-  5th and 95th percentiles of a lognormal that is stored and sampled as such,
-  with no collapse to a PERT: the high is then not a ceiling, and only the
-  loss cap, when one is set, bounds the draws.
+  Lognormal for a loss field there instead (on the form or in a CSV; a JSON
+  file gives the lognormal&rsquo;s parameters directly), the low and high are
+  read as the 5th and 95th percentiles of a lognormal that is stored and
+  sampled as such, with no collapse to a PERT: the high is then not a ceiling.
+  The draws are bounded only by the loss cap, which a lognormal loss is always
+  saved with.
 </p>
 
 <h2 class="text-h3 text-ink-1 mb-3" id="lognormal-authoring-the-distribution-assumption">Lognormal authoring &mdash; the distribution assumption</h2>
